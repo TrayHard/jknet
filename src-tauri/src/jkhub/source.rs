@@ -468,6 +468,20 @@ mod tests {
             first.id
         );
 
+        // `jkhub_file` and `jkhub_install` know an id and no slug, so this is
+        // the address they actually request. An empty segment would 404.
+        let by_id = runtime
+            .block_on(client.fetch_html(&parse::file_url(1486, "")))
+            .expect("an id alone reaches the file page");
+        assert_eq!(
+            parse::file_ref(&by_id.url),
+            Some((1486, "saber-changer".to_string())),
+            "the redirect hands back the real slug"
+        );
+        let file = parse::parse_file_page(&by_id.body, 1486, "saber-changer").expect("it parses");
+        assert_eq!(file.title, "Saber Changer");
+        println!("live: 1486 resolved to {}", by_id.url);
+
         // The index is the other page the tree walk depends on, and the one
         // whose markup a theme update would break first.
         let index = runtime
