@@ -13,8 +13,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Link } from "react-router";
 
+// --- slice: game switch ---
+import { useMissingClientToast } from "../components/MissingClientToast";
 import { PageHeader } from "../components/PageHeader";
 import { ServerDetails } from "../components/servers/ServerDetails";
 import { ROW_COLUMNS, ServerRow } from "../components/servers/ServerRow";
@@ -47,13 +48,17 @@ import { Button, EmptyState, Input, Toggle } from "../components/ui";
 import { cn } from "../lib/format";
 import {
   errorMessage,
+  type Game,
+  type GameInfo,
   type ServerInfo,
   type ServersDoneEvent,
 } from "../lib/ipc";
+// --- slice: game switch ---
+import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
   useAddServerHistory,
   useCachedServers,
-  useClients,
+  useGameInfo,
   useLaunchClient,
   useServerRefresh,
   useServerStatus,
@@ -70,7 +75,10 @@ import { isTauri } from "../lib/runtime";
  * lives outside the component because the route unmounts on every navigation.
  */
 const AUTO_REFRESH_AFTER_MS = 60_000;
-let lastAutoRefresh = 0;
+// --- slice: game switch ---
+// One stamp per game: the two lists come from different master servers, so a
+// refresh of Jedi Academy says nothing about how fresh the Jedi Outcast list is.
+const lastAutoRefresh: Partial<Record<Game, number>> = {};
 
 /**
  * Servers: the browser over the two Quake 3 master servers.
@@ -82,12 +90,21 @@ let lastAutoRefresh = 0;
  */
 export function ServersPage() {
   const settings = useSettings();
-  const clients = useClients();
   const cached = useCachedServers();
   const refresh = useServerRefresh();
   const setFavorite = useSetServerFavorite();
   const addHistory = useAddServerHistory();
   const launchClient = useLaunchClient();
+  // --- slice: game switch ---
+  // The list, the filters, the tabs and Connect all belong to one game. The
+  // queries are keyed by it already, so the switch is what makes them refetch;
+  // what this screen adds is forgetting the rows and the selection of the game
+  // it just left.
+  const activeGame = useActiveGame();
+  const gameInfo = useGameInfo(activeGame);
+  const { label: gameName } = useGameNames();
+  const defaultClient = useDefaultClient();
+  const missingClientToast = useMissingClientToast();
 
   const [tab, setTab] = useState<ServerTab>("all");
   const [filters, setFilters] = useState<ServerFilters>(DEFAULT_FILTERS);
@@ -103,25 +120,54 @@ export function ServersPage() {
   // four seconds the scan takes — the skeleton belongs to the first run of a
   // fresh install, not to every visit.
   const cacheSettled = !cached.isPending;
+  // --- slice: game switch ---
+  // The switch is a new list to fetch, so the screen asks for it as if it had
+  // just been opened. `attempted` is reset by the game as well, which is what
+  // makes the first look at Jedi Outcast scan instead of showing an empty
+  // table until the player presses Refresh.
+  const attemptedFor = useRef<Game | null>(null);
   useEffect(() => {
+    if (attemptedFor.current !== activeGame) {
+      attemptedFor.current = activeGame;
+      attempted.current = false;
+    }
     if (attempted.current || !isTauri() || !cacheSettled) return;
+    // A scan of the game the player just left is still in flight, and the core
+    // runs one at a time. Waiting costs nothing: this effect runs again the
+    // moment that scan ends.
+    if (refresh.running) return;
     attempted.current = true;
-    if (Date.now() - lastAutoRefresh < AUTO_REFRESH_AFTER_MS) return;
-    lastAutoRefresh = Date.now();
+    const last = lastAutoRefresh[activeGame] ?? 0;
+    if (Date.now() - last < AUTO_REFRESH_AFTER_MS) return;
+    lastAutoRefresh[activeGame] = Date.now();
     startRefresh();
-  }, [startRefresh, cacheSettled]);
+  }, [startRefresh, cacheSettled, activeGame, refresh.running]);
 
   const live = useMemo(() => cached.data ?? [], [cached.data]);
   // The rows the whole screen works from. While a scan runs they are the ones
   // it started with, so counts, tabs, filter options and the table agree with
   // each other and none of them moves under the cursor.
-  const held = useHeldRows(live, refresh.running);
+  //
+  // --- slice: game switch --- the hold is dropped when the game changes: rows
+  // held from a Jedi Academy scan have no business under a Jedi Outcast list.
+  const held = useHeldRows(live, refresh.running, activeGame);
   const view = scanView(live, held, refresh.running);
   const all = view.rows;
   const historyAddresses = useMemo(
     () => (settings.data?.serverHistory ?? []).map((entry) => entry.address),
     [settings.data],
   );
+
+  // --- slice: game switch ---
+  // The selection and the filters are bound to the list they were made on: a
+  // mod folder and a gametype number mean different things in the two games —
+  // number 7 is Siege in Jedi Academy and CTF in Jedi Outcast — so carrying
+  // them over would hide rows for a reason nothing on screen explains. The
+  // tabs stay: All, Trusted, Favorites and History mean the same in both.
+  useEffect(() => {
+    setSelectedAddress(null);
+    setFilters(DEFAULT_FILTERS);
+  }, [activeGame]);
 
   const visible = useMemo(() => {
     const inTab = applyTab(all, tab, historyAddresses);
@@ -147,10 +193,6 @@ export function ServersPage() {
   );
   const secondsAgo = useSecondsSince(refresh.refreshedAt);
 
-  const defaultClient = clients.data?.find(
-    (client) => client.id === settings.data?.defaultClientId,
-  );
-
   const toggleSort = (column: SortColumn) => {
     if (column === sortColumn) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -167,7 +209,15 @@ export function ServersPage() {
    * the row belongs in History even when the launch fails on a missing engine.
    */
   const connect = () => {
-    if (selected === undefined || defaultClient === undefined) return;
+    if (selected === undefined) return;
+    // --- slice: game switch ---
+    // The row belongs to the active game, so the client that reaches it is
+    // that game's. Without one the press is answered by a toast that names the
+    // game and offers to make the client, rather than by a dead button.
+    if (defaultClient === undefined) {
+      missingClientToast(activeGame);
+      return;
+    }
     // The core refuses a second game anyway; stopping here keeps the player
     // from seeing "is already running" after their own double click.
     if (launchClient.isPending) return;
@@ -186,6 +236,9 @@ export function ServersPage() {
       <PageHeader
         title="Servers"
         subtitle={describeCounts({
+          // --- slice: game switch --- the list is one game's, and the line
+          // says which: two lists that look alike need naming apart.
+          game: gameName(activeGame),
           visible: visible.length,
           total: all.length,
           players: playersOnline,
@@ -221,7 +274,12 @@ export function ServersPage() {
         }
       />
 
-      <FilterRow servers={all} filters={filters} onChange={setFilters} />
+      <FilterRow
+        servers={all}
+        filters={filters}
+        onChange={setFilters}
+        gameInfo={gameInfo}
+      />
 
       <Tabs
         className="mt-16"
@@ -327,18 +385,12 @@ export function ServersPage() {
                 ? null
                 : `No player list: ${errorMessage(status.error)}`
             }
-            canConnect={defaultClient !== undefined}
+            // --- slice: game switch ---
+            // Live even without a client: pressing it is how the player finds
+            // out they need one, and the toast that says so offers to make it.
+            canConnect
             connecting={launchClient.isPending}
             onConnect={connect}
-            hint={
-              <p className="text-body-sm text-fg-muted text-center">
-                Pick a default client on the{" "}
-                <Link to="/clients" className="text-fg-accent underline">
-                  Clients
-                </Link>{" "}
-                screen first.
-              </p>
-            }
           />
         )}
       </div>
@@ -379,11 +431,22 @@ function ScanOverlay({ label }: { label: string }) {
 function useHeldRows(
   live: ServerInfo[],
   scanning: boolean,
+  game: Game,
 ): ServerInfo[] | null {
   const held = useRef<ServerInfo[] | null>(null);
   const wasScanning = useRef(false);
+  // --- slice: game switch ---
+  // A switch mid-scan is the case this guards: the old list would otherwise
+  // stay frozen on screen under a loader counting the new game's answers.
+  const heldGame = useRef(game);
 
-  if (scanning !== wasScanning.current) {
+  if (heldGame.current !== game) {
+    heldGame.current = game;
+    // Nothing held: the rows of the new game are the ones to draw, and they
+    // are not moving — the scan still in flight belongs to the game the
+    // player left, and its batches land in that game's list.
+    held.current = null;
+  } else if (scanning !== wasScanning.current) {
     wasScanning.current = scanning;
     held.current = rowsToHold(live, scanning);
   }
@@ -396,15 +459,30 @@ function FilterRow({
   servers,
   filters,
   onChange,
+  gameInfo,
 }: {
   servers: ServerInfo[];
   filters: ServerFilters;
   onChange: (filters: ServerFilters) => void;
+  // --- slice: game switch ---
+  /** The active game, for its gametype table. `undefined` until it loads. */
+  gameInfo: GameInfo | undefined;
 }) {
+  // --- slice: game switch ---
+  // The game's own table first, then whatever numbers the rows carry that the
+  // table does not know — a mod is free to invent one. Building the list from
+  // the rows alone made the dropdown change shape with every refresh, and it
+  // offered Siege on a Jedi Outcast screen as soon as one server published a
+  // seven. The table is the game's `bg_public.h`, so the labels are the ones
+  // that game uses for those numbers.
   const modes = useMemo<SelectOption[]>(() => {
     const labels = new Map<string, string>();
+    (gameInfo?.gametypes ?? []).forEach((label, index) => {
+      labels.set(String(index), label);
+    });
     for (const server of servers) {
-      labels.set(String(server.gametype), server.gametypeLabel);
+      const key = String(server.gametype);
+      if (!labels.has(key)) labels.set(key, server.gametypeLabel);
     }
     return [
       { value: "any", label: "Any" },
@@ -412,7 +490,7 @@ function FilterRow({
         .sort((a, b) => Number(a[0]) - Number(b[0]))
         .map(([value, label]) => ({ value, label })),
     ];
-  }, [servers]);
+  }, [servers, gameInfo]);
 
   const mods = useMemo<SelectOption[]>(
     () => [
@@ -606,6 +684,8 @@ function buildTabs(
  * can act on cannot be mistaken for the one they can.
  */
 function describeCounts(state: {
+  /** Name of the active game, which is whose list this is. */
+  game: string;
   visible: number;
   total: number;
   players: number;
@@ -614,14 +694,14 @@ function describeCounts(state: {
   scanning: boolean;
   progress: ServersDoneEvent | null;
 }): string {
-  const { visible, total, players, bots, secondsAgo, scanning, progress } =
+  const { game, visible, total, players, bots, secondsAgo, scanning, progress } =
     state;
   const head =
     total === 0
-      ? "No servers yet"
+      ? `No ${game} servers yet`
       : visible === total
-        ? `${total} servers`
-        : `${visible} of ${total} servers`;
+        ? `${total} ${game} servers`
+        : `${visible} of ${total} ${game} servers`;
   const middle = total === 0 ? "" : ` · ${players} players online`;
   const botTail =
     total === 0 || bots === 0 ? "" : ` · ${bots} bots hidden from counts`;

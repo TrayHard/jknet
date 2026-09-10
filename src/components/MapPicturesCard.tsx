@@ -1,6 +1,8 @@
 import { ImageIcon, RefreshCw } from "lucide-react";
 
-import { errorMessage } from "../lib/ipc";
+// --- slice: game switch ---
+import { levelshotCounts, useGameNames } from "../lib/game";
+import { errorMessage, GAMES } from "../lib/ipc";
 import { useLevelshots, useRebuildLevelshots } from "../lib/queries";
 import { Button } from "./ui";
 
@@ -16,6 +18,13 @@ import { Button } from "./ui";
 export function MapPicturesCard() {
   const levelshots = useLevelshots();
   const rebuild = useRebuildLevelshots();
+  // --- slice: game switch ---
+  // The index keys on `<game>/<map>`, because `ffa_bespin` is a map in both
+  // games and a different picture in each. One total for both would leave a
+  // player who has just set up Jedi Outcast unable to tell whether the launcher
+  // read their archives at all.
+  const { label } = useGameNames();
+  const perGame = levelshotCounts(levelshots.data);
 
   const count = levelshots.data?.length ?? null;
   const failure = levelshots.error
@@ -36,6 +45,13 @@ export function MapPicturesCard() {
                 ? "Reading the index…"
                 : `${count} ${count === 1 ? "map has" : "maps have"} a picture, read from the pk3 files you already own. Nothing is downloaded.`)}
           </span>
+          {/* --- slice: game switch --- one line per game, always both, so a
+              zero is visible rather than absent. */}
+          {failure === null && count !== null ? (
+            <span className="text-body-sm text-fg-secondary pt-4">
+              {GAMES.map((game) => `${perGame[game]} ${label(game)}`).join(", ")}
+            </span>
+          ) : null}
           {rebuild.data ? (
             <span className="text-body-sm text-fg-secondary pt-4">
               Last rebuild: {rebuild.data.maps} pictures from{" "}

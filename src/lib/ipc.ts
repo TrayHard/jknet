@@ -50,6 +50,11 @@ export interface GameInfo {
   wantedVersion: string | null;
   steamAppId: number;
   serverPort: number;
+  // --- slice: game switch ---
+  /** `gametype_t` labels in the order of this game's own `bg_public.h`, so the
+   * index is the number a server publishes. The **Mode** filter builds its
+   * options from this: Jedi Outcast has no Siege and no Power Duel. */
+  gametypes: string[];
 }
 
 // ---------------------------------------------------------------------------

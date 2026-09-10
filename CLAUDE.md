@@ -34,11 +34,12 @@ src/
   index.css              подключение Tailwind, блок @theme, базовые стили
   styles/tokens.css      токены дизайна из Figma
   styles/fonts.css       локальные шрифты @fontsource
-  components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
-                         ClientSettingsDialog, GameEventsProvider,
-                         AppUpdateProvider, AboutCard, MapPreview,
-                         MapPicturesCard, ToastsProvider, FriendsProvider,
-                         AccountProvider
+  components/            AppShell, TitleBar, Sidebar, GameSwitch, PageHeader,
+                         NewClientDialog, ClientSettingsDialog,
+                         GameFilesNotice, MissingClientToast,
+                         GameEventsProvider, AppUpdateProvider, AboutCard,
+                         MapPreview, MapPicturesCard, ToastsProvider,
+                         FriendsProvider, AccountProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
                          RadioCard, StepBadges, Toast, Avatar, Dialog
   components/library/    экран Library: карточка, диалоги, категории, Select,
@@ -52,6 +53,8 @@ src/
   pages/onboarding/      три шага первого запуска и защита маршрутов
   lib/ipc.ts             типизированные обёртки над invoke
   lib/queries.ts         хуки React Query и ключи запросов
+  lib/game.ts            активная игра: имена, клиенты игры, клиент по
+                         умолчанию, игра по порту сервера
   lib/useGameEvents.ts   подписка на события установки движка и запуска игры
   lib/useAppUpdate.ts    проверка, загрузка и установка обновления лаунчера
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
@@ -90,7 +93,7 @@ public/
 - **Движок** — сборка клиента игры: OpenJK, EternalJK, TaystJK, jaMME.
 - **Клиент** — именованный экземпляр движка со своим набором файлов и настроек. Один движок обслуживает сколько угодно клиентов.
 - **Файл библиотеки** — pk3 со скином, рукояткой, картой или модом. Устанавливается в выбранный клиент.
-- **Игра** — атрибут движка, клиента и строки сервера, а не сущность. Игр две: Jedi Academy (`ja`) и Jedi Outcast (`jo`). Все различия между ними лежат в таблице `GameSpec` в `src-tauri/src/game.rs`; больше нигде игры не зашиты.
+- **Игра** — атрибут движка, клиента и строки сервера, а не сущность. Игр две: Jedi Academy (`ja`) и Jedi Outcast (`jo`). Все различия между ними лежат в таблице `GameSpec` в `src-tauri/src/game.rs`; больше нигде игры не зашиты. Активную игру задаёт переключатель в боковой панели, а на фронтенде её обслуживает `src/lib/game.ts`.
 
 Понятия «профиль» в JKNet нет. Не вводите его ни в коде, ни в интерфейсе.
 

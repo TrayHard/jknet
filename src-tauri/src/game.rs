@@ -85,7 +85,56 @@ impl Game {
             .into_iter()
             .find(|game| game.id().eq_ignore_ascii_case(id.trim()))
     }
+
+    /// The game a server port belongs to.
+    ///
+    /// Presence on the hub names the server a friend is on and not the game
+    /// they are playing, yet the launcher has to choose a client before it can
+    /// follow them there. The port is the one clue in the address: `PORT_SERVER`
+    /// is 29070 in Jedi Academy and 28070 in Jedi Outcast, and an admin running
+    /// several servers on one machine counts up from there — 28071, 28072. That
+    /// habit is what [`PORT_SPAN`] allows for; everything outside both windows
+    /// reads as Jedi Academy, the game the launcher shipped with and by far the
+    /// longer server list.
+    ///
+    /// This is a guess, and it is one on purpose. The honest fix is an optional
+    /// `game` in the presence document of the hub contract; until it exists,
+    /// one rule in one place beats the same arithmetic in three screens. See
+    /// «Игра друга выводится из порта» in `docs/architecture.md`.
+    pub fn from_server_port(port: u16) -> Game {
+        Game::ALL
+            .into_iter()
+            .find(|game| {
+                let first = game.spec().server_port;
+                (first..first.saturating_add(PORT_SPAN)).contains(&port)
+            })
+            .unwrap_or_default()
+    }
+
+    /// The same rule applied to an `ip:port` string.
+    ///
+    /// An address with no port, or with something that is not a number after
+    /// the colon, reads as Jedi Academy along with everything else the rule
+    /// does not recognise. IPv6 is not in the launcher anywhere — the engines
+    /// speak IPv4 — so the last colon is the port separator.
+    pub fn from_server_address(address: &str) -> Game {
+        let port = address
+            .trim()
+            .rsplit_once(':')
+            .and_then(|(_, port)| port.trim().parse::<u16>().ok());
+        match port {
+            Some(port) => Game::from_server_port(port),
+            None => Game::default(),
+        }
+    }
 }
+
+/// How many ports above `PORT_SERVER` still count as that game.
+///
+/// Ten, because a machine hosting more than ten servers of one game is rarer
+/// than a machine hosting one of each, and the two windows must not meet: 29070
+/// and 28070 are a thousand apart, so there is room to spare.
+pub const PORT_SPAN: u16 = 10;
 
 impl std::fmt::Display for Game {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -355,6 +404,14 @@ pub struct GameInfo {
     pub steam_app_id: u32,
     /// Port a server of this game listens on by default.
     pub server_port: u16,
+    /// `gametype_t` labels in the order of this game's own `bg_public.h`, so
+    /// the index is the number a server publishes.
+    ///
+    /// The **Mode** filter of the server browser builds its options from this
+    /// rather than from the rows on screen: Jedi Outcast has no Siege and no
+    /// Power Duel, and a list derived from whoever happens to be online would
+    /// offer a different set of modes every refresh.
+    pub gametypes: Vec<&'static str>,
 }
 
 /// Lists both games with the names and constants the interface prints.
@@ -374,6 +431,7 @@ pub fn list_games() -> Vec<GameInfo> {
                 wanted_version: spec.wanted_version,
                 steam_app_id: spec.steam_app_id,
                 server_port: spec.server_port,
+                gametypes: spec.gametypes.to_vec(),
             }
         })
         .collect()
@@ -512,6 +570,64 @@ mod tests {
         // engine, JK2MV's own `fs_assetspath` in Jedi Outcast.
         assert_eq!(Game::JediAcademy.spec().game_data_cvar, "fs_cdpath");
         assert_eq!(Game::JediOutcast.spec().game_data_cvar, "fs_assetspath");
+    }
+
+    #[test]
+    fn a_server_port_names_the_game_it_belongs_to() {
+        // The two default ports, which is the case that matters: presence on
+        // the hub carries an address and no game.
+        assert_eq!(Game::from_server_port(29070), Game::JediAcademy);
+        assert_eq!(Game::from_server_port(28070), Game::JediOutcast);
+
+        // An admin's second and tenth server of one machine.
+        assert_eq!(Game::from_server_port(28071), Game::JediOutcast);
+        assert_eq!(Game::from_server_port(28079), Game::JediOutcast);
+        assert_eq!(Game::from_server_port(29079), Game::JediAcademy);
+
+        // One past each window, and everything else: Jedi Academy, because it
+        // is the game the launcher shipped with and the larger list.
+        assert_eq!(Game::from_server_port(28080), Game::JediAcademy);
+        assert_eq!(Game::from_server_port(29080), Game::JediAcademy);
+        assert_eq!(Game::from_server_port(0), Game::JediAcademy);
+        assert_eq!(Game::from_server_port(u16::MAX), Game::JediAcademy);
+
+        // The windows come from the table, so a port change there moves them.
+        for game in Game::ALL {
+            assert_eq!(Game::from_server_port(game.spec().server_port), game);
+        }
+    }
+
+    #[test]
+    fn an_address_is_read_down_to_its_port() {
+        assert_eq!(
+            Game::from_server_address("81.19.210.136:28070"),
+            Game::JediOutcast
+        );
+        assert_eq!(
+            Game::from_server_address(" 81.19.210.136:29070 "),
+            Game::JediAcademy
+        );
+        // No port, a port that is not a number, and an empty string: nothing
+        // to read, so the answer is the default game rather than a refusal.
+        assert_eq!(Game::from_server_address("81.19.210.136"), Game::JediAcademy);
+        assert_eq!(Game::from_server_address("host:port"), Game::JediAcademy);
+        assert_eq!(Game::from_server_address(""), Game::JediAcademy);
+    }
+
+    #[test]
+    fn the_interface_gets_the_gametypes_of_each_game() {
+        // The Mode filter builds its options from this list, so it has to be
+        // the game's own table and not a copy that drifts.
+        let games = list_games();
+        assert_eq!(games[0].gametypes, Game::JediAcademy.spec().gametypes);
+        assert_eq!(games[1].gametypes, Game::JediOutcast.spec().gametypes);
+
+        assert!(games[0].gametypes.contains(&"Siege"));
+        assert!(!games[1].gametypes.contains(&"Siege"));
+        assert!(!games[1].gametypes.contains(&"Power Duel"));
+        assert!(games[1].gametypes.contains(&"Holocron"));
+        assert!(games[1].gametypes.contains(&"Jedi Master"));
+        assert!(games[1].gametypes.contains(&"CTY"));
     }
 
     #[test]
