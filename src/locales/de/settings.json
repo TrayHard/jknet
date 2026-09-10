@@ -12,7 +12,8 @@
     "label": "Sprache der Oberfläche",
     "system": "Systemsprache",
     "systemWith": "Systemsprache ({{language}})",
-    "needsTranslation": "Diese Sprache ist noch nicht übersetzt und zeigt Englisch."
+    "needsTranslation": "Diese Sprache ist noch nicht übersetzt und zeigt Englisch.",
+    "draft": "Diese Sprache ist ein maschineller Entwurf und wartet auf die Prüfung durch Muttersprachler."
   },
   "gameFiles": {
     "title": "Spieldateien",

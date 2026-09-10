@@ -159,6 +159,16 @@ function checkCatalogs() {
   /** What `_status.json` may say about a folder. */
   const STATES = new Set(["source", "translated", "needs-translation"]);
 
+  /**
+   * The fields of `_status.json`, and nothing else.
+   *
+   * The Settings screen reads `state` and `reviewer` to decide which sentence
+   * goes under the **Language** card, so a field spelled the launcher's way is
+   * part of the contract: `reviewedAt` instead of `reviewer` would leave a
+   * checked folder calling itself a machine draft, and nothing would say so.
+   */
+  const FIELDS = new Set(["state", "source", "reviewer", "date"]);
+
   for (const language of languages) {
     // The marker is how a reader — and the report of a release — tells a
     // translated folder from one that still holds the English text.
@@ -167,6 +177,14 @@ function checkCatalogs() {
       const status = JSON.parse(readFileSync(marker, "utf8"));
       if (!STATES.has(status.state)) {
         fail(`${language}/_status.json`, `state ${JSON.stringify(status.state)} is unknown`);
+      }
+      for (const field of Object.keys(status).filter((one) => !FIELDS.has(one))) {
+        fail(`${language}/_status.json`, `${field} is not a field of the marker`);
+      }
+      if (status.reviewer !== undefined && status.reviewer !== null) {
+        if (typeof status.reviewer !== "string" || status.reviewer.trim() === "") {
+          fail(`${language}/_status.json`, "reviewer is neither a name nor null");
+        }
       }
     } catch (error) {
       fail(`${language}/_status.json`, `is missing or unreadable: ${error.message}`);

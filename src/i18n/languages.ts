@@ -54,6 +54,53 @@ export const LANGUAGE_IDS: readonly Language[] = LANGUAGES.map((entry) => entry.
  */
 export const CYRILLIC_LANGUAGES: readonly Language[] = ["ru", "uk"];
 
+/**
+ * What `src/locales/<language>/_status.json` records about a folder.
+ *
+ * The marker is the one place that says how far a catalog has come, and every
+ * field is optional on purpose: a folder somebody adds by hand is still a
+ * folder, and reading it must not throw.
+ */
+export type LanguageStatus = {
+  /** `source`, `translated`, or `needs-translation`. */
+  state?: string;
+  /** The language it was translated from. */
+  source?: string;
+  /**
+   * Who read the folder against the source, or `null` while nobody has.
+   *
+   * A machine draft names nobody. That is the whole difference between a
+   * catalog a player can trust and one that is waiting for a native speaker.
+   */
+  reviewer?: string | null;
+  /** When the folder last changed hands, `YYYY-MM-DD`. */
+  date?: string;
+};
+
+/**
+ * How far one catalog folder has come.
+ *
+ * `draft` is the state the six machine-drafted languages are in: every key is
+ * filled, and none of it has been read by a native speaker yet.
+ */
+export type TranslationState = "source" | "reviewed" | "draft" | "untranslated";
+
+/**
+ * The state a `_status.json` describes.
+ *
+ * Pure, and deliberately forgiving: a marker that is missing, unreadable or
+ * says something the launcher does not know reads as `untranslated`, which is
+ * the state that warns the player rather than the one that reassures them.
+ */
+export function translationState(
+  status: LanguageStatus | null | undefined,
+): TranslationState {
+  if (status?.state === "source") return "source";
+  if (status?.state !== "translated") return "untranslated";
+  const reviewer = status.reviewer;
+  return typeof reviewer === "string" && reviewer.trim() !== "" ? "reviewed" : "draft";
+}
+
 /** Whether a string from a settings file or a query names a language. */
 export function isLanguage(value: unknown): value is Language {
   return typeof value === "string" && (LANGUAGE_IDS as readonly string[]).includes(value);

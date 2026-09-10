@@ -12,7 +12,8 @@
     "label": "Interface language",
     "system": "System language",
     "systemWith": "System language ({{language}})",
-    "needsTranslation": "This language is not translated yet and shows English."
+    "needsTranslation": "This language is not translated yet and shows English.",
+    "draft": "This language is a machine draft and is waiting for a native speaker to check it."
   },
   "gameFiles": {
     "title": "Game files",
