@@ -144,6 +144,20 @@ pub enum AppError {
     #[error("{0} belongs to the engine build, not to the library")]
     EngineFile(String),
 
+    /// Something real sits where the launcher keeps the link to the game's
+    /// `base` folder, so [`crate::launch::prepare_basepath`] stops instead of
+    /// deleting it.
+    ///
+    /// The rule behind the variant: JKNet removes a *link* it made, never a
+    /// folder someone filled. A player who copied their archives in there by
+    /// hand, or who replaced the link with a real folder, keeps every byte and
+    /// gets a sentence naming the path.
+    #[error(
+        "{0} is a real folder, not the link JKNet keeps there. \
+         Move it away or delete it, then start the game again."
+    )]
+    BasepathOccupied(String),
+
     // --- slice: online gate ---
     /// This build has no service address, so there is nothing to call.
     ///

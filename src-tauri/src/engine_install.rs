@@ -458,7 +458,7 @@ async fn install_inner(
 
     let archive = download(app, paths, client_id, engine, &release).await?;
 
-    let engine_dir = paths.client_dir(client_id).join("engine");
+    let engine_dir = extract_target(paths, client_id);
     let executable = engine.executable;
     emit(
         app,
@@ -494,7 +494,7 @@ async fn install_inner(
     // here. The launch path does it again on every start; doing it now is what
     // makes a client complete the moment the progress bar says «ready».
     if !client.game.spec().launch_layout.engine_dir_on_search_path() {
-        let home_dir = paths.client_dir(client_id).join("home");
+        let home_dir = paths.client_home_dir(client_id);
         sync_engine_archives(&engine_dir, &home_dir)?;
     }
 
@@ -649,6 +649,18 @@ async fn download(
 /// Folder both the unpacked build and the client's `home\` keep archives in.
 const BASE_FOLDER: &str = "base";
 
+/// The one folder an engine archive is ever unpacked into.
+///
+/// A function rather than an inline `join`, and it exists to be pinned by a
+/// test. [`extract_archive`] empties its target before filling it, and the
+/// client folder holds one other root that must never meet that behaviour:
+/// `basepath\`, whose `base` entry is a junction into the player's game folder
+/// (see [`crate::launch::prepare_basepath`]). Unpacking there would empty the
+/// junction, and emptying a junction empties the game.
+pub(crate) fn extract_target(paths: &DataPaths, client_id: &str) -> PathBuf {
+    paths.client_engine_dir(client_id)
+}
+
 /// Names of the pk3 files the unpacked build itself ships, lowercase.
 ///
 /// The one answer to "is this file the player's or the engine's". Read from
@@ -738,6 +750,33 @@ pub fn sync_engine_archives(engine_dir: &Path, home_dir: &Path) -> Result<Vec<St
         );
     }
     Ok(copied)
+}
+
+/// Copies `source` over `target` unless the two already match, and says
+/// whether it copied.
+///
+/// The same rule [`sync_engine_archives`] applies to a whole folder, exposed
+/// for the callers that copy one named file: the menu modules and the retail
+/// archives of [`crate::launch::prepare_basepath`]. Size and modification time
+/// decide, and the copy is stamped with the source's time, so a second call
+/// costs one `metadata` per file and no bytes.
+///
+/// A missing source is not an error and not a copy: a patch archive a player
+/// does not have is exactly that case.
+pub(crate) fn copy_if_changed(source: &Path, target: &Path) -> Result<bool> {
+    let Ok(meta) = fs::metadata(source) else {
+        return Ok(false);
+    };
+    if !meta.is_file() || !needs_copy(&meta, target) {
+        return Ok(false);
+    }
+    if let Some(parent) = target.parent() {
+        paths::create_dir(parent)?;
+    }
+    fs::copy(source, target)
+        .map_err(|e| AppError::io_path("cannot copy into", target, e))?;
+    stamp_modified(target, &meta);
+    Ok(true)
 }
 
 /// Whether the mirrored copy is missing, a different size, or a different age.
@@ -1207,6 +1246,65 @@ mod tests {
             .expect("a build with no archives")
             .is_empty());
         assert!(!home_dir.exists());
+    }
+
+    #[test]
+    fn an_engine_archive_is_only_ever_unpacked_into_the_engine_folder() {
+        // `extract_archive` empties its target before filling it, and the
+        // client folder holds one root that must never meet that: `basepath\`,
+        // whose `base` entry is a junction into the player's game folder.
+        let paths = DataPaths::new(PathBuf::from("C:\\JKNet"));
+        let target = extract_target(&paths, "jk2");
+
+        assert_eq!(target, paths.client_engine_dir("jk2"));
+        assert_eq!(
+            target.file_name().and_then(|name| name.to_str()),
+            Some("engine")
+        );
+        assert_ne!(target, paths.client_basepath_dir("jk2"));
+        assert_ne!(target, paths.client_home_dir("jk2"));
+        assert!(!target.starts_with(paths.client_basepath_dir("jk2")));
+    }
+
+    #[test]
+    fn unpacking_a_build_leaves_the_base_root_of_the_client_alone() {
+        // The same rule, run rather than read: the extraction clears its own
+        // folder and touches no sibling.
+        let temp = tempfile::tempdir().expect("temp dir");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        let link_stand_in = paths.client_basepath_dir("jk2").join("base");
+        fs::create_dir_all(&link_stand_in).expect("the base root");
+        fs::write(link_stand_in.join("assets0.pk3"), b"the player's game").expect("an archive");
+
+        let archive = temp.path().join("jk2mv.zip");
+        write_zip(&archive, &[("jk2mvmp.exe", b"MZ"), ("base/assetsmv.pk3", b"mv")]);
+        extract_archive(&archive, &extract_target(&paths, "jk2")).expect("extraction succeeds");
+
+        assert!(paths.client_engine_dir("jk2").join("jk2mvmp.exe").is_file());
+        assert!(
+            link_stand_in.join("assets0.pk3").is_file(),
+            "the base root of the client is none of the installer's business"
+        );
+    }
+
+    #[test]
+    fn one_named_file_is_copied_only_when_it_differs() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let source = temp.path().join("jk2mvmenu_x64.dll");
+        let target = temp.path().join("basepath").join("jk2mvmenu_x64.dll");
+        fs::write(&source, b"menu").expect("the source");
+
+        assert!(copy_if_changed(&source, &target).expect("the first copy"));
+        assert!(!copy_if_changed(&source, &target).expect("the second call"));
+
+        fs::write(&source, b"menu of 1.4.2").expect("a newer build");
+        assert!(copy_if_changed(&source, &target).expect("the copy after an update"));
+        assert_eq!(fs::read(&target).expect("the copy"), b"menu of 1.4.2".to_vec());
+
+        // A source that is not there is not a failure: a patch archive the
+        // player has not got looks exactly like this.
+        assert!(!copy_if_changed(&temp.path().join("missing.pk3"), &target)
+            .expect("a missing source"));
     }
 
     #[test]

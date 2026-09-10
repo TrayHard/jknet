@@ -156,18 +156,23 @@ pub struct AssetSpec {
 /// The engines of the two games disagree about one thing: whether the folder
 /// holding the player's retail archives can be named by a cvar of its own. A
 /// Jedi Academy engine can, so the unpacked build keeps `fs_basepath` to
-/// itself. The released JK2MV cannot, so the game folder has to take
-/// `fs_basepath` and the build's own archives have to move. See
+/// itself. The released JK2MV cannot — it demands the archives under
+/// `fs_basepath\base` or `fs_homepath\base` and loads its menu module out of
+/// `fs_basepath` — so that client gets a base root of the launcher's own. See
 /// [`GameSpec::launch_layout`] and [`crate::launch`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LaunchLayout {
-    /// `<game data cvar>` → `GameData`, `fs_basepath` → `engine\`,
-    /// `fs_homepath` → `home\`. Three roots, all three on the search path.
-    ThreeRoots,
-    /// `fs_basepath` → `GameData`, `fs_homepath` → `home\`. Two roots; the
-    /// unpacked build is *not* one of them, so every `engine\base\*.pk3` the
-    /// build ships is mirrored into `home\base\` before the game starts.
-    TwoRoots,
+    /// `fs_basepath` → `engine\`: the unpacked build *is* the base root, and
+    /// the game folder arrives under a cvar of its own.
+    EngineIsBasepath,
+    /// `fs_basepath` → `basepath\`, a folder the launcher builds inside the
+    /// client: the menu modules of the build are copied into it and its `base`
+    /// entry is a directory junction to `<GameData>\base`.
+    ///
+    /// The unpacked build is *not* a root in this layout, so every
+    /// `engine\base\*.pk3` it ships is mirrored into `home\base\` before the
+    /// game starts.
+    OwnBasepath,
 }
 
 impl LaunchLayout {
@@ -177,7 +182,13 @@ impl LaunchLayout {
     /// which is what makes the mirror in [`crate::engine_install::sync_engine_archives`]
     /// necessary rather than merely tidy.
     pub fn engine_dir_on_search_path(self) -> bool {
-        matches!(self, LaunchLayout::ThreeRoots)
+        matches!(self, LaunchLayout::EngineIsBasepath)
+    }
+
+    /// Whether the launcher has to build `clients\<slug>\basepath\` before the
+    /// game starts. See [`crate::launch::prepare_basepath`].
+    pub fn needs_own_basepath(self) -> bool {
+        matches!(self, LaunchLayout::OwnBasepath)
     }
 }
 
@@ -272,16 +283,32 @@ pub struct GameSpec {
     /// honouring it.
     pub game_data_cvar: Option<&'static str>,
 
-    /// Where the `GameData` folder is passed on the command line.
+    /// What `fs_basepath` points at, and therefore what the launcher has to
+    /// build before the game starts.
     ///
-    /// Jedi Academy: [`LaunchLayout::ThreeRoots`]. Jedi Outcast:
-    /// [`LaunchLayout::TwoRoots`], because 1.4.1 refuses to start unless
+    /// Jedi Academy: [`LaunchLayout::EngineIsBasepath`]. Jedi Outcast:
+    /// [`LaunchLayout::OwnBasepath`], because 1.4.1 refuses to start unless
     /// `assets5.pk3` sits under `fs_basepath\base` or `fs_homepath\base`
     /// (`files.cpp:3260`, `FS_AllPath_Base_FileExists`; the `fs_assetspath`
     /// branch of that helper is `#if !defined(PORTABLE)`, and the archive
     /// JKNet installs is the portable build). The whole story is in
     /// [`crate::launch`].
     pub launch_layout: LaunchLayout,
+
+    /// Name prefix of the modules the engine loads out of `fs_basepath`
+    /// itself, without going through its file system. `None` for a game whose
+    /// engines load everything through the search path.
+    ///
+    /// Jedi Outcast has one: `CL_InitUI` creates the JK2MV menu as a native
+    /// module, `VM_Create("jk2mvmenu", qtrue, …)`, and `Sys_LoadModuleLibrary`
+    /// with that override flag tries exactly one path,
+    /// `<fs_basepath>\jk2mvmenu_<arch>.dll` (`src/sys/sys_win32.cpp`, tag
+    /// `1.4.1`). A prefix rather than a file name, because the archive ships
+    /// the module of its own architecture — `jk2mvmenu_x64.dll` in the 64-bit
+    /// build, `jk2mvmenu_x86.dll` in the 32-bit one — and both have to arrive.
+    /// [`crate::launch::prepare_basepath`] copies `<prefix>*.dll` out of the
+    /// unpacked build into the base root.
+    pub basepath_module_prefix: Option<&'static str>,
 }
 
 /// Jedi Academy: the game JKNet was built for.
@@ -324,7 +351,8 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
     ],
 
     game_data_cvar: Some("fs_cdpath"),
-    launch_layout: LaunchLayout::ThreeRoots,
+    launch_layout: LaunchLayout::EngineIsBasepath,
+    basepath_module_prefix: None,
 };
 
 /// Jedi Outcast, played through JK2MV.
@@ -383,8 +411,11 @@ static JEDI_OUTCAST: GameSpec = GameSpec {
 
     game_data_cvar: Some("fs_assetspath"),
     // Sent, but not relied on: JK2MV 1.4.1 registers `fs_assetspath` and never
-    // reads it, so the game folder has to arrive as `fs_basepath` instead.
-    launch_layout: LaunchLayout::TwoRoots,
+    // reads it, so the retail archives have to reach the engine through a root
+    // it does read. That root is the client's own `basepath\`, whose `base` is
+    // a junction to `<GameData>\base`.
+    launch_layout: LaunchLayout::OwnBasepath,
+    basepath_module_prefix: Some("jk2mvmenu"),
 };
 
 impl GameSpec {
@@ -631,16 +662,37 @@ mod tests {
     #[test]
     fn only_jedi_academy_keeps_the_unpacked_build_as_a_search_root() {
         // JK2MV 1.4.1 registers `fs_assetspath` and then builds the search
-        // path from its own auto-detection, so the game folder has to arrive
-        // as `fs_basepath` and the build's archives have to be mirrored into
-        // `home\base`.
+        // path from its own auto-detection, so the retail archives have to
+        // arrive under a root it reads. The launcher builds that root itself
+        // and mirrors the build's archives into `home\base`.
         let ja = Game::JediAcademy.spec();
-        assert_eq!(ja.launch_layout, LaunchLayout::ThreeRoots);
+        assert_eq!(ja.launch_layout, LaunchLayout::EngineIsBasepath);
         assert!(ja.launch_layout.engine_dir_on_search_path());
+        assert!(!ja.launch_layout.needs_own_basepath());
 
         let jo = Game::JediOutcast.spec();
-        assert_eq!(jo.launch_layout, LaunchLayout::TwoRoots);
+        assert_eq!(jo.launch_layout, LaunchLayout::OwnBasepath);
         assert!(!jo.launch_layout.engine_dir_on_search_path());
+        assert!(jo.launch_layout.needs_own_basepath());
+    }
+
+    #[test]
+    fn only_the_game_with_its_own_base_root_names_a_module_prefix() {
+        // The two go together: a module loaded straight out of `fs_basepath`
+        // is reachable only because the launcher owns that folder.
+        for game in Game::ALL {
+            let spec = game.spec();
+            assert_eq!(
+                spec.basepath_module_prefix.is_some(),
+                spec.launch_layout.needs_own_basepath(),
+                "{} disagrees with itself",
+                spec.display_name
+            );
+        }
+        assert_eq!(
+            Game::JediOutcast.spec().basepath_module_prefix,
+            Some("jk2mvmenu")
+        );
     }
 
     #[test]
