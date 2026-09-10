@@ -11,7 +11,7 @@ import { useToasts } from "./ToastsProvider";
 const EXPIRED_TOAST = "account:expired";
 
 /**
- * Says out loud when the hub ends the session by itself.
+ * Says out loud when the service ends the session by itself.
  *
  * Every other move of the account answers something the player just did, and
  * the screen they did it on shows the result. An expired or revoked token is

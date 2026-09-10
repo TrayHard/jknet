@@ -1,23 +1,23 @@
-//! The friends half of the contract, against a hub that is actually running.
+//! The friends half of the contract, against a service that is actually running.
 //!
-//! Everything else in this module is checked against `scripts/mock-hub.mjs`,
+//! Everything else in this module is checked against `scripts/mock-online.mjs`,
 //! which is a stand-in written from the same document as the client — so the
 //! two agree by construction, and agreeing with each other proves nothing
-//! about the service. This walks the whole scenario against a real hub:
+//! about the service. This walks the whole scenario against the real service:
 //!
 //! 1. two accounts sign in through the `dev` provider, browser step included;
 //! 2. A asks B to be friends, B accepts;
 //! 3. A opens the live socket;
 //! 4. B says it is in a game;
 //! 5. A hears `presence.updated` on the socket, with B's server in it;
-//! 6. both accounts are deleted, so the hub is as it was.
+//! 6. both accounts are deleted, so the service is as it was.
 //!
-//! Ignored because it needs a hub on `127.0.0.1:8787` started with the
-//! developer provider on (`HUB_DEV_PROVIDER=1`, which `scripts/dev.ps1` of the
-//! hub repository sets). Run it by hand:
+//! Ignored because it needs a service on `127.0.0.1:8787` started with the
+//! developer provider on (`JKNET_ONLINE_DEV_PROVIDER=1`, which `scripts/dev.ps1` of the
+//! service repository sets). Run it by hand:
 //!
 //! ```text
-//! cargo test --lib -- --ignored --nocapture friends::hub_tests
+//! cargo test --lib -- --ignored --nocapture friends::online_tests
 //! ```
 
 use std::time::Duration;
@@ -25,9 +25,9 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::hub::{
-    HubClient, HubContext, HubUser, LiveFrame, Presence, PresenceUpdate, PresenceUpdated,
-    DEV_HUB_URL,
+use crate::online::{
+    LiveFrame, OnlineClient, OnlineContext, OnlineUser, Presence, PresenceUpdate, PresenceUpdated,
+    DEV_ONLINE_URL,
 };
 
 /// How long the socket is given to deliver the frame the test is waiting for.
@@ -36,17 +36,17 @@ const FRAME_TIMEOUT: Duration = Duration::from_secs(15);
 /// One signed-in account: who it is and how to call as it.
 struct Player {
     name: String,
-    user: HubUser,
-    ctx: HubContext,
+    user: OnlineUser,
+    ctx: OnlineContext,
 }
 
 #[tokio::test]
-#[ignore = "needs the real hub on 127.0.0.1:8787 with HUB_DEV_PROVIDER=1"]
+#[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1"]
 async fn two_players_become_friends_and_one_sees_the_other_start_a_game() {
-    let client = HubClient::new();
+    let client = OnlineClient::new();
 
     // A suffix, so a run that failed half way through does not make the next
-    // one collide on a display name the hub still holds.
+    // one collide on a display name the service still holds.
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .expect("the clock is after 1970")
@@ -60,7 +60,7 @@ async fn two_players_become_friends_and_one_sees_the_other_start_a_game() {
 
     let outcome = run(&client, &alpha, &beta).await;
 
-    // The hub keeps accounts until they are deleted, and a test that leaves
+    // The service keeps accounts until they are deleted, and a test that leaves
     // two behind on every run is a test nobody runs twice.
     for player in [&alpha, &beta] {
         match client.delete_me(&player.ctx).await {
@@ -73,7 +73,7 @@ async fn two_players_become_friends_and_one_sees_the_other_start_a_game() {
 }
 
 /// The scenario itself, so a failure still runs the cleanup above.
-async fn run(client: &HubClient, alpha: &Player, beta: &Player) -> Result<(), String> {
+async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(), String> {
     // -- A asks B ----------------------------------------------------------
     let sent = client
         .send_friend_request(&alpha.ctx, &beta.name)
@@ -81,7 +81,7 @@ async fn run(client: &HubClient, alpha: &Player, beta: &Player) -> Result<(), St
         .map_err(|e| format!("POST /v1/friends/requests: {e}"))?;
     let request = sent
         .request
-        .ok_or("the hub answered a friend request without a request")?;
+        .ok_or("the service answered a friend request without a request")?;
     println!(
         "POST /v1/friends/requests -> {} asked {}",
         request.from.display_name, request.to.display_name
@@ -155,7 +155,7 @@ async fn run(client: &HubClient, alpha: &Player, beta: &Player) -> Result<(), St
     if !moved.presence.in_game() {
         return Err(format!("expected in_game, got {}", moved.presence.status));
     }
-    // The hub strips the colour codes of the engine before it stores a server
+    // The service strips the colour codes of the engine before it stores a server
     // name, which is why the launcher never has to.
     if moved.presence.server_name.as_deref() != Some("JKNet Test FFA") {
         return Err(format!("unexpected server name {:?}", moved.presence.server_name));
@@ -199,7 +199,7 @@ where
             .await
             .map_err(|_| format!("no presence.updated for {user_id} within 15 s"))?;
         let message = match next {
-            None => return Err("the hub closed the socket".into()),
+            None => return Err("the service closed the socket".into()),
             Some(Err(e)) => return Err(format!("the socket failed: {e}")),
             Some(Ok(message)) => message,
         };
@@ -234,15 +234,15 @@ where
 /// The launcher opens `session.url` in the system browser and lets the player
 /// type a name; this does the same two requests with `reqwest`, because that
 /// form is the whole of the `dev` provider.
-async fn sign_in(client: &HubClient, display_name: &str) -> Player {
-    let anonymous = HubContext {
-        base_url: DEV_HUB_URL.into(),
+async fn sign_in(client: &OnlineClient, display_name: &str) -> Player {
+    let anonymous = OnlineContext {
+        base_url: DEV_ONLINE_URL.into(),
         token: None,
     };
     let session = client
         .create_login_session(&anonymous, "dev", Some("cargo test"))
         .await
-        .expect("the hub is running with HUB_DEV_PROVIDER=1");
+        .expect("the service is running with JKNET_ONLINE_DEV_PROVIDER=1");
     println!("POST /v1/auth/login-sessions -> {} {}", session.id, session.status);
 
     let browser = reqwest::Client::builder()
@@ -260,10 +260,10 @@ async fn sign_in(client: &HubClient, display_name: &str) -> Player {
     let state = hidden_state(&form).expect("the dev form carries a state");
 
     // The contract puts a `code` here; the `dev` provider has no authorization
-    // code to give, so the hub asks for a name instead. Same path, same method.
+    // code to give, so the service asks for a name instead. Same path, same method.
     let done = browser
         .get(format!(
-            "{DEV_HUB_URL}/v1/auth/dev/callback?state={state}&name={}",
+            "{DEV_ONLINE_URL}/v1/auth/dev/callback?state={state}&name={}",
             encode(display_name)
         ))
         .send()
@@ -303,8 +303,8 @@ async fn sign_in(client: &HubClient, display_name: &str) -> Player {
     Player {
         name: user.display_name.clone(),
         user,
-        ctx: HubContext {
-            base_url: DEV_HUB_URL.into(),
+        ctx: OnlineContext {
+            base_url: DEV_ONLINE_URL.into(),
             token: Some(token),
         },
     }

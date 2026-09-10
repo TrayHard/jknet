@@ -1,32 +1,32 @@
 import { MessageCircle, TerminalSquare, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { HubProvider } from "../../lib/ipc";
+import type { OnlineProvider } from "../../lib/ipc";
 
 interface ProviderButtonsProps {
   /** Called with the provider the player picked. */
-  onPick: (provider: HubProvider) => void;
+  onPick: (provider: OnlineProvider) => void;
   /** True while a sign-in runs, whichever provider started it. */
   busy?: boolean;
-  /** Whether the hub runs on this machine, which is what shows Developer. */
-  localHub?: boolean;
+  /** Whether the service runs on this machine, which is what shows Developer. */
+  localOnline?: boolean;
 }
 
 /**
- * The two provider buttons of the design, and a third for a hub on this
+ * The two provider buttons of the design, and a third for a service on this
  * machine.
  *
  * JKHub and Discord are drawn live rather than disabled: neither has issued an
- * OAuth client yet, and a hub says so with `provider_error` — a sentence the
+ * OAuth client yet, and a service says so with `provider_error` — a sentence the
  * player can act on ("not available yet") instead of a greyed-out control that
- * explains nothing. The Developer button only appears against a local hub,
+ * explains nothing. The Developer button only appears against a local service,
  * because the `dev` provider hands out an account for any name typed into a
  * form.
  */
 export function ProviderButtons({
   onPick,
   busy = false,
-  localHub = false,
+  localOnline = false,
 }: ProviderButtonsProps) {
   return (
     <div className="flex flex-col gap-8">
@@ -44,7 +44,7 @@ export function ProviderButtons({
         disabled={busy}
         onClick={() => onPick("discord")}
       />
-      {localHub ? (
+      {localOnline ? (
         <button
           type="button"
           disabled={busy}

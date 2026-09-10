@@ -13,7 +13,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::error::{AppError, Result};
 use crate::game::Game;
-use crate::hub::{self, HubUser};
+use crate::online::{self, OnlineUser};
 use crate::paths;
 use crate::state::AppState;
 
@@ -21,12 +21,12 @@ use crate::state::AppState;
 /// (that belongs to `tauri-plugin-window-state`).
 ///
 /// `Default` is written out rather than derived, because one field has a value
-/// that is not the zero of its type in a debug build: `hub_url` names the hub
+/// that is not the zero of its type in a debug build: `online_url` names the service
 /// of the build profile, and the container-level `#[serde(default)]` fills a
 /// missing field from this implementation, so a `settings.json` written before
-/// the hub existed reads as the development hub rather than as nothing. A
-/// release build has no hub yet, so there the same default is blank on
-/// purpose; see `hub::default_hub_url`.
+/// the service existed reads as the development service rather than as nothing. A
+/// release build has no service yet, so there the same default is blank on
+/// purpose; see `online::default_online_url`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -92,22 +92,32 @@ pub struct Settings {
     pub onboarding_completed: bool,
 
     // --- slice: account ---
-    /// The JKNet hub this launcher talks to, without a trailing slash.
+    /// JKNet Online, without a trailing slash.
     ///
-    /// Empty means there is no hub, which is what a release build defaults to
+    /// Empty means there is no service, which is what a release build defaults to
     /// until the service is deployed. The field is editable on the Settings
     /// screen, and typing an address there is what switches the account and
     /// friends interface on for one machine.
-    pub hub_url: String,
+    ///
+    /// The alias reads a `settings.json` from 0.2.0, where the service was
+    /// called JKNet Hub and the three keys below it were `hubUrl`, `hubToken`
+    /// and `hubUser`. Reading only: the first write puts the file on the new
+    /// names, so the alias costs one line and keeps an installed launcher's
+    /// address and session through the update. `SettingsPatch` has no such
+    /// alias, because nothing but this launcher writes a patch.
+    #[serde(alias = "hubUrl")]
+    pub online_url: String,
     /// The bearer token of the signed-in account, 64 hex characters.
     ///
     /// This is the one secret the launcher stores. It never reaches the
     /// webview: `get_settings` and every other command that answers with a
     /// whole document call [`Settings::redacted`] first.
-    pub hub_token: Option<String>,
-    /// The account the token belongs to, as the hub last described it. Cached
+    #[serde(alias = "hubToken")]
+    pub online_token: Option<String>,
+    /// The account the token belongs to, as the service last described it. Cached
     /// so the sidebar can print a name before any request answers.
-    pub hub_user: Option<HubUser>,
+    #[serde(alias = "hubUser")]
+    pub online_user: Option<OnlineUser>,
 }
 
 impl Default for Settings {
@@ -124,9 +134,9 @@ impl Default for Settings {
             favorite_servers: Vec::new(),
             server_history: Vec::new(),
             onboarding_completed: false,
-            hub_url: hub::default_hub_url().to_string(),
-            hub_token: None,
-            hub_user: None,
+            online_url: online::default_online_url().to_string(),
+            online_token: None,
+            online_user: None,
         }
     }
 }
@@ -233,14 +243,14 @@ impl Settings {
     }
 
     // --- slice: account ---
-    /// The document as the frontend may see it: without the hub token.
+    /// The document as the frontend may see it: without the service token.
     ///
     /// Every command that answers with a whole `Settings` ends in this call.
     /// The frontend has no use for the token — the core puts it on the
     /// requests — and a secret that never crosses the IPC boundary cannot be
     /// read out of a React Query cache by anything that gets into the webview.
     pub fn redacted(mut self) -> Settings {
-        self.hub_token = None;
+        self.online_token = None;
         self
     }
 
@@ -295,13 +305,13 @@ pub struct SettingsPatch {
     pub onboarding_completed: Option<bool>,
 
     // --- slice: account ---
-    pub hub_url: Option<String>,
+    pub online_url: Option<String>,
     /// Read and thrown away. See [`SettingsPatch::apply`].
     #[serde(deserialize_with = "sent")]
-    pub hub_token: Option<Option<String>>,
+    pub online_token: Option<Option<String>>,
     /// Read and thrown away, for the same reason as the token above.
     #[serde(deserialize_with = "sent")]
-    pub hub_user: Option<Option<HubUser>>,
+    pub online_user: Option<Option<OnlineUser>>,
 }
 
 /// Reads a field and remembers that it was there, `null` included.
@@ -324,12 +334,12 @@ impl SettingsPatch {
     /// `gameDataPath` is not a folder, and storing one would make the Clients
     /// screen show a path of nothing.
     ///
-    /// Two fields are deliberately not copied. `hubToken` and `hubUser` belong
+    /// Two fields are deliberately not copied. `onlineToken` and `onlineUser` belong
     /// to the sign-in and are written by `crate::account` alone; a patch
     /// carrying them is read and dropped. The command behind this is
     /// `update_settings`, which anything running in the webview can call, and a
     /// token settable from there would be a way around `begin_sign_in` and
-    /// `poll_sign_in` — the launcher would talk to the hub as whoever a
+    /// `poll_sign_in` — the launcher would talk to the service as whoever a
     /// crafted `invoke` says. The fields stay declared so that a caller who
     /// sends a whole settings document still gets it accepted rather than
     /// refused by `deny_unknown_fields`.
@@ -375,30 +385,30 @@ impl SettingsPatch {
         if let Some(value) = self.onboarding_completed {
             settings.onboarding_completed = value;
         }
-        if let Some(value) = self.hub_url {
+        if let Some(value) = self.online_url {
             // A blank address means "back to the default", which is what the
             // Settings screen offers when the field is cleared. A `null` is
             // not a way to clear it: an address is always in force, and the
-            // one the field falls back to is the default hub.
-            settings.hub_url = hub::normalize_hub_url(&value);
+            // one the field falls back to is the default service.
+            settings.online_url = online::normalize_online_url(&value);
         }
     }
 
     // --- slice: account ---
     /// Refuses a patch the launcher would rather not write.
     ///
-    /// One field needs this. A hub address without a scheme, or with one that
+    /// One field needs this. A service address without a scheme, or with one that
     /// is not HTTP, would be stored and then rejected by every later call with
     /// a message about the address rather than about the typo — so it is
     /// refused where the typo was made.
     pub fn validate(&self) -> Result<()> {
-        if let Some(url) = self.hub_url.as_deref() {
+        if let Some(url) = self.online_url.as_deref() {
             let url = url.trim();
             // Blank clears the field back to the default, so there is nothing
             // to check.
-            if !url.is_empty() && !hub::is_http_url(url) {
+            if !url.is_empty() && !online::is_http_url(url) {
                 return Err(AppError::InvalidInput(format!(
-                    "the hub address {url:?} has to start with http:// or https://"
+                    "the service address {url:?} has to start with http:// or https://"
                 )));
             }
         }
@@ -435,7 +445,7 @@ fn merge_per_game(map: &mut BTreeMap<Game, String>, entries: BTreeMap<Game, Opti
     }
 }
 
-/// Returns the current settings, without the hub token.
+/// Returns the current settings, without the service token.
 #[tauri::command]
 pub fn get_settings(state: tauri::State<'_, AppState>) -> Result<Settings> {
     Ok(state.settings()?.redacted())
@@ -451,7 +461,7 @@ pub fn update_settings(
     state: tauri::State<'_, AppState>,
     patch: SettingsPatch,
 ) -> Result<Settings> {
-    // --- slice: account --- refuses a hub address that is not an HTTP URL.
+    // --- slice: account --- refuses a service address that is not an HTTP URL.
     patch.validate()?;
     let mut settings = Settings::current(&state)?;
     patch.apply(&mut settings);
@@ -488,9 +498,9 @@ mod tests {
                 last_connected: "2026-09-10T10:00:00Z".into(),
             }],
             onboarding_completed: true,
-            hub_url: "https://hub.jknet.gg".into(),
-            hub_token: Some("0123456789abcdef".into()),
-            hub_user: Some(HubUser {
+            online_url: "https://online.jknet.gg".into(),
+            online_token: Some("0123456789abcdef".into()),
+            online_user: Some(OnlineUser {
                 id: "01JBX7Q2".into(),
                 display_name: "Kyle Katarn".into(),
                 avatar_url: None,
@@ -596,68 +606,115 @@ mod tests {
     // --- slice: account ---
 
     #[test]
-    fn a_settings_file_from_before_the_hub_takes_the_hub_of_this_build() {
+    fn a_settings_file_from_before_the_service_takes_the_service_of_this_build() {
         // The container-level `#[serde(default)]` fills a missing field from
         // `Settings::default()`, so this is the test that proves the manual
         // `Default` and not a derived one is in force.
         let older: Settings = serde_json::from_str(r#"{"closeOnLaunch":true}"#)
             .expect("an older document parses");
-        assert_eq!(older.hub_url, crate::hub::default_hub_url());
-        assert_eq!(older.hub_token, None);
-        assert_eq!(older.hub_user, None);
+        assert_eq!(older.online_url, crate::online::default_online_url());
+        assert_eq!(older.online_token, None);
+        assert_eq!(older.online_user, None);
     }
 
     #[test]
-    fn a_hub_address_is_trimmed_and_a_blank_one_returns_to_the_default() {
+    fn a_settings_file_from_0_2_0_keeps_its_address_and_session_under_the_new_keys() {
+        // 0.2.0 called the service JKNet Hub and wrote `hubUrl`, `hubToken` and
+        // `hubUser`. An installed launcher must not lose its address and its
+        // session to the rename, so the three fields read the old names too.
+        let document = r#"{
+            "hubUrl": "https://online.jknet.gg",
+            "hubToken": "0123456789abcdef",
+            "hubUser": {
+                "id": "01JBX7Q2",
+                "displayName": "Kyle",
+                "avatarUrl": null,
+                "provider": "jkhub",
+                "providerName": "kyle",
+                "createdAt": ""
+            }
+        }"#;
+
+        let older: Settings = serde_json::from_str(document).expect("a 0.2.0 document parses");
+        assert_eq!(older.online_url, "https://online.jknet.gg");
+        assert_eq!(older.online_token.as_deref(), Some("0123456789abcdef"));
+        assert_eq!(
+            older.online_user.as_ref().map(|user| user.display_name.as_str()),
+            Some("Kyle")
+        );
+
+        // Written back under the new names only: the old keys leave the file on
+        // the first write, so the alias never has to be read twice.
+        let written = serde_json::to_string(&older).expect("the document serializes");
+        for new_key in ["onlineUrl", "onlineToken", "onlineUser"] {
+            assert!(written.contains(new_key), "{new_key} is missing from {written}");
+        }
+        for old_key in ["hubUrl", "hubToken", "hubUser"] {
+            assert!(!written.contains(old_key), "{old_key} is still in {written}");
+        }
+    }
+
+    #[test]
+    fn the_patch_accepts_the_new_address_key_only() {
+        // Nothing but this launcher writes a patch, so `hubUrl` in one is a bug
+        // on the frontend rather than an old file, and it has to fail loudly.
+        let old = r#"{"hubUrl":"http://127.0.0.1:8787"}"#;
+        let new = r#"{"onlineUrl":"http://127.0.0.1:8787"}"#;
+        assert!(serde_json::from_str::<SettingsPatch>(old).is_err());
+        assert!(serde_json::from_str::<SettingsPatch>(new).is_ok());
+    }
+
+    #[test]
+    fn a_service_address_is_trimmed_and_a_blank_one_returns_to_the_default() {
         let mut settings = filled();
-        patch(r#"{"hubUrl":"  http://127.0.0.1:9000/  "}"#).apply(&mut settings);
-        assert_eq!(settings.hub_url, "http://127.0.0.1:9000");
+        patch(r#"{"onlineUrl":"  http://127.0.0.1:9000/  "}"#).apply(&mut settings);
+        assert_eq!(settings.online_url, "http://127.0.0.1:9000");
 
         // Clearing the field is the way back to the default of the build,
-        // which in a release build is no hub at all.
-        patch(r#"{"hubUrl":""}"#).apply(&mut settings);
-        assert_eq!(settings.hub_url, crate::hub::default_hub_url());
+        // which in a release build is no service at all.
+        patch(r#"{"onlineUrl":""}"#).apply(&mut settings);
+        assert_eq!(settings.online_url, crate::online::default_online_url());
     }
 
-    // --- slice: hub gate ---
+    // --- slice: online gate ---
 
     #[test]
-    fn an_address_typed_into_the_field_switches_the_hub_on() {
-        // The player's way past a build that ships with the hub switched off:
-        // the address lands in the document and `hub_configured` turns true.
+    fn an_address_typed_into_the_field_switches_the_service_on() {
+        // The player's way past a build that ships with the service switched off:
+        // the address lands in the document and `online_configured` turns true.
         let mut settings = Settings {
-            hub_url: String::new(),
+            online_url: String::new(),
             ..Settings::default()
         };
-        assert!(!crate::hub::hub_configured(&settings.hub_url));
+        assert!(!crate::online::online_configured(&settings.online_url));
 
-        patch(r#"{"hubUrl":"https://hub.jknet.gg/"}"#).apply(&mut settings);
-        assert_eq!(settings.hub_url, "https://hub.jknet.gg");
-        assert!(crate::hub::hub_configured(&settings.hub_url));
+        patch(r#"{"onlineUrl":"https://online.jknet.gg/"}"#).apply(&mut settings);
+        assert_eq!(settings.online_url, "https://online.jknet.gg");
+        assert!(crate::online::online_configured(&settings.online_url));
     }
 
     #[test]
-    fn a_hub_address_without_an_http_scheme_is_refused() {
+    fn a_service_address_without_an_http_scheme_is_refused() {
         // Storing it would move the complaint from the field the player typed
-        // into to every later call to the hub.
-        assert!(patch(r#"{"hubUrl":"127.0.0.1:8787"}"#).validate().is_err());
-        assert!(patch(r#"{"hubUrl":"file:///C:/hub"}"#).validate().is_err());
-        assert!(patch(r#"{"hubUrl":"https://hub.jknet.gg"}"#).validate().is_ok());
-        assert!(patch(r#"{"hubUrl":"  "}"#).validate().is_ok());
+        // into to every later call to the service.
+        assert!(patch(r#"{"onlineUrl":"127.0.0.1:8787"}"#).validate().is_err());
+        assert!(patch(r#"{"onlineUrl":"file:///C:/online"}"#).validate().is_err());
+        assert!(patch(r#"{"onlineUrl":"https://online.jknet.gg"}"#).validate().is_ok());
+        assert!(patch(r#"{"onlineUrl":"  "}"#).validate().is_ok());
         assert!(patch("{}").validate().is_ok());
     }
 
     #[test]
     fn the_token_leaves_the_document_on_the_way_to_the_frontend() {
         let settings = filled();
-        assert!(settings.hub_token.is_some());
+        assert!(settings.online_token.is_some());
 
         let public = settings.clone().redacted();
-        assert_eq!(public.hub_token, None);
+        assert_eq!(public.online_token, None);
         // Everything else survives, the cached account included: the sidebar
         // needs the name, and the name is not the secret.
-        assert_eq!(public.hub_user, settings.hub_user);
-        assert_eq!(public.hub_url, settings.hub_url);
+        assert_eq!(public.online_user, settings.online_user);
+        assert_eq!(public.online_url, settings.online_url);
 
         let json = serde_json::to_string(&public).expect("the document serializes");
         assert!(!json.contains("0123456789abcdef"), "{json}");
@@ -675,8 +732,8 @@ mod tests {
         assert_eq!(
             settings,
             Settings {
-                hub_token: None,
-                hub_user: None,
+                online_token: None,
+                online_user: None,
                 ..filled()
             }
         );
@@ -686,23 +743,23 @@ mod tests {
     fn a_patch_cannot_sign_the_launcher_in() {
         // `update_settings` is callable from the webview. A token settable
         // there would be a way around `begin_sign_in` and `poll_sign_in`: the
-        // launcher would talk to the hub as whoever a crafted `invoke` says.
+        // launcher would talk to the service as whoever a crafted `invoke` says.
         let mut settings = Settings::default();
         patch(
-            r#"{"hubToken":"deadbeef","hubUser":{"id":"01JBX7Q2","displayName":"Not Me",
+            r#"{"onlineToken":"deadbeef","onlineUser":{"id":"01JBX7Q2","displayName":"Not Me",
                 "avatarUrl":null,"provider":"jkhub","providerName":"not_me",
                 "createdAt":"2026-09-10T10:00:00Z"}}"#,
         )
         .apply(&mut settings);
-        assert_eq!(settings.hub_token, None);
-        assert_eq!(settings.hub_user, None);
+        assert_eq!(settings.online_token, None);
+        assert_eq!(settings.online_user, None);
 
         // And it cannot sign the launcher out either: the token of a session
         // in force survives a patch that names it.
         let mut signed_in = filled();
-        patch(r#"{"hubToken":null,"hubUser":null}"#).apply(&mut signed_in);
-        assert_eq!(signed_in.hub_token.as_deref(), Some("0123456789abcdef"));
-        assert!(signed_in.hub_user.is_some());
+        patch(r#"{"onlineToken":null,"onlineUser":null}"#).apply(&mut signed_in);
+        assert_eq!(signed_in.online_token.as_deref(), Some("0123456789abcdef"));
+        assert!(signed_in.online_user.is_some());
     }
 
     // --- slice: game core ---
@@ -859,12 +916,12 @@ mod tests {
     }
 
     #[test]
-    fn a_null_hub_address_leaves_the_one_in_force_alone() {
-        // `hubUrl` is not one of the nullable fields: an address is always in
+    fn a_null_service_address_leaves_the_one_in_force_alone() {
+        // `onlineUrl` is not one of the nullable fields: an address is always in
         // force. The way back to the default is a blank string, which is what
         // clearing the field on the Settings screen sends.
         let mut settings = filled();
-        patch(r#"{"hubUrl":null}"#).apply(&mut settings);
-        assert_eq!(settings.hub_url, "https://hub.jknet.gg");
+        patch(r#"{"onlineUrl":null}"#).apply(&mut settings);
+        assert_eq!(settings.online_url, "https://online.jknet.gg");
     }
 }

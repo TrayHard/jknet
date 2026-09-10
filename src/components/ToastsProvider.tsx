@@ -33,7 +33,7 @@ export interface ToastContent {
    * Runs instead of removing the toast from the column.
    *
    * For a toast that stands for something the core owns — an invitation lives
-   * on the hub until it is dismissed there — so that closing it here does not
+   * on the service until it is dismissed there — so that closing it here does not
    * bring it back on the next refresh.
    */
   onDismiss?: () => void;

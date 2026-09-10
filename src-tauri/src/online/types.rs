@@ -1,10 +1,10 @@
-//! Wire types of the JKNet hub API v1.
+//! Wire types of JKNet Online API v1.
 //!
 //! Every structure here mirrors the contract one to one and travels in both
-//! directions: the hub sends it as JSON, and the same structure reaches the
+//! directions: the service sends it as JSON, and the same structure reaches the
 //! frontend as the answer of a command. Field names are camelCase on the wire.
 //!
-//! Two rules keep this file forward compatible with a hub that ships before
+//! Two rules keep this file forward compatible with a service that ships before
 //! the launcher does. Enumerations of the contract (`provider`, `status`) are
 //! plain strings, so a provider added on the server does not turn every answer
 //! into a parse error; and every optional field carries `#[serde(default)]`,
@@ -12,13 +12,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A hub account. `User` in the contract.
+/// A service account. `User` in the contract.
 ///
-/// The launcher caches this in `settings.json` under `hubUser`, so the sidebar
-/// can print a name before the first request to the hub answers.
+/// The launcher caches this in `settings.json` under `onlineUser`, so the sidebar
+/// can print a name before the first request to the service answers.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct HubUser {
+pub struct OnlineUser {
     pub id: String,
     pub display_name: String,
     #[serde(default)]
@@ -27,7 +27,7 @@ pub struct HubUser {
     pub provider: String,
     /// The name the provider knows the player by, such as a JKHub login.
     pub provider_name: String,
-    /// RFC 3339 in UTC. Empty when the hub leaves it out.
+    /// RFC 3339 in UTC. Empty when the service leaves it out.
     #[serde(default)]
     pub created_at: String,
 }
@@ -35,7 +35,7 @@ pub struct HubUser {
 /// Where a player is right now.
 ///
 /// `status` is a string rather than an enumeration on purpose, like every
-/// other enumeration of the contract here: a hub that grows a fourth status
+/// other enumeration of the contract here: a service that grows a fourth status
 /// must not turn the whole friends list into a parse error on an older
 /// launcher. The three the contract has are [`Presence::ONLINE`],
 /// [`Presence::IN_GAME`] and [`Presence::OFFLINE`].
@@ -57,7 +57,7 @@ pub struct Presence {
 }
 
 /// A presence nobody has said anything about is an offline one, which is also
-/// what the hub decides after 90 s without a heartbeat.
+/// what the service decides after 90 s without a heartbeat.
 impl Default for Presence {
     fn default() -> Self {
         Presence {
@@ -75,13 +75,13 @@ impl Presence {
     pub const ONLINE: &'static str = "online";
     /// A game started from the launcher is open, on a server or on its menu.
     pub const IN_GAME: &'static str = "in_game";
-    /// Not here. Derived by the hub from a missing heartbeat.
+    /// Not here. Derived by the service from a missing heartbeat.
     pub const OFFLINE: &'static str = "offline";
 
     /// Whether the launcher may report this status in a `PUT /v1/presence`.
     ///
     /// Only two of the three are reportable. A launcher that is closing does
-    /// not announce it; the hub times the player out after 90 s instead, which
+    /// not announce it; the service times the player out after 90 s instead, which
     /// is also what covers a launcher killed from the task manager.
     pub fn is_reportable(&self) -> bool {
         self.status == Presence::ONLINE || self.status == Presence::IN_GAME
@@ -97,7 +97,7 @@ impl Presence {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PresenceUpdate {
-    /// `online` or `in_game`; the hub decides when someone is `offline`.
+    /// `online` or `in_game`; the service decides when someone is `offline`.
     pub status: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server_address: Option<String>,
@@ -124,12 +124,12 @@ impl From<&Presence> for PresenceUpdate {
 }
 
 /// The answer of `GET /v1/me`, which only the tests read: see
-/// [`HubClient::get_me`](super::client::HubClient::get_me).
+/// [`OnlineClient::get_me`](super::client::OnlineClient::get_me).
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Me {
-    pub user: HubUser,
+    pub user: OnlineUser,
     pub presence: Presence,
 }
 
@@ -137,7 +137,7 @@ pub struct Me {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Friend {
-    pub user: HubUser,
+    pub user: OnlineUser,
     pub presence: Presence,
     /// RFC 3339 in UTC.
     #[serde(default)]
@@ -150,8 +150,8 @@ pub struct Friend {
 #[serde(rename_all = "camelCase")]
 pub struct FriendRequest {
     pub id: String,
-    pub from: HubUser,
-    pub to: HubUser,
+    pub from: OnlineUser,
+    pub to: OnlineUser,
     #[serde(default)]
     pub created_at: String,
 }
@@ -185,7 +185,7 @@ pub struct SendRequestResult {
 #[serde(rename_all = "camelCase")]
 pub struct Invite {
     pub id: String,
-    pub from: HubUser,
+    pub from: OnlineUser,
     pub server_address: String,
     #[serde(default)]
     pub server_name: Option<String>,
@@ -193,7 +193,7 @@ pub struct Invite {
     pub message: Option<String>,
     #[serde(default)]
     pub created_at: String,
-    /// RFC 3339 in UTC; the hub drops an invite ten minutes after it is made.
+    /// RFC 3339 in UTC; the service drops an invite ten minutes after it is made.
     #[serde(default)]
     pub expires_at: String,
 }
@@ -231,7 +231,7 @@ pub struct LoginSession {
     #[serde(default)]
     pub token: Option<String>,
     #[serde(default)]
-    pub user: Option<HubUser>,
+    pub user: Option<OnlineUser>,
     #[serde(default)]
     pub error: Option<String>,
 }
@@ -256,7 +256,7 @@ pub struct LiveFrame {
 /// Payload of the `presence.updated` frame, and of the `friends:presence`
 /// Tauri event it turns into.
 ///
-/// The hub sends it only when a presence field actually changes. A heartbeat
+/// The service sends it only when a presence field actually changes. A heartbeat
 /// that repeats what it said last time produces no frame, so silence means
 /// "nothing moved", never "the friend is gone".
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -268,7 +268,7 @@ pub struct PresenceUpdated {
 
 /// Payload of the `friend.removed` frame.
 ///
-/// It arrives for a friendship that ended and, on the real hub, for a request
+/// It arrives for a friendship that ended and, on the real service, for a request
 /// that was declined or cancelled as well: one code for "that relationship is
 /// no longer there", whichever of the three lists it was in.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,7 +287,7 @@ pub struct FriendRemoved {
 pub struct SignInPoll {
     /// `pending`, `done`, `error` or `expired`.
     pub status: String,
-    pub user: Option<HubUser>,
+    pub user: Option<OnlineUser>,
     /// What the provider said when `status` is `error`.
     pub error: Option<String>,
 }

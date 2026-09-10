@@ -6,7 +6,7 @@ import {
   useDismissInvite,
   useFriendsEvents,
   useFriendsState,
-  useHubConfigured,
+  useOnlineConfigured,
   useLaunchClient,
   useRunningGame,
   useSettings,
@@ -28,13 +28,13 @@ import { Button } from "./ui";
  * closed still greets the player when it opens, and a dismissed one does not
  * come back on the next refresh.
  *
- * With the hub switched off there is no list, no subscription and no toast:
+ * With the service switched off there is no list, no subscription and no toast:
  * `useFriendsEvents` and `useFriendsState` both stand down, and the invites
  * below are read as none whatever the query cache still holds.
  */
 export function FriendsProvider({ children }: { children: ReactNode }) {
   useFriendsEvents();
-  const configured = useHubConfigured();
+  const configured = useOnlineConfigured();
   const friends = useFriendsState();
   const settings = useSettings();
   const running = useRunningGame();
@@ -71,7 +71,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
       show(toastId(invite.id), {
         title: `${invite.from.displayName} invites you to ${where(invite)}`,
         text: invite.message ?? undefined,
-        // Closing the toast drops the invitation on the hub as well, or the
+        // Closing the toast drops the invitation on the service as well, or the
         // next refresh of the list would bring the same toast straight back.
         onDismiss: () => dismissInvite(invite.id),
         action: (
