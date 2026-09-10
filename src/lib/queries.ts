@@ -21,8 +21,8 @@ import {
   errorMessage,
   friendsEvents,
   friendsIpc,
-  hubErrorCode,
-  hubErrorMessage,
+  onlineErrorCode,
+  onlineErrorMessage,
   ipc,
   jkhubEvents,
   jkhubIpc,
@@ -42,8 +42,8 @@ import {
   type DetectedGameFiles,
   type Game,
   type GameInfo,
-  type HubProvider,
-  type HubUser,
+  type OnlineProvider,
+  type OnlineUser,
   type Invite,
   type JkhubCategories,
   type JkhubDownloadProgress,
@@ -175,9 +175,9 @@ export function useUpdateSettings() {
       queryClient.invalidateQueries({ queryKey: queryKeys.dataPaths });
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
       queryClient.invalidateQueries({ queryKey: queryKeys.gameFiles });
-      // --- slice: hub gate ---
-      // `hubUrl` decides whether there is a hub at all, and the account state
-      // is derived from it. Without this an address typed into **Hub address**
+      // --- slice: online gate ---
+      // `onlineUrl` decides whether there is a service at all, and the account state
+      // is derived from it. Without this an address typed into **JKNet Online address**
       // would leave the Account card, the sidebar and the Friends screen
       // showing the switched-off state until the window was reloaded.
       queryClient.invalidateQueries({ queryKey: accountKeys.state });
@@ -815,7 +815,7 @@ export function useLevelshotEvents(): void {
 // ---------------------------------------------------------------------------
 // --- slice: account ---
 //
-// The hub account. Every hook here works through `accountIpc`, so the bearer
+// The service account. Every hook here works through `accountIpc`, so the bearer
 // token stays in the core: the frontend asks whether one exists and who it
 // belongs to, never what it is.
 // ---------------------------------------------------------------------------
@@ -844,7 +844,7 @@ export function useAccountState(): UseQueryResult<AccountState> {
       const unlisten = await listen<AccountChanged>(ACCOUNT_CHANGED_EVENT, () => {
         queryClient.invalidateQueries({ queryKey: accountKeys.state });
         // The account is cached in the settings document too, and the Settings
-        // screen reads the hub address out of it.
+        // screen reads the service address out of it.
         queryClient.invalidateQueries({ queryKey: queryKeys.settings });
       });
       if (disposed) {
@@ -867,17 +867,17 @@ export function useAccountState(): UseQueryResult<AccountState> {
   });
 }
 
-// --- slice: hub gate ---
+// --- slice: online gate ---
 /**
- * Whether this build has a hub, or `undefined` before the core has answered.
+ * Whether this build has a service, or `undefined` before the core has answered.
  *
  * Three screens switch on it — the Account card, the Friends screen and the
  * third step of the first run — and `useFriendsState` stops calling on it.
  * `undefined` means "not known yet", never "no": outside Tauri the account
- * query fails, and the Friends screen still has the mock hub to draw against.
+ * query fails, and the Friends screen still has the mock service to draw against.
  */
-export function useHubConfigured(): boolean | undefined {
-  return useAccountState().data?.hubConfigured;
+export function useOnlineConfigured(): boolean | undefined {
+  return useAccountState().data?.onlineConfigured;
 }
 
 /** Where a sign-in has got to. */
@@ -887,15 +887,15 @@ export type SignInPhase = "idle" | "starting" | "waiting" | "done" | "error";
 export interface SignInFlow {
   phase: SignInPhase;
   /** The provider being signed in with, while one is. */
-  provider: HubProvider | null;
+  provider: OnlineProvider | null;
   /** The account, once the browser has sent the player back. */
-  user: HubUser | null;
+  user: OnlineUser | null;
   /** What to print when `phase` is `error`. */
   error: string | null;
   /** The address opened in the browser, for a browser that stayed shut. */
   url: string | null;
-  start: (provider: HubProvider) => void;
-  /** Stops polling. The session on the hub expires on its own. */
+  start: (provider: OnlineProvider) => void;
+  /** Stops polling. The session on the service expires on its own. */
   cancel: () => void;
 }
 
@@ -909,19 +909,19 @@ const POLL_BUDGET_MS = 10 * 60_000;
  *
  * The core opens the browser and stores the token; this hook does the waiting.
  * It polls rather than listens because there is nothing to listen to: the
- * player's browser talks to the hub, not to the launcher, and a launcher that
+ * player's browser talks to the service, not to the launcher, and a launcher that
  * opened a port to hear about it would need a firewall prompt to sign in.
  */
 export function useSignIn(): SignInFlow {
   const queryClient = useQueryClient();
   const [phase, setPhase] = useState<SignInPhase>("idle");
-  const [provider, setProvider] = useState<HubProvider | null>(null);
-  const [user, setUser] = useState<HubUser | null>(null);
+  const [provider, setProvider] = useState<OnlineProvider | null>(null);
+  const [user, setUser] = useState<OnlineUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
 
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  // A poll that has not answered yet must not start a second one: a hub that
+  // A poll that has not answered yet must not start a second one: a service that
   // takes three seconds would otherwise collect a queue of them.
   const polling = useRef(false);
 
@@ -943,7 +943,7 @@ export function useSignIn(): SignInFlow {
   }, [stopPolling]);
 
   const start = useCallback(
-    (chosen: HubProvider) => {
+    (chosen: OnlineProvider) => {
       stopPolling();
       setPhase("starting");
       setProvider(chosen);
@@ -991,7 +991,7 @@ export function useSignIn(): SignInFlow {
               .catch((e: unknown) => {
                 stopPolling();
                 setPhase("error");
-                setError(hubErrorMessage(e));
+                setError(onlineErrorMessage(e));
               })
               .finally(() => {
                 polling.current = false;
@@ -1003,9 +1003,9 @@ export function useSignIn(): SignInFlow {
           // A provider that has issued no OAuth client yet is the expected
           // answer rather than a failure, so it reads as one.
           setError(
-            hubErrorCode(e) === "provider_error"
+            onlineErrorCode(e) === "provider_error"
               ? providerUnavailable(chosen)
-              : hubErrorMessage(e),
+              : onlineErrorMessage(e),
           );
         });
     },
@@ -1016,7 +1016,7 @@ export function useSignIn(): SignInFlow {
 }
 
 /** What a provider without an OAuth client yet reads as. */
-function providerUnavailable(provider: HubProvider): string {
+function providerUnavailable(provider: OnlineProvider): string {
   const name = provider === "discord" ? "Discord" : "JKHub";
   return `${name} sign-in is not available yet.`;
 }
@@ -1030,7 +1030,7 @@ function useAccountRefresh() {
   };
 }
 
-/** Forgets the account here and invalidates the token on the hub. */
+/** Forgets the account here and invalidates the token on the service. */
 export function useSignOut() {
   const refresh = useAccountRefresh();
   return useMutation({
@@ -1048,7 +1048,7 @@ export function useUpdateDisplayName() {
   });
 }
 
-/** Deletes the account on the hub. Nothing on this machine is touched. */
+/** Deletes the account on the service. Nothing on this machine is touched. */
 export function useDeleteAccount() {
   const refresh = useAccountRefresh();
   return useMutation({
@@ -1081,12 +1081,12 @@ export const friendsKeys = {
  * router for the events to arrive.
  */
 export function useFriendsState(): UseQueryResult<FriendsView> {
-  // --- slice: hub gate ---
-  // No hub, no query: the command would answer an empty document, and the
+  // --- slice: online gate ---
+  // No service, no query: the command would answer an empty document, and the
   // sidebar and the Friends screen have their own state for this. The query
-  // starts by itself when the player names a hub, because `account:changed`
+  // starts by itself when the player names a service, because `account:changed`
   // and the settings write invalidate the account state this reads.
-  const configured = useHubConfigured();
+  const configured = useOnlineConfigured();
   return useQuery({
     queryKey: friendsKeys.state,
     queryFn: friendsIpc.getFriendsState,
@@ -1099,13 +1099,13 @@ export function useFriendsState(): UseQueryResult<FriendsView> {
  * How many friends are online or in a game, for the sidebar badge.
  *
  * `undefined` leaves the counter off the sidebar entirely, which is the answer
- * while nobody is signed in and while the hub is switched off. The second case
+ * while nobody is signed in and while the service is switched off. The second case
  * is checked here rather than left to the disabled query: React Query keeps
- * what it fetched, so a player who clears the hub address would otherwise keep
+ * what it fetched, so a player who clears the service address would otherwise keep
  * a counter from the session before.
  */
 export function useOnlineFriendCount(): number | undefined {
-  const configured = useHubConfigured();
+  const configured = useOnlineConfigured();
   const friends = useFriendsState();
   if (configured === false) return undefined;
   if (friends.data === undefined || !friends.data.signedIn) return undefined;
@@ -1188,11 +1188,11 @@ export function useJoinFriend() {
  */
 export function useFriendsEvents(): void {
   const queryClient = useQueryClient();
-  // --- slice: hub gate ---
-  // Nothing emits these while the hub is switched off, and the window should
+  // --- slice: online gate ---
+  // Nothing emits these while the service is switched off, and the window should
   // not hold three subscriptions waiting for it. They attach by themselves
-  // when the player names a hub, because this value changes with the account.
-  const configured = useHubConfigured();
+  // when the player names a service, because this value changes with the account.
+  const configured = useOnlineConfigured();
 
   useEffect(() => {
     if (!isTauri() || configured === false) return;

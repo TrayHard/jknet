@@ -88,7 +88,7 @@ impl Game {
 
     /// The game a server port belongs to.
     ///
-    /// Presence on the hub names the server a friend is on and not the game
+    /// Presence on the service names the server a friend is on and not the game
     /// they are playing, yet the launcher has to choose a client before it can
     /// follow them there. The port is the one clue in the address: `PORT_SERVER`
     /// is 29070 in Jedi Academy and 28070 in Jedi Outcast, and an admin running
@@ -98,7 +98,7 @@ impl Game {
     /// longer server list.
     ///
     /// This is a guess, and it is one on purpose. The honest fix is an optional
-    /// `game` in the presence document of the hub contract; until it exists,
+    /// `game` in the presence document of the service contract; until it exists,
     /// one rule in one place beats the same arithmetic in three screens. See
     /// «Игра друга выводится из порта» in `docs/architecture.md`.
     pub fn from_server_port(port: u16) -> Game {
@@ -575,7 +575,7 @@ mod tests {
     #[test]
     fn a_server_port_names_the_game_it_belongs_to() {
         // The two default ports, which is the case that matters: presence on
-        // the hub carries an address and no game.
+        // the service carries an address and no game.
         assert_eq!(Game::from_server_port(29070), Game::JediAcademy);
         assert_eq!(Game::from_server_port(28070), Game::JediOutcast);
 

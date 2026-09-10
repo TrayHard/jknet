@@ -92,16 +92,16 @@ export interface Settings {
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
   // --- slice: account ---
-  /** The JKNet hub this launcher talks to, without a trailing slash. */
-  hubUrl: string;
-  /** The signed-in account as the hub last described it, or `null`. */
-  hubUser: HubUser | null;
+  /** JKNet Online, without a trailing slash. */
+  onlineUrl: string;
+  /** The signed-in account as the service last described it, or `null`. */
+  onlineUser: OnlineUser | null;
   /**
    * Always `null` here. The token lives in `settings.json` and on the
    * `Authorization` header the core builds; `get_settings` strips it, so it
    * never reaches this cache. Ask `getAccountState` whether one exists.
    */
-  hubToken?: null;
+  onlineToken?: null;
 }
 
 /**
@@ -134,8 +134,8 @@ export interface SettingsPatch {
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
   // --- slice: account ---
-  /** An `http://` or `https://` address; blank returns to the default hub. */
-  hubUrl?: string;
+  /** An `http://` or `https://` address; blank returns to the default service. */
+  onlineUrl?: string;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
@@ -690,14 +690,14 @@ export function levelshotUrl(path: string): string | null {
 // ---------------------------------------------------------------------------
 // --- slice: account ---
 //
-// Signing in to the JKNet hub, `src-tauri/src/account.rs` and
-// `src-tauri/src/hub/`. The bearer token is deliberately absent from every
+// Signing in to JKNet Online, `src-tauri/src/account.rs` and
+// `src-tauri/src/online/`. The bearer token is deliberately absent from every
 // type here: it is written into `settings.json` by the core and put on the
 // requests by the core, and the frontend is only ever told whether one exists.
 // ---------------------------------------------------------------------------
 
-/** `src-tauri/src/hub/types.rs`: an account on the hub. */
-export interface HubUser {
+/** `src-tauri/src/online/types.rs`: an account on the service. */
+export interface OnlineUser {
   id: string;
   displayName: string;
   avatarUrl: string | null;
@@ -710,32 +710,32 @@ export interface HubUser {
 }
 
 /** The sign-in providers the contract has. */
-export type HubProvider = "jkhub" | "discord" | "dev";
+export type OnlineProvider = "jkhub" | "discord" | "dev";
 
 /** `src-tauri/src/account.rs`: what the frontend knows about the account. */
 export interface AccountState {
   /**
-   * Whether this build has a hub to talk to at all.
+   * Whether this build has a service to talk to at all.
    *
-   * False in a release build until the JKNet Hub service is deployed and
-   * `RELEASE_HUB_URL` in `src-tauri/src/hub/client.rs` names its origin. While
+   * False in a release build until the JKNet Online service is deployed and
+   * `RELEASE_ONLINE_URL` in `src-tauri/src/online/client.rs` names its origin. While
    * it is false the account and friends interface is one sentence saying so:
-   * no provider buttons, no counters, no calls. The **Hub address** field on
+   * no provider buttons, no counters, no calls. The **JKNet Online address** field on
    * the Settings screen turns it on for this machine.
    */
-  hubConfigured: boolean;
+  onlineConfigured: boolean;
   /**
-   * Whether a token is on file. It does not promise the hub still accepts it:
+   * Whether a token is on file. It does not promise the service still accepts it:
    * finding that out costs a request, and the sidebar paints before one could
-   * answer. Always false while `hubConfigured` is false.
+   * answer. Always false while `onlineConfigured` is false.
    */
-  hubSignedIn: boolean;
-  hubUser: HubUser | null;
-  /** The hub the launcher talks to, or an empty string when there is none. */
-  hubUrl: string;
-  /** Whether the hub runs on this machine, which is what shows the Developer
+  onlineSignedIn: boolean;
+  onlineUser: OnlineUser | null;
+  /** The service the launcher talks to, or an empty string when there is none. */
+  onlineUrl: string;
+  /** Whether the service runs on this machine, which is what shows the Developer
    *  sign-in button. */
-  localHub: boolean;
+  localOnline: boolean;
 }
 
 /** `src-tauri/src/account.rs`: the session `begin_sign_in` opened. */
@@ -750,7 +750,7 @@ export interface SignInStart {
 export interface SignInPoll {
   status: "pending" | "done" | "error" | "expired";
   /** Set on `done`, when the core has stored the token. */
-  user: HubUser | null;
+  user: OnlineUser | null;
   /** Set on `error`. */
   error: string | null;
 }
@@ -758,7 +758,7 @@ export interface SignInPoll {
 /**
  * Why the account changed.
  *
- * `expired` is the only one nobody asked for: the hub answered `401` to a call
+ * `expired` is the only one nobody asked for: the service answered `401` to a call
  * that carried the stored token, so the core forgot it. That is the one worth a
  * message on screen — the others are the answer to something the player just
  * did.
@@ -782,80 +782,80 @@ export const ACCOUNT_CHANGED_EVENT = "account:changed";
 export const accountIpc = {
   getAccountState: () => call<AccountState>("get_account_state"),
   /** Opens a session and sends the player to the browser. */
-  beginSignIn: (provider: HubProvider) =>
+  beginSignIn: (provider: OnlineProvider) =>
     call<SignInStart>("begin_sign_in", { provider }),
   /** Reads a session once. On `done` the core has already stored the token. */
   pollSignIn: (sessionId: string) =>
     call<SignInPoll>("poll_sign_in", { sessionId }),
   signOut: () => call<void>("sign_out"),
   updateDisplayName: (displayName: string) =>
-    call<HubUser>("update_display_name", { displayName }),
+    call<OnlineUser>("update_display_name", { displayName }),
   deleteAccount: () => call<void>("delete_account"),
 };
 
 /**
- * The contract's error code inside a refusal from the hub, or `null`.
+ * The contract's error code inside a refusal from the service, or `null`.
  *
- * `AppError` reaches the frontend as one rendered string, and the hub variant
- * renders as `hub <code>: <message>`. The screens need the code — a
+ * `AppError` reaches the frontend as one rendered string, and the service variant
+ * renders as `online <code>: <message>`. The screens need the code — a
  * `provider_error` keeps the guest button and a `conflict` asks for another
  * name — so this reads it back out rather than every screen matching on the
- * wording of a message the hub wrote.
+ * wording of a message the service wrote.
  */
-export function hubErrorCode(error: unknown): string | null {
-  const match = /^hub ([a-z_]+): /.exec(errorMessage(error));
+export function onlineErrorCode(error: unknown): string | null {
+  const match = /^online ([a-z_]+): /.exec(errorMessage(error));
   return match ? match[1] : null;
 }
 
-/** The same message without the `hub <code>:` prefix, for printing. */
-export function hubErrorMessage(error: unknown): string {
-  return errorMessage(error).replace(/^hub [a-z_]+: /, "");
+/** The same message without the `online <code>:` prefix, for printing. */
+export function onlineErrorMessage(error: unknown): string {
+  return errorMessage(error).replace(/^online [a-z_]+: /, "");
 }
 
-// --- slice: hub gate ---
+// --- slice: online gate ---
 
 /**
- * The code `AppError::HubNotConfigured` carries.
+ * The code `AppError::OnlineNotConfigured` carries.
  *
  * Not one of the contract's own codes: it never leaves the launcher. The core
- * answers it instead of opening a socket when this build has no hub address.
+ * answers it instead of opening a socket when this build has no service address.
  */
-export const HUB_NOT_CONFIGURED = "hub_not_configured";
+export const ONLINE_NOT_CONFIGURED = "online_not_configured";
 
 /**
- * Whether a refusal means "this build has no hub" rather than a failure.
+ * Whether a refusal means "this build has no service" rather than a failure.
  *
- * Read `hubConfigured` from `getAccountState` to decide what to draw; this is
+ * Read `onlineConfigured` from `getAccountState` to decide what to draw; this is
  * for the calls that were already in flight when the answer changed, so a
  * screen prints the same sentence instead of a network error.
  */
-export function isHubNotConfigured(error: unknown): boolean {
-  return hubErrorCode(error) === HUB_NOT_CONFIGURED;
+export function isOnlineNotConfigured(error: unknown): boolean {
+  return onlineErrorCode(error) === ONLINE_NOT_CONFIGURED;
 }
 
-/** What every screen says while the hub is switched off. One wording, one
+/** What every screen says while the service is switched off. One wording, one
  *  place: it appears on the Account card, the Friends screen and the third
  *  step of the first run. */
-export const HUB_NOT_CONFIGURED_TEXT =
-  "JKNet accounts and friends need the JKNet Hub service. It is not open yet, so this version keeps the feature switched off. A later update turns it on by itself.";
+export const ONLINE_NOT_CONFIGURED_TEXT =
+  "JKNet accounts and friends need JKNet Online. It is not open yet, so this version keeps the feature switched off. A later update turns it on by itself.";
 
 // ---------------------------------------------------------------------------
 // --- slice: friends ---
 //
 // Friends, presence and invites, `src-tauri/src/friends/`. The types below
-// mirror `src-tauri/src/hub/types.rs`, which in turn mirrors the `## Types`
-// table of the hub contract, so the three stay readable side by side. The
-// launcher never talks to the hub from the frontend: a token in a webview is a
+// mirror `src-tauri/src/online/types.rs`, which in turn mirrors the `## Types`
+// table of the service contract, so the three stay readable side by side. The
+// launcher never talks to the service from the frontend: a token in a webview is a
 // token in the devtools network tab.
 // ---------------------------------------------------------------------------
 
 /**
- * Calls a friends command, or the mock hub when the page is in a browser.
+ * Calls a friends command, or the mock service when the page is in a browser.
  *
  * The Friends screen is nothing but commands, so outside Tauri it would be one
  * error line and no layout at all. In a development build the call goes to
- * `scripts/mock-hub.mjs` over `fetch` instead; `import.meta.env.DEV` is a
- * compile-time constant, so both the branch and `devHub.ts` behind it are gone
+ * `scripts/mock-online.mjs` over `fetch` instead; `import.meta.env.DEV` is a
+ * compile-time constant, so both the branch and `devOnline.ts` behind it are gone
  * from a production bundle. Inside Tauri nothing changes.
  */
 function callFriends<T>(
@@ -863,12 +863,12 @@ function callFriends<T>(
   args?: Record<string, unknown>,
 ): Promise<T> {
   if (import.meta.env.DEV && !isTauri()) {
-    return import("./devHub").then((module) => module.devFriends<T>(command, args));
+    return import("./devOnline").then((module) => module.devFriends<T>(command, args));
   }
   return call<T>(command, args);
 }
 
-/** Where a player is. `offline` is derived by the hub from a missed heartbeat. */
+/** Where a player is. `offline` is derived by the service from a missed heartbeat. */
 export type PresenceStatus = "online" | "in_game" | "offline";
 
 export interface Presence {
@@ -884,7 +884,7 @@ export interface Presence {
 }
 
 export interface Friend {
-  user: HubUser;
+  user: OnlineUser;
   presence: Presence;
   friendsSince: string;
 }
@@ -892,19 +892,19 @@ export interface Friend {
 /** A friend request; which list it is in says whether it is mine to accept. */
 export interface FriendRequest {
   id: string;
-  from: HubUser;
-  to: HubUser;
+  from: OnlineUser;
+  to: OnlineUser;
   createdAt: string;
 }
 
 export interface Invite {
   id: string;
-  from: HubUser;
+  from: OnlineUser;
   serverAddress: string;
   serverName: string | null;
   message: string | null;
   createdAt: string;
-  /** The hub drops an invite ten minutes after it was made. */
+  /** The service drops an invite ten minutes after it was made. */
   expiresAt: string;
 }
 

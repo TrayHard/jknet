@@ -18,7 +18,7 @@ import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState, Input } from "../components/ui";
 import {
   errorMessage,
-  HUB_NOT_CONFIGURED_TEXT,
+  ONLINE_NOT_CONFIGURED_TEXT,
   type Friend,
   type Presence,
 } from "../lib/ipc";
@@ -30,7 +30,7 @@ import {
   useDeclineFriendRequest,
   useFriendsState,
   useGames,
-  useHubConfigured,
+  useOnlineConfigured,
   useJoinFriend,
   useRemoveFriend,
   useRunningGame,
@@ -59,8 +59,8 @@ export function FriendsPage() {
   const navigate = useNavigate();
   const friends = useFriendsState();
   const running = useRunningGame();
-  // --- slice: hub gate ---
-  const hubConfigured = useHubConfigured();
+  // --- slice: online gate ---
+  const onlineConfigured = useOnlineConfigured();
 
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -125,11 +125,11 @@ export function FriendsPage() {
     });
   };
 
-  // --- slice: hub gate ---
-  // Before the sign-in prompt: with no hub there is nothing to sign in to, and
+  // --- slice: online gate ---
+  // Before the sign-in prompt: with no service there is nothing to sign in to, and
   // a **Sign in** button here would send the player to a card that says the
   // same thing. No counters either — there is nobody to count.
-  if (hubConfigured === false) {
+  if (onlineConfigured === false) {
     return (
       <Page>
         <PageHeader
@@ -139,7 +139,7 @@ export function FriendsPage() {
         <EmptyState
           icon={<Users size={24} />}
           title="Friends are not switched on yet"
-          text={HUB_NOT_CONFIGURED_TEXT}
+          text={ONLINE_NOT_CONFIGURED_TEXT}
         />
       </Page>
     );
@@ -155,7 +155,7 @@ export function FriendsPage() {
         <EmptyState
           icon={<Users size={24} />}
           title="Sign in to see your friends"
-          text="JKNet keeps your friends list on the hub, so it follows you to any machine you sign in on."
+          text="JKNet keeps your friends list on the service, so it follows you to any machine you sign in on."
           action={
             <Button
               variant="primary"
@@ -214,7 +214,7 @@ export function FriendsPage() {
           <span className="text-body-sm text-fg-muted">
             {view.live
               ? "Changes arrive the moment they happen."
-              : "The hub is out of reach; the list refreshes every 30 seconds."}
+              : "The service is out of reach; the list refreshes every 30 seconds."}
           </span>
         </div>
       ) : null}
