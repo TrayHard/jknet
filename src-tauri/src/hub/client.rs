@@ -19,7 +19,7 @@
 //! - a `401` to a request that carried a token means the hub will not take that
 //!   token again, so the launcher forgets it. Every call to the hub passes
 //!   through [`HubClient::call`], which is why this lives here rather than in
-//!   each of the fourteen commands that could meet one.
+//!   each command and background task that could meet one.
 
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
