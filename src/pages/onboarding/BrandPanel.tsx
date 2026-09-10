@@ -37,7 +37,7 @@ export function BrandPanel() {
     <aside className="hidden lg:flex flex-col justify-between w-480 shrink-0 bg-sidebar border-r border-line-subtle p-40">
       <div>
         <div className="flex items-center gap-10">
-          <Logo size={28} className="text-fg-accent" />
+          <Logo size={28} />
           <span className="text-display-nav text-fg tracking-[0.12em]">JKNET</span>
         </div>
         <p className="text-display-md text-fg pt-32">
