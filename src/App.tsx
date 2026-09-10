@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Route, Routes } from "react-router";
 
 import { AppShell } from "./components/AppShell";
+import { AppUpdateProvider } from "./components/AppUpdateProvider";
 import { GameEventsProvider } from "./components/GameEventsProvider";
 import { ClientsPage } from "./pages/ClientsPage";
 import { FriendsPage } from "./pages/FriendsPage";
@@ -36,26 +37,31 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       {/* Above the router: an engine install must survive a route change. */}
       <GameEventsProvider>
-        <HashRouter>
-          <Routes>
-            {/* Everything behind the first run. An unknown hash lands on Home
-                inside the shell, which is where the navigation is. */}
-            <Route element={<OnboardingGate />}>
-              <Route element={<AppShell />}>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/servers" element={<ServersPage />} />
-                <Route path="/library" element={<LibraryPage />} />
-                <Route path="/clients" element={<ClientsPage />} />
-                <Route path="/friends" element={<FriendsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="*" element={<HomePage />} />
+        {/* --- slice: installer --- */}
+        {/* Same reason, plus the toast host: the launcher's own download runs
+            while the player keeps browsing servers. */}
+        <AppUpdateProvider>
+          <HashRouter>
+            <Routes>
+              {/* Everything behind the first run. An unknown hash lands on Home
+                  inside the shell, which is where the navigation is. */}
+              <Route element={<OnboardingGate />}>
+                <Route element={<AppShell />}>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/servers" element={<ServersPage />} />
+                  <Route path="/library" element={<LibraryPage />} />
+                  <Route path="/clients" element={<ClientsPage />} />
+                  <Route path="/friends" element={<FriendsPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="*" element={<HomePage />} />
+                </Route>
               </Route>
-            </Route>
-            <Route element={<AppShell withSidebar={false} />}>
-              <Route path="/onboarding" element={<OnboardingPage />} />
-            </Route>
-          </Routes>
-        </HashRouter>
+              <Route element={<AppShell withSidebar={false} />}>
+                <Route path="/onboarding" element={<OnboardingPage />} />
+              </Route>
+            </Routes>
+          </HashRouter>
+        </AppUpdateProvider>
       </GameEventsProvider>
     </QueryClientProvider>
   );

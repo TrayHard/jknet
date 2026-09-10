@@ -64,10 +64,19 @@ pub fn run() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // --- slice: installer ---
+        // `relaunch()` after the update installer hands control back.
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             #[cfg(desktop)]
-            app.handle()
-                .plugin(tauri_plugin_window_state::Builder::default().build())?;
+            {
+                app.handle()
+                    .plugin(tauri_plugin_window_state::Builder::default().build())?;
+                // --- slice: installer ---
+                // The updater is desktop only: it has no mobile backend.
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             log::info!("JKNet {} started", app.package_info().version);
             Ok(())
         })

@@ -8,6 +8,7 @@ import {
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
+import { AboutCard } from "../components/AboutCard";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
@@ -88,7 +89,11 @@ export function SettingsPage() {
         icon={<SlidersHorizontal size={24} />}
         title="The rest of the settings is not wired up yet"
         text="The Downloads, Appearance and Account sections arrive together with the features they control."
+        className="mb-24"
       />
+
+      {/* --- slice: installer --- */}
+      <AboutCard />
     </Page>
   );
 }

@@ -15,6 +15,11 @@ dist-ssr
 # Rust build output
 src-tauri/target
 
+# Updater signing keys. The private key never enters the repository: a leaked
+# key lets anyone sign an update that every installed launcher will accept.
+*.key
+*.key.pub
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
