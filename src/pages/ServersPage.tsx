@@ -7,7 +7,6 @@ import {
   Server as ServerIcon,
 } from "lucide-react";
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -37,7 +36,12 @@ import {
 } from "../components/servers/filter";
 import { Button, EmptyState, Input } from "../components/ui";
 import { cn } from "../lib/format";
-import { errorMessage, launchClient, type ServerInfo } from "../lib/ipc";
+import {
+  errorMessage,
+  launchClient,
+  type ServerInfo,
+  type ServersDoneEvent,
+} from "../lib/ipc";
 import {
   useAddServerHistory,
   useCachedServers,
@@ -145,7 +149,14 @@ export function ServersPage() {
     <div className="flex flex-col h-full p-24">
       <PageHeader
         title="Servers"
-        subtitle={describeCounts(visible.length, all.length, playersOnline, secondsAgo)}
+        subtitle={describeCounts({
+          visible: visible.length,
+          total: all.length,
+          players: playersOnline,
+          secondsAgo,
+          scanning: refresh.running,
+          progress: refresh.progress,
+        })}
         actions={
           <>
             <Input
@@ -260,7 +271,9 @@ export function ServersPage() {
             players={status.data?.players}
             playersLoading={status.isFetching && status.data === undefined}
             playersError={
-              status.error !== null ? "This server did not answer." : null
+              status.error === null
+                ? null
+                : `No player list: ${errorMessage(status.error)}`
             }
             canConnect={defaultClient !== undefined}
             onConnect={connect}
@@ -476,12 +489,15 @@ function buildTabs(
 }
 
 /** The line under the title: what is shown, out of what, and how fresh. */
-function describeCounts(
-  visible: number,
-  total: number,
-  players: number,
-  secondsAgo: number | null,
-): string {
+function describeCounts(state: {
+  visible: number;
+  total: number;
+  players: number;
+  secondsAgo: number | null;
+  scanning: boolean;
+  progress: ServersDoneEvent | null;
+}): string {
+  const { visible, total, players, secondsAgo, scanning, progress } = state;
   const head =
     total === 0
       ? "No servers yet"
@@ -489,9 +505,16 @@ function describeCounts(
         ? `${total} servers`
         : `${visible} of ${total} servers`;
   const middle = total === 0 ? "" : ` · ${players} players online`;
+
+  if (scanning) return `${head}${middle} · asking the master servers`;
+
+  const silent =
+    progress === null || progress.responded === progress.total
+      ? ""
+      : ` · ${progress.total - progress.responded} did not answer`;
   const tail =
     secondsAgo === null ? "" : ` · refreshed ${formatAge(secondsAgo)} ago`;
-  return `${head}${middle}${tail}`;
+  return `${head}${middle}${tail}${silent}`;
 }
 
 function formatAge(seconds: number): string {
@@ -532,13 +555,11 @@ function useSecondsSince(timestamp: number | null): number | null {
 
   useEffect(() => {
     if (timestamp === null) return;
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, [timestamp]);
 
-  const seconds = useCallback(
-    () => (timestamp === null ? null : Math.max(0, Math.floor((now - timestamp) / 1_000))),
-    [now, timestamp],
-  );
-  return seconds();
+  if (timestamp === null) return null;
+  return Math.max(0, Math.floor((now - timestamp) / 1_000));
 }
