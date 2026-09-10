@@ -10,12 +10,30 @@ use std::collections::BTreeMap;
 use std::fs;
 
 use serde::{Deserialize, Deserializer, Serialize};
+use tauri::{AppHandle, Emitter};
 
 use crate::error::{AppError, Result};
 use crate::game::Game;
 use crate::online::{self, OnlineUser};
 use crate::paths;
 use crate::state::AppState;
+
+// --- slice: jkhub index startup ---
+/// Emitted when a patch moved `activeGame`, and only then.
+///
+/// The switch in the sidebar is the one setting other modules have background
+/// work hanging off: `jkhub::prewarm` uses it to build the catalogue index of
+/// the game the player just moved to. Emitted rather than called so this
+/// module keeps knowing nothing about the ones that care, the way
+/// `account:changed` already works for `friends`.
+pub const ACTIVE_GAME_EVENT: &str = "settings:active-game";
+
+/// Payload of [`ACTIVE_GAME_EVENT`]: the game the launcher is now set to.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActiveGameChanged {
+    pub game: Game,
+}
 
 // --- slice: i18n ---
 /// The value of `language` that means «follow the operating system».
@@ -509,17 +527,31 @@ pub fn get_settings(state: tauri::State<'_, AppState>) -> Result<Settings> {
 /// what actually landed on disk rather than from what it sent.
 #[tauri::command]
 pub fn update_settings(
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     patch: SettingsPatch,
 ) -> Result<Settings> {
     // --- slice: account --- refuses a service address that is not an HTTP URL.
     patch.validate()?;
     let mut settings = Settings::current(&state)?;
+    let was = settings.active_game;
     patch.apply(&mut settings);
     settings.save(&state)?;
     state.set_settings(settings.clone())?;
     state.paths()?.ensure()?;
     log::info!("settings updated, data root is {}", state.paths()?.root.display());
+    // --- slice: jkhub index startup ---
+    // Only the switch, not every write: the settings document is also where
+    // favourites and the server history land, and neither of those is worth
+    // waking a background task for.
+    if settings.active_game != was {
+        let payload = ActiveGameChanged {
+            game: settings.active_game,
+        };
+        if let Err(e) = app.emit(ACTIVE_GAME_EVENT, payload) {
+            log::warn!("cannot emit {ACTIVE_GAME_EVENT}: {e}");
+        }
+    }
     Ok(settings.redacted())
 }
 

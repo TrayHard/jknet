@@ -186,6 +186,17 @@ pub fn run() {
             // Built here rather than per call: the session a `csrfKey` belongs
             // to is the session that jar holds.
             jkhub::manage(app.handle());
+            // --- slice: jkhub index startup ---
+            // Which folder the bundled category trees and catalogue indexes
+            // come from, and what is missing from it. A build that shipped
+            // without one used to be noticed as a crawl the day somebody
+            // searched; now it is a line in the first page of the log.
+            jkhub::snapshot::check(app.handle());
+            // And the index itself, a few seconds from now: building it under
+            // a player who has already typed a word is what this replaces.
+            // Nothing here blocks the window — the work is a spawned task, and
+            // the plan is usually «nothing».
+            jkhub::prewarm::start(app.handle());
             // --- review: downloads of failed installs are never removed ---
             // An install that ended yesterday cannot be resumed by any screen
             // open today, so its archive goes. A scan of a folder with a
@@ -305,6 +316,8 @@ pub fn run() {
             jkhub::jkhub_search,
             jkhub::jkhub_index_status,
             jkhub::jkhub_refresh_index,
+            // --- slice: jkhub index startup ---
+            jkhub::jkhub_cancel_index,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
