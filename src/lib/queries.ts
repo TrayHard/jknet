@@ -19,6 +19,7 @@ import {
   errorMessage,
   ipc,
   launchIpc,
+  levelshotsIpc,
   libraryIpc,
   serversIpc,
   type Client,
@@ -28,6 +29,7 @@ import {
   type EngineRelease,
   type EngineUpdate,
   type GameFilesCandidate,
+  type Levelshot,
   type LibraryItem,
   type RunningGame,
   type ServerInfo,
@@ -601,4 +603,86 @@ async function collectEngineVersions(
   // A copy, not the accumulator: a late answer must not edit the object React
   // Query already handed to a component that will not re-render for it.
   return { ...found };
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: maps ---
+// ---------------------------------------------------------------------------
+
+export const levelshotKeys = {
+  /** One picture, keyed by the lowercase map name. */
+  shot: (map: string) => ["levelshots", "shot", map] as const,
+  /** Every map the launcher has a picture for. */
+  list: ["levelshots", "list"] as const,
+};
+
+/**
+ * The picture of one map, or `null` when the player owns no pk3 with one.
+ *
+ * The core keeps the cache and decides when to rebuild it, so the answer is
+ * cheap after the first call and never goes stale on its own: a rebuild tells
+ * the window through `levelshots:changed`, which is what `useLevelshotEvents`
+ * listens for. `null` is a valid answer and must not be retried.
+ */
+export function useLevelshot(
+  map: string | null | undefined,
+): UseQueryResult<Levelshot | null> {
+  const key = (map ?? "").trim().toLowerCase();
+  return useQuery({
+    queryKey: levelshotKeys.shot(key),
+    queryFn: () => levelshotsIpc.getLevelshot(key),
+    enabled: key.length > 0,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** Every indexed map, which is what the Settings card counts. */
+export function useLevelshots(): UseQueryResult<string[]> {
+  return useQuery({
+    queryKey: levelshotKeys.list,
+    queryFn: levelshotsIpc.listLevelshots,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Reads every pk3 again. The **Rebuild** button of the Settings card. */
+export function useRebuildLevelshots() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: levelshotsIpc.rebuildLevelshots,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["levelshots"] });
+    },
+  });
+}
+
+/**
+ * Repaints the map pictures after the core rebuilt its index.
+ *
+ * A rebuild happens on demand — a new pk3 in a client folder, the game folder
+ * pointed somewhere else — and it may add a picture for a map that answered
+ * `null` a minute ago. Mounted once, next to the other app-wide listeners.
+ */
+export function useLevelshotEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen("levelshots:changed", () => {
+      void queryClient.invalidateQueries({ queryKey: ["levelshots"] });
+    }).then((unlisten) => {
+      // The effect may have been torn down while the promise resolved.
+      if (disposed) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [queryClient]);
 }
