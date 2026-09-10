@@ -74,6 +74,7 @@
   --alpha-white-12: rgba(255, 255, 255, 0.12);
   --alpha-black-40: rgba(0, 0, 0, 0.4);
   --alpha-black-60: rgba(0, 0, 0, 0.6);
+  --alpha-black-85: rgba(0, 0, 0, 0.85);
   --alpha-cyan-16: rgba(34, 184, 240, 0.16);
   --alpha-cyan-32: rgba(34, 184, 240, 0.32);
 
@@ -99,6 +100,10 @@
   --color-bg-danger-subtle: var(--red-900);
   --color-bg-purple-subtle: var(--purple-900);
   --color-bg-overlay: var(--alpha-black-60);
+  /* Ground under a caption that lies on a picture. Deeper than the dialog
+     overlay on purpose: a levelshot can be bright everywhere, and the caption
+     has to hold 4.5:1 against the worst of them. */
+  --color-bg-scrim: var(--alpha-black-85);
   --color-bg-hover-overlay: var(--alpha-white-4);
   --color-bg-selected-overlay: var(--alpha-white-8);
   --color-bg-accent-glow: var(--alpha-cyan-16);
