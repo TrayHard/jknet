@@ -1,11 +1,13 @@
-import { MessageCircle, Shield, UserRound } from "lucide-react";
-import type { ReactNode } from "react";
+import { AlertTriangle, Shield } from "lucide-react";
 import { useState } from "react";
 
-import { Badge, Button } from "../../components/ui";
-import { ACCOUNTS_ENABLED } from "../../lib/flags";
+import { Avatar } from "../../components/account/Avatar";
+import { providerLine } from "../../components/account/provider";
+import { ProviderButtons } from "../../components/account/ProviderButtons";
+import { WaitingForBrowser } from "../../components/account/WaitingForBrowser";
+import { Button } from "../../components/ui";
 import { errorMessage } from "../../lib/ipc";
-import { useUpdateSettings } from "../../lib/queries";
+import { useAccountState, useSignIn, useUpdateSettings } from "../../lib/queries";
 import { StepPanel } from "./StepPanel";
 
 interface StepAccountProps {
@@ -13,7 +15,7 @@ interface StepAccountProps {
   onDone: () => void;
 }
 
-/** What an account will be good for, once there is one. */
+/** What an account is good for. */
 const BENEFITS = [
   "A friends list, with an invite that works without port forwarding.",
   "Your library and your favourite servers on every machine you play from.",
@@ -23,14 +25,21 @@ const BENEFITS = [
 /**
  * Step 3: sign in, or do not.
  *
- * The providers are drawn and switched off. Accounts are the one part of the
- * design with no command behind it, and cutting the step out would leave the
- * badge strip counting to two while the design counts to three — and would
- * hide from a new player that the launcher is going to have accounts at all.
+ * The step never blocks. Signing in is one browser round trip and the guest
+ * button sits next to it the whole way through, including after a provider has
+ * refused: JKHub and Discord have issued no OAuth client yet, and a player who
+ * meets that on their first run must still reach the Play button.
  */
 export function StepAccount({ onBack, onDone }: StepAccountProps) {
+  const account = useAccountState();
+  const flow = useSignIn();
   const updateSettings = useUpdateSettings();
   const [error, setError] = useState<string | null>(null);
+
+  // The signed-in account, from this sign-in or from a previous run.
+  const user = flow.user ?? account.data?.hubUser ?? null;
+  const signedIn = flow.phase === "done" || (account.data?.hubSignedIn ?? false);
+  const waiting = flow.phase === "starting" || flow.phase === "waiting";
 
   const finish = () => {
     setError(null);
@@ -43,86 +52,85 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
   return (
     <StepPanel
       step={3}
-      heading="Sign in, or play as a guest"
-      text="An account is optional. Everything you have set up so far works without one, and you can sign in later from Settings."
+      heading={signedIn ? "You are signed in" : "Sign in, or play as a guest"}
+      text={
+        signedIn
+          ? "Your friends list and your invites follow this account from now on."
+          : "An account is optional. Everything you have set up so far works without one, and you can sign in later from Settings."
+      }
       error={error}
-      onBack={onBack}
+      onBack={waiting ? undefined : onBack}
       footer={
         <Button
-          variant={ACCOUNTS_ENABLED ? "secondary" : "primary"}
+          variant={signedIn ? "primary" : "secondary"}
           size="lg"
-          disabled={updateSettings.isPending}
+          disabled={updateSettings.isPending || waiting}
           onClick={finish}
         >
-          {updateSettings.isPending ? "Finishing…" : "Skip, play as guest"}
+          {updateSettings.isPending
+            ? "Finishing…"
+            : signedIn
+              ? "Continue"
+              : "Skip, play as guest"}
         </Button>
       }
     >
-      <div className="flex flex-col gap-8">
-        {/* No handler on purpose: wiring one belongs to the change that
-            flips ACCOUNTS_ENABLED and adds the command behind it. */}
-        <Provider
-          icon={<UserRound size={20} />}
-          label="Continue with JKHub"
-          note="The account most of the community already has."
-        />
-        <Provider
-          icon={<MessageCircle size={20} />}
-          label="Continue with Discord"
-          note="Signs you in with the Discord you play with."
-        />
-      </div>
+      {signedIn && user ? (
+        <section className="flex items-center gap-12 rounded-lg border border-line bg-surface p-16">
+          <Avatar user={user} size="lg" />
+          <span className="flex-1 min-w-0 flex flex-col">
+            <span className="text-heading-sm text-fg truncate">
+              {user.displayName}
+            </span>
+            <span className="text-body-sm text-fg-muted truncate">
+              {providerLine(user.provider, user.providerName)}
+            </span>
+          </span>
+        </section>
+      ) : waiting ? (
+        <WaitingForBrowser flow={flow} />
+      ) : (
+        <>
+          {flow.error ? (
+            <div
+              role="alert"
+              className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12 mb-16"
+            >
+              <AlertTriangle size={16} className="text-fg-warm shrink-0 mt-2" />
+              <span className="text-body-sm text-fg break-words">
+                {flow.error} You can play as a guest and sign in later.
+              </span>
+            </div>
+          ) : null}
+          <ProviderButtons
+            onPick={flow.start}
+            busy={waiting}
+            localHub={account.data?.localHub ?? false}
+          />
+        </>
+      )}
 
-      <section className="rounded-lg border border-line bg-surface p-16 mt-24">
-        <h2 className="text-heading-sm text-fg">With an account</h2>
-        <ul className="flex flex-col gap-8 pt-12">
-          {BENEFITS.map((benefit) => (
-            <li key={benefit} className="flex items-start gap-8">
-              <span className="mt-8 size-6 shrink-0 rounded-full bg-accent" />
-              <span className="text-body-sm text-fg-secondary">{benefit}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {signedIn ? null : (
+        <section className="rounded-lg border border-line bg-surface p-16 mt-24">
+          <h2 className="text-heading-sm text-fg">With an account</h2>
+          <ul className="flex flex-col gap-8 pt-12">
+            {BENEFITS.map((benefit) => (
+              <li key={benefit} className="flex items-start gap-8">
+                <span className="mt-8 size-6 shrink-0 rounded-full bg-accent" />
+                <span className="text-body-sm text-fg-secondary">{benefit}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <p className="flex items-start gap-8 text-body-sm text-fg-muted pt-16">
         <Shield size={16} className="shrink-0 mt-2" />
         <span>
-          JKNet would store your account name and the clients you made. Your game
+          JKNet stores your account name and who your friends are. Your game
           files, your settings and your saves stay on this machine.
         </span>
       </p>
     </StepPanel>
-  );
-}
-
-interface ProviderProps {
-  icon: ReactNode;
-  label: string;
-  note: string;
-}
-
-/** One sign-in provider, drawn as the design has it and switched off. */
-function Provider({ icon, label, note }: ProviderProps) {
-  return (
-    <button
-      type="button"
-      disabled={!ACCOUNTS_ENABLED}
-      className={[
-        "flex items-center gap-12 h-56 px-16 rounded-md border border-line bg-input",
-        "text-left transition-colors duration-150",
-        "enabled:cursor-pointer enabled:hover:bg-surface-hover",
-        "disabled:cursor-not-allowed disabled:opacity-60",
-      ].join(" ")}
-    >
-      <span className="flex items-center justify-center size-36 shrink-0 rounded-md bg-elevated text-fg-secondary">
-        {icon}
-      </span>
-      <span className="flex-1 min-w-0 flex flex-col">
-        <span className="text-body-md-medium text-fg">{label}</span>
-        <span className="text-body-sm text-fg-muted truncate">{note}</span>
-      </span>
-      {ACCOUNTS_ENABLED ? null : <Badge tone="neutral">Soon</Badge>}
-    </button>
   );
 }

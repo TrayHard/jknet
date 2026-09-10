@@ -47,6 +47,17 @@ export interface Settings {
   // --- slice: onboarding ---
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
+  // --- slice: account ---
+  /** The JKNet hub this launcher talks to, without a trailing slash. */
+  hubUrl: string;
+  /** The signed-in account as the hub last described it, or `null`. */
+  hubUser: HubUser | null;
+  /**
+   * Always `null` here. The token lives in `settings.json` and on the
+   * `Authorization` header the core builds; `get_settings` strips it, so it
+   * never reaches this cache. Ask `getAccountState` whether one exists.
+   */
+  hubToken?: null;
 }
 
 /**
@@ -67,6 +78,9 @@ export interface SettingsPatch {
   serverHistory?: ServerHistoryEntry[];
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
+  // --- slice: account ---
+  /** An `http://` or `https://` address; blank returns to the default hub. */
+  hubUrl?: string;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
@@ -536,4 +550,102 @@ export const levelshotsIpc = {
 export function levelshotUrl(path: string): string | null {
   if (!isTauri()) return null;
   return convertFileSrc(path);
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: account ---
+//
+// Signing in to the JKNet hub, `src-tauri/src/account.rs` and
+// `src-tauri/src/hub/`. The bearer token is deliberately absent from every
+// type here: it is written into `settings.json` by the core and put on the
+// requests by the core, and the frontend is only ever told whether one exists.
+// ---------------------------------------------------------------------------
+
+/** `src-tauri/src/hub/types.rs`: an account on the hub. */
+export interface HubUser {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  /** `jkhub`, `discord` or `dev`. */
+  provider: string;
+  /** The name the provider knows the player by, such as a JKHub login. */
+  providerName: string;
+  /** RFC 3339 in UTC. */
+  createdAt: string;
+}
+
+/** The sign-in providers the contract has. */
+export type HubProvider = "jkhub" | "discord" | "dev";
+
+/** `src-tauri/src/account.rs`: what the frontend knows about the account. */
+export interface AccountState {
+  /**
+   * Whether a token is on file. It does not promise the hub still accepts it:
+   * finding that out costs a request, and the sidebar paints before one could
+   * answer.
+   */
+  hubSignedIn: boolean;
+  hubUser: HubUser | null;
+  hubUrl: string;
+  /** Whether the hub runs on this machine, which is what shows the Developer
+   *  sign-in button. */
+  localHub: boolean;
+}
+
+/** `src-tauri/src/account.rs`: the session `begin_sign_in` opened. */
+export interface SignInStart {
+  sessionId: string;
+  /** Already opened in the system browser by the command; kept so a player
+   *  whose browser stayed shut can be told where to go. */
+  url: string;
+}
+
+/** One read of a sign-in session. */
+export interface SignInPoll {
+  status: "pending" | "done" | "error" | "expired";
+  /** Set on `done`, when the core has stored the token. */
+  user: HubUser | null;
+  /** Set on `error`. */
+  error: string | null;
+}
+
+/** Payload of `account:changed`. */
+export interface AccountChanged {
+  signedIn: boolean;
+}
+
+/** Emitted by the core after every sign-in, sign-out and rename. */
+export const ACCOUNT_CHANGED_EVENT = "account:changed";
+
+export const accountIpc = {
+  getAccountState: () => call<AccountState>("get_account_state"),
+  /** Opens a session and sends the player to the browser. */
+  beginSignIn: (provider: HubProvider) =>
+    call<SignInStart>("begin_sign_in", { provider }),
+  /** Reads a session once. On `done` the core has already stored the token. */
+  pollSignIn: (sessionId: string) =>
+    call<SignInPoll>("poll_sign_in", { sessionId }),
+  signOut: () => call<void>("sign_out"),
+  updateDisplayName: (displayName: string) =>
+    call<HubUser>("update_display_name", { displayName }),
+  deleteAccount: () => call<void>("delete_account"),
+};
+
+/**
+ * The contract's error code inside a refusal from the hub, or `null`.
+ *
+ * `AppError` reaches the frontend as one rendered string, and the hub variant
+ * renders as `hub <code>: <message>`. The screens need the code — a
+ * `provider_error` keeps the guest button and a `conflict` asks for another
+ * name — so this reads it back out rather than every screen matching on the
+ * wording of a message the hub wrote.
+ */
+export function hubErrorCode(error: unknown): string | null {
+  const match = /^hub ([a-z_]+): /.exec(errorMessage(error));
+  return match ? match[1] : null;
+}
+
+/** The same message without the `hub <code>:` prefix, for printing. */
+export function hubErrorMessage(error: unknown): string {
+  return errorMessage(error).replace(/^hub [a-z_]+: /, "");
 }

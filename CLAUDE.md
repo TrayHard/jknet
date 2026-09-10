@@ -23,6 +23,7 @@ JKNet — десктопный лаунчер мультиплеера Jedi Acad
 | Проверить линтером | `cargo clippy --all-targets -- -D warnings` в `src-tauri` |
 | Прогнать тесты ядра | `cargo test` в `src-tauri` |
 | Собрать установщик | `npm run tauri build` |
+| Поднять заглушку хаба | `node scripts/mock-hub.mjs` |
 
 Не запускайте `npm run tauri dev` из агента без прямой просьбы: команда открывает окно и не завершается.
 
@@ -41,6 +42,8 @@ src/
                          RadioCard, StepBadges, Toast
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
+  components/account/    учётная запись: карточка Settings, аватар, кнопки
+                         провайдеров, ожидание браузера, диалог
   pages/                 по одному файлу на маршрут
   pages/onboarding/      три шага первого запуска и защита маршрутов
   lib/ipc.ts             типизированные обёртки над invoke
@@ -63,7 +66,11 @@ src-tauri/
   src/launch.rs          запуск клиента, слежение за процессом, остановка
   src/library.rs         файлы pk3 одного клиента в его папке home\
   src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
+  src/hub/               клиент хаба JKNet: типы контракта, запросы, ошибки
+  src/account.rs         вход через браузер и команды учётной записи
   capabilities/          разрешения окна main
+scripts/
+  mock-hub.mjs           заглушка хаба на Node без зависимостей
 ```
 
 ## Модель сущностей

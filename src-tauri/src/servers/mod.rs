@@ -795,7 +795,8 @@ fn edit_settings(
     edit(&mut settings);
     settings.save(state)?;
     state.set_settings(settings.clone())?;
-    Ok(settings)
+    // --- slice: account --- the hub token never crosses the IPC boundary.
+    Ok(settings.redacted())
 }
 
 /// Stars or unstars a server. Returns the settings so the frontend can update
