@@ -42,6 +42,15 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
   const [picked, setPicked] = useState<Partial<Record<Game, GameFilesCandidate>>>({});
   /** Rows the player selected, one per game. */
   const [selected, setSelected] = useState<Partial<Record<Game, string>>>({});
+  /**
+   * The game whose folder dialog is open, or whose folder is being checked.
+   *
+   * One game at a time: the system dialog is modal, and the check that follows
+   * it belongs to the game that opened it. Its **Choose another folder** button
+   * waits, so a second dialog cannot be asked for while the first answer is on
+   * its way. The other game's button stays live.
+   */
+  const [browsing, setBrowsing] = useState<Game | null>(null);
 
   const queryError = gameFiles.error ?? settings.error ?? games.error ?? null;
   const failure = error ?? (queryError ? errorMessage(queryError) : null);
@@ -87,6 +96,7 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
       setError("Tauri runtime is not available");
       return;
     }
+    setBrowsing(game.id);
     try {
       const folder = await open({
         directory: true,
@@ -104,6 +114,8 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
       }
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
+      setBrowsing(null);
     }
   };
 
@@ -214,6 +226,7 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
                 <button
                   type="button"
                   onClick={() => void browse(entry)}
+                  disabled={browsing === entry.id}
                   className={[
                     "flex items-center gap-12 rounded-md border border-dashed border-line p-12",
                     "text-left cursor-pointer transition-colors duration-150",
