@@ -35,14 +35,17 @@ src/
   styles/fonts.css       локальные шрифты @fontsource
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
                          ClientSettingsDialog, GameEventsProvider
-  components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState
+  components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
+                         RadioCard, StepBadges
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
   pages/                 по одному файлу на маршрут
+  pages/onboarding/      три шага первого запуска и защита маршрутов
   lib/ipc.ts             типизированные обёртки над invoke
   lib/queries.ts         хуки React Query и ключи запросов
   lib/useGameEvents.ts   подписка на события установки движка и запуска игры
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
+  lib/flags.ts           ACCOUNTS_ENABLED и другие выключатели незаконченного
   lib/format.ts          cn, formatBytes, shortenPath
 src-tauri/
   src/lib.rs             сборка приложения, плагины, список команд
