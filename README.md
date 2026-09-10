@@ -135,15 +135,16 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight: Jedi Ac
 
 1. Поднимите версию в трёх файлах одним значением: `package.json`, `src-tauri/Cargo.toml` и `src-tauri/tauri.conf.json`. Версию берёт из `tauri.conf.json` и установщик, и обновление, а расхождение с `Cargo.toml` даёт разные номера в окне и в списке программ.
 2. Обновите `Cargo.lock`: выполните `cargo check` в `src-tauri`.
-3. Зафиксируйте изменения и поставьте тег:
+3. Обновите `package-lock.json`: выполните `npm install --package-lock-only`.
+4. Зафиксируйте изменения и поставьте тег:
    ```bash
    git commit -am "Версия 0.2.0"
    git tag v0.2.0
    git push origin main --tags
    ```
-4. Дождитесь окончания процесса **Release** во вкладке **Actions**. Он собирает установщик, подписывает его и создаёт черновик релиза.
-5. Проверьте вложения черновика: `JKNet_0.2.0_x64-setup.exe`, `JKNet_0.2.0_x64-setup.exe.sig` и `latest.json`.
-6. Опубликуйте черновик кнопкой **Publish release**.
+5. Дождитесь окончания процесса **Release** во вкладке **Actions**. Он собирает установщик, подписывает его и создаёт черновик релиза.
+6. Проверьте вложения черновика: `JKNet_0.2.0_x64-setup.exe`, `JKNet_0.2.0_x64-setup.exe.sig` и `latest.json`.
+7. Опубликуйте черновик кнопкой **Publish release**.
 
 Установленные лаунчеры увидят версию после публикации: адрес `releases/latest/download/latest.json` черновики не отдаёт.
 
@@ -181,4 +182,5 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight: Jedi Ac
 
 - [Архитектура](docs/architecture.md) — модули ядра, раскладка на диске, таблица команд IPC, установка движка и запуск игры.
 - [CLAUDE.md](CLAUDE.md) — правила работы для ИИ-агентов: токены, имена утилит, чего не делать.
+- [CHANGELOG.md](CHANGELOG.md) — список изменений по версиям.
 - Дизайн лаунчера: `docs/jknet-design.md` в родительской рабочей папке.
