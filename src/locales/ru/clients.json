@@ -30,9 +30,9 @@
     "makeDefault": "Сделать основным",
     "running": "Запущен",
     "engineNotInstalled": "Движок не установлен",
-    "delete": "Удалить",
     "meta": "{{id}} · создан {{date}}",
     "metaWithMod": "{{id}} · создан {{date}} · fs_game {{mod}}",
+    "delete": "Удалить",
     "settingsOf": "Настройки клиента {{client}}",
     "settingsHint": "Имя и папка мода",
     "installedOn": "установлен {{date}}",
@@ -52,7 +52,12 @@
   },
   "engines": {
     "heading": "Движки {{game}}",
-    "recommended": "Рекомендуем"
+    "recommended": "Рекомендуем",
+    "legacy": "Устаревший",
+    "notes": {
+      "eternaljk": "Последний выпуск вышел в 2020 году. В наших проверках сборка падает на каждой загрузке карты на современной Windows. Берите TaystJK, её поддерживаемого преемника, если только сервер не требует именно EternalJK.",
+      "eternaljkAction": "Создать клиент на TaystJK"
+    }
   },
   "newDialog": {
     "title": "Новый клиент",

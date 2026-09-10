@@ -50,7 +50,12 @@
   },
   "engines": {
     "heading": "A {{game}} motorjai",
-    "recommended": "Ajánlott"
+    "recommended": "Ajánlott",
+    "legacy": "Legacy",
+    "notes": {
+      "eternaljk": "Last released in 2020. In our tests it crashes on every map load on current Windows systems. Use TaystJK, its maintained successor, unless a server requires EternalJK.",
+      "eternaljkAction": "Create a TaystJK client"
+    }
   },
   "newDialog": {
     "title": "Új kliens",

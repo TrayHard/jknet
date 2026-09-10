@@ -28,12 +28,14 @@ import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState } from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
+import { useEngineNote } from "../i18n/useEngineNote";
 import { useFormat } from "../i18n/useFormat";
 import {
   ipc,
   type Client,
   type Engine,
   type EngineInstallProgress,
+  type EngineStatus,
   type Game,
   type RunningGame,
   type SettingsPatch,
@@ -340,6 +342,7 @@ export function ClientsPage() {
                     { onError: (e) => setError(errorText(e)) },
                   );
                 }}
+                onNewClient={() => setDialogOpen(true)}
                 onStop={() =>
                   stopGame.mutate(undefined, {
                     onError: (e) => setError(errorText(e)),
@@ -390,13 +393,19 @@ export function ClientsPage() {
             >
               <div className="flex items-center gap-8">
                 <span className="text-heading-sm text-fg">{engine.name}</span>
-                {engine.recommended ? (
+                {engine.status.kind === "recommended" ? (
                   <Badge tone="accent">{t("engines.recommended")}</Badge>
+                ) : null}
+                {engine.status.kind === "legacy" ? (
+                  <Badge tone="warm">{t("engines.legacy")}</Badge>
                 ) : null}
               </div>
               {/* The engine name and its one-line description come from the
-                  registry in the core and name a project: data, not copy. */}
+                  registry in the core and name a project: data, not copy. The
+                  note is the opposite: the registry names a catalog key and
+                  the sentence itself is translated. */}
               <p className="text-body-sm text-fg-secondary">{engine.description}</p>
+              <EngineNoteText status={engine.status} />
               <p className="text-mono-xs text-fg-muted">{engine.repo}</p>
             </li>
           ))}
@@ -429,6 +438,19 @@ export function ClientsPage() {
 // `sourceName` is gone: the four detection sources are `games.sources.*` in the
 // catalogs, and both this screen and the first run read them from there.
 
+/**
+ * The warning a legacy build carries, or nothing at all.
+ *
+ * The registry card in the section above states the fact and stops there: the
+ * offer to make a client on the successor belongs on a client's own card,
+ * where the player has one to replace.
+ */
+function EngineNoteText({ status }: { status: EngineStatus }) {
+  const note = useEngineNote()(status);
+  if (note === null) return null;
+  return <p className="text-body-sm text-fg-muted">{note.text}</p>;
+}
+
 interface ClientCardProps {
   client: Client;
   engine: Engine | undefined;
@@ -445,6 +467,8 @@ interface ClientCardProps {
   onInstall: () => void;
   onLaunch: () => void;
   onStop: () => void;
+  /** Opens the New client dialog, for the way out of a legacy engine. */
+  onNewClient: () => void;
 }
 
 function ClientCard({
@@ -460,9 +484,16 @@ function ClientCard({
   onInstall,
   onLaunch,
   onStop,
+  onNewClient,
 }: ClientCardProps) {
   const { t } = useTranslation("clients");
   const format = useFormat();
+  const engineNote = useEngineNote();
+  // A client built on a build nobody maintains says so once, under the card
+  // head, and offers the successor the note names. It is a sentence and a
+  // link, not a dialog: the client still works, and a player who keeps it for
+  // one server should not have to argue with the launcher about it.
+  const legacyNote = engine ? engineNote(engine.status) : null;
   const engineName = engine?.name ?? client.engineId;
   const showProgress =
     install !== undefined && (install.phase === "download" || install.phase === "extract");
@@ -534,6 +565,24 @@ function ClientCard({
           </div>
         </div>
       </div>
+
+      {legacyNote !== null ? (
+        <p className="text-body-sm text-fg-muted">
+          {legacyNote.text}
+          {legacyNote.action !== null ? (
+            <>
+              {" "}
+              <button
+                type="button"
+                onClick={onNewClient}
+                className="text-fg-accent cursor-pointer hover:underline"
+              >
+                {legacyNote.action}
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : null}
 
       {/* Engine state: install, progress, or launch ---------------------- */}
       {showProgress && install ? (
