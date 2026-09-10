@@ -1,87 +1,87 @@
 {
-  "title": "Friends",
-  "subtitle": "See who is online and join their server in one click.",
-  "subtitleCounts": "{{friends}} friends · {{online}} online",
-  "loading": "Loading your friends…",
-  "searchPlaceholder": "Search, or type a name to add",
-  "addFriend": "Add friend",
+  "title": "Друзі",
+  "subtitle": "Дивіться, хто в мережі, і приєднуйтеся до їхнього сервера одним клацанням.",
+  "subtitleCounts": "друзів: {{friends}} · у мережі: {{online}}",
+  "loading": "Завантажуємо ваших друзів…",
+  "searchPlaceholder": "Пошук або ім’я, щоб додати",
+  "addFriend": "Додати друга",
   "live": {
-    "on": "Live",
-    "off": "Reconnecting",
-    "onText": "Changes arrive the moment they happen.",
-    "offText": "The service is out of reach; the list refreshes every 30 seconds."
+    "on": "Наживо",
+    "off": "Перепідключення",
+    "onText": "Зміни надходять тієї ж миті, коли стаються.",
+    "offText": "Служба недоступна; список оновлюється кожні 30 секунд."
   },
   "groups": {
-    "in_game": "In game",
-    "online": "Online",
-    "offline": "Offline"
+    "in_game": "У грі",
+    "online": "У мережі",
+    "offline": "Не в мережі"
   },
   "status": {
-    "playingOn": "Playing on {{server}} · {{address}}",
-    "playingOnAddress": "Playing on {{address}}",
-    "inGame": "In game",
-    "online": "Online",
-    "offline": "Offline",
-    "lastSeenJustNow": "Last seen just now",
-    "lastSeenOn": "Last seen on {{date}}",
-    "lastSeenMinutes_one": "Last seen {{count}} minute ago",
-    "lastSeenMinutes_few": "Last seen {{count}} minutes ago",
-    "lastSeenMinutes_many": "Last seen {{count}} minutes ago",
-    "lastSeenMinutes_other": "Last seen {{count}} minutes ago",
-    "lastSeenHours_one": "Last seen {{count}} hour ago",
-    "lastSeenHours_few": "Last seen {{count}} hours ago",
-    "lastSeenHours_many": "Last seen {{count}} hours ago",
-    "lastSeenHours_other": "Last seen {{count}} hours ago",
-    "lastSeenDays_one": "Last seen {{count}} day ago",
-    "lastSeenDays_few": "Last seen {{count}} days ago",
-    "lastSeenDays_many": "Last seen {{count}} days ago",
-    "lastSeenDays_other": "Last seen {{count}} days ago"
+    "playingOn": "Грає на {{server}} · {{address}}",
+    "playingOnAddress": "Грає на {{address}}",
+    "inGame": "У грі",
+    "online": "У мережі",
+    "offline": "Не в мережі",
+    "lastSeenJustNow": "Востаннє в мережі щойно",
+    "lastSeenMinutes_one": "Востаннє в мережі {{count}} хвилину тому",
+    "lastSeenMinutes_few": "Востаннє в мережі {{count}} хвилини тому",
+    "lastSeenMinutes_many": "Востаннє в мережі {{count}} хвилин тому",
+    "lastSeenMinutes_other": "Востаннє в мережі {{count}} хвилини тому",
+    "lastSeenHours_one": "Востаннє в мережі {{count}} годину тому",
+    "lastSeenHours_few": "Востаннє в мережі {{count}} години тому",
+    "lastSeenHours_many": "Востаннє в мережі {{count}} годин тому",
+    "lastSeenHours_other": "Востаннє в мережі {{count}} години тому",
+    "lastSeenDays_one": "Востаннє в мережі {{count}} день тому",
+    "lastSeenDays_few": "Востаннє в мережі {{count}} дні тому",
+    "lastSeenDays_many": "Востаннє в мережі {{count}} днів тому",
+    "lastSeenDays_other": "Востаннє в мережі {{count}} дня тому",
+    "lastSeenOn": "Востаннє в мережі {{date}}"
   },
   "empty": {
-    "offTitle": "Friends are not switched on yet",
-    "signInTitle": "Sign in to see your friends",
-    "signInText": "JKNet keeps your friends list on the service, so it follows you to any machine you sign in on.",
-    "signIn": "Sign in",
-    "noneTitle": "No friends yet",
-    "noneText": "Type a display name, a jkhub: name or a user id in the box above and press Add friend.",
-    "noMatchTitle": "Nobody matches “{{query}}”",
-    "noMatchText": "Press Add friend to send them a request instead.",
-    "pickFriend": "Select a friend to join their game or invite them to yours."
+    "offTitle": "Друзі ще не увімкнені",
+    "signInTitle": "Увійдіть, щоб побачити друзів",
+    "signInText": "JKNet тримає список друзів на службі, тому він переходить за вами на будь-яку машину, де ви ввійшли.",
+    "signIn": "Увійти",
+    "noneTitle": "Друзів поки немає",
+    "noneText": "Введіть видиме ім’я, ім’я jkhub: або ідентифікатор користувача в полі вгорі й натисніть «Додати друга».",
+    "noMatchTitle": "За запитом «{{query}}» нікого не знайдено",
+    "noMatchText": "Натисніть «Додати друга», щоб надіслати запит.",
+    "pickFriend": "Виберіть друга, щоб приєднатися до його гри або запросити до своєї."
   },
   "requests": {
-    "incoming": "Friend requests",
-    "outgoing": "Sent requests",
+    "incoming": "Запити в друзі",
+    "outgoing": "Надіслані запити",
     "heading": "{{title}} · {{count}}",
-    "accept": "Accept",
-    "decline": "Decline",
-    "cancel": "Cancel",
+    "accept": "Прийняти",
+    "decline": "Відхилити",
+    "cancel": "Скасувати",
     "handle": "{{provider}}:{{name}}"
   },
   "notices": {
-    "nowFriends": "You and {{name}} are now friends.",
-    "requestSent": "Request sent to {{name}}.",
-    "inviteSent": "Invite sent to {{name}}."
+    "nowFriends": "Ви і {{name}} тепер друзі.",
+    "requestSent": "Запит надіслано гравцеві {{name}}.",
+    "inviteSent": "Запрошення надіслано гравцеві {{name}}."
   },
   "row": {
-    "join": "Join",
-    "joining": "Starting…"
+    "join": "Приєднатися",
+    "joining": "Запуск…"
   },
   "panel": {
-    "status": "Status",
-    "join": "Join game",
-    "joining": "Starting the game…",
-    "invite": "Invite to my game",
-    "inviteHintNoServer": "Join a server first, then invite your friends to it",
-    "inviteHint": "Invite to {{server}}",
-    "noServer": "Join a server from the Servers screen to invite anyone to it.",
-    "removeConfirm": "Remove {{name}}? You will both have to send a new request to be friends again.",
-    "remove": "Remove friend"
+    "status": "Стан",
+    "join": "Приєднатися до гри",
+    "joining": "Запускаємо гру…",
+    "invite": "Запросити у свою гру",
+    "inviteHintNoServer": "Спершу приєднайтеся до сервера, потім запрошуйте до нього друзів",
+    "inviteHint": "Запросити на {{server}}",
+    "noServer": "Приєднайтеся до сервера на екрані «Сервери», щоб когось туди запросити.",
+    "removeConfirm": "Видалити {{name}} з друзів? Щоб знову стати друзями, вам обом доведеться надіслати новий запит.",
+    "remove": "Видалити з друзів"
   },
   "invite": {
-    "toast": "{{name}} invites you to {{server}}",
-    "join": "Join",
-    "noClient": "Pick a default client on the Clients screen first",
-    "gameRunning": "A game is already running",
-    "connectTo": "Connect to {{address}}"
+    "toast": "{{name}} запрошує вас на {{server}}",
+    "join": "Приєднатися",
+    "noClient": "Спершу виберіть основний клієнт на екрані «Клієнти»",
+    "gameRunning": "Гра вже запущена",
+    "connectTo": "Підключитися до {{address}}"
   }
 }

@@ -1,11 +1,11 @@
 {
-  "available": "JKNet {{version}} is available",
-  "failedTitle": "Updating to JKNet {{version}} failed",
-  "install": "Install and restart",
-  "downloading": "Downloading… {{received}}",
-  "downloadingOf": "Downloading… {{received}} of {{total}}",
-  "installing": "Starting the installer…",
-  "checking": "Checking for updates…",
-  "unsupported": "Updates work in the installed launcher, not in a browser tab.",
-  "upToDate": "This is the latest version."
+  "available": "Доступна версія JKNet {{version}}",
+  "failedTitle": "Не вдалося оновити JKNet до версії {{version}}",
+  "install": "Встановити й перезапустити",
+  "downloading": "Завантаження… {{received}}",
+  "downloadingOf": "Завантаження… {{received}} із {{total}}",
+  "installing": "Запускаємо встановлювач…",
+  "checking": "Перевіряємо оновлення…",
+  "unsupported": "Оновлення працюють у встановленому лаунчері, а не у вкладці браузера.",
+  "upToDate": "Це найновіша версія."
 }
