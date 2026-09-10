@@ -119,7 +119,26 @@ pub enum AppError {
     /// in `src/lib/ipc.ts` reads the prefix back out.
     #[error("hub {code}: {message}")]
     Hub { code: String, message: String },
+
+    // --- slice: hub gate ---
+    /// This build has no hub address, so there is nothing to call.
+    ///
+    /// Not a network failure and not a sign-out: the service is not open yet,
+    /// and the screens answer it with a sentence rather than an error box. It
+    /// travels in the same `hub <code>: <message>` envelope as [`AppError::Hub`]
+    /// so that `hubErrorCode` in `src/lib/ipc.ts` reads it back like any other
+    /// code — hence the doubled word: `hub` is the envelope and
+    /// [`HUB_NOT_CONFIGURED_CODE`] is the code inside it.
+    #[error("hub {}: JKNet Hub is not configured in this build", HUB_NOT_CONFIGURED_CODE)]
+    HubNotConfigured,
 }
+
+// --- slice: hub gate ---
+/// The code the frontend matches on for [`AppError::HubNotConfigured`].
+///
+/// Declared once so the rendered message and the frontend helper cannot drift
+/// apart; the test below pins them together.
+pub const HUB_NOT_CONFIGURED_CODE: &str = "hub_not_configured";
 
 impl From<reqwest::Error> for AppError {
     fn from(source: reqwest::Error) -> Self {
@@ -166,5 +185,27 @@ impl Serialize for AppError {
         S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- slice: hub gate ---
+    #[test]
+    fn a_missing_hub_reaches_the_frontend_as_a_code_it_can_match_on() {
+        // `hubErrorCode` in `src/lib/ipc.ts` reads `^hub ([a-z_]+): `, so the
+        // envelope has to survive both the rendering and the serialization.
+        let rendered = AppError::HubNotConfigured.to_string();
+        assert_eq!(
+            rendered,
+            "hub hub_not_configured: JKNet Hub is not configured in this build"
+        );
+        assert!(rendered.starts_with(&format!("hub {HUB_NOT_CONFIGURED_CODE}: ")));
+
+        let json = serde_json::to_string(&AppError::HubNotConfigured)
+            .expect("an error serializes as a string");
+        assert_eq!(json, format!("{rendered:?}"));
     }
 }

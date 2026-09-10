@@ -5,7 +5,7 @@ import { providerLine } from "../../components/account/provider";
 import { ProviderButtons } from "../../components/account/ProviderButtons";
 import { WaitingForBrowser } from "../../components/account/WaitingForBrowser";
 import { Avatar, Button } from "../../components/ui";
-import { errorMessage } from "../../lib/ipc";
+import { errorMessage, HUB_NOT_CONFIGURED_TEXT } from "../../lib/ipc";
 import { useAccountState, useSignIn, useUpdateSettings } from "../../lib/queries";
 import { StepPanel } from "./StepPanel";
 
@@ -28,6 +28,12 @@ const BENEFITS = [
  * button sits next to it the whole way through, including after a provider has
  * refused: JKHub and Discord have issued no OAuth client yet, and a player who
  * meets that on their first run must still reach the Play button.
+ *
+ * With no hub in this build the step is one sentence and **Continue**. It
+ * stays in the sequence rather than disappearing from `steps.ts`: the first
+ * run is three steps in the design and in the badges, and a setup that is
+ * three steps long for one player and two for another is harder to explain
+ * than a step that says the feature is not open yet.
  */
 export function StepAccount({ onBack, onDone }: StepAccountProps) {
   const account = useAccountState();
@@ -35,6 +41,8 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
   const updateSettings = useUpdateSettings();
   const [error, setError] = useState<string | null>(null);
 
+  // --- slice: hub gate ---
+  const configured = account.data?.hubConfigured ?? true;
   // The signed-in account, from this sign-in or from a previous run.
   const user = flow.user ?? account.data?.hubUser ?? null;
   const signedIn = flow.phase === "done" || (account.data?.hubSignedIn ?? false);
@@ -47,6 +55,40 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
       { onSuccess: () => onDone(), onError: (e) => setError(errorMessage(e)) },
     );
   };
+
+  // --- slice: hub gate ---
+  // No hub in this build: one sentence and one button. The provider buttons,
+  // the waiting-for-browser state and the list of what an account is good for
+  // all go with them — every one of them is an offer this build cannot keep.
+  if (!configured) {
+    return (
+      <StepPanel
+        step={3}
+        heading="Accounts and friends come later"
+        text={HUB_NOT_CONFIGURED_TEXT}
+        error={error}
+        onBack={onBack}
+        footer={
+          <Button
+            variant="primary"
+            size="lg"
+            disabled={updateSettings.isPending}
+            onClick={finish}
+          >
+            {updateSettings.isPending ? "Finishing…" : "Continue"}
+          </Button>
+        }
+      >
+        <p className="flex items-start gap-8 text-body-sm text-fg-muted">
+          <Shield size={16} className="shrink-0 mt-2" />
+          <span>
+            Everything you have set up so far works without an account. Your
+            game files, your settings and your saves stay on this machine.
+          </span>
+        </p>
+      </StepPanel>
+    );
+  }
 
   return (
     <StepPanel

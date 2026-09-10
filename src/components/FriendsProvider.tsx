@@ -6,6 +6,7 @@ import {
   useDismissInvite,
   useFriendsEvents,
   useFriendsState,
+  useHubConfigured,
   useLaunchClient,
   useRunningGame,
   useSettings,
@@ -26,9 +27,14 @@ import { Button } from "./ui";
  * a few seconds sooner. That way an invitation sent while the launcher was
  * closed still greets the player when it opens, and a dismissed one does not
  * come back on the next refresh.
+ *
+ * With the hub switched off there is no list, no subscription and no toast:
+ * `useFriendsEvents` and `useFriendsState` both stand down, and the invites
+ * below are read as none whatever the query cache still holds.
  */
 export function FriendsProvider({ children }: { children: ReactNode }) {
   useFriendsEvents();
+  const configured = useHubConfigured();
   const friends = useFriendsState();
   const settings = useSettings();
   const running = useRunningGame();
@@ -40,7 +46,7 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
   // below writes it on every pass and must not re-run because it did.
   const shown = useRef(new Set<string>());
 
-  const invites = friends.data?.invites;
+  const invites = configured === false ? undefined : friends.data?.invites;
   const defaultClientId = settings.data?.defaultClientId ?? null;
   const gameRunning = running.data != null;
   const { show, dismiss: hide } = toasts;

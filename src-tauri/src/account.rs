@@ -81,6 +81,14 @@ pub enum AccountChangeReason {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountState {
+    /// Whether this build has a hub to talk to at all.
+    ///
+    /// False in a release build until `hub::RELEASE_HUB_URL` names the public
+    /// origin, and until then the whole account and friends interface is one
+    /// sentence saying so. The player turns it on for their machine by typing
+    /// an address into **Hub address** on the Settings screen, which is why
+    /// that field stays visible in this state.
+    pub hub_configured: bool,
     /// Whether a token is on file. It says nothing about whether the hub still
     /// accepts it: finding that out costs a request, and the sidebar has to
     /// paint before one could answer.
@@ -88,6 +96,7 @@ pub struct AccountState {
     /// The account as it was when the launcher last heard from the hub.
     pub hub_user: Option<HubUser>,
     /// The hub this launcher talks to, so the Settings screen can show it.
+    /// Empty when there is none.
     pub hub_url: String,
     /// Whether that hub runs on this machine, which is what makes the
     /// Developer sign-in button appear.
@@ -129,6 +138,13 @@ pub async fn begin_sign_in(
 ) -> Result<SignInStart> {
     let settings = state.settings()?;
     let ctx = HubContext::from_settings(&settings);
+    // --- slice: hub gate ---
+    // Before the provider check, so a build with no hub says "the service is
+    // not open yet" rather than "the developer sign-in only works against a
+    // hub on this machine" — a sentence about a hub that does not exist.
+    if !ctx.configured() {
+        return Err(AppError::HubNotConfigured);
+    }
     let provider = check_provider(&provider, &ctx)?;
 
     let session = hub
@@ -289,14 +305,36 @@ pub async fn delete_account(
 
 /// Builds the answer of `get_account_state` from a settings document.
 ///
-/// Pure, so the rules it encodes — a blank token is not a sign-in, the
-/// Developer button belongs to a local hub — are tested without a hub.
+/// Pure, so the rules it encodes — a blank token is not a sign-in, a build
+/// with no hub is signed out, the Developer button belongs to a local hub —
+/// are tested without a hub.
+///
+/// It never fails and never touches the network, which is what lets the
+/// sidebar and the Account card paint on the first frame of a launcher whose
+/// hub is switched off.
 fn account_state(settings: &Settings) -> AccountState {
     let ctx = HubContext::from_settings(settings);
+    account_state_of(ctx, settings.hub_user.clone())
+}
+
+/// The same answer, built from the address and token that are actually in
+/// force rather than from the document they came out of.
+///
+/// Split from [`account_state`] for the one state a debug build cannot reach
+/// through `settings.json`: a blank stored address means "the default of this
+/// build", and that default is a hub in a debug build. The release state —
+/// no hub at all — is a `HubContext` with a blank `base_url`, which this takes
+/// directly, so both halves of the switch are covered by one `cargo test`.
+fn account_state_of(ctx: HubContext, user: Option<HubUser>) -> AccountState {
+    let configured = ctx.configured();
     AccountState {
+        hub_configured: configured,
+        // Everything below follows the address. With no hub there is nobody to
+        // be signed in to, no account to name, and the Developer button would
+        // open a sign-in that cannot start.
         hub_signed_in: ctx.signed_in(),
-        hub_user: settings.hub_user.clone(),
-        local_hub: is_local_hub(&ctx.base_url),
+        hub_user: if configured { user } else { None },
+        local_hub: configured && is_local_hub(&ctx.base_url),
         hub_url: ctx.base_url,
     }
 }
@@ -429,6 +467,10 @@ mod tests {
 
     fn signed_in_settings() -> Settings {
         Settings {
+            // Named rather than taken from `Settings::default()`: the default
+            // follows the build profile, and these tests are about the account
+            // and not about which hub a profile ships with.
+            hub_url: crate::hub::DEV_HUB_URL.into(),
             hub_token: Some("0123456789abcdef".into()),
             hub_user: Some(HubUser {
                 id: "01JBX7Q2".into(),
@@ -445,11 +487,67 @@ mod tests {
     #[test]
     fn the_account_state_follows_the_token_and_the_hub() {
         let state = account_state(&signed_in_settings());
+        assert!(state.hub_configured);
         assert!(state.hub_signed_in);
         assert_eq!(state.hub_user.expect("a user").display_name, "Kyle Katarn");
-        // The stock hub is the development one, so the Developer button shows.
+        // The development hub runs here, so the Developer button shows.
         assert!(state.local_hub);
-        assert_eq!(state.hub_url, crate::hub::DEFAULT_HUB_URL);
+        assert_eq!(state.hub_url, crate::hub::DEV_HUB_URL);
+    }
+
+    // --- slice: hub gate ---
+
+    /// A context with a token and whatever address the case is about. A blank
+    /// one is what a release build builds until `RELEASE_HUB_URL` names an
+    /// origin, and what a debug build cannot produce from `settings.json`.
+    fn signed_in_at(base_url: &str) -> HubContext {
+        HubContext {
+            base_url: base_url.into(),
+            token: Some("0123456789abcdef".into()),
+        }
+    }
+
+    fn stored_user() -> Option<HubUser> {
+        signed_in_settings().hub_user
+    }
+
+    #[test]
+    fn a_build_without_a_hub_is_signed_out_and_says_which_of_the_two_it_is() {
+        // The token is deliberately still there: a player who signed in
+        // against a hub of their own and then lost the address must not keep a
+        // signed-in sidebar over screens with nothing behind them.
+        let state = account_state_of(signed_in_at(""), stored_user());
+        assert!(!state.hub_configured);
+        assert!(!state.hub_signed_in);
+        assert_eq!(state.hub_user, None);
+        assert!(!state.local_hub);
+        // Empty rather than an address nothing answers at: the Settings screen
+        // prints this string in the **Hub address** field.
+        assert_eq!(state.hub_url, "");
+    }
+
+    #[test]
+    fn typing_an_address_switches_the_feature_on_without_a_new_build() {
+        // How a self-hoster or a tester turns the hub on, and how the whole
+        // Account and Friends interface comes back.
+        assert!(!account_state_of(signed_in_at(""), stored_user()).hub_configured);
+
+        let state = account_state_of(
+            signed_in_at(&crate::hub::normalize_hub_url("https://hub.jknet.gg/")),
+            stored_user(),
+        );
+        assert!(state.hub_configured);
+        assert!(state.hub_signed_in);
+        assert_eq!(state.hub_url, "https://hub.jknet.gg");
+        assert!(!state.local_hub);
+    }
+
+    #[test]
+    fn the_state_reaches_the_frontend_in_camel_case() {
+        // `AccountState` in `src/lib/ipc.ts` switches on this field name.
+        let json = serde_json::to_string(&account_state(&signed_in_settings()))
+            .expect("the state serializes");
+        assert!(json.contains("\"hubConfigured\":true"), "{json}");
     }
 
     #[test]
@@ -536,7 +634,7 @@ mod tests {
         assert!(check_provider("jkhub", &remote).is_ok());
 
         let local = HubContext {
-            base_url: crate::hub::DEFAULT_HUB_URL.into(),
+            base_url: crate::hub::DEV_HUB_URL.into(),
             token: None,
         };
         assert!(check_provider("dev", &local).is_ok());
