@@ -13,13 +13,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::paths::DataPaths;
 
 use super::cache;
 use super::client::{JkhubClient, Page};
 use super::parse;
 use super::types::{
-    JkhubCategories, JkhubCategory, JkhubFile, JkhubFileView, JkhubGame, JkhubListing, JkhubSort,
+    JkhubCategories, JkhubCategory, JkhubFile, JkhubFileView, JkhubListing, JkhubSort,
 };
 
 /// Reading the JKHub catalogue, however it arrives.
@@ -30,10 +31,20 @@ use super::types::{
 #[allow(async_fn_in_trait)]
 pub trait JkhubSource {
     /// The category tree of one game, roots first.
-    async fn categories(&self, game: JkhubGame) -> Result<JkhubCategories>;
+    async fn categories(&self, game: Game) -> Result<JkhubCategories>;
 
     /// One page of one category.
-    async fn list(&self, category_id: u32, sort: JkhubSort, page: u32) -> Result<JkhubListing>;
+    ///
+    /// `game` names the tree the category's slug is looked up in; the page
+    /// itself is addressed by id, so a category of the other game still
+    /// answers.
+    async fn list(
+        &self,
+        game: Game,
+        category_id: u32,
+        sort: JkhubSort,
+        page: u32,
+    ) -> Result<JkhubListing>;
 
     /// One file page.
     async fn file(&self, id: u32) -> Result<JkhubFileView>;
@@ -85,9 +96,14 @@ impl<'a> HtmlSource<'a> {
     /// address, so a stale slug costs one redirect and never a wrong page —
     /// which is why an unknown category is asked for with an empty slug
     /// rather than refused.
-    fn slug_of(&self, category_id: u32) -> String {
-        for game in [JkhubGame::Ja, JkhubGame::Jo, JkhubGame::Both] {
-            let name = cache::categories_name(game.as_str());
+    ///
+    /// The tree of `game` is read first because that is the one the screen
+    /// asking for the listing is showing; the other game's tree is a fallback
+    /// for a category opened from a file page.
+    fn slug_of(&self, game: Game, category_id: u32) -> String {
+        let others = Game::ALL.into_iter().filter(|entry| *entry != game);
+        for game in std::iter::once(game).chain(others) {
+            let name = cache::categories_name(game.id());
             let Some(cached) = cache::read::<Vec<JkhubCategory>>(self.data, &name) else {
                 continue;
             };
@@ -116,7 +132,7 @@ impl<'a> HtmlSource<'a> {
     ///   of its first five children;
     /// * the widget on a child's own page counts every grandchild, and when
     ///   the child's listing fits on one page the cards on it are the count.
-    async fn crawl_tree(&self, game: JkhubGame) -> Result<Vec<JkhubCategory>> {
+    async fn crawl_tree(&self, game: Game) -> Result<Vec<JkhubCategory>> {
         let index = self
             .client
             .fetch_html(&format!("{}/files/categories/", parse::SITE))
@@ -139,7 +155,7 @@ impl<'a> HtmlSource<'a> {
                 // screens hide it, so it is not walked either.
                 continue;
             };
-            if !root_game.shown_for(game) {
+            if !root_game.matches(game) {
                 continue;
             }
             tree.push(JkhubCategory {
@@ -233,8 +249,8 @@ fn dedup(tree: &mut Vec<JkhubCategory>) {
 }
 
 impl JkhubSource for HtmlSource<'_> {
-    async fn categories(&self, game: JkhubGame) -> Result<JkhubCategories> {
-        let name = cache::categories_name(game.as_str());
+    async fn categories(&self, game: Game) -> Result<JkhubCategories> {
+        let name = cache::categories_name(game.id());
         let cached = cache::read::<Vec<JkhubCategory>>(self.data, &name);
         if let Some(entry) = &cached {
             if entry.fresh && !self.force {
@@ -274,7 +290,13 @@ impl JkhubSource for HtmlSource<'_> {
         }
     }
 
-    async fn list(&self, category_id: u32, sort: JkhubSort, page: u32) -> Result<JkhubListing> {
+    async fn list(
+        &self,
+        game: Game,
+        category_id: u32,
+        sort: JkhubSort,
+        page: u32,
+    ) -> Result<JkhubListing> {
         let page = page.max(1);
         let name = cache::listing_name(category_id, sort.as_str(), page);
         let cached = cache::read::<JkhubListing>(self.data, &name);
@@ -287,7 +309,7 @@ impl JkhubSource for HtmlSource<'_> {
             }
         }
 
-        let url = self.listing_url(category_id, &self.slug_of(category_id), sort, page);
+        let url = self.listing_url(category_id, &self.slug_of(game, category_id), sort, page);
         match self.client.fetch_html(&url).await {
             Ok(Page { body, max_age, .. }) => {
                 let parsed = parse::parse_listing(&body)?;
@@ -381,11 +403,17 @@ impl JkhubSource for HtmlSource<'_> {
 pub struct RestSource;
 
 impl JkhubSource for RestSource {
-    async fn categories(&self, _game: JkhubGame) -> Result<JkhubCategories> {
+    async fn categories(&self, _game: Game) -> Result<JkhubCategories> {
         Err(not_configured())
     }
 
-    async fn list(&self, _category_id: u32, _sort: JkhubSort, _page: u32) -> Result<JkhubListing> {
+    async fn list(
+        &self,
+        _game: Game,
+        _category_id: u32,
+        _sort: JkhubSort,
+        _page: u32,
+    ) -> Result<JkhubListing> {
         Err(not_configured())
     }
 
@@ -407,6 +435,9 @@ fn not_configured() -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Only a fixture names a shelf of the site here: the reader itself speaks
+    // the launcher's `Game`.
+    use super::super::types::JkhubGame;
 
     fn source<'a>(client: &'a JkhubClient, data: &'a DataPaths) -> HtmlSource<'a> {
         HtmlSource::new(client, data)

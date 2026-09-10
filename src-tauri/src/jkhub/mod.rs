@@ -42,6 +42,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::clients;
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::library;
 use crate::state::AppState;
 use crate::timestamp;
@@ -49,7 +50,7 @@ use crate::timestamp;
 use client::JkhubClient;
 use source::{HtmlSource, JkhubSource};
 use types::{
-    InstalledEvent, JkhubCategories, JkhubDownload, JkhubFileView, JkhubGame, JkhubInstallOutcome,
+    InstalledEvent, JkhubCategories, JkhubDownload, JkhubFileView, JkhubInstallOutcome,
     JkhubInstallResult, JkhubListing, JkhubSort, Provenance,
 };
 
@@ -137,32 +138,45 @@ impl Drop for InstallGuard<'_> {
 /// `refresh` skips a cache entry that is still fresh, which is what the
 /// **Refresh** action on the screen does. The walk costs one request per
 /// direct child of a root, so it is cached for a day.
+///
+/// --- slice: game core ---
+/// `game` picks the tree; leaving it out means the active game, the way every
+/// other command that takes a game behaves. The site keeps the two games in
+/// separate roots, and `Both Games/Other` shows up under either.
 #[tauri::command]
 pub async fn jkhub_categories(
     state: tauri::State<'_, AppState>,
     jkhub: tauri::State<'_, JkhubState>,
-    game: JkhubGame,
+    game: Option<Game>,
     refresh: Option<bool>,
 ) -> Result<JkhubCategories> {
+    let game = state.settings()?.game_or_active(game);
     let data = state.paths()?;
     let source = HtmlSource::new(jkhub.client()?, &data).forced(refresh.unwrap_or(false));
     source.categories(game).await
 }
 
 /// One page of one category, 25 cards at a time.
+///
+/// --- slice: game core ---
+/// `game` says which cached tree the category's slug is read from; leaving it
+/// out means the active game. The listing itself is addressed by id, so a
+/// wrong guess costs one redirect and never a wrong page.
 #[tauri::command]
 pub async fn jkhub_list(
     state: tauri::State<'_, AppState>,
     jkhub: tauri::State<'_, JkhubState>,
+    game: Option<Game>,
     category_id: u32,
     sort: Option<JkhubSort>,
     page: Option<u32>,
     refresh: Option<bool>,
 ) -> Result<JkhubListing> {
+    let game = state.settings()?.game_or_active(game);
     let data = state.paths()?;
     let source = HtmlSource::new(jkhub.client()?, &data).forced(refresh.unwrap_or(false));
     source
-        .list(category_id, sort.unwrap_or_default(), page.unwrap_or(1))
+        .list(game, category_id, sort.unwrap_or_default(), page.unwrap_or(1))
         .await
 }
 
@@ -438,7 +452,9 @@ pub fn manage(app: &AppHandle) {
 mod tests {
     use super::*;
     use crate::clients::Client;
-    use crate::game::Game;
+    // Only the fixture below names a shelf of the site; the commands speak
+    // the launcher's `Game`, which `super::*` already brings in.
+    use types::JkhubGame;
 
     fn client(fs_game: Option<&str>) -> Client {
         Client {

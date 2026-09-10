@@ -6,13 +6,19 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Which game a category or a file belongs to.
+use crate::game::Game;
+
+/// Which game a category or a file on JKHub belongs to.
 ///
-/// A private enum of this module on purpose. The launcher grows a shared
-/// `Game` type in a parallel change; the serde ids are chosen to match it
-/// (`"ja"`, `"jo"`), so the merge replaces this type without touching the
-/// wire format. `Both` has no counterpart there: it is a property of the
-/// JKHub tree, where `Both Games/Other` (74) is a root of its own.
+/// Not a replacement for [`Game`] and never the game the player browses in:
+/// that one is always one of the two the launcher knows, and every command
+/// here takes it as a [`Game`]. This enum answers the other question — whose
+/// shelf a category or a file sits on — and the site has a third answer for
+/// it. `Both Games/Other` (74) is a root of its own, and the files under it
+/// belong to Jedi Academy and Jedi Outcast alike.
+///
+/// The serde ids of the first two are the ids of [`Game`], so the wire format
+/// of a category is the same string on both sides of the launcher.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum JkhubGame {
@@ -21,22 +27,21 @@ pub enum JkhubGame {
     Both,
 }
 
-impl JkhubGame {
-    /// Whether a category of this game shows up while browsing `game`.
-    ///
-    /// `Both Games/Other` appears under both games, which is what the site
-    /// means by the name.
-    pub fn shown_for(self, game: JkhubGame) -> bool {
-        self == game || self == JkhubGame::Both || game == JkhubGame::Both
-    }
-
-    /// The id used in cache file names.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            JkhubGame::Ja => "ja",
-            JkhubGame::Jo => "jo",
-            JkhubGame::Both => "both",
+impl From<Game> for JkhubGame {
+    fn from(game: Game) -> Self {
+        match game {
+            Game::JediAcademy => JkhubGame::Ja,
+            Game::JediOutcast => JkhubGame::Jo,
         }
+    }
+}
+
+impl JkhubGame {
+    /// Whether a category of this shelf shows up while browsing `game`.
+    ///
+    /// `Both` matches either, which is what the site means by the name.
+    pub fn matches(self, game: Game) -> bool {
+        self == JkhubGame::Both || self == JkhubGame::from(game)
     }
 }
 
@@ -62,7 +67,10 @@ pub struct JkhubCategory {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JkhubCategories {
-    pub game: JkhubGame,
+    /// The game the tree was walked for. One of the launcher's two: the
+    /// shelf `Both Games/Other` shows up in either tree, but nobody browses
+    /// it on its own.
+    pub game: Game,
     /// Depth-first: a root, then its children, then their children.
     pub categories: Vec<JkhubCategory>,
     /// RFC 3339 time the tree was read from the site.
@@ -328,10 +336,24 @@ mod tests {
 
     #[test]
     fn both_games_categories_are_shown_under_each_game() {
-        assert!(JkhubGame::Both.shown_for(JkhubGame::Ja));
-        assert!(JkhubGame::Both.shown_for(JkhubGame::Jo));
-        assert!(JkhubGame::Ja.shown_for(JkhubGame::Ja));
-        assert!(!JkhubGame::Ja.shown_for(JkhubGame::Jo));
+        assert!(JkhubGame::Both.matches(Game::JediAcademy));
+        assert!(JkhubGame::Both.matches(Game::JediOutcast));
+        assert!(JkhubGame::Ja.matches(Game::JediAcademy));
+        assert!(!JkhubGame::Ja.matches(Game::JediOutcast));
+        assert!(JkhubGame::Jo.matches(Game::JediOutcast));
+        assert!(!JkhubGame::Jo.matches(Game::JediAcademy));
+    }
+
+    #[test]
+    fn a_shelf_of_the_core_game_carries_the_id_of_that_game() {
+        assert_eq!(JkhubGame::from(Game::JediAcademy), JkhubGame::Ja);
+        assert_eq!(JkhubGame::from(Game::JediOutcast), JkhubGame::Jo);
+        // The launcher and the site spell the two shared ids the same way,
+        // which is what keeps `JkhubCategory.game` readable on both sides.
+        assert_eq!(
+            serde_json::to_string(&JkhubGame::from(Game::JediAcademy)).unwrap(),
+            serde_json::to_string(&Game::JediAcademy).unwrap()
+        );
     }
 
     #[test]

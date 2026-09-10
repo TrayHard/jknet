@@ -48,7 +48,6 @@ import {
   type JkhubCategories,
   type JkhubDownloadProgress,
   type JkhubFile,
-  type JkhubGame,
   type JkhubListing,
   type JkhubSort,
   type Levelshot,
@@ -1258,15 +1257,15 @@ export function useFriendsEvents(): void {
 
 export const jkhubKeys = {
   all: ["jkhub"] as const,
-  categories: (game: JkhubGame) => ["jkhub", "categories", game] as const,
-  list: (categoryId: number, sort: JkhubSort, page: number) =>
-    ["jkhub", "list", categoryId, sort, page] as const,
+  categories: (game: Game) => ["jkhub", "categories", game] as const,
+  list: (game: Game, categoryId: number, sort: JkhubSort, page: number) =>
+    ["jkhub", "list", game, categoryId, sort, page] as const,
   file: (id: number) => ["jkhub", "file", id] as const,
 };
 
 /** The category tree of one game. Cached on disk by the core for a day. */
 export function useJkhubCategories(
-  game: JkhubGame,
+  game: Game,
   enabled = true,
 ): UseQueryResult<JkhubCategories> {
   return useQuery({
@@ -1281,13 +1280,14 @@ export function useJkhubCategories(
 
 /** One page of one category, 25 cards. Idle until a category is picked. */
 export function useJkhubListing(
+  game: Game,
   categoryId: number | null,
   sort: JkhubSort,
   page: number,
 ): UseQueryResult<JkhubListing> {
   return useQuery({
-    queryKey: jkhubKeys.list(categoryId ?? 0, sort, page),
-    queryFn: () => jkhubIpc.list(categoryId as number, sort, page),
+    queryKey: jkhubKeys.list(game, categoryId ?? 0, sort, page),
+    queryFn: () => jkhubIpc.list(categoryId as number, sort, page, game),
     enabled: categoryId != null && isTauri(),
     staleTime: 5 * 60_000,
   });
@@ -1307,7 +1307,7 @@ export function useJkhubFile(id: number | null): UseQueryResult<JkhubFile> {
 export function useRefreshJkhub() {
   const queryClient = useQueryClient();
   return useCallback(
-    async (game: JkhubGame) => {
+    async (game: Game) => {
       // `refresh: true` is what makes the core ignore its own disk cache; the
       // invalidation below is what makes React Query ask for it.
       await jkhubIpc.categories(game, true);

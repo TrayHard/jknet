@@ -11,6 +11,7 @@ import { Select, type SelectOption } from "./Select";
 import { errorMessage, type JkhubCategory, type JkhubInstallResult, type JkhubSort, type LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
+  useActiveGame,
   useJkhubCategories,
   useJkhubDownloadProgress,
   useJkhubFile,
@@ -19,15 +20,6 @@ import {
   useRefreshJkhub,
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
-
-/**
- * The game this tab browses.
- *
- * TODO(game-switch): read the active game from the settings once the launcher
- * has one. JKHub keeps Jedi Academy and Jedi Outcast in separate roots, and
- * the tree is fetched per game, so this is the only place that has to change.
- */
-const GAME = "ja" as const;
 
 const SORTS: SelectOption[] = [
   { value: "recentlyUpdated", label: "Recently updated" },
@@ -65,19 +57,25 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   const [refreshing, setRefreshing] = useState(false);
 
   const toasts = useToasts();
-  const categories = useJkhubCategories(GAME);
+  // JKHub keeps the two games in separate roots, so the tab browses the game
+  // the launcher is set to. `Both Games/Other` shows up under either.
+  const game = useActiveGame();
+  const categories = useJkhubCategories(game);
   const refresh = useRefreshJkhub();
   const progress = useJkhubDownloadProgress();
   const install = useJkhubInstall(clientId);
   const details = useJkhubFile(openFile);
 
   // The first category with files of its own is the landing page of the tab:
-  // the two roots hold nothing themselves, and neither does Maps.
+  // the two roots hold nothing themselves, and neither does Maps. A change of
+  // game brings a different tree, and a category picked in the old one is not
+  // in it, so the landing page is chosen again.
   const tree = useMemo(() => categories.data?.categories ?? [], [categories.data]);
   useEffect(() => {
-    if (category != null || tree.length === 0) return;
+    if (tree.length === 0) return;
+    if (category != null && tree.some((entry) => entry.id === category.id)) return;
     const first = tree.find((entry) => entry.hasFiles && entry.parentId != null);
-    if (first) setCategory(first);
+    setCategory(first ?? null);
   }, [tree, category]);
 
   // A change of category or order starts the paging over.
@@ -85,10 +83,10 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     setPages(1);
   }, [category?.id, sort]);
 
-  const page1 = useJkhubListing(category?.id ?? null, sort, 1);
-  const page2 = useJkhubListing(pages >= 2 ? (category?.id ?? null) : null, sort, 2);
-  const page3 = useJkhubListing(pages >= 3 ? (category?.id ?? null) : null, sort, 3);
-  const page4 = useJkhubListing(pages >= 4 ? (category?.id ?? null) : null, sort, 4);
+  const page1 = useJkhubListing(game, category?.id ?? null, sort, 1);
+  const page2 = useJkhubListing(game, pages >= 2 ? (category?.id ?? null) : null, sort, 2);
+  const page3 = useJkhubListing(game, pages >= 3 ? (category?.id ?? null) : null, sort, 3);
+  const page4 = useJkhubListing(game, pages >= 4 ? (category?.id ?? null) : null, sort, 4);
 
   // Four pages of twenty-five is a hundred cards, which is as far as **Load
   // more** goes before the sort or the filter is the better tool. A hook
@@ -174,7 +172,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   const runRefresh = () => {
     setRefreshing(true);
     setFailure(null);
-    void refresh(GAME)
+    void refresh(game)
       .catch((e: unknown) => setFailure(errorMessage(e)))
       .finally(() => setRefreshing(false));
   };
