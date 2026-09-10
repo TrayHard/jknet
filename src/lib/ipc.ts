@@ -38,6 +38,17 @@ export interface Settings {
   closeOnLaunch: boolean;
   /** Absolute path that replaces the default data folder. */
   dataDirOverride: string | null;
+  /** Servers starred in the browser, as `ip:port`. */
+  favoriteServers: string[];
+  /** Servers Connect was pressed on, newest first, capped at 50. */
+  serverHistory: ServerHistoryEntry[];
+}
+
+/** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
+export interface ServerHistoryEntry {
+  address: string;
+  /** RFC 3339 in UTC. */
+  lastConnected: string;
 }
 
 /** `src-tauri/src/paths.rs`: the folders JKNet writes into. */
@@ -92,21 +103,8 @@ export interface Client {
 }
 
 // ---------------------------------------------------------------------------
-// Servers and library
+// Library
 // ---------------------------------------------------------------------------
-
-export interface Server {
-  address: string;
-  name: string;
-  map: string;
-  mode: string;
-  gameMod: string;
-  players: number;
-  maxPlayers: number;
-  ping: number | null;
-  passwordProtected: boolean;
-  trusted: boolean;
-}
 
 export type LibraryCategory = "skin" | "saber" | "map" | "mod" | "other";
 
@@ -143,9 +141,6 @@ export const ipc = {
     call<Client>("rename_client", { id, name }),
   deleteClient: (id: string) => call<void>("delete_client", { id }),
 
-  listServers: () => call<Server[]>("list_servers"),
-  refreshServers: () => call<Server[]>("refresh_servers"),
-
   launchClient: (clientId: string, address?: string) =>
     call<void>("launch_client", { clientId, address: address ?? null }),
 
@@ -166,4 +161,113 @@ export function errorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
   return "Unexpected error";
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: servers ---
+// ---------------------------------------------------------------------------
+
+/** `src-tauri/src/servers/mod.rs`: one row of the browser. */
+export interface ServerInfo {
+  /** `ip:port`, the key of the row everywhere in the launcher. */
+  address: string;
+  /** Host name as the server sent it, `^1`-style colour codes included. */
+  hostnameRaw: string;
+  /** The same name with the colour codes removed. */
+  hostnameClean: string;
+  map: string;
+  gametype: number;
+  /** Label of `gametype`, or `Mode <n>` for a number a mod invented. */
+  gametypeLabel: string;
+  /** Players the server counts, bots included. */
+  clients: number;
+  /** `g_humanplayers`: the same count without bots, when the server sends it. */
+  humans: number | null;
+  maxClients: number;
+  needpass: boolean;
+  /** `fs_game`, `base` when the server runs no mod. */
+  game: string;
+  /** 26 is Jedi Academy 1.01. */
+  protocol: number;
+  pingMs: number;
+  /** Listed in the bundled `trusted_servers.json`. */
+  trusted: boolean;
+  /** Starred by the player. */
+  favorite: boolean;
+  /** RFC 3339 in UTC. */
+  lastSeen: string;
+}
+
+/** `src-tauri/src/servers/mod.rs`: a vouched-for community server. */
+export interface TrustedServer {
+  address: string;
+  name: string;
+  community: string;
+  url: string;
+}
+
+/** One player of a `getstatus` answer. */
+export interface ServerPlayer {
+  nameRaw: string;
+  nameClean: string;
+  score: number;
+  /** Ping the server measures, which is the player's, not the launcher's. */
+  ping: number;
+}
+
+/** The answer of `get_server_status`. */
+export interface ServerStatus {
+  address: string;
+  /** The server's whole `serverinfo`, keys lowercased. */
+  info: Record<string, string>;
+  players: ServerPlayer[];
+}
+
+/** Payload of the `servers:batch` event. */
+export interface ServersBatchEvent {
+  servers: ServerInfo[];
+}
+
+/** Payload of the `servers:done` event, emitted once per refresh. */
+export interface ServersDoneEvent {
+  /** Addresses the masters returned. */
+  total: number;
+  /** How many of them answered `getinfo`. */
+  responded: number;
+  elapsedMs: number;
+}
+
+export const serversIpc = {
+  getCachedServers: () => call<ServerInfo[]>("get_cached_servers"),
+  /** `masters` overrides the two stock master servers. */
+  refreshServers: (masters?: string[]) =>
+    call<ServerInfo[]>("refresh_servers", { masters: masters ?? null }),
+  getServerStatus: (address: string) =>
+    call<ServerStatus>("get_server_status", { address }),
+  listTrustedServers: () => call<TrustedServer[]>("list_trusted_servers"),
+  setServerFavorite: (address: string, favorite: boolean) =>
+    call<Settings>("set_server_favorite", { address, favorite }),
+  addServerHistory: (address: string) =>
+    call<Settings>("add_server_history", { address }),
+};
+
+/**
+ * TEMPORARY. Starts a client, optionally connecting it to a server.
+ *
+ * The launch slice owns `launch_client` and is being written in parallel, so
+ * this branch has the signature but not the command: the call rejects at
+ * runtime until the two branches are merged. Delete this wrapper then and
+ * point the Connect button at the real one — the signature is already the
+ * agreed shape, so nothing else has to change.
+ */
+export function launchClient(args: {
+  clientId: string;
+  connect?: string;
+  extraArgs?: string[];
+}): Promise<void> {
+  return call<void>("launch_client", {
+    clientId: args.clientId,
+    connect: args.connect ?? null,
+    extraArgs: args.extraArgs ?? null,
+  });
 }
