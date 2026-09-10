@@ -2,17 +2,58 @@
  * Local font faces. The launcher never loads fonts from a CDN: it must start
  * offline and must not reach the network before the user asks for it.
  *
- * Only the weights used by the text styles in `tokens.css` are imported.
+ * Only the weights used by the text styles in `tokens.css` are imported. The
+ * files below are the per-weight ones rather than the per-subset ones, and that
+ * is deliberate: a `@fontsource` file named `latin-500.css` declares one
+ * `@font-face` with no `unicode-range`, so importing `latin-500` and
+ * `latin-ext-500` side by side declares the same family twice and the second
+ * wins for every character. The per-weight file declares each subset with its
+ * own range instead, and the browser fetches only the ranges the text uses.
+ *
+ * --- slice: i18n ---
+ * That is also what makes Polish and Hungarian render at all: `ł ą ę ż ő ű`
+ * live in the Latin Extended range, which the previous `latin-*` imports did
+ * not carry.
  */
 
-/* Chakra Petch: headings and navigation. */
-@import "@fontsource/chakra-petch/latin-500.css";
-@import "@fontsource/chakra-petch/latin-600.css";
+/* Chakra Petch: headings and navigation. Latin and Latin Extended, no
+   Cyrillic — see the rule at the end of this file. */
+@import "@fontsource/chakra-petch/500.css";
+@import "@fontsource/chakra-petch/600.css";
 
-/* Inter: body text and controls. */
-@import "@fontsource/inter/latin-400.css";
-@import "@fontsource/inter/latin-500.css";
-@import "@fontsource/inter/latin-600.css";
+/* --- slice: i18n ---
+   Exo 2: the display face of the Cyrillic languages. Same two weights as
+   Chakra Petch, and the same technical shape — a squarish, slightly condensed
+   sans — so a heading keeps its proportions when the language changes. */
+@import "@fontsource/exo-2/500.css";
+@import "@fontsource/exo-2/600.css";
 
-/* JetBrains Mono: addresses, versions and file paths. */
-@import "@fontsource/jetbrains-mono/latin-400.css";
+/* Inter: body text and controls. Covers Latin, Latin Extended and Cyrillic. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+
+/* JetBrains Mono: addresses, versions and file paths. Covers Cyrillic too,
+   which matters for the one mono line that is not data: a unit suffix. */
+@import "@fontsource/jetbrains-mono/400.css";
+
+/*
+ * --- slice: i18n ---
+ * The display face of the Cyrillic languages.
+ *
+ * Chakra Petch ships Latin, Latin Extended, Thai and Vietnamese and no
+ * Cyrillic at all, so every heading in Russian or Ukrainian would fall back to
+ * whatever the system offers — a different face on every machine, and a
+ * different one from the body text beside it. Exo 2 covers both alphabets and
+ * reads as the same kind of face.
+ *
+ * The selector matches the `lang` attribute `src/i18n/index.ts` writes on the
+ * document. It overrides the `--font-display` of the `@theme` block in
+ * `index.css`: this rule sits outside every cascade layer, and an unlayered
+ * rule beats a layered one whatever the specificity. Declaring the token twice
+ * inside `@theme` is what CLAUDE.md forbids, and this is not that.
+ */
+html[lang="ru"],
+html[lang="uk"] {
+  --font-display: "Exo 2", "Segoe UI", system-ui, sans-serif;
+}

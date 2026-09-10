@@ -1,13 +1,26 @@
 //! The single error type of the JKNet core.
 //!
 //! Every command returns `Result<T, AppError>`. The error reaches the frontend
-//! as a plain string, so `ipc.ts` can surface `error.message` without knowing
-//! the variants. Add a variant instead of returning a bare `String`: the
-//! variant names are what makes a log line searchable.
+//! as `{ code, message, details }`, so a screen can print the rendered English
+//! message without knowing the variants and the translation layer can look up
+//! `errors:<code>` and fill it from `details`. Add a variant instead of
+//! returning a bare `String`: the variant names are what makes a log line
+//! searchable, and a variant is what earns a translatable message.
+//!
+//! --- slice: i18n ---
+//! Two rules keep the envelope useful. Every variant answers [`AppError::code`]
+//! with a stable camelCase name that matches a key of `src/locales/en/errors.json`,
+//! and every value the rendered message interpolates is also a field of
+//! [`AppError::details`] — a translated message can only name a file, a game or
+//! a count if that value travels beside the code. Nothing here is translated:
+//! the core logs and speaks English, and `src/i18n/errors.ts` is what turns a
+//! code into the player's language.
 
 use std::path::Path;
 
+use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
+use serde_json::{json, Value};
 use thiserror::Error;
 
 /// Result alias used by every module of the core.
@@ -222,16 +235,110 @@ impl AppError {
             source,
         }
     }
+
+    // --- slice: i18n ---
+    /// The stable name of this failure, and the key of its translated message.
+    ///
+    /// One name per variant, in camelCase, matching a top-level key of
+    /// `src/locales/en/errors.json`. Renaming one is a breaking change for
+    /// every catalog, so rename the key in the same edit.
+    pub fn code(&self) -> &'static str {
+        match self {
+            AppError::Io { .. } => "io",
+            AppError::Json { .. } => "json",
+            AppError::Path(_) => "path",
+            AppError::NotFound(_) => "notFound",
+            AppError::InvalidInput(_) => "invalidInput",
+            AppError::AlreadyExists(_) => "alreadyExists",
+            AppError::Busy(_) => "busy",
+            AppError::State(_) => "state",
+            AppError::Network(_) => "network",
+            AppError::NotImplemented(_) => "notImplemented",
+            AppError::RateLimited(_) => "rateLimited",
+            AppError::Archive(_) => "archive",
+            AppError::Launch(_) => "launch",
+            AppError::Image(_) => "image",
+            AppError::SignedOut => "signedOut",
+            // Both service failures share one code: what tells them apart is
+            // the contract code inside `details`, which is what the frontend
+            // already branches on.
+            AppError::Online { .. } | AppError::OnlineNotConfigured => "online",
+            AppError::GameMismatch(_) => "gameMismatch",
+            AppError::GameDataMissing { .. } => "gameDataMissing",
+            AppError::JkhubUnavailable(_) => "jkhubUnavailable",
+            AppError::JkhubParse { .. } => "jkhubParse",
+            AppError::JkhubDownload(_) => "jkhubDownload",
+            AppError::ArchiveUnsupported { .. } => "archiveUnsupported",
+            AppError::NoPk3Files { .. } => "noPk3Files",
+        }
+    }
+
+    // --- slice: i18n ---
+    /// The values the rendered message interpolates, as a JSON object.
+    ///
+    /// A translated message can only name the file, the game or the format the
+    /// English one names if those values travel next to the code. Everything
+    /// here is data, never a sentence the launcher composed — the one
+    /// exception is `reason`, which carries text written by the operating
+    /// system or by a library and therefore stays English wherever it appears.
+    pub fn details(&self) -> Value {
+        match self {
+            AppError::Io { context, source } => {
+                json!({ "context": context, "reason": source.to_string() })
+            }
+            AppError::Json { context, source } => {
+                json!({ "context": context, "reason": source.to_string() })
+            }
+            AppError::Path(path) => json!({ "path": path }),
+            AppError::NotFound(what) => json!({ "what": what }),
+            AppError::InvalidInput(reason) => json!({ "reason": reason }),
+            AppError::AlreadyExists(what) => json!({ "what": what }),
+            AppError::Busy(reason) => json!({ "reason": reason }),
+            AppError::State(reason) => json!({ "reason": reason }),
+            AppError::Network(reason) => json!({ "reason": reason }),
+            AppError::NotImplemented(what) => json!({ "what": what }),
+            AppError::RateLimited(reason) => json!({ "reason": reason }),
+            AppError::Archive(reason) => json!({ "reason": reason }),
+            AppError::Launch(reason) => json!({ "reason": reason }),
+            AppError::Image(reason) => json!({ "reason": reason }),
+            AppError::SignedOut => json!({}),
+            AppError::Online { code, message } => json!({ "code": code, "message": message }),
+            AppError::OnlineNotConfigured => json!({
+                "code": ONLINE_NOT_CONFIGURED_CODE,
+                "message": "JKNet Online is not configured in this build",
+            }),
+            AppError::GameMismatch(reason) => json!({ "reason": reason }),
+            AppError::GameDataMissing { game, reason } => {
+                json!({ "game": game, "reason": reason })
+            }
+            AppError::JkhubUnavailable(reason) => json!({ "reason": reason }),
+            AppError::JkhubParse { what } => json!({ "what": what }),
+            AppError::JkhubDownload(reason) => json!({ "reason": reason }),
+            AppError::ArchiveUnsupported { format } => json!({ "format": format }),
+            AppError::NoPk3Files { entries } => json!({ "entries": entries }),
+        }
+    }
 }
 
-/// The frontend receives the rendered message, not the variant, so a command
-/// rejection reads the same in the console and in the log file.
+// --- slice: i18n ---
+/// The frontend receives `{ code, message, details }`.
+///
+/// `message` is the rendered English sentence, and it is what a screen prints
+/// when the catalog has no key for the code: the fallback is always a sentence,
+/// never a blank line or a bare code. `code` and `details` are what
+/// `translateError` in `src/i18n/errors.ts` needs to print the same failure in
+/// the player's language. The log file and the console keep the rendered
+/// message alone, so a bug report still reads as one line.
 impl Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.to_string())
+        let mut error = serializer.serialize_struct("AppError", 3)?;
+        error.serialize_field("code", self.code())?;
+        error.serialize_field("message", &self.to_string())?;
+        error.serialize_field("details", &self.details())?;
+        error.end()
     }
 }
 
@@ -251,8 +358,85 @@ mod tests {
         );
         assert!(rendered.starts_with(&format!("online {ONLINE_NOT_CONFIGURED_CODE}: ")));
 
-        let json = serde_json::to_string(&AppError::OnlineNotConfigured)
-            .expect("an error serializes as a string");
-        assert_eq!(json, format!("{rendered:?}"));
+        // --- slice: i18n ---
+        // The envelope carries the contract code in `details`, which is where
+        // `onlineErrorCode` in `src/lib/ipc.ts` now reads it from.
+        let value = serde_json::to_value(AppError::OnlineNotConfigured)
+            .expect("an error serializes into an envelope");
+        assert_eq!(value["code"], "online");
+        assert_eq!(value["message"], rendered);
+        assert_eq!(value["details"]["code"], ONLINE_NOT_CONFIGURED_CODE);
+    }
+
+    // --- slice: i18n ---
+    #[test]
+    fn an_error_reaches_the_frontend_as_a_code_a_message_and_its_parameters() {
+        let value = serde_json::to_value(AppError::GameDataMissing {
+            game: "Jedi Outcast",
+            reason: "the folder is not set.".into(),
+        })
+        .expect("an error serializes into an envelope");
+
+        assert_eq!(value["code"], "gameDataMissing");
+        assert_eq!(value["message"], "Jedi Outcast game files: the folder is not set.");
+        // Every value the rendered message interpolates is also a field of
+        // `details`: a translated message cannot name the game otherwise.
+        assert_eq!(value["details"]["game"], "Jedi Outcast");
+        assert_eq!(value["details"]["reason"], "the folder is not set.");
+    }
+
+    // --- slice: i18n ---
+    #[test]
+    fn every_code_is_a_key_of_the_english_error_catalog() {
+        // The catalog is the frontend's; reading it here is what stops a new
+        // variant from reaching a player as a bare English sentence.
+        let catalog: serde_json::Value =
+            serde_json::from_str(include_str!("../../src/locales/en/errors.json"))
+                .expect("the English error catalog parses");
+
+        let samples = [
+            AppError::Io {
+                context: "cannot read x".into(),
+                source: std::io::Error::other("boom"),
+            },
+            AppError::Json {
+                context: "cannot parse x".into(),
+                source: serde_json::from_str::<u8>("x").expect_err("not a number"),
+            },
+            AppError::Path("x".into()),
+            AppError::NotFound("x".into()),
+            AppError::InvalidInput("x".into()),
+            AppError::AlreadyExists("x".into()),
+            AppError::Busy("x".into()),
+            AppError::State("x".into()),
+            AppError::Network("x".into()),
+            AppError::NotImplemented("x"),
+            AppError::RateLimited("x".into()),
+            AppError::Archive("x".into()),
+            AppError::Launch("x".into()),
+            AppError::Image("x".into()),
+            AppError::SignedOut,
+            AppError::Online { code: "conflict".into(), message: "x".into() },
+            AppError::OnlineNotConfigured,
+            AppError::GameMismatch("x".into()),
+            AppError::GameDataMissing { game: "Jedi Academy", reason: "x".into() },
+            AppError::JkhubUnavailable("x".into()),
+            AppError::JkhubParse { what: "x".into() },
+            AppError::JkhubDownload("x".into()),
+            AppError::ArchiveUnsupported { format: "rar".into() },
+            AppError::NoPk3Files { entries: "x".into() },
+        ];
+
+        for error in samples {
+            let code = error.code();
+            assert!(
+                catalog.get(code).is_some(),
+                "errors.json has no key {code:?}; add it in the same edit as the variant"
+            );
+            assert!(
+                error.details().is_object(),
+                "the details of {code:?} have to be an object"
+            );
+        }
     }
 }

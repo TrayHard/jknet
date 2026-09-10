@@ -41,6 +41,7 @@ tokio-tungstenite = { version = "0.30.0", default-features = false, features = [
 scraper = { version = "0.27.0", default-features = false, features = ["main", "errors"] }
 percent-encoding = "2.3.2"
 sevenz-rust2 = { version = "0.22.2", default-features = false }
+tauri-plugin-os = "2.3.2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

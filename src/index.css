@@ -82,7 +82,9 @@
   --radius-xl: 16px;
   --radius-full: 999px;
 
-  /* Font families used by the text-style classes in tokens.css. */
+  /* Font families used by the text-style classes in tokens.css.
+     `--font-display` is overridden for the Cyrillic languages in
+     `styles/fonts.css`, where the reason lives: Chakra Petch has no Cyrillic. */
   --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
   --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;

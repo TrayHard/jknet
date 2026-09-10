@@ -1,0 +1,24 @@
+{
+  "groups": {
+    "play": "Play",
+    "manage": "Manage",
+    "community": "Community"
+  },
+  "items": {
+    "home": "Home",
+    "servers": "Servers",
+    "library": "Library",
+    "clients": "Clients",
+    "friends": "Friends",
+    "settings": "Settings"
+  },
+  "user": {
+    "guest": "Guest",
+    "noClient": "No client yet",
+    "openAccount": "Account settings",
+    "signIn": "Sign in"
+  },
+  "gameSwitch": {
+    "label": "Game"
+  }
+}
