@@ -1,66 +1,66 @@
 {
   "actions": {
-    "add": "Add",
-    "back": "Back",
-    "cancel": "Cancel",
-    "close": "Close",
-    "continue": "Continue",
-    "delete": "Delete",
-    "disable": "Disable",
-    "dismiss": "Dismiss",
-    "loadMore": "Load more",
-    "refresh": "Refresh",
-    "remove": "Remove",
-    "retry": "Retry",
-    "save": "Save",
-    "seeAll": "See all",
-    "tryAgain": "Try again"
+    "add": "Додати",
+    "back": "Назад",
+    "cancel": "Скасувати",
+    "close": "Закрити",
+    "continue": "Далі",
+    "delete": "Видалити",
+    "disable": "Вимкнути",
+    "dismiss": "Сховати",
+    "loadMore": "Показати ще",
+    "refresh": "Оновити",
+    "remove": "Видалити",
+    "retry": "Повторити",
+    "save": "Зберегти",
+    "seeAll": "Усі сервери",
+    "tryAgain": "Повторити"
   },
   "states": {
-    "checking": "Checking…",
-    "creating": "Creating…",
-    "deleting": "Deleting…",
-    "finishing": "Finishing…",
-    "installing": "Installing…",
-    "loading": "Loading…",
-    "reading": "Reading…",
-    "removing": "Removing…",
-    "saving": "Saving…",
-    "sending": "Sending…",
-    "starting": "Starting…"
+    "checking": "Перевірка…",
+    "creating": "Створення…",
+    "deleting": "Видалення…",
+    "finishing": "Завершення…",
+    "installing": "Встановлення…",
+    "loading": "Завантаження…",
+    "reading": "Читання…",
+    "removing": "Видалення…",
+    "saving": "Збереження…",
+    "sending": "Надсилання…",
+    "starting": "Запуск…"
   },
   "values": {
     "empty": "—",
-    "notSet": "Not set",
-    "unknown": "Unknown"
+    "notSet": "Не задано",
+    "unknown": "Невідомо"
   },
   "units": {
     "bytes": {
-      "b": "{{value}} B",
-      "kb": "{{value}} KB",
-      "mb": "{{value}} MB",
-      "gb": "{{value}} GB"
+      "b": "{{value}} Б",
+      "kb": "{{value}} КБ",
+      "mb": "{{value}} МБ",
+      "gb": "{{value}} ГБ"
     },
-    "milliseconds": "{{value}} ms",
-    "seconds": "{{value}} s",
-    "minutes": "{{value}} min",
-    "hours": "{{value}} h",
-    "hoursMinutes": "{{hours}} h {{minutes}} min"
+    "milliseconds": "{{value}} мс",
+    "seconds": "{{value}} с",
+    "minutes": "{{value}} хв",
+    "hours": "{{value}} год",
+    "hoursMinutes": "{{hours}} год {{minutes}} хв"
   },
   "window": {
-    "minimize": "Minimize",
-    "maximize": "Maximize",
-    "restore": "Restore",
-    "close": "Close"
+    "minimize": "Згорнути",
+    "maximize": "Розгорнути",
+    "restore": "Відновити",
+    "close": "Закрити"
   },
   "select": {
-    "any": "Any",
-    "nothingToChoose": "Nothing to choose"
+    "any": "Усі",
+    "nothingToChoose": "Немає варіантів"
   },
   "search": {
-    "nothingMatches": "Nothing matches"
+    "nothingMatches": "Нічого не знайдено"
   },
   "runtime": {
-    "missing": "Tauri runtime is not available"
+    "missing": "Середовище Tauri недоступне"
   }
 }

@@ -1,65 +1,65 @@
 {
-  "title": "Settings",
-  "subtitle": "Language, launch, downloads, appearance and account.",
+  "title": "Налаштування",
+  "subtitle": "Мова, запуск, завантаження, вигляд і обліковий запис.",
   "dataFolder": {
-    "title": "Data folder",
-    "text": "Clients, library and logs live here.",
-    "open": "Open JKNet folder"
+    "title": "Папка даних",
+    "text": "Тут лежать клієнти, бібліотека та журнали.",
+    "open": "Відкрити папку JKNet"
   },
   "language": {
-    "title": "Language",
-    "text": "The launcher speaks the language you pick here. Server names, map names and file titles stay as their authors wrote them.",
-    "label": "Interface language",
-    "system": "System language",
-    "systemWith": "System language ({{language}})",
-    "needsTranslation": "This language is not translated yet and shows English."
+    "title": "Мова",
+    "text": "Лаунчер говорить мовою, яку ви тут виберете. Назви серверів, карт і файлів залишаються такими, як їх написали автори.",
+    "label": "Мова інтерфейсу",
+    "system": "Мова системи",
+    "systemWith": "Мова системи ({{language}})",
+    "needsTranslation": "Ця мова ще не перекладена й показує англійський текст."
   },
   "gameFiles": {
-    "title": "Game files",
-    "text": "JKNet reads the archives in these folders and writes nothing into them. One game is enough; set up the other whenever you like.",
-    "row": "{{game}} files",
-    "playStarts": "Play starts {{client}}",
-    "noDefault": "No default client yet",
-    "locate": "Locate",
-    "change": "Change",
-    "pickTitle": "Select the {{game}} GameData folder",
-    "invalid": "No {{game}} files in {{path}}. Missing: {{missing}}."
+    "title": "Файли гри",
+    "text": "JKNet читає архіви в цих папках і нічого в них не пише. Однієї гри достатньо; другу налаштуйте, коли захочете.",
+    "row": "Файли {{game}}",
+    "playStarts": "Кнопка «Грати» запускає {{client}}",
+    "noDefault": "Основного клієнта ще немає",
+    "locate": "Вказати",
+    "change": "Змінити",
+    "pickTitle": "Виберіть папку GameData для {{game}}",
+    "invalid": "У папці {{path}} немає файлів {{game}}. Бракує: {{missing}}."
   },
   "launch": {
-    "title": "Launch",
-    "label": "Extra launch arguments",
+    "title": "Запуск",
+    "label": "Додаткові аргументи запуску",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Appended to every client, exactly as in a shortcut. Example: <0>+set r_fullscreen 0 +set r_mode 4</0>. Double quotes keep a value with a space together."
+    "hint": "Додаються до кожного клієнта точно так, як у ярлику. Приклад: <0>+set r_fullscreen 0 +set r_mode 4</0>. Подвійні лапки тримають значення з пробілом разом."
   },
   "onboarding": {
-    "title": "First-time setup",
-    "text": "Walks through game files, a client and an account again. Nothing you have set up is removed.",
-    "action": "Run first-time setup again"
+    "title": "Перше налаштування",
+    "text": "Проводить наново через файли гри, клієнт і обліковий запис. Нічого з налаштованого не видаляється.",
+    "action": "Пройти перше налаштування ще раз"
   },
   "cache": {
-    "title": "Cache",
-    "mapPictures": "Map pictures",
-    "reading": "Reading the index…",
+    "title": "Кеш",
+    "mapPictures": "Зображення карт",
+    "reading": "Читаємо покажчик…",
+    "count_one": "{{count}} карта має зображення, прочитане з файлів pk3, які у вас уже є. Нічого не завантажується.",
+    "count_few": "{{count}} карти мають зображення, прочитані з файлів pk3, які у вас уже є. Нічого не завантажується.",
+    "count_many": "{{count}} карт мають зображення, прочитані з файлів pk3, які у вас уже є. Нічого не завантажується.",
+    "count_other": "{{count}} карти мають зображення, прочитані з файлів pk3, які у вас уже є. Нічого не завантажується.",
     "perGame": "{{count}} {{game}}",
-    "lastRebuild": "Last rebuild: {{maps}} pictures from {{sources}} files in {{elapsed}}.",
-    "rebuild": "Rebuild",
-    "rebuilding": "Rebuilding…",
-    "count_one": "{{count}} map has a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_few": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_many": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_other": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded."
+    "lastRebuild": "Остання перебудова: {{maps}} зображень із {{sources}} файлів за {{elapsed}}.",
+    "rebuild": "Перебудувати",
+    "rebuilding": "Перебудова…"
   },
   "rest": {
-    "title": "The rest of the settings is not wired up yet",
-    "text": "The Downloads and Appearance sections arrive together with the features they control."
+    "title": "Решта налаштувань ще не підключена",
+    "text": "Розділи «Завантаження» та «Вигляд» з’являться разом із можливостями, якими вони керують."
   },
   "about": {
-    "title": "About",
-    "text": "JKNet updates itself from GitHub Releases. Every package is signed, and an unsigned one is refused.",
-    "version": "Version {{version}}",
-    "versionUnknown": "Version unknown",
+    "title": "Про програму",
+    "text": "JKNet оновлюється з GitHub Releases. Кожен пакет підписаний, а непідписаний відхиляється.",
+    "version": "Версія {{version}}",
+    "versionUnknown": "Версія невідома",
     "license": "GPL-3.0-or-later",
-    "check": "Check for updates",
-    "install": "Install and restart"
+    "check": "Перевірити оновлення",
+    "install": "Встановити й перезапустити"
   }
 }
