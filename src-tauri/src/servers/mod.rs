@@ -359,8 +359,9 @@ fn emit<T: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: T) {
 /// the current settings applied.
 ///
 /// This is what the Servers screen renders on its first frame, before the
-/// network answers anything.
-#[tauri::command]
+/// network answers anything. Declared `async` so the read of a list a thousand
+/// rows long happens off the main thread, where it would stall the window.
+#[tauri::command(async)]
 pub fn get_cached_servers(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
