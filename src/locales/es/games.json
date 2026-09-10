@@ -1,47 +1,47 @@
 {
   "gametypes": {
     "ja": {
-      "0": "FFA",
-      "1": "Holocron",
-      "2": "Jedi Master",
-      "3": "Duel",
-      "4": "Power Duel",
-      "5": "Single Player",
-      "6": "Team FFA",
-      "7": "Siege",
-      "8": "CTF",
-      "9": "CTY"
+      "0": "Todos contra todos",
+      "1": "Holocrones",
+      "2": "Maestro Jedi",
+      "3": "Duelo",
+      "4": "Duelo de poder",
+      "5": "Un jugador",
+      "6": "Combate por equipos",
+      "7": "Asedio",
+      "8": "Captura la bandera",
+      "9": "Captura el ysalamiri"
     },
     "jo": {
-      "0": "FFA",
-      "1": "Holocron",
-      "2": "Jedi Master",
-      "3": "Duel",
-      "4": "Single Player",
-      "5": "Team FFA",
+      "0": "Todos contra todos",
+      "1": "Holocrones",
+      "2": "Maestro Jedi",
+      "3": "Duelo",
+      "4": "Un jugador",
+      "5": "Combate por equipos",
       "6": "Saga",
-      "7": "CTF",
-      "8": "CTY"
+      "7": "Captura la bandera",
+      "8": "Captura el ysalamiri"
     }
   },
   "gametypesShort": {
     "ja": {
       "0": "FFA",
       "1": "HOLO",
-      "2": "JM",
-      "3": "DUEL",
-      "4": "PDUEL",
+      "2": "MJ",
+      "3": "DUELO",
+      "4": "PODER",
       "5": "SP",
       "6": "TFFA",
-      "7": "SIEGE",
+      "7": "ASEDIO",
       "8": "CTF",
       "9": "CTY"
     },
     "jo": {
       "0": "FFA",
       "1": "HOLO",
-      "2": "JM",
-      "3": "DUEL",
+      "2": "MJ",
+      "3": "DUELO",
       "4": "SP",
       "5": "TFFA",
       "6": "SAGA",
@@ -49,15 +49,15 @@
       "8": "CTY"
     }
   },
-  "unknownGametype": "Mode {{number}}",
+  "unknownGametype": "Modo {{number}}",
   "sources": {
     "steam": "Steam",
     "gog": "GOG",
-    "manual": "Chosen by hand",
-    "configured": "Saved",
-    "configuredEarlier": "Saved earlier"
+    "manual": "Elegida a mano",
+    "configured": "Guardada",
+    "configuredEarlier": "Guardada antes"
   },
   "map": {
-    "unknown": "unknown map"
+    "unknown": "mapa desconocido"
   }
 }

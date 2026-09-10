@@ -1,38 +1,38 @@
 {
   "actions": {
-    "add": "Add",
-    "back": "Back",
-    "cancel": "Cancel",
-    "close": "Close",
-    "continue": "Continue",
-    "delete": "Delete",
-    "disable": "Disable",
-    "dismiss": "Dismiss",
-    "loadMore": "Load more",
-    "refresh": "Refresh",
-    "remove": "Remove",
-    "retry": "Retry",
-    "save": "Save",
-    "seeAll": "See all",
-    "tryAgain": "Try again"
+    "add": "Agregar",
+    "back": "Atrás",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "continue": "Continuar",
+    "delete": "Eliminar",
+    "disable": "Desactivar",
+    "dismiss": "Descartar",
+    "loadMore": "Cargar más",
+    "refresh": "Actualizar",
+    "remove": "Quitar",
+    "retry": "Reintentar",
+    "save": "Guardar",
+    "seeAll": "Ver todo",
+    "tryAgain": "Intentar de nuevo"
   },
   "states": {
-    "checking": "Checking…",
-    "creating": "Creating…",
-    "deleting": "Deleting…",
-    "finishing": "Finishing…",
-    "installing": "Installing…",
-    "loading": "Loading…",
-    "reading": "Reading…",
-    "removing": "Removing…",
-    "saving": "Saving…",
-    "sending": "Sending…",
-    "starting": "Starting…"
+    "checking": "Comprobando…",
+    "creating": "Creando…",
+    "deleting": "Eliminando…",
+    "finishing": "Finalizando…",
+    "installing": "Instalando…",
+    "loading": "Cargando…",
+    "reading": "Leyendo…",
+    "removing": "Quitando…",
+    "saving": "Guardando…",
+    "sending": "Enviando…",
+    "starting": "Iniciando…"
   },
   "values": {
     "empty": "—",
-    "notSet": "Not set",
-    "unknown": "Unknown"
+    "notSet": "Sin definir",
+    "unknown": "Desconocido"
   },
   "units": {
     "bytes": {
@@ -48,19 +48,19 @@
     "hoursMinutes": "{{hours}} h {{minutes}} min"
   },
   "window": {
-    "minimize": "Minimize",
-    "maximize": "Maximize",
-    "restore": "Restore",
-    "close": "Close"
+    "minimize": "Minimizar",
+    "maximize": "Maximizar",
+    "restore": "Restaurar",
+    "close": "Cerrar"
   },
   "select": {
-    "any": "Any",
-    "nothingToChoose": "Nothing to choose"
+    "any": "Cualquiera",
+    "nothingToChoose": "Nada que elegir"
   },
   "search": {
-    "nothingMatches": "Nothing matches"
+    "nothingMatches": "Sin coincidencias"
   },
   "runtime": {
-    "missing": "Tauri runtime is not available"
+    "missing": "El entorno de Tauri no está disponible"
   }
 }
