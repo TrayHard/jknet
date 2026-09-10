@@ -49,15 +49,21 @@ use crate::timestamp;
 const WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Emitted right after the process starts.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameStarted {
     pub client_id: String,
     pub pid: u32,
+    // --- slice: friends ---
+    /// The `+connect` address, when the game was started to join a server.
+    /// `None` means the Play button: the game opens on its main menu, and
+    /// there is no server to tell anybody about.
+    #[serde(default)]
+    pub connect: Option<String>,
 }
 
 /// Emitted once the process is gone, however it went.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameExited {
     pub client_id: String,
@@ -228,6 +234,30 @@ pub fn launch_client(
     connect: Option<String>,
     extra_args: Option<Vec<String>>,
 ) -> Result<RunningGame> {
+    start_client(
+        &app,
+        &state,
+        &launch,
+        &client_id,
+        connect.as_deref(),
+        &extra_args.unwrap_or_default(),
+    )
+}
+
+/// The body of [`launch_client`], reachable from another module.
+///
+/// --- slice: friends ---
+/// `join_friend` starts a game the same way the Play button does, and the
+/// argument order in [`build_launch_args`] is the kind of thing that only
+/// stays right while there is one copy of it.
+pub(crate) fn start_client(
+    app: &AppHandle,
+    state: &AppState,
+    launch: &LaunchState,
+    client_id: &str,
+    connect: Option<&str>,
+    extra_args: &[String],
+) -> Result<RunningGame> {
     if let Some(running) = launch.current()? {
         return Err(AppError::Launch(format!(
             "{} is already running (pid {}). Stop it first.",
@@ -237,7 +267,7 @@ pub fn launch_client(
 
     let settings = state.settings()?;
     let paths = state.paths()?;
-    let client = clients::read_record(&paths, &client_id)?;
+    let client = clients::read_record(&paths, client_id)?;
     let engine = engines::require(&client.engine_id)?;
 
     let game_data = settings.game_data_path.as_deref().ok_or_else(|| {
@@ -261,12 +291,11 @@ pub fn launch_client(
     // The engine creates the rest itself, but it will not create its root.
     crate::paths::create_dir(&home_dir)?;
 
-    let connect = match connect.as_deref() {
+    let connect = match connect {
         Some(address) => Some(validate_address(address)?),
         None => None,
     };
     let settings_args = split_args(&settings.extra_launch_args);
-    let extra_args = extra_args.unwrap_or_default();
     let fs_game = client
         .fs_game
         .as_deref()
@@ -278,7 +307,7 @@ pub fn launch_client(
         home_dir: &home_dir,
         fs_game,
         settings_args: &settings_args,
-        extra_args: &extra_args,
+        extra_args,
         connect,
     });
 
@@ -305,11 +334,16 @@ pub fn launch_client(
         GameStarted {
             client_id: view.client_id.clone(),
             pid: view.pid,
+            // --- slice: friends ---
+            // The presence reporter reads the address from here: it is the
+            // only place in the launcher that knows the game went to a server
+            // rather than to its main menu.
+            connect: connect.map(str::to_string),
         },
     ) {
         log::warn!("cannot emit launch:game-started: {e}");
     }
-    watch(app, view.client_id.clone());
+    watch(app.clone(), view.client_id.clone());
     Ok(view)
 }
 

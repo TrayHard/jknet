@@ -92,6 +92,19 @@ pub enum AppError {
     /// game already running.
     #[error("cannot launch: {0}")]
     Launch(String),
+
+    // --- slice: friends ---
+    /// Nobody is signed in, so there is no token to talk to the hub with. Its
+    /// own variant because the cure is the Account card on the Settings
+    /// screen, not a retry.
+    #[error("sign in to JKNet to see your friends")]
+    SignedOut,
+
+    /// The hub refused the request and said why. The message is the hub's own
+    /// sentence, so it goes straight onto the screen; the code stays in the
+    /// log line the caller writes.
+    #[error("{0}")]
+    Hub(String),
 }
 
 impl From<reqwest::Error> for AppError {
