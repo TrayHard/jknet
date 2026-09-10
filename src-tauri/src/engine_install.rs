@@ -488,6 +488,16 @@ async fn install_inner(
         )));
     }
 
+    // --- slice: game core ---
+    // A game whose engine folder is not a search root leaves the build's own
+    // `base\*.pk3` unreachable, so they are mirrored into `home\base\` right
+    // here. The launch path does it again on every start; doing it now is what
+    // makes a client complete the moment the progress bar says «ready».
+    if !client.game.spec().launch_layout.engine_dir_on_search_path() {
+        let home_dir = paths.client_dir(client_id).join("home");
+        sync_engine_archives(&engine_dir, &home_dir)?;
+    }
+
     client.engine_version = Some(release.tag.clone());
     client.engine_installed_at = Some(timestamp::now_rfc3339());
     client.engine_published_at = Some(release.published_at.clone());
@@ -628,6 +638,142 @@ async fn download(
     fs::rename(&partial, &file).map_err(|e| AppError::io_path("cannot rename", &partial, e))?;
     log::info!("downloaded {downloaded} bytes into {}", file.display());
     Ok(file)
+}
+
+// ---------------------------------------------------------------------------
+// The archives an engine build ships with itself
+// ---------------------------------------------------------------------------
+
+// --- slice: game core ---
+
+/// Folder both the unpacked build and the client's `home\` keep archives in.
+const BASE_FOLDER: &str = "base";
+
+/// Names of the pk3 files the unpacked build itself ships, lowercase.
+///
+/// The one answer to "is this file the player's or the engine's". Read from
+/// disk rather than from a list in the registry, because the list would have to
+/// be right about a release nobody has downloaded yet.
+///
+/// An unreadable or missing `engine\base\` answers with an empty set: a client
+/// whose engine is not installed has no engine files, which is the truth.
+pub fn bundled_archive_names(engine_dir: &Path) -> HashSet<String> {
+    let Ok(entries) = fs::read_dir(engine_dir.join(BASE_FOLDER)) else {
+        return HashSet::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_str()?.to_ascii_lowercase();
+            let is_file = entry.metadata().map(|meta| meta.is_file()).unwrap_or(false);
+            (is_file && name.ends_with(".pk3")).then_some(name)
+        })
+        .collect()
+}
+
+/// Copies every `engine\base\*.pk3` into `home\base\`, skipping what is
+/// already there unchanged. Returns the names it copied.
+///
+/// --- slice: game core ---
+/// Jedi Outcast needs this. Its layout hands `fs_basepath` to the game folder
+/// (see [`crate::launch`]), which leaves `clients\<slug>\engine\` off the
+/// search path — and that is where JK2MV keeps `assetsmv.pk3` and
+/// `assetsmv2.pk3`, the archives its own modules need. `home\base\` is the one
+/// root left that JKNet may write into.
+///
+/// Idempotent by size and modification time, so the common call copies nothing
+/// and touches no disk beyond one `read_dir` and one `metadata` per file. The
+/// copy stamps the source's modification time onto the destination, because
+/// `fs::copy` does not promise to carry it over and a lost timestamp would
+/// make every launch copy the same two megabytes again.
+///
+/// Called from two places: after an install, so a fresh client is complete,
+/// and before every launch, so a client created before this existed repairs
+/// itself without a reinstall.
+pub fn sync_engine_archives(engine_dir: &Path, home_dir: &Path) -> Result<Vec<String>> {
+    let source_dir = engine_dir.join(BASE_FOLDER);
+    let Ok(entries) = fs::read_dir(&source_dir) else {
+        // No `base\` in the build: nothing of the engine's to mirror.
+        return Ok(Vec::new());
+    };
+
+    let sources: Vec<(String, PathBuf, fs::Metadata)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_str()?.to_string();
+            if !name.to_ascii_lowercase().ends_with(".pk3") {
+                return None;
+            }
+            let meta = entry.metadata().ok()?;
+            meta.is_file().then(|| (name, entry.path(), meta))
+        })
+        .collect();
+    if sources.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let target_dir = home_dir.join(BASE_FOLDER);
+    paths::create_dir(&target_dir)?;
+
+    let mut copied = Vec::new();
+    for (name, source, meta) in sources {
+        let target = target_dir.join(&name);
+        if !needs_copy(&meta, &target) {
+            continue;
+        }
+        fs::copy(&source, &target)
+            .map_err(|e| AppError::io_path("cannot copy the engine archive into", &target, e))?;
+        stamp_modified(&target, &meta);
+        copied.push(name);
+    }
+
+    if copied.is_empty() {
+        log::debug!("{} is already in sync", target_dir.display());
+    } else {
+        log::info!(
+            "copied {} engine archive(s) into {}: {}",
+            copied.len(),
+            target_dir.display(),
+            copied.join(", ")
+        );
+    }
+    Ok(copied)
+}
+
+/// Whether the mirrored copy is missing, a different size, or a different age.
+///
+/// A destination whose metadata cannot be read counts as missing: copying a
+/// file twice is cheap, and skipping one that is not really there is not.
+fn needs_copy(source: &fs::Metadata, target: &Path) -> bool {
+    let Ok(existing) = fs::metadata(target) else {
+        return true;
+    };
+    if existing.len() != source.len() {
+        return true;
+    }
+    match (existing.modified(), source.modified()) {
+        (Ok(there), Ok(here)) => there != here,
+        // A platform that will not report modification times leaves the size
+        // as the only signal, and the size already matched.
+        _ => false,
+    }
+}
+
+/// Gives the copy the modification time of the original.
+///
+/// A failure costs one redundant copy on the next launch and nothing else, so
+/// it is logged rather than propagated.
+fn stamp_modified(target: &Path, source: &fs::Metadata) {
+    let Ok(modified) = source.modified() else {
+        return;
+    };
+    let stamped = File::options()
+        .write(true)
+        .open(target)
+        .and_then(|file| file.set_modified(modified));
+    if let Err(e) = stamped {
+        log::warn!("cannot stamp the modification time of {}: {e}", target.display());
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -946,6 +1092,141 @@ mod tests {
         // folder, so they are on the search path where the archive put them.
         assert!(engine_dir.join("base").join("assetsmv.pk3").is_file());
         assert!(engine_dir.join("base").join("assetsmv2.pk3").is_file());
+    }
+
+    /// A client folder with an unpacked JK2MV in it: the executable, the menu
+    /// module and the two archives the build ships in `base\`.
+    fn jk2mv_client(root: &Path) -> (PathBuf, PathBuf) {
+        let engine_dir = root.join("engine");
+        let home_dir = root.join("home");
+        fs::create_dir_all(engine_dir.join("base")).expect("engine base");
+        fs::write(engine_dir.join("jk2mvmp.exe"), b"MZ").expect("exe");
+        fs::write(engine_dir.join("base").join("assetsmv.pk3"), b"mv").expect("assetsmv");
+        fs::write(engine_dir.join("base").join("assetsmv2.pk3"), b"mv2").expect("assetsmv2");
+        (engine_dir, home_dir)
+    }
+
+    #[test]
+    fn the_archives_of_the_build_are_mirrored_into_the_home_folder() {
+        // Jedi Outcast keeps the game folder on `fs_basepath`, so this copy is
+        // the only way JK2MV's own archives reach the search path.
+        let temp = tempfile::tempdir().expect("temp dir");
+        let (engine_dir, home_dir) = jk2mv_client(temp.path());
+
+        let copied = sync_engine_archives(&engine_dir, &home_dir).expect("the first sync");
+        assert_eq!(copied.len(), 2, "{copied:?}");
+        assert!(copied.contains(&"assetsmv.pk3".to_string()));
+        assert!(copied.contains(&"assetsmv2.pk3".to_string()));
+        assert_eq!(
+            fs::read(home_dir.join("base").join("assetsmv.pk3")).expect("the copy"),
+            b"mv"
+        );
+        // Only archives travel: the executable and the DLLs stay next to the
+        // binary, where the working directory of the process points.
+        assert!(!home_dir.join("base").join("jk2mvmp.exe").exists());
+    }
+
+    #[test]
+    fn a_second_sync_copies_nothing() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let (engine_dir, home_dir) = jk2mv_client(temp.path());
+
+        sync_engine_archives(&engine_dir, &home_dir).expect("the first sync");
+        let again = sync_engine_archives(&engine_dir, &home_dir).expect("the second sync");
+        assert!(again.is_empty(), "{again:?}");
+
+        // Idempotence is what makes the call on every launch free, so the size
+        // and the modification time both have to survive the copy.
+        let source = fs::metadata(engine_dir.join("base").join("assetsmv.pk3")).expect("source");
+        let copy = fs::metadata(home_dir.join("base").join("assetsmv.pk3")).expect("copy");
+        assert_eq!(source.len(), copy.len());
+        assert_eq!(
+            source.modified().expect("source time"),
+            copy.modified().expect("copy time")
+        );
+    }
+
+    #[test]
+    fn a_new_build_replaces_the_mirrored_archive() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let (engine_dir, home_dir) = jk2mv_client(temp.path());
+        sync_engine_archives(&engine_dir, &home_dir).expect("the first sync");
+
+        // An engine update writes a different archive under the same name.
+        fs::write(engine_dir.join("base").join("assetsmv.pk3"), b"mv 1.4.2")
+            .expect("a newer archive");
+        let copied = sync_engine_archives(&engine_dir, &home_dir).expect("the sync after an update");
+        assert_eq!(copied, vec!["assetsmv.pk3".to_string()]);
+        assert_eq!(
+            fs::read(home_dir.join("base").join("assetsmv.pk3")).expect("the copy"),
+            b"mv 1.4.2"
+        );
+    }
+
+    #[test]
+    fn a_rebuilt_archive_of_the_same_size_is_recognised_by_its_age() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let (engine_dir, home_dir) = jk2mv_client(temp.path());
+        sync_engine_archives(&engine_dir, &home_dir).expect("the first sync");
+
+        // Same two bytes, newer file: only the modification time tells them
+        // apart, which is why the check does not stop at the size.
+        let source = engine_dir.join("base").join("assetsmv.pk3");
+        fs::write(&source, b"MV").expect("a rebuilt archive");
+        File::options()
+            .write(true)
+            .open(&source)
+            .expect("open the source")
+            .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(60))
+            .expect("age the source");
+
+        let copied = sync_engine_archives(&engine_dir, &home_dir).expect("the sync");
+        assert_eq!(copied, vec!["assetsmv.pk3".to_string()]);
+        assert_eq!(
+            fs::read(home_dir.join("base").join("assetsmv.pk3")).expect("the copy"),
+            b"MV"
+        );
+    }
+
+    #[test]
+    fn a_build_without_archives_is_synced_without_writing_anything() {
+        // The Jedi Academy forks ship DLLs in `base\` and no pk3 at all, and
+        // an engine that is not installed yet has no `base\` folder.
+        let temp = tempfile::tempdir().expect("temp dir");
+        let engine_dir = temp.path().join("engine");
+        let home_dir = temp.path().join("home");
+
+        assert!(sync_engine_archives(&engine_dir, &home_dir)
+            .expect("a missing build is not an error")
+            .is_empty());
+        assert!(!home_dir.exists(), "nothing to copy means nothing created");
+
+        fs::create_dir_all(engine_dir.join("base")).expect("engine base");
+        fs::write(engine_dir.join("base").join("cgamex86.dll"), b"dll").expect("module");
+        assert!(sync_engine_archives(&engine_dir, &home_dir)
+            .expect("a build with no archives")
+            .is_empty());
+        assert!(!home_dir.exists());
+    }
+
+    #[test]
+    fn the_bundled_names_are_the_pk3_files_of_the_build() {
+        // What `library.rs` asks to tell the player's files from the engine's.
+        let temp = tempfile::tempdir().expect("temp dir");
+        let (engine_dir, _home_dir) = jk2mv_client(temp.path());
+        fs::write(engine_dir.join("base").join("notes.txt"), b"read me").expect("a stray file");
+
+        let names = bundled_archive_names(&engine_dir);
+        assert_eq!(names.len(), 2, "{names:?}");
+        assert!(names.contains("assetsmv.pk3"));
+        assert!(names.contains("assetsmv2.pk3"));
+
+        // Lowercase, because the engine's file lister does not care about case
+        // and neither may the comparison that hides these files.
+        fs::write(engine_dir.join("base").join("Extra.PK3"), b"pk3").expect("a loud name");
+        assert!(bundled_archive_names(&engine_dir).contains("extra.pk3"));
+
+        assert!(bundled_archive_names(temp.path().join("nothing").as_path()).is_empty());
     }
 
     #[test]

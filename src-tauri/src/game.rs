@@ -151,6 +151,36 @@ pub struct AssetSpec {
     pub required: bool,
 }
 
+/// How a client of this game lays its file system roots out.
+///
+/// The engines of the two games disagree about one thing: whether the folder
+/// holding the player's retail archives can be named by a cvar of its own. A
+/// Jedi Academy engine can, so the unpacked build keeps `fs_basepath` to
+/// itself. The released JK2MV cannot, so the game folder has to take
+/// `fs_basepath` and the build's own archives have to move. See
+/// [`GameSpec::launch_layout`] and [`crate::launch`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchLayout {
+    /// `<game data cvar>` → `GameData`, `fs_basepath` → `engine\`,
+    /// `fs_homepath` → `home\`. Three roots, all three on the search path.
+    ThreeRoots,
+    /// `fs_basepath` → `GameData`, `fs_homepath` → `home\`. Two roots; the
+    /// unpacked build is *not* one of them, so every `engine\base\*.pk3` the
+    /// build ships is mirrored into `home\base\` before the game starts.
+    TwoRoots,
+}
+
+impl LaunchLayout {
+    /// Whether `clients\<slug>\engine` is itself a file system root.
+    ///
+    /// False means the engine never looks inside its own folder for archives,
+    /// which is what makes the mirror in [`crate::engine_install::sync_engine_archives`]
+    /// necessary rather than merely tidy.
+    pub fn engine_dir_on_search_path(self) -> bool {
+        matches!(self, LaunchLayout::ThreeRoots)
+    }
+}
+
 /// A patch level recognised by the archives it adds.
 #[derive(Debug, Clone, Copy)]
 pub struct VersionSpec {
@@ -210,26 +240,48 @@ pub struct GameSpec {
     pub gametypes: &'static [&'static str],
 
     // --- launch ---
-    /// Cvar naming the read-only root that holds the player's retail install:
-    /// the folder that *contains* `base`, the `GameData` equivalent.
+    /// Cvar that names the folder holding the player's retail install: the
+    /// folder that *contains* `base`, the `GameData` equivalent.
     ///
-    /// Only the name differs between the games; the role is the same, which is
-    /// what lets both of them share one launch layout — see [`crate::launch`].
-    /// Jedi Academy engines inherit `fs_cdpath` from Quake 3. JK2MV dropped it
-    /// (`files.cpp` mentions a cd path only inside a Quake 3 comment) and put
-    /// its own cvar in that place, `mvdevs/jk2mv`, `src/qcommon/files.cpp`:
+    /// `None` for an engine that has no such cvar at all. `Some` does **not**
+    /// promise the engine acts on it — see [`Self::launch_layout`], which is
+    /// what decides where the game folder is actually passed.
+    ///
+    /// Jedi Academy engines inherit `fs_cdpath` from Quake 3 and read it.
+    /// JK2MV dropped `fs_cdpath` (`files.cpp` mentions a cd path only inside a
+    /// Quake 3 comment) and registers `fs_assetspath` in its place. In the
+    /// released 1.4.1 that cvar is registered and then never read
+    /// (`mvdevs/jk2mv`, tag `1.4.1`, `src/qcommon/files.cpp:3257`):
     ///
     /// ```text
-    /// fs_assetspath = Cvar_Get("fs_assetspath", Sys_DefaultAssetsPath() or "", CVAR_INIT | CVAR_VM_NOWRITE)
-    /// FS_AddAssetsDirectoryJK2(fs_assetspath->string, BASEGAME)
+    /// assetsPath = Sys_DefaultAssetsPath();
+    /// fs_assetspath = Cvar_Get("fs_assetspath", assetsPath ? assetsPath : "", CVAR_INIT | CVAR_VM_NOWRITE);
+    /// ...
+    /// // don't use the assetspath if assets files already found in fs_basepath or fs_homepath
+    /// if (assetsPath && !FS_BaseHome_Base_FileExists("assets5.pk3")) {
+    ///     FS_AddGameDirectory(assetsPath, BASEGAME, qtrue);
+    /// }
     /// ```
     ///
-    /// `FS_Startup` adds that assets directory first — and only when
-    /// `assets5.pk3` was not already found in `base` under basepath or
-    /// homepath — then `FS_AddGameDirectory(fs_basepath, game)`, then homepath,
-    /// then `fs_basegame`, `fs_game` and `fs_forcegame`. `CVAR_INIT` means the
-    /// command line is the only way to set it, which is what JKNet does.
-    pub game_data_cvar: &'static str,
+    /// The search path is built from the **local** `assetsPath`, which is
+    /// auto-detection and nothing else. Only the current `master` uses the
+    /// cvar: `if (fs_assetspath->string[0] && ...) FS_AddAssetsDirectoryJK2(fs_assetspath->string, BASEGAME)`.
+    ///
+    /// JKNet passes the cvar to Jedi Outcast anyway. It costs one token, it is
+    /// harmless in 1.4.1, and it is the right value for the build that starts
+    /// honouring it.
+    pub game_data_cvar: Option<&'static str>,
+
+    /// Where the `GameData` folder is passed on the command line.
+    ///
+    /// Jedi Academy: [`LaunchLayout::ThreeRoots`]. Jedi Outcast:
+    /// [`LaunchLayout::TwoRoots`], because 1.4.1 refuses to start unless
+    /// `assets5.pk3` sits under `fs_basepath\base` or `fs_homepath\base`
+    /// (`files.cpp:3260`, `FS_AllPath_Base_FileExists`; the `fs_assetspath`
+    /// branch of that helper is `#if !defined(PORTABLE)`, and the archive
+    /// JKNet installs is the portable build). The whole story is in
+    /// [`crate::launch`].
+    pub launch_layout: LaunchLayout,
 }
 
 /// Jedi Academy: the game JKNet was built for.
@@ -271,7 +323,8 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
         "CTY",
     ],
 
-    game_data_cvar: "fs_cdpath",
+    game_data_cvar: Some("fs_cdpath"),
+    launch_layout: LaunchLayout::ThreeRoots,
 };
 
 /// Jedi Outcast, played through JK2MV.
@@ -328,7 +381,10 @@ static JEDI_OUTCAST: GameSpec = GameSpec {
         "CTY",
     ],
 
-    game_data_cvar: "fs_assetspath",
+    game_data_cvar: Some("fs_assetspath"),
+    // Sent, but not relied on: JK2MV 1.4.1 registers `fs_assetspath` and never
+    // reads it, so the game folder has to arrive as `fs_basepath` instead.
+    launch_layout: LaunchLayout::TwoRoots,
 };
 
 impl GameSpec {
@@ -568,8 +624,23 @@ mod tests {
     fn each_game_names_the_cvar_of_its_own_game_data_root() {
         // Same role, different name: Quake 3's `fs_cdpath` in a Jedi Academy
         // engine, JK2MV's own `fs_assetspath` in Jedi Outcast.
-        assert_eq!(Game::JediAcademy.spec().game_data_cvar, "fs_cdpath");
-        assert_eq!(Game::JediOutcast.spec().game_data_cvar, "fs_assetspath");
+        assert_eq!(Game::JediAcademy.spec().game_data_cvar, Some("fs_cdpath"));
+        assert_eq!(Game::JediOutcast.spec().game_data_cvar, Some("fs_assetspath"));
+    }
+
+    #[test]
+    fn only_jedi_academy_keeps_the_unpacked_build_as_a_search_root() {
+        // JK2MV 1.4.1 registers `fs_assetspath` and then builds the search
+        // path from its own auto-detection, so the game folder has to arrive
+        // as `fs_basepath` and the build's archives have to be mirrored into
+        // `home\base`.
+        let ja = Game::JediAcademy.spec();
+        assert_eq!(ja.launch_layout, LaunchLayout::ThreeRoots);
+        assert!(ja.launch_layout.engine_dir_on_search_path());
+
+        let jo = Game::JediOutcast.spec();
+        assert_eq!(jo.launch_layout, LaunchLayout::TwoRoots);
+        assert!(!jo.launch_layout.engine_dir_on_search_path());
     }
 
     #[test]

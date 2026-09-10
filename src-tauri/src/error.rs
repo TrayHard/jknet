@@ -150,6 +150,13 @@ pub enum AppError {
         reason: String,
     },
 
+    /// A library command addressed a pk3 that belongs to the engine build,
+    /// such as JK2MV's `assetsmv.pk3` mirrored into `home\base\`. Its own
+    /// variant because there is nothing for the player to fix: the file is not
+    /// theirs, and disabling it would stop the client from starting.
+    #[error("{0} belongs to the engine build, not to the library")]
+    EngineFile(String),
+
     // --- slice: online gate ---
     /// This build has no service address, so there is nothing to call.
     ///
