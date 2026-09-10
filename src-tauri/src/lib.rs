@@ -13,7 +13,7 @@
 //! | `game_files`  | finding `GameData` with `assets0.pk3`..`assets3.pk3` |
 //! | `engines`     | static registry of engine builds                    |
 //! | `clients`     | named engine instances on disk                      |
-//! | `servers`     | server browser (stub)                               |
+//! | `servers`     | master server queries, ping and the server cache    |
 //! | `launch`      | starting a client (stub)                            |
 //! | `library`     | pk3 library (stub)                                  |
 
@@ -79,12 +79,17 @@ pub fn run() {
             clients::create_client,
             clients::rename_client,
             clients::delete_client,
-            servers::list_servers,
-            servers::refresh_servers,
             launch::launch_client,
             library::list_library_files,
             library::install_library_file,
             library::remove_library_file,
+            // --- slice: servers ---
+            servers::get_cached_servers,
+            servers::refresh_servers,
+            servers::get_server_status,
+            servers::list_trusted_servers,
+            servers::set_server_favorite,
+            servers::add_server_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

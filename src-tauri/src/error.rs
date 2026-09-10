@@ -55,6 +55,12 @@ pub enum AppError {
     #[error("internal state is unavailable: {0}")]
     State(String),
 
+    /// A socket, a name lookup or a remote peer failed. The message names the
+    /// address, because "connection refused" alone is unusable in a log of a
+    /// scan across a thousand servers.
+    #[error("network: {0}")]
+    Network(String),
+
     /// The feature is planned but the skeleton does not implement it yet.
     #[error("not implemented: {0}")]
     NotImplemented(&'static str),

@@ -27,6 +27,23 @@ pub struct Settings {
     /// Absolute path that replaces the config root for `clients`, `library`,
     /// `cache` and `logs`. Ignored when it is relative or blank.
     pub data_dir_override: Option<String>,
+    /// Servers starred in the browser, as `ip:port`. The star belongs to the
+    /// player and not to the server list, so it survives every refresh and
+    /// every cache wipe.
+    pub favorite_servers: Vec<String>,
+    /// Servers the player connected to, newest first, capped at 50 entries by
+    /// `add_server_history`.
+    pub server_history: Vec<ServerHistoryEntry>,
+}
+
+/// One line of `server_history`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerHistoryEntry {
+    /// `ip:port` of the server, the same key the browser uses.
+    pub address: String,
+    /// When Connect was last pressed, RFC 3339 in UTC.
+    pub last_connected: String,
 }
 
 impl Settings {

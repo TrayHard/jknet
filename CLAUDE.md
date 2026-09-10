@@ -1,6 +1,6 @@
 # Проект: лаунчер JKNet
 
-JKNet — десктопный лаунчер мультиплеера Jedi Academy на Tauri 2: ядро на Rust, фронтенд на React, TypeScript и Tailwind CSS v4. Каркас собран, работает экран **Clients**, остальные экраны — заготовки.
+JKNet — десктопный лаунчер мультиплеера Jedi Academy на Tauri 2: ядро на Rust, фронтенд на React, TypeScript и Tailwind CSS v4. Каркас собран, работают экраны **Clients** и **Servers**, остальные экраны — заготовки.
 
 ## Язык
 
@@ -48,7 +48,7 @@ src-tauri/
   src/game_files.rs      поиск GameData в Steam и GOG
   src/engines.rs         статический реестр движков
   src/clients.rs         клиенты на диске
-  src/servers.rs         браузер серверов (заглушка)
+  src/servers/           браузер серверов: мастер-серверы, ping, кеш
   src/launch.rs          запуск клиента (заглушка)
   src/library.rs         библиотека pk3 (заглушка)
   capabilities/          разрешения окна main
