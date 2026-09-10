@@ -84,7 +84,8 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
       setChoice({ kind: "existing", clientId: first.id });
       return;
     }
-    const recommended = engineList.find((engine) => engine.recommended) ?? engineList[0];
+    const recommended =
+      engineList.find((engine) => engine.status.kind === "recommended") ?? engineList[0];
     if (recommended) setChoice({ kind: "engine", engineId: recommended.id });
   }, [choice, clients.data, engines.data, engineList, settings.data]);
 
@@ -274,8 +275,11 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
                   title={engine.name}
                   aside={
                     <>
-                      {engine.recommended ? (
+                      {engine.status.kind === "recommended" ? (
                         <Badge tone="accent">{tClients("engines.recommended")}</Badge>
+                      ) : null}
+                      {engine.status.kind === "legacy" ? (
+                        <Badge tone="warm">{tClients("engines.legacy")}</Badge>
                       ) : null}
                       <span className="text-mono-xs text-fg-muted">
                         {version?.tag ?? t("client.latest")}
