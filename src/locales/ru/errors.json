@@ -17,6 +17,7 @@
   "gameMismatch": "{{reason}}",
   "gameDataMissing": "Файлы игры {{game}}: {{reason}}",
   "engineFile": "Файл {{file}} входит в сборку движка, а не в библиотеку, поэтому JKNet не выключает и не удаляет его.",
+  "basepathOccupied": "По пути {{path}} лежит настоящая папка, а не ссылка, которую держит там JKNet. Перенесите или удалите её и запустите игру заново.",
   "jkhubUnavailable": "JKHub недоступен: {{reason}}",
   "jkhubParse": "Страницу JKHub не удалось разобрать: {{what}}. Скорее всего, сайт изменился.",
   "jkhubDownload": "Загрузка с JKHub не удалась: {{reason}}",

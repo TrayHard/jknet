@@ -287,6 +287,7 @@ impl AppError {
             AppError::GameMismatch(_) => "gameMismatch",
             AppError::GameDataMissing { .. } => "gameDataMissing",
             AppError::EngineFile(_) => "engineFile",
+            AppError::BasepathOccupied(_) => "basepathOccupied",
             AppError::JkhubUnavailable(_) => "jkhubUnavailable",
             AppError::JkhubParse { .. } => "jkhubParse",
             AppError::JkhubDownload(_) => "jkhubDownload",
@@ -334,6 +335,7 @@ impl AppError {
                 json!({ "game": game, "reason": reason })
             }
             AppError::EngineFile(file) => json!({ "file": file }),
+            AppError::BasepathOccupied(path) => json!({ "path": path }),
             AppError::JkhubUnavailable(reason) => json!({ "reason": reason }),
             AppError::JkhubParse { what } => json!({ "what": what }),
             AppError::JkhubDownload(reason) => json!({ "reason": reason }),
@@ -444,6 +446,7 @@ mod tests {
             AppError::GameMismatch("x".into()),
             AppError::GameDataMissing { game: "Jedi Academy", reason: "x".into() },
             AppError::EngineFile("base/assetsmv.pk3".into()),
+            AppError::BasepathOccupied(r"C:\clients\jk2mv\basepath\base".into()),
             AppError::JkhubUnavailable("x".into()),
             AppError::JkhubParse { what: "x".into() },
             AppError::JkhubDownload("x".into()),
