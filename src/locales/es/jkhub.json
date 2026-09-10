@@ -1,89 +1,89 @@
 {
   "sort": {
-    "label": "Sort by",
-    "recentlyUpdated": "Recently updated",
-    "newest": "Newest",
-    "mostDownloaded": "Most downloaded",
-    "topRated": "Top rated",
-    "name": "Name"
+    "label": "Ordenar por",
+    "recentlyUpdated": "Actualizados hace poco",
+    "newest": "Más nuevos",
+    "mostDownloaded": "Más descargados",
+    "topRated": "Mejor valorados",
+    "name": "Nombre"
   },
-  "filterPlaceholder": "Filter loaded files",
-  "refresh": "Refresh",
-  "fromCache": "From cache",
+  "filterPlaceholder": "Filtrar archivos cargados",
+  "refresh": "Actualizar",
+  "fromCache": "De la caché",
   "tree": {
-    "heading": "Categories",
-    "update": "Update categories",
-    "updating": "Updating…",
-    "updateHint": "Walk the JKHub category tree again. Takes about twenty requests.",
-    "expand": "Expand {{category}}",
-    "collapse": "Collapse {{category}}",
-    "empty": "No categories yet."
+    "heading": "Categorías",
+    "update": "Actualizar categorías",
+    "updating": "Actualizando…",
+    "updateHint": "Recorre otra vez el árbol de categorías de JKHub. Cuesta unas veinte solicitudes.",
+    "expand": "Desplegar {{category}}",
+    "collapse": "Plegar {{category}}",
+    "empty": "Aún no hay categorías."
   },
   "scope": {
-    "category": "{{category}} · installs into {{client}}",
-    "noCategory": "Pick a category · installs into {{client}}"
+    "category": "{{category}} · se instala en {{client}}",
+    "noCategory": "Elija una categoría · se instala en {{client}}"
   },
   "loading": {
-    "categories": "Reading the JKHub categories…",
-    "files": "Loading files…"
+    "categories": "Leyendo las categorías de JKHub…",
+    "files": "Cargando archivos…"
   },
   "empty": {
-    "browserTitle": "JKHub needs the launcher window",
-    "browserText": "This tab talks to jkhub.org through the JKNet core, which a browser preview does not have.",
-    "unreachableTitle": "JKHub did not answer",
-    "categoryTitle": "This category did not load",
-    "filteredTitle": "Nothing matches",
-    "filteredText": "No loaded file matches the filter. Clear it, load more pages, or pick another category."
+    "browserTitle": "JKHub necesita la ventana del lanzador",
+    "browserText": "Esta pestaña habla con jkhub.org a través del núcleo de JKNet, del que una vista previa en el navegador no dispone.",
+    "unreachableTitle": "JKHub no respondió",
+    "categoryTitle": "Esta categoría no se cargó",
+    "filteredTitle": "Nada coincide",
+    "filteredText": "Ningún archivo cargado coincide con el filtro. Bórrelo, cargue más páginas o elija otra categoría."
   },
-  "loaded": "{{shown}} of {{total}} files loaded. Narrow the category or change the order to see the rest.",
+  "loaded": "{{shown}} de {{total}} archivos cargados. Acote la categoría o cambie el orden para ver el resto.",
   "card": {
-    "open": "Open {{title}}",
-    "installed": "Installed",
-    "install": "Install",
-    "reinstall": "Reinstall",
+    "open": "Abrir {{title}}",
+    "installed": "Instalado",
+    "install": "Instalar",
+    "reinstall": "Reinstalar",
     "fallbackAuthor": "JKHub",
-    "updated": "Updated {{date}}",
-    "submitted": "Submitted {{date}}"
+    "updated": "Actualizado el {{date}}",
+    "submitted": "Enviado el {{date}}"
   },
   "details": {
-    "loadingTitle": "Loading…",
-    "fallbackTitle": "File",
-    "openOnSite": "Open on JKHub",
-    "installTo": "Install to {{client}}",
-    "replaceAndInstall": "Replace and install",
-    "openScreenshot": "Open the screenshot",
-    "screenshot": "Screenshot",
-    "screenshotMissing": "JKHub did not serve this screenshot.",
-    "author": "Author",
-    "authorUnknown": "Unknown",
-    "updated": "Updated",
-    "submitted": "Submitted",
-    "rating": "Rating",
-    "ratingValue": "{{value}} of 5 · {{count}} reviews",
-    "notRated": "Not rated",
-    "downloads": "{{count}} downloads",
-    "views": "{{count}} views",
-    "comments": "{{count}} comments",
-    "versions": "Versions",
-    "downloading": "Downloading… {{received}}",
-    "downloadingOf": "Downloading… {{received}} of {{total}}"
+    "loadingTitle": "Cargando…",
+    "fallbackTitle": "Archivo",
+    "openOnSite": "Abrir en JKHub",
+    "installTo": "Instalar en {{client}}",
+    "replaceAndInstall": "Reemplazar e instalar",
+    "openScreenshot": "Abrir la captura",
+    "screenshot": "Captura",
+    "screenshotMissing": "JKHub no entregó esta captura.",
+    "author": "Autor",
+    "authorUnknown": "Desconocido",
+    "updated": "Actualizado",
+    "submitted": "Enviado",
+    "rating": "Valoración",
+    "ratingValue": "{{value}} de 5 · {{count}} reseñas",
+    "notRated": "Sin valoración",
+    "downloads": "{{count}} descargas",
+    "views": "{{count}} visitas",
+    "comments": "{{count}} comentarios",
+    "versions": "Versiones",
+    "downloading": "Descargando… {{received}}",
+    "downloadingOf": "Descargando… {{received}} de {{total}}"
   },
   "install": {
-    "pickClient": "Pick a client above first: a file is installed into a client.",
-    "toastTitle": "Installed into {{client}}",
-    "failedTitle": "Install failed",
-    "categoriesTitle": "Categories updated",
-    "categoriesText": "{{count}} categories read from JKHub."
+    "pickClient": "Elija antes un cliente arriba: un archivo se instala en un cliente.",
+    "toastTitle": "Instalado en {{client}}",
+    "failedTitle": "La instalación falló",
+    "categoriesTitle": "Categorías actualizadas",
+    "categoriesText": "{{count}} categorías leídas de JKHub."
   },
   "outcome": {
-    "installed": "Installed {{files}} into {{folder}}.",
-    "external": "This entry links to another site rather than an archive, so there is nothing to install. Open it on JKHub to follow the link.",
-    "unsupportedDownloaded": "The archive is a .{{format}}, which JKNet cannot open yet. It is downloaded already: unpack it by hand into the client's folder.",
-    "unsupported": "The archive is a .{{format}}, which JKNet cannot open yet. Open the file on JKHub and unpack it by hand.",
-    "noPk3": "The archive holds no pk3 file, so there is nothing to install into a client. Inside it: {{entries}}",
-    "showArchive": "Show the archive",
-    "conflicts_one": "{{files}} already is in {{folder}}. Press Replace and install to overwrite.",
-    "conflicts_many": "{{files}} already are in {{folder}}. Press Replace and install to overwrite.",
-    "conflicts_other": "{{files}} already are in {{folder}}. Press Replace and install to overwrite."
+    "installed": "Instalado en {{folder}}: {{files}}.",
+    "conflicts_one": "{{files}} ya está en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlo.",
+    "conflicts_many": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
+    "conflicts_other": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
+    "external": "Esta entrada enlaza a otro sitio en vez de a un archivo comprimido, así que no hay nada que instalar. Ábrala en JKHub para seguir el enlace.",
+    "unsupportedDownloaded": "El archivo comprimido es un .{{format}}, que JKNet aún no sabe abrir. Ya está descargado: descomprímalo a mano en la carpeta del cliente.",
+    "unsupported": "El archivo comprimido es un .{{format}}, que JKNet aún no sabe abrir. Abra el archivo en JKHub y descomprímalo a mano.",
+    "noPk3": "El archivo comprimido no contiene ningún archivo pk3, así que no hay nada que instalar en un cliente. Dentro tiene: {{entries}}",
+    "showArchive": "Mostrar el archivo comprimido"
   }
 }
