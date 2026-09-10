@@ -25,7 +25,7 @@
 //! `fs_copyfiles` stays at its default of 0, so nothing is ever written back
 //! to the game.
 //!
-//! ## The two search paths of a Jedi Outcast client
+//! ## The base root of a Jedi Outcast client
 //!
 //! --- slice: game core ---
 //! JK2MV cannot be told where the retail archives are. It registers a cvar
@@ -56,38 +56,53 @@
 //! `fs_assetspath` was set. Only the current `master` uses
 //! `fs_assetspath->string`.
 //!
-//! So Jedi Outcast gets two roots, and the game folder takes `fs_basepath`:
+//! A second 1.4.1 rule pulls in the same direction. `CL_InitUI` creates the
+//! JK2MV menu as a native module, `VM_Create("jk2mvmenu", qtrue, …)`, and
+//! `Sys_LoadModuleLibrary` with that override flag tries a single path,
+//! `<fs_basepath>\jk2mvmenu_<arch>.dll` (`src/sys/sys_win32.cpp`). With the
+//! game folder on `fs_basepath` the engine died on «Failed loading library
+//! file: jk2mvmenu», and the cure of the previous attempt —
+//! `+set mv_menuOverride 1` — only moved the funeral: the engine then loads
+//! MVSDK's `vm/ui.qvm` out of `assetsmv.pk3` as the main menu and dies on
+//! «MVSDK: Unable to detect jk2version [UI]», because the MV API is not
+//! negotiated on that path.
+//!
+//! Both rules say the same thing: `fs_basepath` has to be a folder JKNet owns
+//! *and* the retail archives have to be under it. So the launcher builds one:
 //!
 //! ```text
-//! fs_assetspath <GameData>                 sent, ignored by 1.4.1, right for master
-//! fs_basepath   <GameData>                 the player's retail archives
-//! fs_homepath   <clients\<slug>\home>      configs, screenshots, downloads,
-//!                                          and the engine's own base\*.pk3
+//! clients\<slug>\basepath\              fs_basepath, built by prepare_basepath
+//!   jk2mvmenu_x64.dll                   copied from engine\, loaded by name
+//!   base  →  <GameData>\base            NTFS directory junction, read only
+//! clients\<slug>\engine\                the unpacked build; working directory
+//! clients\<slug>\home\                  fs_homepath: assetsmv*.pk3, pk3, configs
 //! ```
 //!
-//! Nothing is written into the game folder: `fs_basepath` is a read root, the
-//! engine writes through `fs_homepath`, and `fs_copyfiles` stays 0.
+//! ```text
+//! fs_assetspath <GameData>                    sent, ignored by 1.4.1, right for master
+//! fs_basepath   <clients\<slug>\basepath>     menu module, and base → the game's base
+//! fs_homepath   <clients\<slug>\home>         configs, screenshots, downloads,
+//!                                             and the engine's own base\*.pk3
+//! ```
 //!
-//! One more 1.4.1 rule follows from the same root. `CL_InitUI` creates the
-//! JK2MV menu as a native module, `VM_Create("jk2mvmenu", qtrue, ...)`, and
-//! `Sys_LoadModuleLibrary` with that override flag tries a single path,
-//! `<fs_basepath>\jk2mvmenu_<arch>.dll` (sys_win32.cpp). The DLL sits in the
-//! unpacked build, not in GameData, and copying it into the game folder is
-//! out of the question, so the launcher passes `+set mv_menuOverride 1`: the
-//! engine skips the module and runs the retail UI from the archives. The
-//! player loses the JK2MV menu, keeps every engine feature, and can drop the
-//! override through the extra launch arguments.
+//! The engine then finds `assets5.pk3` through the junction, which also stops
+//! it from adding the auto-detected assets path a second time, and it finds
+//! `jk2mvmenu_x64.dll` by the single name it looks for.
 //!
-//! The price is that `clients\<slug>\engine\` is no longer on the search path,
-//! so the archives JK2MV ships there — `base\assetsmv.pk3` and
-//! `base\assetsmv2.pk3` — have to be mirrored into `clients\<slug>\home\base\`
-//! before the game starts. [`crate::engine_install::sync_engine_archives`]
-//! does that, from here on every launch and from the installer on every
-//! install, so a client made before this fix repairs itself.
+//! Nothing is written into the game folder. A junction is a read path here:
+//! JKNet writes to `basepath\` only the modules it copies there, the engine
+//! writes through `fs_homepath`, and `fs_copyfiles` stays 0. [`prepare_basepath`]
+//! has the rules that keep the link safe, and it never deletes a real folder.
+//!
+//! `clients\<slug>\engine\` is off the search path in this layout, so the
+//! archives JK2MV ships there — `base\assetsmv.pk3` and `base\assetsmv2.pk3` —
+//! are mirrored into `clients\<slug>\home\base\` before the game starts.
+//! [`crate::engine_install::sync_engine_archives`] does that, from here on
+//! every launch and from the installer on every install, so a client made
+//! before this fix repairs itself.
 //!
 //! `clients\<slug>\engine\` is the working directory of the process in both
-//! games, so `jk2mvmenu_x64.dll` and `SDL2.dll` sit next to the binary that
-//! loads them.
+//! games, so `SDL2.dll` and the rest sit next to the binary that loads them.
 //!
 //! ## One game at a time
 //!
@@ -190,6 +205,10 @@ pub struct LaunchPlan<'a> {
     pub game_data: &'a Path,
     /// `clients\<slug>\engine`, where the executable lives.
     pub engine_dir: &'a Path,
+    /// `clients\<slug>\basepath`, the launcher-owned base root. Read only in
+    /// the [`LaunchLayout::OwnBasepath`] layout, and [`prepare_basepath`] has
+    /// already built it by the time the arguments are assembled.
+    pub base_dir: &'a Path,
     /// `clients\<slug>\home`, the writable root of the client.
     pub home_dir: &'a Path,
     /// Mod folder, already resolved from the client and the engine.
@@ -215,11 +234,12 @@ pub struct LaunchPlan<'a> {
 ///
 /// --- slice: game core ---
 /// The roots come from the game's own spec, because the two engines disagree
-/// about what they will listen to. Jedi Academy gets three roots with
-/// `fs_cdpath` on the game folder; Jedi Outcast gets two, with the game folder
-/// on `fs_basepath`. Either way `fs_homepath` is the client's `home\` and the
-/// tail of the command line is identical. The module docs quote the JK2MV
-/// source that forces the split.
+/// about what they will listen to. Jedi Academy hands `fs_basepath` to the
+/// unpacked build and names the game folder with `fs_cdpath`; Jedi Outcast
+/// hands `fs_basepath` to the client's own `basepath\`, whose `base` is a
+/// junction to the game's. Either way `fs_homepath` is the client's `home\`,
+/// three roots go out, and the tail of the command line is identical. The
+/// module docs quote the JK2MV source that forces the split.
 pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     let spec = plan.game.spec();
     let mut args = Vec::new();
@@ -229,31 +249,20 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
         args.push(value);
     };
 
-    let game_data = plan.game_data.display().to_string();
-    // Sent in both layouts. In `ThreeRoots` it *is* the game data root; in
-    // `TwoRoots` it is a note for the engine build that starts reading it,
-    // and one ignored token in the one that does not.
+    // Sent in both layouts. Under `EngineIsBasepath` it *is* the game data
+    // root; under `OwnBasepath` it is a note for the engine build that starts
+    // reading it, and one ignored token in the one that does not.
     if let Some(cvar) = spec.game_data_cvar {
-        set(cvar, game_data.clone());
+        set(cvar, plan.game_data.display().to_string());
     }
     let base_path = match spec.launch_layout {
-        LaunchLayout::ThreeRoots => plan.engine_dir.display().to_string(),
-        LaunchLayout::TwoRoots => game_data,
+        LaunchLayout::EngineIsBasepath => plan.engine_dir,
+        LaunchLayout::OwnBasepath => plan.base_dir,
     };
-    set("fs_basepath", base_path);
+    set("fs_basepath", base_path.display().to_string());
     set("fs_homepath", plan.home_dir.display().to_string());
     if let Some(fs_game) = plan.fs_game.map(str::trim).filter(|v| !v.is_empty()) {
         set("fs_game", fs_game.to_string());
-    }
-    if spec.launch_layout == LaunchLayout::TwoRoots {
-        // JK2MV's own menu is a native module loaded with `mvOverride`, and
-        // `Sys_LoadModuleLibrary` (sys_win32.cpp, 1.4.1) then tries exactly one
-        // path: `<fs_basepath>\jk2mvmenu_<arch>.dll`. With the game folder on
-        // `fs_basepath` that file would have to live inside GameData, which
-        // JKNet never writes into. `mv_menuOverride 1` makes `CL_InitUI` skip
-        // the module and run the retail UI from the pk3 archives instead. It
-        // goes before the settings and extra args so the player can override it.
-        set("mv_menuOverride", "1".to_string());
     }
 
     args.extend(plan.settings_args.iter().cloned());
@@ -320,6 +329,275 @@ fn validate_address(address: &str) -> Result<&str> {
 }
 
 // ---------------------------------------------------------------------------
+// The base root of a client that owns one
+// ---------------------------------------------------------------------------
+
+// --- slice: game core ---
+
+/// Marker file that says `basepath\base` is a copy JKNet made, not a link.
+///
+/// It sits in `basepath\`, next to `base\`, so that nothing lands in a folder
+/// the engine scans. Without it the two rules of [`prepare_basepath`] would
+/// contradict each other on the second launch: the fallback below fills
+/// `basepath\base` with real files, and a real folder there is otherwise the
+/// one thing the function refuses to touch.
+const COPIED_BASE_MARKER: &str = ".jknet-copied-base";
+
+/// What the marker file says, for the player who opens it.
+const COPIED_BASE_NOTE: &str = "\
+JKNet could not link basepath\\base to the game's base folder on this disk, so
+it copied the retail archives instead. Delete the whole basepath folder to make
+JKNet build it again.
+";
+
+/// Builds `clients\<slug>\basepath\`, the `fs_basepath` of a client whose game
+/// asks for one, and returns it.
+///
+/// Three steps, all idempotent, all cheap on the second run:
+///
+/// 1. Create the folder.
+/// 2. Copy `<prefix>*.dll` out of `engine\` — the modules the engine loads
+///    from `fs_basepath` by name rather than through its file system. The
+///    prefix comes from [`crate::game::GameSpec::basepath_module_prefix`].
+/// 3. Make `basepath\base` a directory junction to `<GameData>\base`.
+///
+/// ## What may happen to `basepath\base`, and what is done about it
+///
+/// | On disk | Answer |
+/// | --- | --- |
+/// | nothing | create the junction |
+/// | a junction to the same folder | leave it alone |
+/// | a junction elsewhere (the player moved the game) | `remove_dir`, create again |
+/// | a real folder JKNet filled, marked by [`COPIED_BASE_MARKER`] | refresh the copies |
+/// | any other real folder, or a file | [`AppError::BasepathOccupied`], touch nothing |
+///
+/// Removing a junction with [`std::fs::remove_dir`] deletes the link and
+/// nothing else: Windows `RemoveDirectoryW` on a reparse point removes the
+/// entry, not the target. That is the whole safety argument, and it is why the
+/// last row of the table refuses instead of clearing the way — a real folder
+/// there holds somebody's bytes, and JKNet has none of its own to put back.
+///
+/// A junction needs no elevation, unlike a symbolic link, so this runs as the
+/// player. When it fails anyway — a FAT32 or exFAT disk, a network share, a
+/// policy — the function copies the game's own archives into `basepath\base\`
+/// and logs why. Hundreds of megabytes, which is why it is the fallback and
+/// not the plan.
+pub(crate) fn prepare_basepath(
+    game: Game,
+    client_dir: &Path,
+    game_data: &Path,
+) -> Result<PathBuf> {
+    prepare_basepath_with(game, client_dir, game_data, make_junction)
+}
+
+/// The body of [`prepare_basepath`] with the junction call injected, so a test
+/// can watch the fallback run on a machine where junctions work.
+fn prepare_basepath_with(
+    game: Game,
+    client_dir: &Path,
+    game_data: &Path,
+    junction: fn(&Path, &Path) -> std::io::Result<()>,
+) -> Result<PathBuf> {
+    let base_dir = client_dir.join(crate::paths::CLIENT_BASEPATH_DIR);
+    crate::paths::create_dir(&base_dir)?;
+    copy_basepath_modules(game, &client_dir.join(crate::paths::CLIENT_ENGINE_DIR), &base_dir)?;
+    link_game_base(game, &base_dir, game_data, junction)?;
+    Ok(base_dir)
+}
+
+/// Copies the modules the engine loads straight out of `fs_basepath`.
+///
+/// Matched by prefix and extension rather than by full name: the JK2MV archive
+/// carries the module of its own architecture, and a build that ships both has
+/// to hand over both. A game with no such module copies nothing.
+fn copy_basepath_modules(game: Game, engine_dir: &Path, base_dir: &Path) -> Result<Vec<String>> {
+    let Some(prefix) = game.spec().basepath_module_prefix else {
+        return Ok(Vec::new());
+    };
+    // Both sides folded, because the table is written by hand and a release
+    // may spell its own file `JK2MVmenu_x64.dll` any day it likes.
+    let prefix = prefix.to_ascii_lowercase();
+    let Ok(entries) = std::fs::read_dir(engine_dir) else {
+        // No build unpacked yet. The launch path checks for the executable
+        // itself and says so in a sentence the player can act on.
+        return Ok(Vec::new());
+    };
+
+    let mut copied = Vec::new();
+    for entry in entries.flatten() {
+        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+            continue;
+        };
+        let lower = name.to_ascii_lowercase();
+        if !lower.starts_with(&prefix) || !lower.ends_with(".dll") {
+            continue;
+        }
+        if engine_install::copy_if_changed(&entry.path(), &base_dir.join(&name))? {
+            copied.push(name);
+        }
+    }
+    if !copied.is_empty() {
+        log::info!(
+            "copied {} module(s) into {}: {}",
+            copied.len(),
+            base_dir.display(),
+            copied.join(", ")
+        );
+    }
+    Ok(copied)
+}
+
+/// Points `basepath\base` at `<GameData>\base`, by the table in
+/// [`prepare_basepath`].
+fn link_game_base(
+    game: Game,
+    base_dir: &Path,
+    game_data: &Path,
+    junction: fn(&Path, &Path) -> std::io::Result<()>,
+) -> Result<()> {
+    let link = base_dir.join(crate::paths::BASE_FOLDER);
+    let target = game_data.join(crate::paths::BASE_FOLDER);
+
+    match std::fs::symlink_metadata(&link) {
+        // A link of some kind. Windows reports a junction as a symlink, which
+        // is the property that matters here: `remove_dir` unlinks it.
+        Ok(meta) if meta.file_type().is_symlink() => match junction_target(&link) {
+            Some(current) if same_folder(&current, &target) => {
+                log::debug!("{} already links to {}", link.display(), target.display());
+                return Ok(());
+            }
+            current => {
+                log::info!(
+                    "{} links to {}, relinking it to {}",
+                    link.display(),
+                    current.as_deref().unwrap_or(Path::new("something else")).display(),
+                    target.display()
+                );
+                std::fs::remove_dir(&link)
+                    .map_err(|e| AppError::io_path("cannot unlink", &link, e))?;
+            }
+        },
+        // The fallback of an earlier run: real files, and the launcher's own.
+        Ok(meta) if meta.is_dir() && base_dir.join(COPIED_BASE_MARKER).is_file() => {
+            return copy_game_archives(game, base_dir, game_data, None);
+        }
+        // A real folder or a file somebody else put there.
+        Ok(_) => return Err(AppError::BasepathOccupied(link.display().to_string())),
+        // Not there yet, which is the ordinary first launch.
+        Err(_) => {}
+    }
+
+    match junction(&target, &link) {
+        Ok(()) => {
+            log::info!("linked {} to {}", link.display(), target.display());
+            Ok(())
+        }
+        Err(e) => copy_game_archives(game, base_dir, game_data, Some(&e)),
+    }
+}
+
+/// Fills `basepath\base\` with copies of the game's own archives.
+///
+/// The list is [`crate::game::GameSpec::assets`], so an archive a patch adds
+/// and this copy does not have is skipped rather than missed. Files already
+/// there with the same size and time are left alone, which makes the second
+/// call free.
+fn copy_game_archives(
+    game: Game,
+    base_dir: &Path,
+    game_data: &Path,
+    reason: Option<&std::io::Error>,
+) -> Result<()> {
+    let target_dir = base_dir.join(crate::paths::BASE_FOLDER);
+    let source_dir = game_data.join(crate::paths::BASE_FOLDER);
+    crate::paths::create_dir(&target_dir)?;
+
+    let mut names = Vec::new();
+    let mut bytes = 0u64;
+    for asset in game.spec().assets {
+        let source = source_dir.join(asset.name);
+        let size = std::fs::metadata(&source).map(|meta| meta.len()).unwrap_or(0);
+        if engine_install::copy_if_changed(&source, &target_dir.join(asset.name))? {
+            names.push(asset.name);
+            bytes += size;
+        }
+    }
+
+    let marker = base_dir.join(COPIED_BASE_MARKER);
+    if !marker.is_file() {
+        std::fs::write(&marker, COPIED_BASE_NOTE)
+            .map_err(|e| AppError::io_path("cannot write", &marker, e))?;
+    }
+
+    if let Some(reason) = reason {
+        log::warn!(
+            "cannot link {} to {}: {reason}. Copied {} archive(s), {} MB, instead: {}",
+            target_dir.display(),
+            source_dir.display(),
+            names.len(),
+            bytes / (1024 * 1024),
+            names.join(", ")
+        );
+    } else if !names.is_empty() {
+        log::info!(
+            "refreshed {} copied archive(s) in {}: {}",
+            names.len(),
+            target_dir.display(),
+            names.join(", ")
+        );
+    }
+    Ok(())
+}
+
+/// Creates a directory junction from `link` to `target`.
+///
+/// The `junction` crate writes the reparse point itself through
+/// `FSCTL_SET_REPARSE_POINT`, which needs no elevation and no `mklink`
+/// subprocess. It creates the directory on the way, so `link` must not exist.
+#[cfg(windows)]
+fn make_junction(target: &Path, link: &Path) -> std::io::Result<()> {
+    junction::create(target, link)
+}
+
+#[cfg(not(windows))]
+fn make_junction(_target: &Path, _link: &Path) -> std::io::Result<()> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "a directory junction is a Windows thing",
+    ))
+}
+
+/// Where a junction points, or `None` for anything that is not one.
+#[cfg(windows)]
+fn junction_target(link: &Path) -> Option<PathBuf> {
+    junction::exists(link)
+        .ok()
+        .filter(|yes| *yes)
+        .and_then(|_| junction::get_target(link).ok())
+}
+
+#[cfg(not(windows))]
+fn junction_target(_link: &Path) -> Option<PathBuf> {
+    None
+}
+
+/// Whether two Windows paths name the same folder.
+///
+/// Compared as text, case-insensitively, with `/` folded to `\`, a `\\?\`
+/// prefix dropped and a trailing separator ignored. Not [`std::fs::canonicalize`]:
+/// a junction whose target has been deleted still has to compare — that is the
+/// «the player moved the game» row of the table — and the stored target is
+/// already what `GetFullPathNameW` made of the path JKNet passed.
+fn same_folder(a: &Path, b: &Path) -> bool {
+    fn key(path: &Path) -> String {
+        let text = path.to_string_lossy().replace('/', "\\");
+        let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+        text.trim_end_matches('\\').to_lowercase()
+    }
+    key(a) == key(b)
+}
+
+// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
@@ -376,8 +654,8 @@ pub(crate) fn start_client(
     game_files::validate(client.game, &game_data)?;
 
     let client_dir = paths.client_dir(&client.id);
-    let engine_dir = client_dir.join("engine");
-    let home_dir = client_dir.join("home");
+    let engine_dir = paths.client_engine_dir(&client.id);
+    let home_dir = paths.client_home_dir(&client.id);
     let executable = engine_dir.join(engine.executable);
     if !executable.is_file() {
         return Err(AppError::Launch(format!(
@@ -389,14 +667,21 @@ pub(crate) fn start_client(
     crate::paths::create_dir(&home_dir)?;
 
     // --- slice: game core ---
-    // Jedi Outcast hands `fs_basepath` to the game folder, which leaves the
-    // unpacked build off the search path, so its own archives have to be in
-    // `home\base\` before the process starts. Idempotent, and it runs on every
-    // launch on purpose: a client installed before this fix has an empty
-    // `home\base\` and must repair itself without a reinstall.
-    if !client.game.spec().launch_layout.engine_dir_on_search_path() {
+    // Jedi Outcast leaves the unpacked build off the search path, so its own
+    // archives have to be in `home\base\` before the process starts, and its
+    // `fs_basepath` has to be built. Both steps are idempotent and both run on
+    // every launch on purpose: a client installed before this fix repairs
+    // itself without a reinstall, and a player who moved their game gets the
+    // link redrawn.
+    let layout = client.game.spec().launch_layout;
+    if !layout.engine_dir_on_search_path() {
         engine_install::sync_engine_archives(&engine_dir, &home_dir)?;
     }
+    let base_dir = if layout.needs_own_basepath() {
+        prepare_basepath(client.game, &client_dir, &game_data)?
+    } else {
+        paths.client_basepath_dir(&client.id)
+    };
 
     let connect = match connect {
         Some(address) => Some(validate_address(address)?),
@@ -412,6 +697,7 @@ pub(crate) fn start_client(
         game: client.game,
         game_data: &game_data,
         engine_dir: &engine_dir,
+        base_dir: &base_dir,
         home_dir: &home_dir,
         fs_game,
         settings_args: &settings_args,
@@ -568,12 +854,14 @@ mod tests {
     fn plan<'a>(
         game_data: &'a Path,
         engine_dir: &'a Path,
+        base_dir: &'a Path,
         home_dir: &'a Path,
     ) -> LaunchPlan<'a> {
         LaunchPlan {
             game: Game::JediAcademy,
             game_data,
             engine_dir,
+            base_dir,
             home_dir,
             fs_game: None,
             settings_args: &[],
@@ -584,15 +872,17 @@ mod tests {
 
     // --- slice: game core ---
     /// The same plan for the other game, whose engine names the game data root
-    /// `fs_assetspath` instead of `fs_cdpath`.
+    /// `fs_assetspath` instead of `fs_cdpath` and takes `fs_basepath` from the
+    /// client's own base root.
     fn jo_plan<'a>(
         game_data: &'a Path,
         engine_dir: &'a Path,
+        base_dir: &'a Path,
         home_dir: &'a Path,
     ) -> LaunchPlan<'a> {
         LaunchPlan {
             game: Game::JediOutcast,
-            ..plan(game_data, engine_dir, home_dir)
+            ..plan(game_data, engine_dir, base_dir, home_dir)
         }
     }
 
@@ -601,6 +891,7 @@ mod tests {
         let args = build_launch_args(&plan(
             Path::new("D:\\SteamLibrary\\steamapps\\common\\Jedi Academy\\GameData"),
             Path::new("C:\\JKNet\\clients\\everyday\\engine"),
+            Path::new("C:\\JKNet\\clients\\everyday\\basepath"),
             Path::new("C:\\JKNet\\clients\\everyday\\home"),
         ));
         assert_eq!(
@@ -624,6 +915,7 @@ mod tests {
         let args = build_launch_args(&plan(
             Path::new("C:\\Program Files (x86)\\Jedi Academy\\GameData"),
             Path::new("C:\\Users\\Ben Kenobi\\JKNet\\clients\\duel\\engine"),
+            Path::new("C:\\Users\\Ben Kenobi\\JKNet\\clients\\duel\\basepath"),
             Path::new("C:\\Users\\Ben Kenobi\\JKNet\\clients\\duel\\home"),
         ));
         assert_eq!(args[2], "C:\\Program Files (x86)\\Jedi Academy\\GameData");
@@ -635,18 +927,19 @@ mod tests {
     fn fs_game_appears_only_when_the_client_has_one() {
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\JKNet\\clients\\mme\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\mme\\basepath");
         let home = Path::new("C:\\JKNet\\clients\\mme\\home");
 
-        let without = build_launch_args(&plan(game, engine, home));
+        let without = build_launch_args(&plan(game, engine, base, home));
         assert!(!without.iter().any(|arg| arg == "fs_game"));
 
-        let mut with = plan(game, engine, home);
+        let mut with = plan(game, engine, base, home);
         with.fs_game = Some("mme");
         let args = build_launch_args(&with);
         assert_eq!(&args[9..12], ["+set", "fs_game", "mme"]);
 
         // A blank value is the same as no value.
-        let mut blank = plan(game, engine, home);
+        let mut blank = plan(game, engine, base, home);
         blank.fs_game = Some("   ");
         assert!(!build_launch_args(&blank)
             .iter()
@@ -657,11 +950,12 @@ mod tests {
     fn connect_is_last_and_settings_come_before_the_client_arguments() {
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\JKNet\\clients\\duel\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\duel\\basepath");
         let home = Path::new("C:\\JKNet\\clients\\duel\\home");
         let settings_args = vec!["+set".to_string(), "r_mode".to_string(), "-1".to_string()];
         let extra_args = vec!["+set".to_string(), "name".to_string(), "Kyle".to_string()];
 
-        let mut with = plan(game, engine, home);
+        let mut with = plan(game, engine, base, home);
         with.fs_game = Some("japlus");
         with.settings_args = &settings_args;
         with.extra_args = &extra_args;
@@ -688,8 +982,9 @@ mod tests {
     fn a_blank_address_is_left_out() {
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\e");
+        let base = Path::new("C:\\b");
         let home = Path::new("C:\\h");
-        let mut with = plan(game, engine, home);
+        let mut with = plan(game, engine, base, home);
         with.connect = Some("  ");
         assert!(!build_launch_args(&with).iter().any(|arg| arg == "+connect"));
     }
@@ -697,15 +992,17 @@ mod tests {
     // --- slice: game core ---
 
     #[test]
-    fn a_jedi_outcast_client_hands_fs_basepath_to_the_game_folder() {
-        // JK2MV 1.4.1 registers `fs_assetspath` and never reads it, and its
+    fn a_jedi_outcast_client_hands_fs_basepath_to_its_own_base_root() {
+        // JK2MV 1.4.1 registers `fs_assetspath` and never reads it; its
         // pre-flight check for `assets5.pk3` looks only under `fs_basepath` and
-        // `fs_homepath`. Two roots, with the game folder on `fs_basepath`, is
-        // the only layout that starts.
+        // `fs_homepath`; and it loads its menu module out of `fs_basepath` by
+        // name. A folder JKNet owns, holding a link to the game's `base`, is
+        // the one root that answers all three.
         let game_data = "D:\\SteamLibrary\\steamapps\\common\\Jedi Outcast\\GameData";
         let args = build_launch_args(&jo_plan(
             Path::new(game_data),
             Path::new("C:\\JKNet\\clients\\jk2\\engine"),
+            Path::new("C:\\JKNet\\clients\\jk2\\basepath"),
             Path::new("C:\\JKNet\\clients\\jk2\\home"),
         ));
         assert_eq!(
@@ -716,23 +1013,26 @@ mod tests {
                 game_data,
                 "+set",
                 "fs_basepath",
-                game_data,
+                "C:\\JKNet\\clients\\jk2\\basepath",
                 "+set",
                 "fs_homepath",
                 "C:\\JKNet\\clients\\jk2\\home",
-                "+set",
-                "mv_menuOverride",
-                "1",
             ]
         );
-        // `mv_menuOverride 1` is part of the layout: the JK2MV menu module is
-        // loaded only from `<fs_basepath>\jk2mvmenu_<arch>.dll`, and the game
-        // folder is never written into. The retail UI from the archives runs.
         // `fs_assetspath` is still sent: harmless in 1.4.1, and the value the
         // `master` build reads. `fs_cdpath` does not exist in this engine.
         assert!(!args.iter().any(|arg| arg == "fs_cdpath"));
-        // The unpacked build is deliberately not a root. Its own archives
-        // reach the engine through `home\base\` instead — see
+        // No `mv_menuOverride`. It was the previous attempt at the menu module
+        // and it made things worse: the engine then loads MVSDK's `vm/ui.qvm`
+        // and dies on «MVSDK: Unable to detect jk2version [UI]». The module is
+        // copied into the base root instead.
+        assert!(!args.iter().any(|arg| arg == "mv_menuOverride"));
+        // The game folder is named once, under the cvar only a future build
+        // reads. It is *not* a root: it reaches the engine through the
+        // junction at `basepath\base`.
+        assert_eq!(args.iter().filter(|arg| *arg == game_data).count(), 1);
+        // The unpacked build is deliberately not a root either. Its own
+        // archives reach the engine through `home\base\` — see
         // `engine_install::sync_engine_archives`.
         assert!(!args.iter().any(|arg| arg.ends_with("\\engine")));
     }
@@ -743,9 +1043,10 @@ mod tests {
         // the fork has to win over the 1.01 module in the retail folder.
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\JKNet\\clients\\everyday\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\everyday\\basepath");
         let home = Path::new("C:\\JKNet\\clients\\everyday\\home");
 
-        let ja = build_launch_args(&plan(game, engine, home));
+        let ja = build_launch_args(&plan(game, engine, base, home));
         let root = ja
             .iter()
             .position(|arg| arg == "fs_basepath")
@@ -753,18 +1054,22 @@ mod tests {
         assert_eq!(ja[root + 1], engine.display().to_string());
         assert_eq!(ja[1], "fs_cdpath");
         assert_eq!(ja[2], game.display().to_string());
+        // Jedi Academy builds no base root of its own, so the folder is never
+        // named on its command line.
+        assert!(!ja.iter().any(|arg| arg == base.display().to_string().as_str()));
     }
 
     #[test]
     fn every_game_sets_the_home_folder_of_its_client() {
-        // The one root both layouts agree on, and the only one JKNet writes
-        // into: configs, screenshots, downloads and the pk3 library.
+        // The one root both layouts agree on, and the only one the engine
+        // writes into: configs, screenshots, downloads and the pk3 library.
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\JKNet\\clients\\c\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\c\\basepath");
         let home = Path::new("C:\\JKNet\\clients\\c\\home");
         for args in [
-            build_launch_args(&plan(game, engine, home)),
-            build_launch_args(&jo_plan(game, engine, home)),
+            build_launch_args(&plan(game, engine, base, home)),
+            build_launch_args(&jo_plan(game, engine, base, home)),
         ] {
             let root = args
                 .iter()
@@ -781,18 +1086,19 @@ mod tests {
         // games, and this is what keeps them that way.
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\JKNet\\clients\\jk2\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\jk2\\basepath");
         let home = Path::new("C:\\JKNet\\clients\\jk2\\home");
         let settings_args = vec!["+set".to_string(), "r_mode".to_string(), "-1".to_string()];
 
-        let mut with = jo_plan(game, engine, home);
+        let mut with = jo_plan(game, engine, base, home);
         with.fs_game = Some("mv");
         with.settings_args = &settings_args;
         with.connect = Some("jk2.example.org:28070");
 
         let args = build_launch_args(&with);
-        // Jedi Outcast adds exactly one triple of its own after `fs_game`:
-        // the menu override the module docs explain. Everything after it is
-        // the shared tail.
+        // Nine tokens of roots, then the tail both games share. Jedi Outcast
+        // adds nothing of its own any more: what it needs is on disk, not on
+        // the command line.
         assert_eq!(
             &args[9..],
             [
@@ -800,15 +1106,18 @@ mod tests {
                 "fs_game",
                 "mv",
                 "+set",
-                "mv_menuOverride",
-                "1",
-                "+set",
                 "r_mode",
                 "-1",
                 "+connect",
                 "jk2.example.org:28070"
             ]
         );
+
+        let mut ja = plan(game, engine, base, home);
+        ja.fs_game = Some("mv");
+        ja.settings_args = &settings_args;
+        ja.connect = Some("jk2.example.org:28070");
+        assert_eq!(&build_launch_args(&ja)[9..], &args[9..]);
     }
 
     #[test]
@@ -854,5 +1163,311 @@ mod tests {
         assert!(validate_address("").is_err());
         assert!(validate_address("   ").is_err());
         assert!(validate_address("127.0.0.1:29070 +quit").is_err());
+    }
+
+    // --- slice: game core ---
+    // The base root of a Jedi Outcast client.
+
+    /// A client folder and a game folder in temp roots of their own.
+    ///
+    /// Two roots rather than one, because the point of most of these tests is
+    /// that a junction from the first into the second never carries anything
+    /// back — including the cleanup that runs when the fixture drops.
+    struct Fixture {
+        client_root: tempfile::TempDir,
+        game_root: tempfile::TempDir,
+    }
+
+    /// A file the player owns, dropped into the game's `base` so a test can
+    /// prove the game folder came through untouched.
+    const GAME_MARKER: &str = "kyle.cfg";
+
+    impl Fixture {
+        /// A client with a JK2MV build unpacked, and a 1.04 game folder.
+        fn new() -> Fixture {
+            let fixture = Fixture {
+                client_root: tempfile::tempdir().expect("a client root"),
+                game_root: tempfile::tempdir().expect("a game root"),
+            };
+
+            let engine = fixture.client_dir().join("engine");
+            std::fs::create_dir_all(&engine).expect("the engine folder");
+            std::fs::write(engine.join("jk2mvmp.exe"), b"MZ").expect("the executable");
+            std::fs::write(engine.join("jk2mvmenu_x64.dll"), b"menu").expect("the menu module");
+            // Loaded from next to the executable, so it stays in `engine\`.
+            std::fs::write(engine.join("SDL2.dll"), b"sdl").expect("a plain dll");
+
+            fixture.fill_game(&fixture.game_data());
+            fixture
+        }
+
+        /// Writes the retail archives and one file of the player's own.
+        fn fill_game(&self, game_data: &Path) {
+            let base = game_data.join("base");
+            std::fs::create_dir_all(&base).expect("the game base folder");
+            for asset in Game::JediOutcast.spec().assets {
+                std::fs::write(base.join(asset.name), asset.name.as_bytes()).expect("an archive");
+            }
+            std::fs::write(base.join(GAME_MARKER), b"seta name Kyle").expect("a player file");
+        }
+
+        fn client_dir(&self) -> PathBuf {
+            self.client_root.path().join("jk2")
+        }
+
+        fn game_data(&self) -> PathBuf {
+            self.game_root.path().join("GameData")
+        }
+
+        fn link(&self) -> PathBuf {
+            self.client_dir().join("basepath").join("base")
+        }
+
+        /// Whether the game folder is still whole.
+        fn game_is_intact(&self) -> bool {
+            let base = self.game_data().join("base");
+            base.join(GAME_MARKER).is_file()
+                && Game::JediOutcast
+                    .spec()
+                    .assets
+                    .iter()
+                    .all(|asset| base.join(asset.name).is_file())
+        }
+
+        fn prepare(&self) -> Result<PathBuf> {
+            prepare_basepath(Game::JediOutcast, &self.client_dir(), &self.game_data())
+        }
+    }
+
+    /// Stands in for a disk that will not take a junction.
+    fn refuse_junction(_target: &Path, _link: &Path) -> std::io::Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "this file system has no reparse points",
+        ))
+    }
+
+    /// Fails the test if the link is touched when it should not be.
+    fn never_junction(_target: &Path, _link: &Path) -> std::io::Result<()> {
+        panic!("the link was already there and must not be made again");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_base_root_gets_the_menu_module_and_a_link_to_the_game() {
+        let fixture = Fixture::new();
+        let base_dir = fixture.prepare().expect("the base root is built");
+
+        assert_eq!(base_dir, fixture.client_dir().join("basepath"));
+        // The module `Sys_LoadModuleLibrary` looks for, by the one name it
+        // tries. `SDL2.dll` is loaded from next to the executable and stays
+        // where the archive put it.
+        assert!(base_dir.join("jk2mvmenu_x64.dll").is_file());
+        assert!(!base_dir.join("SDL2.dll").exists());
+
+        let link = fixture.link();
+        assert!(
+            junction_target(&link).is_some_and(|target| same_folder(
+                &target,
+                &fixture.game_data().join("base")
+            )),
+            "{} must be a junction to the game's base",
+            link.display()
+        );
+        // The engine reads the retail archives through it, and nothing was
+        // copied to make that true.
+        assert!(link.join("assets5.pk3").is_file());
+        assert!(!base_dir.join(".jknet-copied-base").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_second_launch_leaves_the_link_and_the_module_alone() {
+        let fixture = Fixture::new();
+        fixture.prepare().expect("the first launch");
+
+        let stamp = std::fs::metadata(fixture.client_dir().join("basepath").join("jk2mvmenu_x64.dll"))
+            .and_then(|meta| meta.modified())
+            .expect("the copied module");
+        // `never_junction` panics if the link is remade, so reaching the
+        // assertions below is itself the result.
+        prepare_basepath_with(
+            Game::JediOutcast,
+            &fixture.client_dir(),
+            &fixture.game_data(),
+            never_junction,
+        )
+        .expect("the second launch");
+
+        let again = std::fs::metadata(fixture.client_dir().join("basepath").join("jk2mvmenu_x64.dll"))
+            .and_then(|meta| meta.modified())
+            .expect("the copied module");
+        assert_eq!(stamp, again, "an unchanged module is not copied again");
+        assert!(fixture.game_is_intact());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_game_that_moved_gets_the_link_redrawn() {
+        let fixture = Fixture::new();
+        fixture.prepare().expect("the first launch");
+
+        // The player moved their copy of the game to another folder.
+        let moved = fixture.game_root.path().join("Moved").join("GameData");
+        fixture.fill_game(&moved);
+        prepare_basepath(Game::JediOutcast, &fixture.client_dir(), &moved)
+            .expect("the launch after the move");
+
+        let link = fixture.link();
+        assert!(junction_target(&link)
+            .is_some_and(|target| same_folder(&target, &moved.join("base"))));
+        assert!(link.join(GAME_MARKER).is_file());
+        // Unlinking is not deleting: the folder the link used to name is whole.
+        assert!(fixture.game_is_intact());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_newer_build_replaces_the_copied_module() {
+        let fixture = Fixture::new();
+        fixture.prepare().expect("the first launch");
+
+        let source = fixture.client_dir().join("engine").join("jk2mvmenu_x64.dll");
+        std::fs::write(&source, b"menu of 1.4.2").expect("the updated module");
+        fixture.prepare().expect("the launch after the update");
+
+        let copy = fixture.client_dir().join("basepath").join("jk2mvmenu_x64.dll");
+        assert_eq!(
+            std::fs::read(&copy).expect("the copy"),
+            b"menu of 1.4.2".to_vec()
+        );
+    }
+
+    #[test]
+    fn a_real_folder_where_the_link_belongs_is_refused() {
+        // The one case that must never turn into a deletion: somebody's files
+        // sit where the launcher wants its link.
+        let fixture = Fixture::new();
+        let link = fixture.link();
+        std::fs::create_dir_all(&link).expect("a folder in the way");
+        std::fs::write(link.join("mine.pk3"), b"my work").expect("a file in it");
+
+        let error = fixture.prepare().expect_err("it must refuse");
+        assert!(matches!(error, AppError::BasepathOccupied(_)), "{error}");
+        assert!(link.join("mine.pk3").is_file(), "nothing may be deleted");
+    }
+
+    #[test]
+    fn a_file_where_the_link_belongs_is_refused_too() {
+        let fixture = Fixture::new();
+        let link = fixture.link();
+        std::fs::create_dir_all(link.parent().expect("the base root")).expect("the base root");
+        std::fs::write(&link, b"not even a folder").expect("a file in the way");
+
+        let error = fixture.prepare().expect_err("it must refuse");
+        assert!(matches!(error, AppError::BasepathOccupied(_)), "{error}");
+        assert!(link.is_file());
+    }
+
+    #[test]
+    fn a_disk_that_takes_no_junction_gets_the_archives_copied() {
+        let fixture = Fixture::new();
+        prepare_basepath_with(
+            Game::JediOutcast,
+            &fixture.client_dir(),
+            &fixture.game_data(),
+            refuse_junction,
+        )
+        .expect("the fallback still starts the game");
+
+        let link = fixture.link();
+        for asset in Game::JediOutcast.spec().assets {
+            assert!(link.join(asset.name).is_file(), "{} is missing", asset.name);
+        }
+        // Only the archives the table names. The player's own file in the game
+        // folder is not part of the copy.
+        assert!(!link.join(GAME_MARKER).exists());
+        assert!(fixture
+            .client_dir()
+            .join("basepath")
+            .join(".jknet-copied-base")
+            .is_file());
+        assert!(fixture.game_is_intact());
+    }
+
+    #[test]
+    fn a_copy_made_by_the_fallback_is_refreshed_and_not_refused() {
+        // Without the marker the second launch would meet a real folder and
+        // stop, which is what the rule above says about a folder JKNet did not
+        // make. The marker is how the two rules stay apart.
+        let fixture = Fixture::new();
+        let roots = (fixture.client_dir(), fixture.game_data());
+        prepare_basepath_with(Game::JediOutcast, &roots.0, &roots.1, refuse_junction)
+            .expect("the first fallback");
+
+        // A patch the player installed between the two launches.
+        std::fs::write(roots.1.join("base").join("assets5.pk3"), b"the 1.04 patch, rebuilt")
+            .expect("the patched archive");
+        prepare_basepath_with(Game::JediOutcast, &roots.0, &roots.1, refuse_junction)
+            .expect("the second fallback");
+
+        assert_eq!(
+            std::fs::read(fixture.link().join("assets5.pk3")).expect("the copy"),
+            b"the 1.04 patch, rebuilt".to_vec()
+        );
+    }
+
+    #[test]
+    fn a_copy_of_an_archive_the_player_has_not_got_is_not_a_failure() {
+        // `assets2.pk3` and `assets5.pk3` come with a patch, and a 1.02 copy
+        // has neither.
+        let fixture = Fixture::new();
+        let base = fixture.game_data().join("base");
+        std::fs::remove_file(base.join("assets2.pk3")).expect("remove the 1.03 archive");
+        std::fs::remove_file(base.join("assets5.pk3")).expect("remove the 1.04 archive");
+
+        prepare_basepath_with(
+            Game::JediOutcast,
+            &fixture.client_dir(),
+            &fixture.game_data(),
+            refuse_junction,
+        )
+        .expect("the fallback copies what is there");
+
+        assert!(fixture.link().join("assets0.pk3").is_file());
+        assert!(!fixture.link().join("assets5.pk3").exists());
+    }
+
+    #[test]
+    fn a_client_of_the_other_game_copies_no_modules() {
+        // Jedi Academy names no module prefix, so the same code copies nothing
+        // even when a `jk2mvmenu` happens to be lying about.
+        let fixture = Fixture::new();
+        let base_dir = fixture.client_dir().join("basepath");
+        std::fs::create_dir_all(&base_dir).expect("the base root");
+        let copied = copy_basepath_modules(
+            Game::JediAcademy,
+            &fixture.client_dir().join("engine"),
+            &base_dir,
+        )
+        .expect("nothing to copy");
+        assert!(copied.is_empty());
+        assert!(!base_dir.join("jk2mvmenu_x64.dll").exists());
+    }
+
+    #[test]
+    fn two_spellings_of_one_folder_compare_equal() {
+        assert!(same_folder(
+            Path::new("D:\\Games\\Jedi Outcast\\GameData\\base"),
+            Path::new("d:\\games\\jedi outcast\\gamedata\\base\\")
+        ));
+        assert!(same_folder(
+            Path::new("\\\\?\\D:\\GameData\\base"),
+            Path::new("D:/GameData/base")
+        ));
+        assert!(!same_folder(
+            Path::new("D:\\GameData\\base"),
+            Path::new("E:\\GameData\\base")
+        ));
     }
 }

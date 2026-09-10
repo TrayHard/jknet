@@ -89,7 +89,48 @@ impl DataPaths {
     pub fn client_dir(&self, slug: &str) -> PathBuf {
         self.clients.join(slug)
     }
+
+    /// `clients\<slug>\engine\`: the unpacked build, and the working directory
+    /// of the game process. The engine installer empties it on every install,
+    /// so nothing else may live here.
+    pub fn client_engine_dir(&self, slug: &str) -> PathBuf {
+        self.client_dir(slug).join(CLIENT_ENGINE_DIR)
+    }
+
+    /// `clients\<slug>\home\`: `fs_homepath`, the one root JKNet and the engine
+    /// both write into.
+    pub fn client_home_dir(&self, slug: &str) -> PathBuf {
+        self.client_dir(slug).join(CLIENT_HOME_DIR)
+    }
+
+    // --- slice: game core ---
+    /// `clients\<slug>\basepath\`: the base root of a client whose layout is
+    /// [`crate::game::LaunchLayout::OwnBasepath`].
+    ///
+    /// Built by [`crate::launch::prepare_basepath`] and used by Jedi Outcast
+    /// only. Its `base` entry is a directory junction into the player's game
+    /// folder, which is why nothing in the launcher may ever extract, copy or
+    /// recursively delete through this path without reading that function
+    /// first.
+    pub fn client_basepath_dir(&self, slug: &str) -> PathBuf {
+        self.client_dir(slug).join(CLIENT_BASEPATH_DIR)
+    }
 }
+
+/// Name of the folder every file system root of a Quake 3 engine keeps its
+/// archives in: `<GameData>\base`, `engine\base`, `home\base`, `basepath\base`.
+pub const BASE_FOLDER: &str = "base";
+
+/// Name of the folder holding the unpacked engine build.
+pub const CLIENT_ENGINE_DIR: &str = "engine";
+
+/// Name of the writable root of a client, `fs_homepath`.
+pub const CLIENT_HOME_DIR: &str = "home";
+
+// --- slice: game core ---
+/// Name of the launcher-owned base root, `fs_basepath` of a Jedi Outcast
+/// client.
+pub const CLIENT_BASEPATH_DIR: &str = "basepath";
 
 /// Returns `%LOCALAPPDATA%`, or the closest thing the system offers.
 ///
