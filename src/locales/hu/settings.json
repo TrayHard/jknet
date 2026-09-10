@@ -1,63 +1,63 @@
 {
-  "title": "Settings",
-  "subtitle": "Language, launch, downloads, appearance and account.",
+  "title": "Beállítások",
+  "subtitle": "Nyelv, indítás, letöltések, megjelenés és fiók.",
   "dataFolder": {
-    "title": "Data folder",
-    "text": "Clients, library and logs live here.",
-    "open": "Open JKNet folder"
+    "title": "Adatmappa",
+    "text": "A kliensek, a könyvtár és a naplók itt találhatók.",
+    "open": "A JKNet mappájának megnyitása"
   },
   "language": {
-    "title": "Language",
-    "text": "The launcher speaks the language you pick here. Server names, map names and file titles stay as their authors wrote them.",
-    "label": "Interface language",
-    "system": "System language",
-    "systemWith": "System language ({{language}})",
-    "needsTranslation": "This language is not translated yet and shows English."
+    "title": "Nyelv",
+    "text": "A JKNet azon a nyelven szól Önhöz, amelyet itt kiválaszt. A szerverek, a pályák és a fájlok nevei úgy maradnak, ahogyan a szerzőjük megírta.",
+    "label": "A felület nyelve",
+    "system": "A rendszer nyelve",
+    "systemWith": "A rendszer nyelve ({{language}})",
+    "needsTranslation": "Ez a nyelv még nincs lefordítva, ezért angolul jelenik meg."
   },
   "gameFiles": {
-    "title": "Game files",
-    "text": "JKNet reads the archives in these folders and writes nothing into them. One game is enough; set up the other whenever you like.",
-    "row": "{{game}} files",
-    "playStarts": "Play starts {{client}}",
-    "noDefault": "No default client yet",
-    "locate": "Locate",
-    "change": "Change",
-    "pickTitle": "Select the {{game}} GameData folder",
-    "invalid": "No {{game}} files in {{path}}. Missing: {{missing}}."
+    "title": "Játékfájlok",
+    "text": "A JKNet az ezekben a mappákban lévő archívumokat olvassa, és semmit nem ír beléjük. Egy játék is elég; a másikat bármikor beállíthatja.",
+    "row": "A {{game}} fájljai",
+    "playStarts": "A Játék gomb ezt indítja: {{client}}",
+    "noDefault": "Még nincs alapértelmezett kliens",
+    "locate": "Megkeresés",
+    "change": "Módosítás",
+    "pickTitle": "Válassza ki a {{game}} GameData mappáját",
+    "invalid": "A {{game}} fájljai nem találhatók itt: {{path}}. Hiányzik: {{missing}}."
   },
   "launch": {
-    "title": "Launch",
-    "label": "Extra launch arguments",
+    "title": "Indítás",
+    "label": "További indítási argumentumok",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Appended to every client, exactly as in a shortcut. Example: <0>+set r_fullscreen 0 +set r_mode 4</0>. Double quotes keep a value with a space together."
+    "hint": "Minden kliens indításakor hozzáfűződik, pontosan úgy, mint egy parancsikonban. Például: <0>+set r_fullscreen 0 +set r_mode 4</0>. Az idézőjel egyben tartja a szóközt tartalmazó értéket."
   },
   "onboarding": {
-    "title": "First-time setup",
-    "text": "Walks through game files, a client and an account again. Nothing you have set up is removed.",
-    "action": "Run first-time setup again"
+    "title": "Első beállítás",
+    "text": "Végigvezeti a játékfájlokon, egy kliensen és a fiókon. Semmi nem vész el abból, amit már beállított.",
+    "action": "Az első beállítás megismétlése"
   },
   "cache": {
-    "title": "Cache",
-    "mapPictures": "Map pictures",
-    "reading": "Reading the index…",
+    "title": "Gyorsítótár",
+    "mapPictures": "Pályaképek",
+    "reading": "Az index beolvasása…",
+    "count_one": "{{count}} pályához van kép, a már meglévő pk3-fájlokból beolvasva. A JKNet semmit nem tölt le.",
+    "count_other": "{{count}} pályához van kép, a már meglévő pk3-fájlokból beolvasva. A JKNet semmit nem tölt le.",
     "perGame": "{{count}} {{game}}",
-    "lastRebuild": "Last rebuild: {{maps}} pictures from {{sources}} files in {{elapsed}}.",
-    "rebuild": "Rebuild",
-    "rebuilding": "Rebuilding…",
-    "count_one": "{{count}} map has a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_other": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded."
+    "lastRebuild": "Utolsó újraépítés: {{maps}} kép {{sources}} fájlból, {{elapsed}} alatt.",
+    "rebuild": "Újraépítés",
+    "rebuilding": "Újraépítés…"
   },
   "rest": {
-    "title": "The rest of the settings is not wired up yet",
-    "text": "The Downloads and Appearance sections arrive together with the features they control."
+    "title": "A beállítások többi része még nincs bekötve",
+    "text": "A Letöltések és a Megjelenés szakasz azokkal a funkciókkal együtt érkezik, amelyeket vezérel."
   },
   "about": {
-    "title": "About",
-    "text": "JKNet updates itself from GitHub Releases. Every package is signed, and an unsigned one is refused.",
-    "version": "Version {{version}}",
-    "versionUnknown": "Version unknown",
+    "title": "Névjegy",
+    "text": "A JKNet a GitHub Releases oldaláról frissíti magát. Minden csomag alá van írva, az aláíratlant a program elutasítja.",
+    "version": "Verzió: {{version}}",
+    "versionUnknown": "Ismeretlen verzió",
     "license": "GPL-3.0-or-later",
-    "check": "Check for updates",
-    "install": "Install and restart"
+    "check": "Frissítés keresése",
+    "install": "Telepítés és újraindítás"
   }
 }
