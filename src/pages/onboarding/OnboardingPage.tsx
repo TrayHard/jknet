@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
-import { errorMessage } from "../../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../../i18n/errors";
 import { useClients, useSettings } from "../../lib/queries";
 import { BrandPanel } from "./BrandPanel";
 import { StepAccount } from "./StepAccount";
@@ -20,6 +22,7 @@ import { initialStep, type OnboardingStep } from "./steps";
  * to an account screen with nothing to play.
  */
 export function OnboardingPage() {
+  const errorText = useErrorText();
   const navigate = useNavigate();
   const settings = useSettings();
   const clients = useClients();
@@ -33,7 +36,7 @@ export function OnboardingPage() {
   }, [step, settings.data, clients.data]);
 
   const queryError = settings.error ?? clients.error ?? null;
-  const failure = queryError ? errorMessage(queryError) : null;
+  const failure = queryError ? errorText(queryError) : null;
 
   return (
     <div className="flex h-full">
@@ -59,16 +62,18 @@ export function OnboardingPage() {
  * a wizard whose buttons all fail.
  */
 function Resolving({ error }: { error: string | null }) {
+  const { t } = useTranslation("onboarding");
+
   return (
     <StepPanel
       step={1}
-      heading="Where is the game installed?"
-      text="JKNet needs the folder that holds base\assets0.pk3 to assets3.pk3."
+      heading={t("resolving.heading")}
+      text={t("resolving.text")}
       error={error}
       footer={null}
     >
       <p className="text-body-sm text-fg-muted">
-        {error ? "Restart the launcher once the problem is fixed." : "Reading your setup…"}
+        {error ? t("resolving.failed") : t("resolving.reading")}
       </p>
     </StepPanel>
   );

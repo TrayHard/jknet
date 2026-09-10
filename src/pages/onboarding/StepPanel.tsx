@@ -1,8 +1,9 @@
 import { AlertTriangle, ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button, StepBadges } from "../../components/ui";
-import { STEP_COUNT, STEP_LABELS, type OnboardingStep } from "./steps";
+import { STEP_COUNT, STEP_KEYS, type OnboardingStep } from "./steps";
 
 interface StepPanelProps {
   step: OnboardingStep;
@@ -34,10 +35,21 @@ export function StepPanel({
   footer,
   children,
 }: StepPanelProps) {
+  const { t } = useTranslation("onboarding");
+  const { t: tCommon } = useTranslation("common");
+
   return (
     <div className="flex-1 min-w-0 flex justify-center overflow-hidden">
       <div className="flex flex-col w-full max-w-[640px] p-32">
-        <StepBadges steps={STEP_LABELS} current={step} />
+        <StepBadges
+          steps={STEP_KEYS.map((key) => ({
+            label: t(`steps.${key}`),
+            done: t("panel.stepDone"),
+            current: t("panel.stepCurrent"),
+            upcoming: t("panel.stepUpcoming"),
+          }))}
+          current={step}
+        />
 
         <h1 className="text-display-lg text-fg pt-24">{heading}</h1>
         <p className="text-body-md text-fg-secondary pt-8">{text}</p>
@@ -62,10 +74,10 @@ export function StepPanel({
             onClick={onBack}
             disabled={onBack === undefined}
           >
-            Back
+            {tCommon("actions.back")}
           </Button>
           <span className="text-label-xs text-fg-muted">
-            Step {step} of {STEP_COUNT}
+            {t("panel.position", { step, total: STEP_COUNT })}
           </span>
           <div className="flex items-center gap-12">{footer}</div>
         </div>

@@ -2,9 +2,20 @@ import { Check } from "lucide-react";
 
 import { cn } from "../../lib/format";
 
+/** One step of the strip: its label, plus what a screen reader adds to it. */
+export interface StepBadge {
+  label: string;
+  /** Read after the label of a step already behind the player. */
+  done: string;
+  /** Read after the label of the step on screen. */
+  current: string;
+  /** Read after the label of a step still ahead. */
+  upcoming: string;
+}
+
 interface StepBadgesProps {
-  /** One label per step, in order. */
-  steps: string[];
+  /** One entry per step, in order. */
+  steps: StepBadge[];
   /** The step being shown, counted from 1. */
   current: number;
   className?: string;
@@ -20,14 +31,14 @@ interface StepBadgesProps {
 export function StepBadges({ steps, current, className }: StepBadgesProps) {
   return (
     <ol className={cn("flex items-center gap-8", className)}>
-      {steps.map((label, index) => {
+      {steps.map((step, index) => {
         const number = index + 1;
         const done = number < current;
         const active = number === current;
 
         return (
           <li
-            key={label}
+            key={step.label}
             aria-current={active ? "step" : undefined}
             className={cn(
               "flex items-center gap-6 h-24 pl-4 pr-10 rounded-full",
@@ -51,9 +62,9 @@ export function StepBadges({ steps, current, className }: StepBadgesProps) {
               {done ? <Check size={10} strokeWidth={3} /> : number}
             </span>
             <span className="text-label-xs">
-              {label}
+              {step.label}
               <span className="sr-only">
-                {done ? " (done)" : active ? " (current step)" : " (not started)"}
+                {done ? step.done : active ? step.current : step.upcoming}
               </span>
             </span>
           </li>

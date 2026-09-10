@@ -1,7 +1,10 @@
 import { ChevronRight, Play, ShieldCheck } from "lucide-react";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
+// --- slice: i18n ---
+import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { useCachedServers } from "../../lib/queries";
 import { Badge, EmptyState } from "../ui";
 import { botCount, isBotOnly, realPlayers } from "./filter";
@@ -24,6 +27,8 @@ const TOP_COUNT = 4;
  * outright; a trusted server keeps its place whatever is on it.
  */
 export function TopServers() {
+  const { t } = useTranslation("home");
+  const gametypes = useGametypeLabels();
   const cached = useCachedServers();
 
   const rows = useMemo(() => {
@@ -37,21 +42,21 @@ export function TopServers() {
   }, [cached.data]);
 
   const heading = rows.some((server) => server.trusted)
-    ? "Trusted servers"
-    : "Busiest servers";
+    ? t("topServers.trusted")
+    : t("topServers.busiest");
 
   if (rows.length === 0) {
     return (
       <EmptyState
         icon={<Play size={24} />}
-        title="No servers in the cache yet"
-        text="Open the Servers screen once and the busiest ones show up here."
+        title={t("topServers.emptyTitle")}
+        text={t("topServers.emptyText")}
         action={
           <Link
             to="/servers"
             className="text-body-sm-medium text-fg-accent hover:underline"
           >
-            Open Servers
+            {t("topServers.openServers")}
           </Link>
         }
       />
@@ -66,7 +71,7 @@ export function TopServers() {
           to="/servers"
           className="inline-flex items-center gap-2 text-body-sm-medium text-fg-accent hover:underline"
         >
-          See all
+          {t("topServers.seeAll")}
           <ChevronRight size={14} />
         </Link>
       </div>
@@ -88,7 +93,9 @@ export function TopServers() {
                   className="text-body-sm-medium text-fg"
                 />
               </span>
-              <Badge tone="accent">{server.gametypeLabel}</Badge>
+              <Badge tone="accent">
+                {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
+              </Badge>
               <span className="text-mono-xs tabular-nums text-fg-secondary text-right">
                 {realPlayers(server)}/{server.maxClients}
                 {botCount(server) > 0 ? (

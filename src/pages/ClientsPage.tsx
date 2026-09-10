@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 
 import { ClientSettingsDialog } from "../components/ClientSettingsDialog";
@@ -25,8 +26,10 @@ import {
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState } from "../components/ui";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import { useFormat } from "../i18n/useFormat";
 import {
-  errorMessage,
   ipc,
   type Client,
   type Engine,
@@ -35,7 +38,7 @@ import {
   type RunningGame,
   type SettingsPatch,
 } from "../lib/ipc";
-import { formatBytes, shortenPath } from "../lib/format";
+import { shortenPath } from "../lib/format";
 // --- slice: game switch ---
 import {
   clientsOfGame,
@@ -70,6 +73,10 @@ import {
  * clients below it, and the engine row with New client at the bottom.
  */
 export function ClientsPage() {
+  const { t } = useTranslation("clients");
+  const { t: tGames } = useTranslation("games");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const settings = useSettings();
   const clients = useClients();
   // --- slice: game core ---
@@ -127,7 +134,7 @@ export function ClientsPage() {
   const patchSettings = (patch: SettingsPatch) => {
     setError(null);
     updateSettings.mutate(patch, {
-      onError: (e) => setError(errorMessage(e)),
+      onError: (e) => setError(errorText(e)),
     });
   };
 
@@ -138,7 +145,7 @@ export function ClientsPage() {
       const picked = await open({
         directory: true,
         multiple: false,
-        title: "Select the GameData folder",
+        title: t("gameFiles.pickTitle"),
       });
       if (typeof picked !== "string") return;
       // --- slice: game core --- checked against the game this card shows.
@@ -148,19 +155,19 @@ export function ClientsPage() {
           .filter((asset) => asset.required && !asset.present)
           .map((asset) => asset.name)
           .join(", ");
-        setError(`No game files in ${candidate.path}. Missing: ${missing}.`);
+        setError(t("gameFiles.invalid", { path: candidate.path, missing }));
         return;
       }
       patchSettings({ gameDataPaths: { [activeGame]: candidate.path } });
     } catch (e) {
-      setError(errorMessage(e));
+      setError(errorText(e));
     }
   };
 
   // A command that never answered is as much of a failure as one that said
   // no, and outside the Tauri runtime it is the only thing to report.
   const queryError = settings.error ?? clients.error ?? gameFiles.error ?? null;
-  const failure = error ?? (queryError ? errorMessage(queryError) : null);
+  const failure = error ?? (queryError ? errorText(queryError) : null);
 
   // --- slice: game core ---
   // The card shows the folder of the active game. Both games get a row of
@@ -186,15 +193,15 @@ export function ClientsPage() {
   return (
     <Page>
       <PageHeader
-        title="Clients"
-        subtitle="A client is an engine build with its own files and settings. Name it and it is yours."
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <Button
             variant="primary"
             icon={<Plus size={16} />}
             onClick={() => setDialogOpen(true)}
           >
-            New client
+            {t("newClient")}
           </Button>
         }
       />
@@ -218,35 +225,44 @@ export function ClientsPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-8">
               <h2 className="text-heading-sm text-fg">
-                {gameInfo ? `${gameInfo.displayName} files` : "Game files"}
+                {gameInfo
+                  ? t("gameFiles.title", { game: gameInfo.displayName })
+                  : t("gameFiles.titleFallback")}
               </h2>
               {configuredPath ? (
                 <Badge tone="success" icon={<Check size={12} />}>
-                  Ready
+                  {t("gameFiles.ready")}
                 </Badge>
               ) : (
-                <Badge tone="warm">Not set</Badge>
+                <Badge tone="warm">{t("gameFiles.notSet")}</Badge>
               )}
             </div>
             <p className="text-body-sm text-fg-secondary pt-4">
-              JKNet reads <span className="text-mono-sm">{assetRange}</span> from
-              this folder and never writes into it.
+              <Trans
+                t={t}
+                i18nKey="gameFiles.text"
+                values={{ range: assetRange }}
+                components={[<span className="text-mono-sm" />]}
+              />
             </p>
             <p className="text-mono-sm text-fg-accent pt-8 break-all">
               {configuredPath ??
                 activeCandidate?.path ??
-                (gameFiles.isLoading ? "Looking for Steam and GOG copies…" : "No copy found")}
+                (gameFiles.isLoading
+                  ? t("gameFiles.searching")
+                  : t("gameFiles.noCopy"))}
             </p>
             {activeCandidate && !configuredPath ? (
               <p className="text-body-sm text-fg-muted pt-4">
-                Found through {sourceName(activeCandidate.source)}. Confirm it to
-                start using it.
+                {t("gameFiles.foundThrough", {
+                  source: tGames(`sources.${activeCandidate.source}`),
+                })}
               </p>
             ) : null}
           </div>
           <div className="flex flex-col gap-8 shrink-0">
             <Button icon={<FolderOpen size={16} />} onClick={() => void chooseGameFolder()}>
-              Change folder
+              {t("gameFiles.changeFolder")}
             </Button>
             {activeCandidate && activeCandidate.path !== configuredPath ? (
               <Button
@@ -257,7 +273,7 @@ export function ClientsPage() {
                   })
                 }
               >
-                Use this folder
+                {t("gameFiles.useThisFolder")}
               </Button>
             ) : null}
           </div>
@@ -271,7 +287,7 @@ export function ClientsPage() {
                 className="flex items-center gap-8 text-body-sm text-fg-muted"
               >
                 <Badge tone={candidate.valid ? "neutral" : "danger"}>
-                  {sourceName(candidate.source)}
+                  {tGames(`sources.${candidate.source}`)}
                 </Badge>
                 <span className="text-mono-xs truncate" title={candidate.path}>
                   {shortenPath(candidate.path, 64)}
@@ -284,10 +300,10 @@ export function ClientsPage() {
 
       {/* Clients --------------------------------------------------------- */}
       <section className="flex flex-col gap-12">
-        <h2 className="text-label-xs text-fg-muted">Your clients</h2>
+        <h2 className="text-label-xs text-fg-muted">{t("list.heading")}</h2>
 
         {clients.isLoading ? (
-          <p className="text-body-sm text-fg-muted">Loading…</p>
+          <p className="text-body-sm text-fg-muted">{tCommon("states.loading")}</p>
         ) : gameClients.length > 0 ? (
           <ul className="grid grid-cols-1 xl:grid-cols-2 gap-12">
             {gameClients.map((client) => (
@@ -306,7 +322,7 @@ export function ClientsPage() {
                 onEdit={() => setEditing(client)}
                 onDelete={() =>
                   deleteClient.mutate(client.id, {
-                    onError: (e) => setError(errorMessage(e)),
+                    onError: (e) => setError(errorText(e)),
                   })
                 }
                 onInstall={() => {
@@ -314,19 +330,19 @@ export function ClientsPage() {
                   clearInstall(client.id);
                   installEngine.mutate(
                     { clientId: client.id },
-                    { onError: (e) => setError(errorMessage(e)) },
+                    { onError: (e) => setError(errorText(e)) },
                   );
                 }}
                 onLaunch={() => {
                   setError(null);
                   launchClient.mutate(
                     { clientId: client.id },
-                    { onError: (e) => setError(errorMessage(e)) },
+                    { onError: (e) => setError(errorText(e)) },
                   );
                 }}
                 onStop={() =>
                   stopGame.mutate(undefined, {
-                    onError: (e) => setError(errorMessage(e)),
+                    onError: (e) => setError(errorText(e)),
                   })
                 }
               />
@@ -335,11 +351,11 @@ export function ClientsPage() {
         ) : (
           <EmptyState
             icon={<Plus size={24} />}
-            title={`No ${gameName(activeGame)} clients yet`}
-            text="A client is a named engine build with its own mods and settings. Create one and it shows up here."
+            title={t("list.emptyTitle", { game: gameName(activeGame) })}
+            text={t("list.emptyText")}
             action={
               <Button variant="primary" onClick={() => setDialogOpen(true)}>
-                New client
+                {t("newClient")}
               </Button>
             }
           />
@@ -350,9 +366,10 @@ export function ClientsPage() {
             launcher lost their clients. */}
         {otherCount > 0 ? (
           <p className="text-body-sm text-fg-muted">
-            {otherCount} {gameName(otherGame(activeGame))}{" "}
-            {otherCount === 1 ? "client" : "clients"} — switch game in the
-            sidebar to see {otherCount === 1 ? "it" : "them"}.
+            {t("list.otherGame", {
+              count: otherCount,
+              game: gameName(otherGame(activeGame)),
+            })}
           </p>
         ) : null}
       </section>
@@ -363,7 +380,7 @@ export function ClientsPage() {
             An engine of the other game cannot be picked in the dialog below
             anyway, so listing it here would only be a card to be puzzled by. */}
         <h2 className="text-label-xs text-fg-muted">
-          {gameName(activeGame)} engines
+          {t("engines.heading", { game: gameName(activeGame) })}
         </h2>
         <ul className="grid grid-cols-1 xl:grid-cols-2 gap-12">
           {engines.map((engine) => (
@@ -373,8 +390,12 @@ export function ClientsPage() {
             >
               <div className="flex items-center gap-8">
                 <span className="text-heading-sm text-fg">{engine.name}</span>
-                {engine.recommended ? <Badge tone="accent">Recommended</Badge> : null}
+                {engine.recommended ? (
+                  <Badge tone="accent">{t("engines.recommended")}</Badge>
+                ) : null}
               </div>
+              {/* The engine name and its one-line description come from the
+                  registry in the core and name a project: data, not copy. */}
               <p className="text-body-sm text-fg-secondary">{engine.description}</p>
               <p className="text-mono-xs text-fg-muted">{engine.repo}</p>
             </li>
@@ -403,6 +424,10 @@ export function ClientsPage() {
     </Page>
   );
 }
+
+// --- slice: i18n ---
+// `sourceName` is gone: the four detection sources are `games.sources.*` in the
+// catalogs, and both this screen and the first run read them from there.
 
 interface ClientCardProps {
   client: Client;
@@ -436,6 +461,8 @@ function ClientCard({
   onLaunch,
   onStop,
 }: ClientCardProps) {
+  const { t } = useTranslation("clients");
+  const format = useFormat();
   const engineName = engine?.name ?? client.engineId;
   const showProgress =
     install !== undefined && (install.phase === "download" || install.phase === "extract");
@@ -455,8 +482,8 @@ function ClientCard({
         <div className="flex-1 min-w-0 flex flex-col gap-4">
           <div className="flex items-center gap-8">
             <span className="text-heading-sm text-fg truncate">{client.name}</span>
-            {isDefault ? <Badge tone="accent">Default</Badge> : null}
-            {isRunning ? <Badge tone="success">Running</Badge> : null}
+            {isDefault ? <Badge tone="accent">{t("card.default")}</Badge> : null}
+            {isRunning ? <Badge tone="success">{t("card.running")}</Badge> : null}
           </div>
           <div className="flex items-center gap-8 flex-wrap">
             <Badge tone={installed ? "neutral" : "warm"}>
@@ -464,17 +491,27 @@ function ClientCard({
               {client.engineVersion ? ` ${client.engineVersion}` : ""}
             </Badge>
             {installed ? null : (
-              <span className="text-body-sm text-fg-muted">Engine not installed</span>
+              <span className="text-body-sm text-fg-muted">
+                {t("card.engineNotInstalled")}
+              </span>
             )}
           </div>
           <span className="text-mono-xs text-fg-muted">
-            {client.id} · created {client.createdAt.slice(0, 10)}
-            {client.fsGame ? ` · fs_game ${client.fsGame}` : ""}
+            {client.fsGame
+              ? t("card.metaWithMod", {
+                  id: client.id,
+                  date: format.date(client.createdAt),
+                  mod: client.fsGame,
+                })
+              : t("card.meta", {
+                  id: client.id,
+                  date: format.date(client.createdAt),
+                })}
           </span>
         </div>
         <div className="flex flex-col gap-8 shrink-0">
           <Button size="sm" onClick={onMakeDefault} disabled={isDefault}>
-            {isDefault ? "Default" : "Make default"}
+            {isDefault ? t("card.default") : t("card.makeDefault")}
           </Button>
           <div className="flex items-center gap-4">
             <Button
@@ -482,8 +519,8 @@ function ClientCard({
               variant="ghost"
               icon={<SettingsIcon size={14} />}
               onClick={onEdit}
-              aria-label={`Settings of ${client.name}`}
-              title="Name and mod folder"
+              aria-label={t("card.settingsOf", { client: client.name })}
+              title={t("card.settingsHint")}
             />
             <Button
               size="sm"
@@ -492,7 +529,7 @@ function ClientCard({
               onClick={onDelete}
               disabled={isRunning || installing}
             >
-              Delete
+              {t("card.delete")}
             </Button>
           </div>
         </div>
@@ -507,7 +544,7 @@ function ClientCard({
 
       {engine && !engine.installable ? (
         <p className="text-body-sm text-fg-muted">
-          {engine.notInstallableReason ?? "This build has to be installed by hand."}
+          {engine.notInstallableReason ?? t("card.manualInstall")}
         </p>
       ) : (
         <EngineControls
@@ -554,6 +591,10 @@ function EngineControls({
   onLaunch,
   onStop,
 }: EngineControlsProps) {
+  const { t } = useTranslation("clients");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
+  const format = useFormat();
   const releases = useEngineReleases(installed ? null : client.engineId);
   const [checkRequested, setCheckRequested] = useState(false);
   const update = useEngineUpdate(checkRequested ? client.id : null);
@@ -570,7 +611,7 @@ function EngineControls({
     <div className="flex items-center gap-8 flex-wrap">
       {isRunning ? (
         <Button size="sm" variant="danger" icon={<Square size={14} />} onClick={onStop}>
-          Stop
+          {t("engine.stop")}
         </Button>
       ) : (
         <Button
@@ -581,13 +622,13 @@ function EngineControls({
           disabled={!installed || installing || otherIsRunning}
           title={
             otherIsRunning
-              ? "Another client is already running"
+              ? t("engine.otherRunning")
               : installed
                 ? undefined
-                : "Install the engine first"
+                : t("engine.installFirst")
           }
         >
-          Launch
+          {t("engine.launch")}
         </Button>
       )}
 
@@ -599,7 +640,7 @@ function EngineControls({
             onClick={check}
             disabled={installing || isRunning || update.isFetching}
           >
-            {update.isFetching ? "Checking…" : "Check updates"}
+            {update.isFetching ? tCommon("states.checking") : t("engine.checkUpdates")}
           </Button>
           {updateAvailable ? (
             <Button
@@ -609,16 +650,18 @@ function EngineControls({
               onClick={onInstall}
               disabled={installing || isRunning}
             >
-              Update to {update.data?.latest ?? "the newest build"}
+              {update.data?.latest
+                ? t("engine.updateTo", { version: update.data.latest })
+                : t("engine.updateToNewest")}
             </Button>
           ) : update.data ? (
             <Badge tone="success" icon={<Check size={12} />}>
-              Up to date
+              {t("engine.upToDate")}
             </Badge>
           ) : null}
           {update.error ? (
             <span className="text-body-sm text-fg-danger">
-              {errorMessage(update.error)}
+              {errorText(update.error)}
             </span>
           ) : null}
         </>
@@ -630,16 +673,16 @@ function EngineControls({
           disabled={installing}
         >
           {installing
-            ? "Installing…"
+            ? tCommon("states.installing")
             : latestTag
-              ? `Install engine ${latestTag}`
-              : "Install engine"}
+              ? t("engine.installVersion", { version: latestTag })
+              : t("engine.install")}
         </Button>
       )}
 
       {installed && client.engineInstalledAt ? (
         <span className="text-mono-xs text-fg-muted">
-          installed {client.engineInstalledAt.slice(0, 10)}
+          {t("card.installedOn", { date: format.date(client.engineInstalledAt) })}
         </span>
       ) : null}
     </div>
@@ -653,6 +696,7 @@ function EngineControls({
  * fake percentage: GitHub always sends one, mirrors do not always.
  */
 function InstallProgressBar({ progress }: { progress: EngineInstallProgress }) {
+  const format = useFormat();
   const ratio =
     progress.total > 0 ? Math.min(1, progress.downloaded / progress.total) : null;
 
@@ -664,8 +708,8 @@ function InstallProgressBar({ progress }: { progress: EngineInstallProgress }) {
         </span>
         <span className="text-mono-xs text-fg-muted shrink-0">
           {ratio === null
-            ? formatBytes(progress.downloaded)
-            : `${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)}`}
+            ? format.bytes(progress.downloaded)
+            : `${format.bytes(progress.downloaded)} / ${format.bytes(progress.total)}`}
         </span>
       </div>
       <div
@@ -683,18 +727,4 @@ function InstallProgressBar({ progress }: { progress: EngineInstallProgress }) {
       </div>
     </div>
   );
-}
-
-/** Human name of a detection source, for the game files card. */
-function sourceName(source: string): string {
-  switch (source) {
-    case "steam":
-      return "Steam";
-    case "gog":
-      return "GOG";
-    case "manual":
-      return "Chosen by hand";
-    default:
-      return "Saved";
-  }
 }

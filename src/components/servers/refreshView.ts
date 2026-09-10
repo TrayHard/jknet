@@ -75,23 +75,37 @@ export function respondedSoFar(
 }
 
 /**
- * The line under the spinner.
+ * What the line under the spinner should say, as a decision rather than a
+ * sentence.
  *
  * The core counts its addresses only when a scan ends (`servers:done`), so the
  * scan in flight has no total to print and the last one's stands in as an
  * estimate — said as an estimate, because the masters answer with a different
  * list every time.
+ *
+ * --- slice: i18n ---
+ * The three shapes are three keys of the `servers` catalog. Returning the
+ * decision instead of the words keeps this module free of English and testable
+ * without a translation layer.
  */
+export interface ScanProgress {
+  /** `label`, `found` or `ofAbout`: which key of `servers.scan` to print. */
+  kind: "label" | "found" | "ofAbout";
+  /** Servers that have answered this scan. */
+  count: number;
+  /** The previous scan's total, when it is worth printing as an estimate. */
+  total: number;
+}
+
 export function scanLabel(
   responded: number,
   previous: ServersDoneEvent | null,
-): string {
-  const head = "Scanning servers…";
-  if (responded <= 0) return head;
+): ScanProgress {
+  if (responded <= 0) return { kind: "label", count: 0, total: 0 };
   if (previous === null || previous.total < responded) {
-    return `${head} ${responded} found`;
+    return { kind: "found", count: responded, total: 0 };
   }
-  return `${head} ${responded} of about ${previous.total}`;
+  return { kind: "ofAbout", count: responded, total: previous.total };
 }
 
 /** The newest RFC 3339 stamp in a list, or `""` for an empty one. */

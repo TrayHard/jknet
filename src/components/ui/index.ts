@@ -18,7 +18,7 @@ export {
   type SelectOption,
   type SelectSize,
 } from "./Select";
-export { StepBadges } from "./StepBadges";
+export { StepBadges, type StepBadge } from "./StepBadges";
 export { Toggle } from "./Toggle";
 // --- slice: installer ---
 export { Toast, type ToastVariant } from "./Toast";

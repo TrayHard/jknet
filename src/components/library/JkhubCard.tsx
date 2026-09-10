@@ -1,7 +1,9 @@
 import { ArrowDownCircle, Check, Download, Star } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { formatBytes } from "../../lib/format";
+// --- slice: i18n ---
+import { useFormat, type Formatters } from "../../i18n/useFormat";
 import type { JkhubCardData } from "../../lib/ipc";
 import { Badge, Button } from "../ui";
 
@@ -41,6 +43,8 @@ export function JkhubCard({
   onOpen,
   onInstall,
 }: JkhubCardProps) {
+  const { t } = useTranslation("jkhub");
+  const format = useFormat();
   // The address that failed rather than a flag: a card reused for another file
   // gets its picture back without an effect to reset anything.
   const [broken, setBroken] = useState<string | null>(null);
@@ -53,7 +57,7 @@ export function JkhubCard({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Open ${card.title}`}
+        aria-label={t("card.open", { title: card.title })}
         className="block h-120 bg-elevated cursor-pointer overflow-hidden"
       >
         {thumbnail ? (
@@ -85,9 +89,10 @@ export function JkhubCard({
           >
             {card.title}
           </button>
+          {/* Author and category are the site's own words. */}
           <span className="text-body-sm text-fg-muted truncate">
             {[card.author?.name, categoryName].filter(Boolean).join(" · ") ||
-              "JKHub"}
+              t("card.fallbackAuthor")}
           </span>
         </div>
 
@@ -110,7 +115,7 @@ export function JkhubCard({
           {card.downloads != null ? (
             <span className="inline-flex items-center gap-4 whitespace-nowrap">
               <ArrowDownCircle size={12} aria-hidden />
-              {card.downloads.toLocaleString("en-US")}
+              {format.number(card.downloads)}
             </span>
           ) : null}
           {card.rating ? (
@@ -119,13 +124,13 @@ export function JkhubCard({
               {card.rating.value.toFixed(1)}
             </span>
           ) : null}
-          <span className="whitespace-nowrap">{dateLine(card)}</span>
+          <span className="whitespace-nowrap">{dateLine(card, t, format)}</span>
         </div>
 
         <div className="flex items-center gap-8">
           {installed ? (
             <Badge tone="success" icon={<Check size={12} />}>
-              Installed
+              {t("card.installed")}
             </Badge>
           ) : null}
           <span className="flex-1" />
@@ -136,7 +141,11 @@ export function JkhubCard({
             disabled={busy}
             onClick={onInstall}
           >
-            {downloading ? received(progress) : installed ? "Reinstall" : "Install"}
+            {downloading
+              ? received(progress, format)
+              : installed
+                ? t("card.reinstall")
+                : t("card.install")}
           </Button>
         </div>
       </div>
@@ -144,23 +153,32 @@ export function JkhubCard({
   );
 }
 
-/** `Updated Sep 2, 2026`, or nothing when the card printed no date. */
-function dateLine(card: JkhubCardData): string {
+/**
+ * `Updated 2 Sep 2026`, or nothing when the card printed no date.
+ *
+ * The site prints either «Updated» or «Submitted» over the date, and which of
+ * the two it was is the only part of the line that is not the date itself.
+ */
+function dateLine(
+  card: JkhubCardData,
+  t: ReturnType<typeof useTranslation<"jkhub">>["t"],
+  format: Formatters,
+): string {
   if (!card.date) return "";
-  const when = new Date(card.date);
-  if (Number.isNaN(when.getTime())) return "";
-  return `${card.dateLabel ?? "Updated"} ${when.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  })}`;
+  const when = format.date(card.date);
+  if (when === card.date) return "";
+  return card.dateLabel === "Submitted"
+    ? t("card.submitted", { date: when })
+    : t("card.updated", { date: when });
 }
 
 /** What the button says while the archive is coming down. */
-function received(progress: { received: number; total: number }): string {
+function received(
+  progress: { received: number; total: number },
+  format: Formatters,
+): string {
   if (progress.total > 0) {
-    const percent = Math.round((progress.received / progress.total) * 100);
-    return `${percent}%`;
+    return format.percent(progress.received / progress.total);
   }
-  return formatBytes(progress.received);
+  return format.bytes(progress.received);
 }

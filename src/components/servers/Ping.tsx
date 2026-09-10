@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { cn } from "../../lib/format";
 
 /** The four states of the Ping component in the design. */
@@ -35,13 +37,15 @@ const LIT: Record<PingLevel, number> = { good: 3, ok: 2, bad: 1, unknown: 0 };
 
 /** Three rising bars and the number, as in the Figma Ping component. */
 export function Ping({ ms, className }: { ms: number | null; className?: string }) {
+  const { t } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
   const level = pingLevel(ms);
   const lit = LIT[level];
 
   return (
     <span
       className={cn("inline-flex items-center gap-6", className)}
-      title={ms == null ? "No answer" : `${ms} ms`}
+      title={ms == null ? t("ping.noAnswer") : t("ping.value", { value: ms })}
     >
       <span className="flex items-end gap-2 h-12" aria-hidden="true">
         {[6, 9, 12].map((height, index) => (
@@ -56,7 +60,7 @@ export function Ping({ ms, className }: { ms: number | null; className?: string 
         ))}
       </span>
       <span className={cn("text-mono-xs tabular-nums", TEXT_COLOR[level])}>
-        {ms == null ? "—" : ms}
+        {ms == null ? tCommon("values.empty") : ms}
       </span>
     </span>
   );

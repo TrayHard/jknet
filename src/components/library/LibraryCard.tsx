@@ -1,9 +1,12 @@
 import { AlertTriangle, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-import { cn, formatBytes } from "../../lib/format";
+// --- slice: i18n ---
+import { useFormat } from "../../i18n/useFormat";
+import { cn } from "../../lib/format";
 import type { LibraryItem } from "../../lib/ipc";
 import { Badge, Toggle } from "../ui";
-import { categoryInfo, categoryLabel } from "./categories";
+import { categoryInfo } from "./categories";
 
 interface LibraryCardProps {
   item: LibraryItem;
@@ -27,6 +30,8 @@ export function LibraryCard({
   onRemove,
   busy = false,
 }: LibraryCardProps) {
+  const { t } = useTranslation("library");
+  const format = useFormat();
   const info = categoryInfo(item.category);
   const Icon = info.icon;
 
@@ -60,11 +65,11 @@ export function LibraryCard({
               {item.displayName}
             </span>
             <span className="text-body-sm text-fg-muted truncate" title={item.fileName}>
-              {sourceLine(item)}
+              {sourceLine(item, t)}
             </span>
           </div>
           <Toggle
-            label={`Enable ${item.displayName}`}
+            label={t("card.enable", { file: item.displayName })}
             checked={item.enabled}
             disabled={busy}
             onChange={onToggle}
@@ -75,20 +80,20 @@ export function LibraryCard({
           {/* The row wraps instead of squeezing: a size that breaks across
               two lines is unreadable, a badge on the next line is not. */}
           <div className="flex flex-wrap items-center gap-6 flex-1 min-w-0">
-            <Badge tone={info.tone}>{categoryLabel(item.category)}</Badge>
+            <Badge tone={info.tone}>{t(`categoryOne.${item.category}`)}</Badge>
             <span className="text-mono-xs text-fg-muted whitespace-nowrap">
-              {formatBytes(item.size)}
+              {format.bytes(item.size)}
             </span>
             {conflicting ? (
               <Badge tone="warm" icon={<AlertTriangle size={12} />}>
-                Conflict
+                {t("card.conflict")}
               </Badge>
             ) : null}
           </div>
           <button
             type="button"
-            aria-label={`Remove ${item.displayName}`}
-            title="Remove from this client"
+            aria-label={t("card.remove", { file: item.displayName })}
+            title={t("card.removeHint")}
             disabled={busy}
             onClick={onRemove}
             className={cn(
@@ -109,7 +114,17 @@ export function LibraryCard({
  * The line under the title: where the file came from, and which folder it
  * loads from when that is not the usual one.
  */
-function sourceLine(item: LibraryItem): string {
-  const origin = item.source === "local" || item.source == null ? "Added by hand" : item.source;
-  return item.folder === "base" ? origin : `${origin} · ${item.folder}`;
+function sourceLine(
+  item: LibraryItem,
+  t: ReturnType<typeof useTranslation<"library">>["t"],
+): string {
+  // A source other than `local` is the name of the site the file came from —
+  // `jkhub` — which is a proper noun and stays as it is.
+  const origin =
+    item.source === "local" || item.source == null
+      ? t("card.addedByHand")
+      : item.source;
+  return item.folder === "base"
+    ? origin
+    : t("card.sourceWithFolder", { source: origin, folder: item.folder });
 }

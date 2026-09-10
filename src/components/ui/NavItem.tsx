@@ -31,7 +31,12 @@ export function NavItem({ to, icon, label, count, end = false }: NavItemProps) {
       {({ isActive }) => (
         <>
           <span className={cn("shrink-0", isActive && "text-fg-accent")}>{icon}</span>
-          <span className="flex-1 truncate">{label}</span>
+          {/* --- slice: i18n --- the column is 232 px wide and the design sets
+              that width, so a long label truncates; the tooltip carries the
+              rest. */}
+          <span className="flex-1 truncate" title={label}>
+            {label}
+          </span>
           {count === undefined ? null : (
             <span className="text-mono-xs text-fg-muted">{count}</span>
           )}

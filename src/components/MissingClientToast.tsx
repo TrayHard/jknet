@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { useGameNames } from "../lib/game";
@@ -40,6 +41,7 @@ export const NEW_CLIENT_GAME_PARAM = "game";
  * do, and the answer is a step to take, not a refusal to explain.
  */
 export function useMissingClientToast(): (game: Game) => void {
+  const { t } = useTranslation("clients");
   const navigate = useNavigate();
   const toasts = useToasts();
   const { label } = useGameNames();
@@ -50,10 +52,8 @@ export function useMissingClientToast(): (game: Game) => void {
     (game: Game) => {
       const id = `missing-client:${game}`;
       show(id, {
-        title: `No ${label(game)} client yet`,
-        text: `Create one and it becomes the client this game starts. ${label(
-          game,
-        )} clients are separate from the other game's.`,
+        title: t("missingToast.title", { game: label(game) }),
+        text: t("missingToast.text", { game: label(game) }),
         action: (
           <Button
             size="sm"
@@ -65,11 +65,11 @@ export function useMissingClientToast(): (game: Game) => void {
               );
             }}
           >
-            Create client
+            {t("missingToast.action")}
           </Button>
         ),
       });
     },
-    [dismiss, label, navigate, show],
+    [dismiss, label, navigate, show, t],
   );
 }

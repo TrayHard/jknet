@@ -4,9 +4,11 @@ import {
   AlertTriangle,
   Compass,
   FolderOpen,
+  Languages,
   SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { AboutCard } from "../components/AboutCard";
@@ -14,8 +16,12 @@ import { MapPicturesCard } from "../components/MapPicturesCard";
 // --- slice: account ---
 import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
 import { Page, PageHeader } from "../components/PageHeader";
-import { Button, EmptyState, Input } from "../components/ui";
-import { errorMessage, ipc, type GameInfo } from "../lib/ipc";
+import { Button, EmptyState, Input, Select } from "../components/ui";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import { LANGUAGES, isLanguageSetting, resolveLanguage } from "../i18n";
+import { useSystemLocale } from "../i18n/useSystemLocale";
+import { ipc, type GameInfo } from "../lib/ipc";
 // --- slice: game switch ---
 import { findDefaultClient } from "../lib/game";
 import {
@@ -37,6 +43,9 @@ import { ONBOARDING_ROUTE } from "./onboarding/OnboardingGate";
  * starts with "open that folder and send me the log".
  */
 export function SettingsPage() {
+  const { t } = useTranslation("settings");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const dataPaths = useDataPaths();
   const settings = useSettings();
   const [error, setError] = useState<string | null>(null);
@@ -56,9 +65,9 @@ export function SettingsPage() {
   const failure =
     error ??
     (dataPaths.error
-      ? errorMessage(dataPaths.error)
+      ? errorText(dataPaths.error)
       : settings.error
-        ? errorMessage(settings.error)
+        ? errorText(settings.error)
         : null);
 
   /** Hands the folder to the file manager. Scoped to `$LOCALDATA/JKNet` in
@@ -67,15 +76,12 @@ export function SettingsPage() {
   const openDataFolder = () => {
     if (!dataRoot || !isTauri()) return;
     setError(null);
-    openPath(dataRoot).catch((e: unknown) => setError(errorMessage(e)));
+    openPath(dataRoot).catch((e: unknown) => setError(errorText(e)));
   };
 
   return (
     <Page>
-      <PageHeader
-        title="Settings"
-        subtitle="Launch, downloads, appearance and account."
-      />
+      <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
       {failure ? (
         <div
@@ -87,14 +93,21 @@ export function SettingsPage() {
         </div>
       ) : null}
 
+      {/* --- slice: i18n --- first card of the screen: a player who cannot
+          read the rest of it has to be able to find this one. */}
+      <LanguageCard onError={setError} />
+
       <section className="flex items-start gap-16 rounded-lg border border-line bg-surface p-16 mb-24">
         <div className="flex-1 min-w-0">
-          <h2 className="text-heading-sm text-fg pb-4">Data folder</h2>
+          <h2 className="text-heading-sm text-fg pb-4">{t("dataFolder.title")}</h2>
           <p className="text-body-sm text-fg-secondary pb-8">
-            Clients, library and logs live here.
+            {t("dataFolder.text")}
           </p>
           <p className="text-mono-sm text-fg-accent break-all">
-            {dataRoot ?? (dataPaths.isLoading ? "Reading…" : "Unknown")}
+            {dataRoot ??
+              (dataPaths.isLoading
+                ? tCommon("states.reading")
+                : tCommon("values.unknown"))}
           </p>
         </div>
         <Button
@@ -102,7 +115,7 @@ export function SettingsPage() {
           disabled={!dataRoot || !isTauri()}
           onClick={openDataFolder}
         >
-          Open JKNet folder
+          {t("dataFolder.open")}
         </Button>
       </section>
 
@@ -119,14 +132,88 @@ export function SettingsPage() {
 
       <EmptyState
         icon={<SlidersHorizontal size={24} />}
-        title="The rest of the settings is not wired up yet"
-        text="The Downloads and Appearance sections arrive together with the features they control."
+        title={t("rest.title")}
+        text={t("rest.text")}
         className="mb-24"
       />
 
       {/* --- slice: installer --- */}
       <AboutCard />
     </Page>
+  );
+}
+
+// --- slice: i18n ---
+/**
+ * The Language card: which language the launcher speaks.
+ *
+ * Every option is written in its own language. A player looking for Polish
+ * reads «Polski», not «Polish» in a language they cannot read — which is also
+ * why the card is the first one on the screen and why its options are never
+ * translated.
+ *
+ * «System language» names the language it would pick, so the row answers «and
+ * what is that» without a second click. Switching applies at once: the patch
+ * answers with the settings document, `LanguageSync` sees the new value and
+ * loads the catalog.
+ */
+function LanguageCard({ onError }: { onError: (message: string) => void }) {
+  const { t } = useTranslation("settings");
+  const errorText = useErrorText();
+  const settings = useSettings();
+  const updateSettings = useUpdateSettings();
+  const systemLocale = useSystemLocale();
+
+  const stored = settings.data?.language ?? "system";
+  const fromSystem = resolveLanguage("system", systemLocale);
+  const systemName =
+    LANGUAGES.find((entry) => entry.id === fromSystem)?.nativeName ?? fromSystem;
+
+  const options = [
+    { value: "system", label: t("language.systemWith", { language: systemName }) },
+    ...LANGUAGES.map((entry) => ({ value: entry.id, label: entry.nativeName })),
+  ];
+
+  const active = resolveLanguage(stored, systemLocale);
+  // Phase 1 ships English and Russian; the other six folders hold the English
+  // text until a translator fills them in. Saying so is better than letting a
+  // player wonder why Magyar looks like English.
+  const untranslated = active !== "en" && active !== "ru";
+
+  const save = (value: string) => {
+    if (!isLanguageSetting(value) || value === stored) return;
+    updateSettings.mutate(
+      { language: value },
+      { onError: (e) => onError(errorText(e)) },
+    );
+  };
+
+  return (
+    <section className="flex items-start gap-16 rounded-lg border border-line bg-surface p-16 mb-24">
+      <span className="flex items-center justify-center size-36 rounded-md bg-elevated text-fg-secondary shrink-0">
+        <Languages size={20} />
+      </span>
+      <div className="flex-1 min-w-0">
+        <h2 className="text-heading-sm text-fg pb-4">{t("language.title")}</h2>
+        <p className="text-body-sm text-fg-secondary">{t("language.text")}</p>
+        {untranslated ? (
+          <p className="text-body-sm text-fg-warm pt-8">
+            {t("language.needsTranslation")}
+          </p>
+        ) : null}
+      </div>
+      <Select
+        ariaLabel={t("language.label")}
+        options={options}
+        value={stored}
+        disabled={settings.data === undefined || updateSettings.isPending}
+        onChange={save}
+        // Wide enough for «Язык системы (English)», which is the longest
+        // option any language produces: the system entry names the language
+        // it would pick, in that language.
+        className="w-240 shrink-0"
+      />
+    </section>
   );
 }
 
@@ -140,6 +227,9 @@ export function SettingsPage() {
  * alone, so setting up Jedi Outcast cannot clear a Jedi Academy folder.
  */
 function GameFilesCard({ onError }: { onError: (message: string) => void }) {
+  const { t } = useTranslation("settings");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const settings = useSettings();
   const games = useGames();
   const updateSettings = useUpdateSettings();
@@ -152,14 +242,14 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
   /** Asks for a folder, checks it against this game and saves it. */
   const locate = async (game: GameInfo) => {
     if (!isTauri()) {
-      onError("Tauri runtime is not available");
+      onError(tCommon("runtime.missing"));
       return;
     }
     try {
       const picked = await open({
         directory: true,
         multiple: false,
-        title: `Select the ${game.displayName} GameData folder`,
+        title: t("gameFiles.pickTitle", { game: game.displayName }),
       });
       if (typeof picked !== "string") return;
       const candidate = await ipc.validateGameData(game.id, picked);
@@ -168,26 +258,29 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
           .filter((asset) => asset.required && !asset.present)
           .map((asset) => asset.name)
           .join(", ");
-        onError(`No ${game.displayName} files in ${candidate.path}. Missing: ${missing}.`);
+        onError(
+          t("gameFiles.invalid", {
+            game: game.displayName,
+            path: candidate.path,
+            missing,
+          }),
+        );
         return;
       }
       // One game per patch: the other row keeps whatever it holds.
       updateSettings.mutate(
         { gameDataPaths: { [game.id]: candidate.path } },
-        { onError: (e) => onError(errorMessage(e)) },
+        { onError: (e) => onError(errorText(e)) },
       );
     } catch (e) {
-      onError(errorMessage(e));
+      onError(errorText(e));
     }
   };
 
   return (
     <section className="rounded-lg border border-line bg-surface p-16 mb-24">
-      <h2 className="text-heading-sm text-fg pb-4">Game files</h2>
-      <p className="text-body-sm text-fg-secondary pb-8">
-        JKNet reads the archives in these folders and writes nothing into them.
-        One game is enough; set up the other whenever you like.
-      </p>
+      <h2 className="text-heading-sm text-fg pb-4">{t("gameFiles.title")}</h2>
+      <p className="text-body-sm text-fg-secondary pb-8">{t("gameFiles.text")}</p>
 
       <ul className="flex flex-col gap-8 pt-8">
         {(games.data ?? []).map((game) => {
@@ -205,15 +298,15 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
             >
               <span className="flex-1 min-w-0 flex flex-col">
                 <span className="text-body-md-medium text-fg">
-                  {game.displayName} files
+                  {t("gameFiles.row", { game: game.displayName })}
                 </span>
                 <span className="text-mono-sm text-fg-accent break-all">
-                  {path ?? "Not set"}
+                  {path ?? tCommon("values.notSet")}
                 </span>
                 <span className="text-body-sm text-fg-muted pt-2">
                   {defaultClient
-                    ? `Play starts ${defaultClient.name}`
-                    : "No default client yet"}
+                    ? t("gameFiles.playStarts", { client: defaultClient.name })
+                    : t("gameFiles.noDefault")}
                 </span>
               </span>
               <Button
@@ -221,7 +314,7 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
                 disabled={updateSettings.isPending}
                 onClick={() => void locate(game)}
               >
-                {path ? "Change" : "Locate"}
+                {path ? t("gameFiles.change") : t("gameFiles.locate")}
               </Button>
             </li>
           );
@@ -239,6 +332,9 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
  * launcher has not read back, and sending the whole thing would erase them.
  */
 function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
+  const { t } = useTranslation("settings");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const settings = useSettings();
   const updateSettings = useUpdateSettings();
 
@@ -254,23 +350,23 @@ function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
     if (settings.data === undefined || next === stored) return;
     updateSettings.mutate(
       { extraLaunchArgs: next },
-      { onError: (e) => onError(errorMessage(e)) },
+      { onError: (e) => onError(errorText(e)) },
     );
   };
 
   return (
     <section className="rounded-lg border border-line bg-surface p-16 mb-24">
-      <h2 className="text-heading-sm text-fg pb-4">Launch</h2>
+      <h2 className="text-heading-sm text-fg pb-4">{t("launch.title")}</h2>
       <label
         className="block text-label-xs text-fg-muted pt-12 pb-8"
         htmlFor="extra-launch-args"
       >
-        Extra launch arguments
+        {t("launch.label")}
       </label>
       <Input
         id="extra-launch-args"
         value={value}
-        placeholder="+set r_fullscreen 0 +set r_mode 4"
+        placeholder={t("launch.placeholder")}
         disabled={settings.data === undefined}
         onChange={(event) => setValue(event.target.value)}
         onBlur={save}
@@ -281,12 +377,14 @@ function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
         }}
       />
       <p className="text-body-sm text-fg-secondary pt-8">
-        Appended to every client, exactly as in a shortcut. Example:{" "}
-        <span className="text-mono-sm">+set r_fullscreen 0 +set r_mode 4</span>.
-        Double quotes keep a value with a space together.
+        <Trans
+          t={t}
+          i18nKey="launch.hint"
+          components={[<span className="text-mono-sm" />]}
+        />
       </p>
       {updateSettings.isPending ? (
-        <p className="text-body-sm text-fg-muted pt-4">Saving…</p>
+        <p className="text-body-sm text-fg-muted pt-4">{tCommon("states.saving")}</p>
       ) : null}
 
       <RerunOnboarding onError={onError} />
@@ -302,6 +400,8 @@ function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
  * than asking again for a game folder that has not moved. Nothing is deleted.
  */
 function RerunOnboarding({ onError }: { onError: (message: string) => void }) {
+  const { t } = useTranslation("settings");
+  const errorText = useErrorText();
   const navigate = useNavigate();
   const updateSettings = useUpdateSettings();
 
@@ -310,7 +410,7 @@ function RerunOnboarding({ onError }: { onError: (message: string) => void }) {
       { onboardingCompleted: false },
       {
         onSuccess: () => void navigate(ONBOARDING_ROUTE),
-        onError: (e) => onError(errorMessage(e)),
+        onError: (e) => onError(errorText(e)),
       },
     );
   };
@@ -318,11 +418,10 @@ function RerunOnboarding({ onError }: { onError: (message: string) => void }) {
   return (
     <div className="flex items-start justify-between gap-16 border-t border-line-subtle mt-16 pt-16">
       <span className="flex flex-col">
-        <span className="text-body-md-medium text-fg">First-time setup</span>
-        <span className="text-body-sm text-fg-muted">
-          Walks through game files, a client and an account again. Nothing you
-          have set up is removed.
+        <span className="text-body-md-medium text-fg">
+          {t("onboarding.title")}
         </span>
+        <span className="text-body-sm text-fg-muted">{t("onboarding.text")}</span>
       </span>
       <Button
         variant="ghost"
@@ -330,7 +429,7 @@ function RerunOnboarding({ onError }: { onError: (message: string) => void }) {
         disabled={updateSettings.isPending}
         onClick={rerun}
       >
-        Run first-time setup again
+        {t("onboarding.action")}
       </Button>
     </div>
   );

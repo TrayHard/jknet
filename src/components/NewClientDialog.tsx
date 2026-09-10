@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { errorMessage, type Game } from "../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import type { Game } from "../lib/ipc";
 // --- slice: game switch ---
 import {
   defaultClientPatch,
@@ -43,6 +46,9 @@ export function NewClientDialog({
   onClose,
   onError,
 }: NewClientDialogProps) {
+  const { t } = useTranslation("clients");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const settings = useSettings();
   // --- slice: game core ---
   // The game comes first: it decides which engines the list below offers.
@@ -112,13 +118,13 @@ export function NewClientDialog({
           if (downloadEngine) {
             installEngine.mutate(
               { clientId: client.id },
-              { onError: (e) => onError(errorMessage(e)) },
+              { onError: (e) => onError(errorText(e)) },
             );
           }
           onClose();
         },
         onError: (e) => {
-          onError(errorMessage(e));
+          onError(errorText(e));
           onClose();
         },
       },
@@ -130,21 +136,24 @@ export function NewClientDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-24"
       role="dialog"
       aria-modal="true"
-      aria-label="New client"
+      aria-label={t("newDialog.title")}
       onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
       }}
     >
       <div className="w-full max-w-[520px] rounded-xl border border-line bg-surface p-24 shadow-popover">
-        <h2 className="text-display-md text-fg">New client</h2>
-        <p className="text-body-sm text-fg-secondary pt-4">
-          A client is an engine build with its own files and settings. Give it a
-          name you will recognise in the client list.
-        </p>
+        <h2 className="text-display-md text-fg">{t("newDialog.title")}</h2>
+        <p className="text-body-sm text-fg-secondary pt-4">{t("newDialog.text")}</p>
 
         {/* --- slice: game core --- the game before the engine list. */}
-        <label className="block text-label-xs text-fg-muted pt-24 pb-8">Game</label>
-        <div className="grid grid-cols-2 gap-8" role="radiogroup" aria-label="Game">
+        <label className="block text-label-xs text-fg-muted pt-24 pb-8">
+          {t("newDialog.game")}
+        </label>
+        <div
+          className="grid grid-cols-2 gap-8"
+          role="radiogroup"
+          aria-label={t("newDialog.game")}
+        >
           {(games.data ?? []).map((entry) => (
             <RadioCard
               key={entry.id}
@@ -156,7 +165,9 @@ export function NewClientDialog({
           ))}
         </div>
 
-        <label className="block text-label-xs text-fg-muted pt-24 pb-8">Engine</label>
+        <label className="block text-label-xs text-fg-muted pt-24 pb-8">
+          {t("newDialog.engine")}
+        </label>
         <div className="grid grid-cols-2 gap-8">
           {engines.map((engine) => (
             <button
@@ -181,14 +192,14 @@ export function NewClientDialog({
           className="block text-label-xs text-fg-muted pt-24 pb-8"
           htmlFor="new-client-name"
         >
-          Name
+          {t("newDialog.name")}
         </label>
         <Input
           id="new-client-name"
           value={name}
           autoFocus
           maxLength={48}
-          placeholder="Everyday"
+          placeholder={t("newDialog.namePlaceholder")}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") submit();
@@ -197,14 +208,15 @@ export function NewClientDialog({
 
         <div className="flex items-center justify-between gap-16 pt-24">
           <span className="flex flex-col">
-            <span className="text-body-md-medium text-fg">Make it the default</span>
+            <span className="text-body-md-medium text-fg">
+              {t("newDialog.makeDefault")}
+            </span>
             <span className="text-body-sm text-fg-muted">
-              The Play button on Home starts the default client of the game it
-              is on. Each game has its own.
+              {t("newDialog.makeDefaultText")}
             </span>
           </span>
           <Toggle
-            label="Make this client the default one"
+            label={t("newDialog.makeDefaultSwitch")}
             checked={makeDefault}
             onChange={setMakeDefault}
           />
@@ -212,27 +224,30 @@ export function NewClientDialog({
 
         <div className="flex items-center justify-between gap-16 pt-16">
           <span className="flex flex-col">
-            <span className="text-body-md-medium text-fg">Download the engine now</span>
+            <span className="text-body-md-medium text-fg">
+              {t("newDialog.download")}
+            </span>
             <span className="text-body-sm text-fg-muted">
-              Fetches the newest build from GitHub. Progress shows on the client
-              card.
+              {t("newDialog.downloadText")}
             </span>
           </span>
           <Toggle
-            label="Download the engine right after creating the client"
+            label={t("newDialog.downloadSwitch")}
             checked={downloadEngine}
             onChange={setDownloadEngine}
           />
         </div>
 
         <div className="flex items-center justify-end gap-8 pt-24">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{tCommon("actions.cancel")}</Button>
           <Button
             variant="primary"
             disabled={!canSubmit || createClient.isPending}
             onClick={submit}
           >
-            {createClient.isPending ? "Creating…" : "Create client"}
+            {createClient.isPending
+              ? tCommon("states.creating")
+              : t("newDialog.create")}
           </Button>
         </div>
       </div>

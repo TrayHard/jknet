@@ -1,6 +1,9 @@
 import { Check, Copy, Lock, Play, ShieldCheck, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
+// --- slice: i18n ---
+import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo, ServerPlayer } from "../../lib/ipc";
 import { MapPreview } from "../MapPreview";
@@ -35,6 +38,9 @@ export function ServerDetails({
   connecting,
   hint,
 }: ServerDetailsProps) {
+  const { t } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
+  const gametypes = useGametypeLabels();
   const [copied, setCopied] = useState(false);
 
   const copyAddress = () => {
@@ -59,14 +65,17 @@ export function ServerDetails({
         <div className="flex flex-wrap items-center gap-6">
           {server.trusted ? (
             <Badge tone="warm" icon={<ShieldCheck size={12} />}>
-              TRUSTED
+              {t("details.trusted")}
             </Badge>
           ) : null}
-          <Badge tone="accent">{server.gametypeLabel}</Badge>
+          <Badge tone="accent">
+            {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
+          </Badge>
+          {/* The mod folder is data: whatever the operator put in `fs_game`. */}
           <Badge>{server.modName}</Badge>
           {server.needpass ? (
             <Badge tone="danger" icon={<Lock size={12} />}>
-              PASSWORD
+              {t("details.password")}
             </Badge>
           ) : null}
         </div>
@@ -79,7 +88,7 @@ export function ServerDetails({
         <button
           type="button"
           onClick={copyAddress}
-          aria-label="Copy address"
+          aria-label={t("details.copyAddress")}
           className="text-fg-muted hover:text-fg transition-colors cursor-pointer"
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -93,14 +102,13 @@ export function ServerDetails({
             {realPlayers(server)}/{server.maxClients}
           </span>
           {botCount(server) > 0 ? (
-            <span className="text-fg-disabled">+{botCount(server)} bots</span>
+            <span className="text-fg-disabled">
+              {t("details.bots", { count: botCount(server) })}
+            </span>
           ) : null}
           {server.playersSource === "unknown" ? (
-            <span
-              className="text-fg-disabled"
-              title="This server publishes no bot count and did not answer getstatus"
-            >
-              bots unknown
+            <span className="text-fg-disabled" title={t("details.botsUnknownTitle")}>
+              {t("details.botsUnknown")}
             </span>
           ) : null}
         </span>
@@ -122,7 +130,7 @@ export function ServerDetails({
           disabled={!canConnect || connecting}
           onClick={onConnect}
         >
-          {connecting ? "Starting…" : "Connect"}
+          {connecting ? tCommon("states.starting") : t("details.connect")}
         </Button>
         {canConnect ? null : hint}
       </div>
@@ -140,6 +148,8 @@ function PlayerList({
   loading: boolean;
   error: string | null;
 }) {
+  const { t } = useTranslation("servers");
+
   if (loading) {
     return (
       <div className="flex flex-col gap-6">
@@ -159,7 +169,7 @@ function PlayerList({
   }
 
   if (players === undefined || players.length === 0) {
-    return <p className="text-body-sm text-fg-muted">Nobody is playing.</p>;
+    return <p className="text-body-sm text-fg-muted">{t("details.noPlayers")}</p>;
   }
 
   // People first, bots after them, each half keeping the server's own order,
@@ -171,8 +181,7 @@ function PlayerList({
     return (
       <div className="flex flex-col gap-6">
         <p className="text-body-sm text-fg-muted">
-          Nobody is playing: {bots.length} {bots.length === 1 ? "bot" : "bots"}{" "}
-          {bots.length === 1 ? "is" : "are"} alone here.
+          {t("details.onlyBots", { count: bots.length })}
         </p>
         <PlayerRows players={bots} />
       </div>
@@ -185,7 +194,7 @@ function PlayerList({
       {bots.length > 0 ? (
         <>
           <p className="px-4 text-label-xs text-fg-disabled">
-            {bots.length} {bots.length === 1 ? "BOT" : "BOTS"}
+            {t("details.botHeading", { count: bots.length })}
           </p>
           <PlayerRows players={bots} />
         </>
@@ -202,6 +211,8 @@ function PlayerList({
  * says nothing to a reader.
  */
 function PlayerRows({ players }: { players: ServerPlayer[] }) {
+  const { t } = useTranslation("servers");
+
   return (
     <ul className="flex flex-col gap-2">
       {players.map((player, index) => (
@@ -229,7 +240,7 @@ function PlayerRows({ players }: { players: ServerPlayer[] }) {
             {player.score}
           </span>
           {player.isBot ? (
-            <Badge className="justify-self-end">BOT</Badge>
+            <Badge className="justify-self-end">{t("details.botBadge")}</Badge>
           ) : (
             <Ping ms={player.ping} className="justify-end" />
           )}
