@@ -7,7 +7,14 @@
     "topRated": "Найвищий рейтинг",
     "name": "За назвою"
   },
-  "filterPlaceholder": "Фільтр серед завантажених",
+  "search": {
+    "placeholder": "Search the whole catalog",
+    "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "results_one": "{{count}} result in {{game}}",
+    "results_few": "{{count}} results in {{game}}",
+    "results_many": "{{count}} results in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
+  },
   "refresh": "Оновити",
   "fromCache": "З кешу",
   "tree": {
@@ -17,11 +24,37 @@
     "updateHint": "Обійти дерево категорій JKHub заново. Це приблизно двадцять запитів.",
     "expand": "Розгорнути {{category}}",
     "collapse": "Згорнути {{category}}",
-    "empty": "Категорій поки немає."
+    "empty": "Категорій поки немає.",
+    "noMatches": "No category holds a match."
   },
   "scope": {
     "category": "{{category}} · встановлення в клієнт {{client}}",
     "noCategory": "Виберіть категорію · встановлення в клієнт {{client}}"
+  },
+  "index": {
+    "missing": "Catalog not indexed yet.",
+    "startingUp": "Indexing the JKHub catalog…",
+    "building": "Indexing the JKHub catalog {{done}} / {{total}}",
+    "rebuild": "Rebuild",
+    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
+    "updatedTitle": "Catalog updated",
+    "currentTitle": "Catalog is current",
+    "line_one": "Catalog indexed {{time}} ago · {{count}} file",
+    "line_few": "Catalog indexed {{time}} ago · {{count}} files",
+    "line_many": "Catalog indexed {{time}} ago · {{count}} files",
+    "line_other": "Catalog indexed {{time}} ago · {{count}} files",
+    "lineDate_one": "Catalog indexed {{date}} · {{count}} file",
+    "lineDate_few": "Catalog indexed {{date}} · {{count}} files",
+    "lineDate_many": "Catalog indexed {{date}} · {{count}} files",
+    "lineDate_other": "Catalog indexed {{date}} · {{count}} files",
+    "updatedText_one": "{{added}} added, {{updated}} updated · {{count}} file indexed",
+    "updatedText_few": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "updatedText_many": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "updatedText_other": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "currentText_one": "{{count}} file indexed. JKHub has nothing newer.",
+    "currentText_few": "{{count}} files indexed. JKHub has nothing newer.",
+    "currentText_many": "{{count}} files indexed. JKHub has nothing newer.",
+    "currentText_other": "{{count}} files indexed. JKHub has nothing newer."
   },
   "loading": {
     "categories": "Читаємо категорії JKHub…",
@@ -33,9 +66,11 @@
     "unreachableTitle": "JKHub не відповів",
     "categoryTitle": "Ця категорія не завантажилася",
     "filteredTitle": "Нічого не знайдено",
-    "filteredText": "Жоден завантажений файл не підходить під фільтр. Очистіть його, завантажте ще сторінки або виберіть іншу категорію."
+    "filteredText": "Жоден завантажений файл не підходить під фільтр. Очистіть його, завантажте ще сторінки або виберіть іншу категорію.",
+    "elsewhereTitle": "Nothing here, but there is elsewhere",
+    "elsewhereText": "{{category}} holds no match. The tree shows the categories that do.",
+    "showAllCategories": "Show all categories"
   },
-  "loaded": "Завантажено файлів: {{shown}} із {{total}}. Звузьте категорію або змініть порядок, щоб побачити решту.",
   "card": {
     "open": "Відкрити {{title}}",
     "installed": "Встановлено",
@@ -77,14 +112,14 @@
   },
   "outcome": {
     "installed": "Встановлено {{files}} у папку {{folder}}.",
-    "conflicts_one": "Файл {{files}} уже лежить у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
-    "conflicts_few": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
-    "conflicts_many": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
-    "conflicts_other": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
     "external": "Цей запис веде на інший сайт, а не на архів, тому встановлювати нічого. Відкрийте його на JKHub, щоб перейти за посиланням.",
     "unsupportedDownloaded": "Архів у форматі .{{format}}, а JKNet поки такі не відкриває. Архів уже завантажено: розпакуйте його вручну в папку клієнта.",
     "unsupported": "Архів у форматі .{{format}}, а JKNet поки такі не відкриває. Відкрийте файл на JKHub і розпакуйте вручну.",
     "noPk3": "В архіві немає жодного файла pk3, тому встановлювати в клієнт нічого. Усередині: {{entries}}",
-    "showArchive": "Показати архів"
+    "showArchive": "Показати архів",
+    "conflicts_one": "Файл {{files}} уже лежить у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
+    "conflicts_few": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
+    "conflicts_many": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
+    "conflicts_other": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати."
   }
 }

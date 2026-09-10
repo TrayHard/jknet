@@ -7,7 +7,12 @@
     "topRated": "Top rated",
     "name": "Name"
   },
-  "filterPlaceholder": "Filter loaded files",
+  "search": {
+    "placeholder": "Search the whole catalog",
+    "results_one": "{{count}} result in {{game}}",
+    "results_other": "{{count}} results in {{game}}",
+    "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest."
+  },
   "refresh": "Refresh",
   "fromCache": "From cache",
   "tree": {
@@ -17,11 +22,29 @@
     "updateHint": "Walk the JKHub category tree again. Takes about twenty requests.",
     "expand": "Expand {{category}}",
     "collapse": "Collapse {{category}}",
-    "empty": "No categories yet."
+    "empty": "No categories yet.",
+    "noMatches": "No category holds a match."
   },
   "scope": {
     "category": "{{category}} · installs into {{client}}",
     "noCategory": "Pick a category · installs into {{client}}"
+  },
+  "index": {
+    "line_one": "Catalog indexed {{time}} ago · {{count}} file",
+    "line_other": "Catalog indexed {{time}} ago · {{count}} files",
+    "lineDate_one": "Catalog indexed {{date}} · {{count}} file",
+    "lineDate_other": "Catalog indexed {{date}} · {{count}} files",
+    "missing": "Catalog not indexed yet.",
+    "startingUp": "Indexing the JKHub catalog…",
+    "building": "Indexing the JKHub catalog {{done}} / {{total}}",
+    "rebuild": "Rebuild",
+    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
+    "updatedTitle": "Catalog updated",
+    "updatedText_one": "{{added}} added, {{updated}} updated · {{count}} file indexed",
+    "updatedText_other": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "currentTitle": "Catalog is current",
+    "currentText_one": "{{count}} file indexed. JKHub has nothing newer.",
+    "currentText_other": "{{count}} files indexed. JKHub has nothing newer."
   },
   "loading": {
     "categories": "Reading the JKHub categories…",
@@ -33,9 +56,11 @@
     "unreachableTitle": "JKHub did not answer",
     "categoryTitle": "This category did not load",
     "filteredTitle": "Nothing matches",
-    "filteredText": "No loaded file matches the filter. Clear it, load more pages, or pick another category."
+    "filteredText": "Nothing in the indexed catalog matches this search. Try fewer words, or refresh the catalog.",
+    "elsewhereTitle": "Nothing here, but there is elsewhere",
+    "elsewhereText": "{{category}} holds no match. The tree shows the categories that do.",
+    "showAllCategories": "Show all categories"
   },
-  "loaded": "{{shown}} of {{total}} files loaded. Narrow the category or change the order to see the rest.",
   "card": {
     "open": "Open {{title}}",
     "installed": "Installed",

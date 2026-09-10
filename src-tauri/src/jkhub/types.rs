@@ -115,8 +115,8 @@ pub struct JkhubChangelogEntry {
 
 /// One card of a category listing.
 ///
-/// A card carries less than a file page: no version, no screenshots and no
-/// category id. Opening the card fills those in with `jkhub_file`.
+/// A card carries less than a file page: no version and no screenshots.
+/// Opening the card fills those in with `jkhub_file`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JkhubCard {
@@ -124,6 +124,14 @@ pub struct JkhubCard {
     pub slug: String,
     pub title: String,
     pub url: String,
+    /// The category the card came out of.
+    ///
+    /// `None` from a parsed listing page — a card there says nothing about its
+    /// category, and the caller asked for one anyway. The catalogue index
+    /// fills it in, because a search crosses categories and every card then has
+    /// to say which one it is in.
+    #[serde(default)]
+    pub category_id: Option<u32>,
     pub author: Option<JkhubAuthor>,
     pub thumbnail_url: Option<String>,
     pub description: String,

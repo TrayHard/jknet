@@ -7,7 +7,12 @@
     "topRated": "Bestbewertet",
     "name": "Name"
   },
-  "filterPlaceholder": "Geladene Dateien filtern",
+  "search": {
+    "placeholder": "Search the whole catalog",
+    "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "results_one": "{{count}} result in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
+  },
   "refresh": "Aktualisieren",
   "fromCache": "Aus dem Cache",
   "tree": {
@@ -17,11 +22,29 @@
     "updateHint": "Den Kategoriebaum von JKHub erneut durchlaufen. Das kostet etwa zwanzig Anfragen.",
     "expand": "{{category}} aufklappen",
     "collapse": "{{category}} zuklappen",
-    "empty": "Noch keine Kategorien."
+    "empty": "Noch keine Kategorien.",
+    "noMatches": "No category holds a match."
   },
   "scope": {
     "category": "{{category}} · Installation in {{client}}",
     "noCategory": "Kategorie wählen · Installation in {{client}}"
+  },
+  "index": {
+    "missing": "Catalog not indexed yet.",
+    "startingUp": "Indexing the JKHub catalog…",
+    "building": "Indexing the JKHub catalog {{done}} / {{total}}",
+    "rebuild": "Rebuild",
+    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
+    "updatedTitle": "Catalog updated",
+    "currentTitle": "Catalog is current",
+    "line_one": "Catalog indexed {{time}} ago · {{count}} file",
+    "line_other": "Catalog indexed {{time}} ago · {{count}} files",
+    "lineDate_one": "Catalog indexed {{date}} · {{count}} file",
+    "lineDate_other": "Catalog indexed {{date}} · {{count}} files",
+    "updatedText_one": "{{added}} added, {{updated}} updated · {{count}} file indexed",
+    "updatedText_other": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "currentText_one": "{{count}} file indexed. JKHub has nothing newer.",
+    "currentText_other": "{{count}} files indexed. JKHub has nothing newer."
   },
   "loading": {
     "categories": "Die Kategorien von JKHub werden gelesen…",
@@ -33,9 +56,11 @@
     "unreachableTitle": "JKHub hat nicht geantwortet",
     "categoryTitle": "Diese Kategorie wurde nicht geladen",
     "filteredTitle": "Keine Treffer",
-    "filteredText": "Keine geladene Datei passt zum Filter. Leeren Sie ihn, laden Sie weitere Seiten oder wählen Sie eine andere Kategorie."
+    "filteredText": "Keine geladene Datei passt zum Filter. Leeren Sie ihn, laden Sie weitere Seiten oder wählen Sie eine andere Kategorie.",
+    "elsewhereTitle": "Nothing here, but there is elsewhere",
+    "elsewhereText": "{{category}} holds no match. The tree shows the categories that do.",
+    "showAllCategories": "Show all categories"
   },
-  "loaded": "{{shown}} von {{total}} Dateien geladen. Grenzen Sie die Kategorie ein oder ändern Sie die Reihenfolge, um den Rest zu sehen.",
   "card": {
     "open": "{{title}} öffnen",
     "installed": "Installiert",
@@ -77,12 +102,12 @@
   },
   "outcome": {
     "installed": "{{files}} in {{folder}} installiert.",
-    "conflicts_one": "{{files}} liegt bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben.",
-    "conflicts_other": "{{files}} liegen bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben.",
     "external": "Dieser Eintrag verweist auf eine andere Website statt auf ein Archiv, es gibt also nichts zu installieren. Öffnen Sie ihn auf JKHub, um dem Link zu folgen.",
     "unsupportedDownloaded": "Das Archiv ist eine .{{format}}-Datei, die JKNet noch nicht öffnen kann. Heruntergeladen ist sie bereits: Entpacken Sie sie von Hand in den Ordner des Clients.",
     "unsupported": "Das Archiv ist eine .{{format}}-Datei, die JKNet noch nicht öffnen kann. Öffnen Sie die Datei auf JKHub und entpacken Sie sie von Hand.",
     "noPk3": "Das Archiv enthält keine pk3-Datei, es gibt also nichts, was sich in einen Client installieren ließe. Darin liegen: {{entries}}",
-    "showArchive": "Archiv anzeigen"
+    "showArchive": "Archiv anzeigen",
+    "conflicts_one": "{{files}} liegt bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben.",
+    "conflicts_other": "{{files}} liegen bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben."
   }
 }

@@ -14,6 +14,34 @@ interface JkhubTreeProps {
   onUpdate: () => void;
   /** True while that walk is running. */
   updating: boolean;
+  /**
+   * Matches per category while a query is active, `null` while none is.
+   *
+   * Comes from `jkhub_search` already rolled up the tree, so a container
+   * carries what its children hold.
+   */
+  counts: Record<string, number> | null;
+}
+
+/**
+ * Whether a pruned tree still shows a category.
+ *
+ * One rule, because the core did the hard half: a category with matches
+ * anywhere below it already has a count of its own, so keeping every category
+ * with a count keeps the ancestors of every match too. Without a query nothing
+ * is pruned at all.
+ *
+ * ```ts
+ * shows(null)(anything)                 // true
+ * shows({ "13": 4 })({ id: 13, ... })   // true
+ * shows({ "13": 4 })({ id: 28, ... })   // false
+ * ```
+ */
+export function shows(
+  counts: Record<string, number> | null,
+): (category: JkhubCategory) => boolean {
+  return (category) =>
+    counts == null || (counts[String(category.id)] ?? 0) > 0;
 }
 
 /**
@@ -23,6 +51,11 @@ interface JkhubTreeProps {
  * container such as Maps holds no files of its own — clicking it would give an
  * empty listing, so it expands instead of selecting.
  *
+ * With a query typed, the tree shrinks to the categories that answer it and
+ * every badge switches from the file count of the category to the number of
+ * matches inside it. Nothing collapses in that state: a branch the player
+ * never opened is exactly where the file they cannot find tends to be.
+ *
  * `Contest Entries` never reaches this component: the core drops the root, as
  * it is a temporary category that is usually empty (research report,
  * section 2).
@@ -30,7 +63,7 @@ interface JkhubTreeProps {
  * The header carries **Update categories** rather than the toolbar next to the
  * cards. Walking the tree costs about twenty requests to jkhub.org and the
  * tree changes a few times a year, so it is deliberately the quietest control
- * on the tab: **Refresh** above the cards reads the listing, not this.
+ * on the tab: **Refresh** above the cards reads the catalogue, not this.
  */
 export function JkhubTree({
   categories,
@@ -38,19 +71,25 @@ export function JkhubTree({
   onSelect,
   onUpdate,
   updating,
+  counts,
 }: JkhubTreeProps) {
   const { t } = useTranslation("jkhub");
   const [open, setOpen] = useState<Set<number>>(() => new Set());
 
+  const visible = useMemo(
+    () => categories.filter(shows(counts)),
+    [categories, counts],
+  );
+
   const children = useMemo(() => {
     const map = new Map<number | null, JkhubCategory[]>();
-    for (const category of categories) {
+    for (const category of visible) {
       const list = map.get(category.parentId) ?? [];
       list.push(category);
       map.set(category.parentId, list);
     }
     return map;
-  }, [categories]);
+  }, [visible]);
 
   const roots = children.get(null) ?? [];
 
@@ -64,11 +103,16 @@ export function JkhubTree({
   const render = (category: JkhubCategory, depth: number) => {
     const below = children.get(category.id) ?? [];
     const expandable = below.length > 0;
-    const expanded = open.has(category.id) || depth === 0;
+    // A pruned tree is a short one, and every branch left in it holds an
+    // answer, so it opens itself.
+    const expanded = counts != null || open.has(category.id) || depth === 0;
+    const badge = counts
+      ? counts[String(category.id)]
+      : (category.fileCount ?? undefined);
     return (
       <li key={category.id}>
         <div className="flex items-center">
-          {expandable && depth > 0 ? (
+          {expandable && depth > 0 && counts == null ? (
             <button
               type="button"
               aria-label={
@@ -102,9 +146,17 @@ export function JkhubTree({
             <span className="flex-1 text-left truncate" title={category.name}>
               {category.name}
             </span>
-            {category.fileCount != null ? (
-              <Badge tone={selected === category.id ? "accent" : "neutral"}>
-                {category.fileCount}
+            {badge != null ? (
+              <Badge
+                tone={
+                  counts
+                    ? "accent"
+                    : selected === category.id
+                      ? "accent"
+                      : "neutral"
+                }
+              >
+                {badge}
               </Badge>
             ) : null}
           </button>
@@ -144,7 +196,9 @@ export function JkhubTree({
     <>
       {header}
       {roots.length === 0 ? (
-        <p className="text-body-sm text-fg-muted">{t("tree.empty")}</p>
+        <p className="text-body-sm text-fg-muted">
+          {counts ? t("tree.noMatches") : t("tree.empty")}
+        </p>
       ) : (
         <ul className="flex flex-col gap-2">
           {roots.map((root) => render(root, 0))}
