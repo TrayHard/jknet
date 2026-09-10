@@ -10,7 +10,8 @@
 //! | `paths`          | data folders under `%LOCALAPPDATA%\org.jknet.launcher` and their command |
 //! | `settings`       | `settings.json` and its two commands            |
 //! | `state`          | shared state injected into every command        |
-//! | `game_files`     | finding `GameData` with `assets0.pk3`..`assets3.pk3` |
+//! | `game`           | the two games and every constant that differs between them |
+//! | `game_files`     | finding the `GameData` of each game and its archives |
 //! | `engines`        | static registry of engine builds                |
 //! | `engine_install` | GitHub releases, downloads and archive unpacking |
 //! | `clients`        | named engine instances on disk                  |
@@ -28,6 +29,7 @@ mod engine_install;
 mod engines;
 mod error;
 mod friends;
+mod game;
 mod game_files;
 // The one client of hub API v1. `account` calls its sign-in half and
 // `friends` the rest, so a token is attached to a request in one place and
@@ -216,7 +218,12 @@ pub fn run() {
             settings::update_settings,
             paths::get_data_paths,
             game_files::detect_game_files,
-            game_files::inspect_game_files,
+            // --- slice: game core ---
+            // The two games and the names the interface prints for them.
+            game::list_games,
+            // `inspect_game_files` became `validate_game_data`: the same work
+            // for one folder, plus the game it is being checked against.
+            game_files::validate_game_data,
             engines::list_engines,
             clients::list_clients,
             clients::create_client,

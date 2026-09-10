@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::engines;
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::paths::{self, DataPaths};
 use crate::settings::Settings;
 use crate::state::AppState;
@@ -48,6 +49,12 @@ pub struct Client {
     pub name: String,
     /// Id from the engine registry.
     pub engine_id: String,
+    // --- slice: game core ---
+    /// The game this client plays, always the game of its engine. A
+    /// `client.json` written before the field existed reads as Jedi Academy,
+    /// which is the only game the launcher had.
+    #[serde(default)]
+    pub game: Game,
     /// Installed engine version, `None` until the engine is downloaded.
     pub engine_version: Option<String>,
     /// UTC creation time, RFC 3339.
@@ -78,16 +85,20 @@ pub fn list_clients(state: tauri::State<'_, AppState>) -> Result<Vec<Client>> {
 }
 
 /// Creates a client folder layout and its record.
+///
+/// --- slice: game core ---
+/// `game` is required and has to be the game of the engine. Deriving it from
+/// the engine alone would be shorter and would hide the mistake the dialog can
+/// actually make: sending the engine of the game the player did *not* pick.
 #[tauri::command]
 pub fn create_client(
     state: tauri::State<'_, AppState>,
     name: String,
     engine_id: String,
+    game: Game,
 ) -> Result<Client> {
     let name = validate_name(&name)?;
-    if engines::find(&engine_id).is_none() {
-        return Err(AppError::InvalidInput(format!("unknown engine {engine_id}")));
-    }
+    engines::require_for_game(&engine_id, game)?;
 
     let paths = state.paths()?;
     paths.ensure()?;
@@ -108,6 +119,7 @@ pub fn create_client(
         id,
         name,
         engine_id,
+        game,
         engine_version: None,
         created_at: timestamp::now_rfc3339(),
         engine_installed_at: None,
@@ -115,7 +127,12 @@ pub fn create_client(
         fs_game: None,
     };
     write_record(&paths, &client)?;
-    log::info!("created client {} on engine {}", client.id, client.engine_id);
+    log::info!(
+        "created client {} on engine {} for {}",
+        client.id,
+        client.engine_id,
+        client.game.display_name()
+    );
     Ok(client)
 }
 
@@ -165,11 +182,20 @@ pub fn delete_client(state: tauri::State<'_, AppState>, id: String) -> Result<()
     fs::remove_dir_all(&dir).map_err(|e| AppError::io_path("cannot delete", &dir, e))?;
     log::info!("deleted client {id}");
 
-    // A deleted client must not stay the default one. The document comes from
-    // disk, so this write carries over whatever else changed there.
+    // A deleted client must not stay the default one, of the launcher or of
+    // its game. The document comes from disk, so this write carries over
+    // whatever else changed there.
     let mut settings = Settings::current(&state)?;
-    if settings.default_client_id.as_deref() == Some(id.as_str()) {
-        settings.default_client_id = None;
+    let was_default = settings.default_client_id.as_deref() == Some(id.as_str());
+    // --- slice: game core ---
+    let before = settings.default_client_ids.len();
+    settings.default_client_ids.retain(|_, value| value != &id);
+    if was_default || settings.default_client_ids.len() != before {
+        settings.default_client_id = if was_default {
+            None
+        } else {
+            settings.default_client_id.clone()
+        };
         settings.save(&state)?;
         state.set_settings(settings)?;
     }
@@ -346,6 +372,34 @@ mod tests {
     fn a_blank_mod_folder_means_the_default_of_the_engine() {
         assert_eq!(validate_fs_game("").unwrap(), None);
         assert_eq!(validate_fs_game("   ").unwrap(), None);
+    }
+
+    // --- slice: game core ---
+
+    #[test]
+    fn a_client_json_without_a_game_reads_as_jedi_academy() {
+        // Every client on every installed launcher has such a record, and
+        // Jedi Academy was the only game those clients could play.
+        let older: Client = serde_json::from_str(
+            r#"{"id":"everyday","name":"Everyday","engineId":"openjk",
+                "engineVersion":"latest","createdAt":"2026-09-10T00:00:00Z"}"#,
+        )
+        .expect("an older record parses");
+        assert_eq!(older.game, Game::JediAcademy);
+        assert_eq!(older.engine_id, "openjk");
+    }
+
+    #[test]
+    fn a_game_written_into_the_record_reads_back() {
+        let record: Client = serde_json::from_str(
+            r#"{"id":"duel","name":"Duel","engineId":"jk2mv","game":"jo",
+                "engineVersion":null,"createdAt":"2026-09-10T00:00:00Z"}"#,
+        )
+        .expect("a record parses");
+        assert_eq!(record.game, Game::JediOutcast);
+
+        let json = serde_json::to_string(&record).expect("it serializes");
+        assert!(json.contains("\"game\":\"jo\""), "{json}");
     }
 
     #[test]

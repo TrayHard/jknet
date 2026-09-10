@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::clients::Client;
 use crate::engine_install;
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::state::AppState;
 
 /// One attempt at recognising the Windows 32-bit archive of a release.
@@ -39,6 +40,11 @@ pub struct AssetRule {
 pub struct Engine {
     /// Stable key stored in `client.json`. Never shown to the player.
     pub id: &'static str,
+    // --- slice: game core ---
+    /// The game this build plays. An engine belongs to exactly one: OpenJK
+    /// builds a Jedi Outcast client too, but it is a different executable in a
+    /// different archive, and its multiplayer is explicitly unsupported.
+    pub game: Game,
     /// Name shown on the engine tile.
     pub name: &'static str,
     /// One sentence for the tile, in the interface language (English).
@@ -58,13 +64,49 @@ pub struct Engine {
     /// `fs_game` the build needs to run at all. jaMME lives in `mme\` and
     /// starts into the main menu without it; the other three run from `base`.
     pub default_fs_game: Option<&'static str>,
+    // --- slice: game core ---
+    /// Folder inside the unpacked build whose pk3 files the engine ships and
+    /// needs on its search path, copied into the client's `home\<folder>\`
+    /// after every install. `None` for the four Jedi Academy builds: their
+    /// `base\` holds the game modules, and `fs_basepath` already points at the
+    /// unpacked build, so nothing has to be copied anywhere.
+    ///
+    /// JK2MV is the reason this exists. It has no `fs_cdpath`, so a Jedi
+    /// Outcast client spends `fs_basepath` on the player's `GameData` and its
+    /// own `base\assetsmv.pk3` would be off the search path otherwise.
+    pub bundled_pk3_dir: Option<&'static str>,
     /// Whether a release flagged as a pre-release may be installed. Only the
     /// projects that publish rolling builds need it.
     #[serde(skip)]
     pub allow_prerelease: bool,
     /// Rules tried in order until one recognises an asset of the release.
+    ///
+    /// These are the rules for a 32-bit launcher. A 64-bit one prefers
+    /// [`Engine::asset_rules_x64`] when the project publishes a 64-bit build;
+    /// read both through [`Engine::rules_for_host`].
     #[serde(skip)]
     pub asset_rules: &'static [AssetRule],
+    // --- slice: game core ---
+    /// Rules preferred on a 64-bit launcher, or `None` when the project ships
+    /// one architecture only.
+    #[serde(skip)]
+    pub asset_rules_x64: Option<&'static [AssetRule]>,
+}
+
+impl Engine {
+    // --- slice: game core ---
+    /// The asset rules for the machine this launcher runs on.
+    ///
+    /// The width of the launcher build, not of the operating system, and that
+    /// is the right question: a 32-bit JKNet runs on 64-bit Windows, where the
+    /// 32-bit game build also runs, and a 64-bit JKNet only exists on 64-bit
+    /// Windows. Either way the archive picked is one the machine can start.
+    pub fn rules_for_host(&self) -> &'static [AssetRule] {
+        match self.asset_rules_x64 {
+            Some(rules) if cfg!(target_pointer_width = "64") => rules,
+            _ => self.asset_rules,
+        }
+    }
 }
 
 /// Every engine, in the order the Clients screen shows them.
@@ -81,9 +123,17 @@ pub struct Engine {
 /// Two traps the rules exist for: the OpenJK release carries `OpenJO-*`
 /// archives for the *other* game next to its own, and TaystJK publishes an
 /// `-AddressSanitizer` build that is a debugging tool, not a game.
+///
+/// --- slice: game core ---
+/// The fifth entry plays the other game. JK2MV is the only live Jedi Outcast
+/// multiplayer client: OpenJK says outright that it does not support Jedi
+/// Outcast multiplayer and points at JK2MV, OpenJO is single player, and
+/// EternalJK and TaystJK are Jedi Academy forks. Its archive was downloaded
+/// and listed on 2026-09-10; the layout is in the table below the registry.
 const ENGINES: &[Engine] = &[
     Engine {
         id: "openjk",
+        game: Game::JediAcademy,
         name: "OpenJK",
         description: "The community reference build. Stable, closest to the original game.",
         executable: "openjk.x86.exe",
@@ -92,6 +142,7 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
+        bundled_pk3_dir: None,
         // OpenJK ships one rolling `latest` release and keeps an old tagged
         // one flagged as a pre-release; taking both leaves a fallback.
         allow_prerelease: true,
@@ -105,9 +156,11 @@ const ENGINES: &[Engine] = &[
                 forbid: &["x86_64", "openjo", "arm"],
             },
         ],
+        asset_rules_x64: None,
     },
     Engine {
         id: "eternaljk",
+        game: Game::JediAcademy,
         name: "EternalJK",
         description: "OpenJK with the modern multiplayer patches most servers expect.",
         executable: "eternaljk.x86.exe",
@@ -116,6 +169,7 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
+        bundled_pk3_dir: None,
         allow_prerelease: false,
         asset_rules: &[
             AssetRule {
@@ -128,9 +182,11 @@ const ENGINES: &[Engine] = &[
                 forbid: &["x86_64", "pk3only"],
             },
         ],
+        asset_rules_x64: None,
     },
     Engine {
         id: "taystjk",
+        game: Game::JediAcademy,
         name: "TaystJK",
         description: "Fork focused on competitive play and quality of life fixes.",
         executable: "taystjk.x86.exe",
@@ -139,6 +195,7 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
+        bundled_pk3_dir: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -150,9 +207,11 @@ const ENGINES: &[Engine] = &[
                 forbid: &["x86_64", "sanitizer", "arm"],
             },
         ],
+        asset_rules_x64: None,
     },
     Engine {
         id: "jamme",
+        game: Game::JediAcademy,
         name: "jaMME",
         description: "Movie maker edition: demo playback, camera work and capture.",
         // `jamme.exe`, without the `.x86` the other three carry.
@@ -164,6 +223,7 @@ const ENGINES: &[Engine] = &[
         // `start_jaMME.cmd` inside the archive runs
         // `jamme +set fs_game mme +set fs_extraGames "japlus japp"`.
         default_fs_game: Some("mme"),
+        bundled_pk3_dir: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -175,6 +235,45 @@ const ENGINES: &[Engine] = &[
                 forbid: &["x86_64", "android", "macos", "arm"],
             },
         ],
+        asset_rules_x64: None,
+    },
+    // --- slice: game core ---
+    Engine {
+        id: "jk2mv",
+        game: Game::JediOutcast,
+        name: "JK2MV",
+        description: "The Jedi Outcast multiplayer client. Plays 1.02, 1.03 and 1.04.",
+        executable: "jk2mvmp.exe",
+        repo: "mvdevs/jk2mv",
+        // Recommended within its game; the flag is read per game, so the two
+        // recommendations do not compete.
+        recommended: true,
+        installable: true,
+        not_installable_reason: None,
+        default_fs_game: None,
+        // `base\assetsmv.pk3` and `base\assetsmv2.pk3` ride in the archive and
+        // have to reach the search path through `fs_homepath`.
+        bundled_pk3_dir: Some("base"),
+        // 1.4.1 of 2018-02-15 is the only tagged release; the project builds
+        // every push but tags nothing, so there is no pre-release to fall back
+        // on and nothing to allow.
+        allow_prerelease: false,
+        asset_rules: &[AssetRule {
+            require: &["win32-x86-portable", ".zip"],
+            forbid: &["x64"],
+        }],
+        asset_rules_x64: Some(&[
+            AssetRule {
+                require: &["win32-x64-portable", ".zip"],
+                forbid: &[],
+            },
+            // A 64-bit machine runs the 32-bit build too, so a release that
+            // ever drops the x64 archive still installs.
+            AssetRule {
+                require: &["win32-x86-portable", ".zip"],
+                forbid: &[],
+            },
+        ]),
     },
 ];
 
@@ -188,10 +287,39 @@ pub fn require(id: &str) -> Result<&'static Engine> {
     find(id).ok_or_else(|| AppError::InvalidInput(format!("unknown engine {id}")))
 }
 
-/// Lists every engine the launcher knows.
+// --- slice: game core ---
+/// Returns the engine with this id, and refuses one that plays another game.
+///
+/// Its own error, because the cure is picking a different engine rather than
+/// fixing a typo: the id is real, it just belongs to the other list.
+pub fn require_for_game(id: &str, game: Game) -> Result<&'static Engine> {
+    let engine = require(id)?;
+    if engine.game != game {
+        return Err(AppError::GameMismatch(format!(
+            "{} plays {}, not {}",
+            engine.name,
+            engine.game.display_name(),
+            game.display_name()
+        )));
+    }
+    Ok(engine)
+}
+
+/// Lists the engines of one game, or every engine when `game` is `None`.
+///
+/// The Clients screen asks once without a game and filters the answer itself:
+/// the registry is static, and refetching it every time a radio button moves
+/// would be a round trip for a constant.
 #[tauri::command]
-pub fn list_engines() -> Result<Vec<Engine>> {
-    Ok(ENGINES.to_vec())
+pub fn list_engines(game: Option<Game>) -> Result<Vec<Engine>> {
+    Ok(match game {
+        Some(game) => ENGINES
+            .iter()
+            .filter(|engine| engine.game == game)
+            .cloned()
+            .collect(),
+        None => ENGINES.to_vec(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -390,10 +518,26 @@ mod tests {
         "jaMME-1.11_Windows.zip",
     ];
 
+    // --- slice: game core ---
+    /// JK2MV 1.4.1, listed from the GitHub release on 2026-09-10 and confirmed
+    /// by downloading `jk2mv-v1.4.1-win32-x64-portable.zip` (17 335 197 bytes).
+    const JK2MV_ASSETS: &[&str] = &[
+        "jk2mv-v1.4.1-dedicated.zip",
+        "jk2mv-v1.4.1-win32-x64-portable.zip",
+        "jk2mv-v1.4.1-win32-x86-installer.exe",
+        "jk2mv-v1.4.1-win32-x86-portable.zip",
+    ];
+
     fn pick(engine_id: &str, assets: &[&str]) -> Option<String> {
         let engine = find(engine_id).expect("engine is in the registry");
-        match_asset(engine.asset_rules, assets.iter().copied())
+        match_asset(engine.rules_for_host(), assets.iter().copied())
             .map(|index| assets[index].to_string())
+    }
+
+    /// Picks with one explicit rule list, so a test can name the architecture
+    /// rather than depend on the width of the machine running it.
+    fn pick_with(rules: &[AssetRule], assets: &[&str]) -> Option<String> {
+        match_asset(rules, assets.iter().copied()).map(|index| assets[index].to_string())
     }
 
     #[test]
@@ -406,13 +550,106 @@ mod tests {
     }
 
     #[test]
-    fn exactly_one_engine_is_recommended() {
-        let recommended: Vec<&str> = ENGINES
-            .iter()
-            .filter(|engine| engine.recommended)
-            .map(|engine| engine.id)
-            .collect();
-        assert_eq!(recommended, vec!["openjk"]);
+    fn exactly_one_engine_of_each_game_is_recommended() {
+        // The New client dialog preselects the recommended build of the game
+        // the player picked, so two of them in one game would be a coin toss.
+        for game in Game::ALL {
+            let recommended: Vec<&str> = ENGINES
+                .iter()
+                .filter(|engine| engine.game == game && engine.recommended)
+                .map(|engine| engine.id)
+                .collect();
+            assert_eq!(recommended.len(), 1, "{game}: {recommended:?}");
+        }
+        assert!(find("openjk").expect("openjk").recommended);
+        assert!(find("jk2mv").expect("jk2mv").recommended);
+    }
+
+    // --- slice: game core ---
+
+    #[test]
+    fn every_engine_names_the_game_it_plays() {
+        assert_eq!(find("openjk").unwrap().game, Game::JediAcademy);
+        assert_eq!(find("eternaljk").unwrap().game, Game::JediAcademy);
+        assert_eq!(find("taystjk").unwrap().game, Game::JediAcademy);
+        assert_eq!(find("jamme").unwrap().game, Game::JediAcademy);
+        assert_eq!(find("jk2mv").unwrap().game, Game::JediOutcast);
+    }
+
+    #[test]
+    fn the_list_is_filtered_by_game_and_whole_without_one() {
+        let all = list_engines(None).expect("the registry answers");
+        assert_eq!(all.len(), ENGINES.len());
+
+        let ja = list_engines(Some(Game::JediAcademy)).expect("the registry answers");
+        assert_eq!(ja.len(), 4);
+        assert!(ja.iter().all(|engine| engine.game == Game::JediAcademy));
+
+        let jo = list_engines(Some(Game::JediOutcast)).expect("the registry answers");
+        assert_eq!(
+            jo.iter().map(|engine| engine.id).collect::<Vec<_>>(),
+            vec!["jk2mv"]
+        );
+    }
+
+    #[test]
+    fn an_engine_of_the_other_game_is_refused_by_name() {
+        assert!(require_for_game("jk2mv", Game::JediOutcast).is_ok());
+        assert!(require_for_game("openjk", Game::JediAcademy).is_ok());
+
+        let refusal = require_for_game("jk2mv", Game::JediAcademy)
+            .expect_err("JK2MV does not play Jedi Academy");
+        let text = refusal.to_string();
+        assert!(text.contains("JK2MV"), "{text}");
+        assert!(text.contains("Jedi Outcast"), "{text}");
+        assert!(text.contains("Jedi Academy"), "{text}");
+
+        // An id that is not in the registry is still an input error, not a
+        // mismatch: there is no other list to look in.
+        assert!(require_for_game("quake3", Game::JediAcademy).is_err());
+    }
+
+    #[test]
+    fn jk2mv_picks_the_portable_archive_of_the_host_architecture() {
+        let engine = find("jk2mv").expect("jk2mv is in the registry");
+
+        assert_eq!(
+            pick_with(engine.asset_rules_x64.expect("a 64-bit list"), JK2MV_ASSETS).as_deref(),
+            Some("jk2mv-v1.4.1-win32-x64-portable.zip")
+        );
+        assert_eq!(
+            pick_with(engine.asset_rules, JK2MV_ASSETS).as_deref(),
+            Some("jk2mv-v1.4.1-win32-x86-portable.zip")
+        );
+        // Whatever this machine is, the installer executable and the dedicated
+        // server archive are never what a player gets.
+        let chosen = pick("jk2mv", JK2MV_ASSETS).expect("something matches");
+        assert!(chosen.ends_with("-portable.zip"), "{chosen}");
+        assert!(!chosen.contains("dedicated"), "{chosen}");
+    }
+
+    #[test]
+    fn a_64_bit_launcher_falls_back_to_the_32_bit_archive() {
+        // If a future release drops the x64 zip, the x86 one still installs.
+        let engine = find("jk2mv").expect("jk2mv is in the registry");
+        let without_x64 = ["jk2mv-v1.4.1-win32-x86-portable.zip"];
+        assert_eq!(
+            pick_with(engine.asset_rules_x64.unwrap(), &without_x64).as_deref(),
+            Some("jk2mv-v1.4.1-win32-x86-portable.zip")
+        );
+    }
+
+    #[test]
+    fn only_jk2mv_carries_pk3_files_into_the_client_home() {
+        for engine in ENGINES {
+            assert_eq!(
+                engine.bundled_pk3_dir.is_some(),
+                engine.id == "jk2mv",
+                "{} states the wrong bundled pk3 folder",
+                engine.id
+            );
+        }
+        assert_eq!(find("jk2mv").unwrap().bundled_pk3_dir, Some("base"));
     }
 
     #[test]
@@ -438,7 +675,8 @@ mod tests {
     fn every_rule_is_written_in_lowercase() {
         // `match_asset` lowercases the asset name, not the needle.
         for engine in ENGINES {
-            for rule in engine.asset_rules {
+            let lists = [Some(engine.asset_rules), engine.asset_rules_x64];
+            for rule in lists.into_iter().flatten().flatten() {
                 for needle in rule.require.iter().chain(rule.forbid.iter()) {
                     assert_eq!(*needle, needle.to_ascii_lowercase(), "{}", engine.id);
                 }
@@ -517,6 +755,7 @@ mod tests {
             id: "everyday".into(),
             name: "Everyday".into(),
             engine_id: "openjk".into(),
+            game: Game::JediAcademy,
             engine_version: version.map(str::to_string),
             engine_published_at: published.map(str::to_string),
             engine_installed_at: None,

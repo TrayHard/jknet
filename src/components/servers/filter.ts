@@ -16,8 +16,10 @@ export interface ServerFilters {
   search: string;
   /** `gametype` as text, or `any`. */
   gametype: string;
-  /** `fs_game` value, or `any`. */
-  game: string;
+  // --- slice: game core ---
+  /** `fs_game` value, or `any`. Called `game` until 0.3, when that name went
+   * to the game the server plays. This one is the mod. */
+  modName: string;
   players: PlayersFilter;
   /** Network protocol as text, or `any`. */
   protocol: string;
@@ -35,7 +37,7 @@ export interface ServerFilters {
 export const DEFAULT_FILTERS: ServerFilters = {
   search: "",
   gametype: "any",
-  game: "any",
+  modName: "any",
   players: "any",
   protocol: "any",
   hideBotOnly: true,
@@ -46,7 +48,7 @@ export function filtersAreDefault(filters: ServerFilters): boolean {
   return (
     filters.search.trim() === "" &&
     filters.gametype === "any" &&
-    filters.game === "any" &&
+    filters.modName === "any" &&
     filters.players === "any" &&
     filters.protocol === "any" &&
     filters.hideBotOnly === DEFAULT_FILTERS.hideBotOnly
@@ -100,7 +102,7 @@ export function matchesSearch(server: ServerInfo, query: string): boolean {
     server.hostnameClean.toLowerCase().includes(needle) ||
     server.map.toLowerCase().includes(needle) ||
     server.address.toLowerCase().includes(needle) ||
-    server.game.toLowerCase().includes(needle)
+    server.modName.toLowerCase().includes(needle)
   );
 }
 
@@ -144,7 +146,7 @@ export function applyFilters(
       matchesBotOnly(server, filters.hideBotOnly) &&
       (filters.gametype === "any" ||
         String(server.gametype) === filters.gametype) &&
-      (filters.game === "any" || server.game === filters.game) &&
+      (filters.modName === "any" || server.modName === filters.modName) &&
       (filters.protocol === "any" ||
         String(server.protocol) === filters.protocol),
   );
@@ -215,7 +217,7 @@ function compareBy(
     case "ping":
       return a.pingMs - b.pingMs;
     case "mod":
-      return a.game.localeCompare(b.game);
+      return a.modName.localeCompare(b.modName);
   }
 }
 

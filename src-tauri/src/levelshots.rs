@@ -41,6 +41,7 @@ use tauri::{AppHandle, Emitter};
 use zip::ZipArchive;
 
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::library::pak_order;
 use crate::paths::{self, DataPaths};
 use crate::settings::Settings;
@@ -52,6 +53,16 @@ const CACHE_DIR: &str = "levelshots";
 
 /// The index document inside that folder.
 const INDEX_FILE: &str = "index.json";
+
+// --- slice: game core ---
+/// Shape of the index. A document written under another number is thrown away
+/// and rebuilt rather than read.
+///
+/// Version 2 is the one with game-scoped keys. Version 1 keyed on the map name
+/// alone, which was right while there was one game and wrong the moment Jedi
+/// Outcast arrived: `ffa_yavin` exists in both games and is a different
+/// picture in each.
+const INDEX_VERSION: u32 = 2;
 
 /// Folder the game keeps map pictures in, inside an archive and on disk.
 const ENTRY_PREFIX: &str = "levelshots/";
@@ -128,11 +139,17 @@ pub struct SourceStamp {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Index {
+    // --- slice: game core ---
+    /// Shape of this document, [`INDEX_VERSION`]. A missing field reads as `0`,
+    /// which is what every index written before the games were told apart
+    /// deserializes to, and which is what makes it get rebuilt.
+    pub version: u32,
     /// When the last full rebuild finished, RFC 3339 in UTC.
     pub built_at: String,
     /// The sources of that rebuild, in the order they were read.
     pub sources: Vec<SourceStamp>,
-    /// Key to picture. A `BTreeMap` so the document stays diffable.
+    /// Key to picture, the key being `<game>/<map>`. A `BTreeMap` so the
+    /// document stays diffable.
     pub maps: BTreeMap<String, MapShot>,
 }
 
@@ -219,6 +236,23 @@ pub fn map_key(name: &str) -> String {
         .to_string()
 }
 
+// --- slice: game core ---
+/// The key of the index: the map key with the game in front of it.
+///
+/// Jedi Academy names its multiplayer maps `mp/ffa1` and Jedi Outcast names
+/// them `ffa_yavin`, but the two games share several — `ffa_bespin` is a map in
+/// both — and they are different pictures. The prefix keeps them apart in the
+/// index, in the cache folder and in the React Query cache at once.
+///
+/// Empty when the map name is empty: a key of `ja/` names no map.
+fn index_key(game: Game, map: &str) -> String {
+    let map = map_key(map);
+    if map.is_empty() {
+        return String::new();
+    }
+    format!("{}/{map}", game.id())
+}
+
 /// Turns a path inside `levelshots\` into the key of the index, or `None` when
 /// the entry is not a picture the launcher can use.
 ///
@@ -263,19 +297,36 @@ fn cache_file_name(key: &str, extension: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 /// One file a rebuild reads.
+///
+/// --- slice: game core ---
+/// Every source belongs to one game: a folder is either the `GameData` of a
+/// game or the `home\` of a client, and a client plays one game. The game
+/// travels with the source so that the keys it produces carry the right prefix.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Source {
     /// A pk3. Every `levelshots/` entry inside it is indexed.
-    Archive(PathBuf),
+    Archive { game: Game, path: PathBuf },
     /// A picture lying in a `levelshots\` folder, with the key it carries.
-    Loose { path: PathBuf, key: String },
+    Loose {
+        game: Game,
+        path: PathBuf,
+        /// Already game-scoped: `ja/mp/ffa1`.
+        key: String,
+    },
 }
 
 impl Source {
     fn path(&self) -> &Path {
         match self {
-            Source::Archive(path) => path,
+            Source::Archive { path, .. } => path,
             Source::Loose { path, .. } => path,
+        }
+    }
+
+    fn game(&self) -> Game {
+        match self {
+            Source::Archive { game, .. } => *game,
+            Source::Loose { game, .. } => *game,
         }
     }
 }
@@ -285,25 +336,31 @@ impl Source {
 /// Later wins. The retail archives come first, then the clients in slug order,
 /// so a map a player installed into a client beats the stock picture of the
 /// same name — which is what the player sees in game.
+///
+/// --- slice: game core ---
+/// Both games are read in one pass: their keys carry a game prefix, so nothing
+/// they hold can collide and one index serves both. A client contributes to the
+/// key space of the game it plays.
 fn collect_sources(paths: &DataPaths, settings: &Settings) -> Vec<Source> {
     let mut sources = Vec::new();
 
-    if let Some(game) = settings
-        .game_data_path
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-    {
-        collect_from_folder(&Path::new(game).join("base"), &mut sources);
+    for (game, dir) in crate::game_files::configured_dirs(settings) {
+        collect_from_folder(game, &dir.join("base"), &mut sources);
     }
 
     // Every mod folder of every client, not only `base` and the client's own
     // `fs_game`: reading the folders costs one `read_dir` each and spares this
     // module a second copy of the rule that resolves `fs_game`.
-    for client in sorted_dir_names(&paths.clients) {
-        let home = paths.client_dir(&client).join("home");
+    for slug in sorted_dir_names(&paths.clients) {
+        // A folder whose record will not read is treated as a Jedi Academy
+        // client, exactly as `serde(default)` treats one whose record has no
+        // game — the only game a client written before this slice could play.
+        let game = crate::clients::read_record(paths, &slug)
+            .map(|client| client.game)
+            .unwrap_or_default();
+        let home = paths.client_dir(&slug).join("home");
         for mod_folder in sorted_dir_names(&home) {
-            collect_from_folder(&home.join(mod_folder), &mut sources);
+            collect_from_folder(game, &home.join(mod_folder), &mut sources);
         }
     }
 
@@ -324,9 +381,9 @@ fn sorted_dir_names(dir: &Path) -> Vec<String> {
     names
 }
 
-/// Adds the sources of one game folder: its loose pictures, then its archives.
-fn collect_from_folder(folder: &Path, out: &mut Vec<Source>) {
-    collect_loose(&folder.join(ENTRY_PREFIX.trim_end_matches('/')), "", out);
+/// Adds the sources of one mod folder: its loose pictures, then its archives.
+fn collect_from_folder(game: Game, folder: &Path, out: &mut Vec<Source>) {
+    collect_loose(game, &folder.join(ENTRY_PREFIX.trim_end_matches('/')), "", out);
 
     let Ok(entries) = fs::read_dir(folder) else {
         return;
@@ -345,11 +402,15 @@ fn collect_from_folder(folder: &Path, out: &mut Vec<Source>) {
     // The engine sorts the same way and prepends each archive to the search
     // path, so the archive that sorts last is the one that answers.
     archives.sort();
-    out.extend(archives.into_iter().map(|(_, path)| Source::Archive(path)));
+    out.extend(
+        archives
+            .into_iter()
+            .map(|(_, path)| Source::Archive { game, path }),
+    );
 }
 
 /// Walks a `levelshots\` folder on disk and adds every picture in it.
-fn collect_loose(dir: &Path, prefix: &str, out: &mut Vec<Source>) {
+fn collect_loose(game: Game, dir: &Path, prefix: &str, out: &mut Vec<Source>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -367,8 +428,9 @@ fn collect_loose(dir: &Path, prefix: &str, out: &mut Vec<Source>) {
         }
         if let Some((stem, _)) = entry_key(&format!("{ENTRY_PREFIX}{prefix}{name}")) {
             found.push(Source::Loose {
+                game,
                 path: entry.path(),
-                key: stem,
+                key: index_key(game, &stem),
             });
         }
     }
@@ -377,7 +439,7 @@ fn collect_loose(dir: &Path, prefix: &str, out: &mut Vec<Source>) {
     out.extend(found);
     folders.sort();
     for (nested_prefix, path) in folders {
-        collect_loose(&path, &nested_prefix, out);
+        collect_loose(game, &path, &nested_prefix, out);
     }
 }
 
@@ -530,7 +592,12 @@ fn store_image(
 }
 
 /// Adds every `levelshots/` entry of one archive to `maps`.
-fn scan_archive(path: &Path, dir: &Path, maps: &mut BTreeMap<String, MapShot>) -> Result<()> {
+fn scan_archive(
+    game: Game,
+    path: &Path,
+    dir: &Path,
+    maps: &mut BTreeMap<String, MapShot>,
+) -> Result<()> {
     let file = File::open(path).map_err(|e| AppError::io_path("cannot open", path, e))?;
     let mut archive = ZipArchive::new(BufReader::new(file))?;
     let names: Vec<String> = archive
@@ -541,9 +608,13 @@ fn scan_archive(path: &Path, dir: &Path, maps: &mut BTreeMap<String, MapShot>) -
 
     let source = path.display().to_string();
     for name in names {
-        let Some((key, extension)) = entry_key(&name) else {
+        let Some((stem, extension)) = entry_key(&name) else {
             continue;
         };
+        let key = index_key(game, &stem);
+        if key.is_empty() {
+            continue;
+        }
         let Some(bytes) = read_entry(&mut archive, &name, path)? else {
             continue;
         };
@@ -616,8 +687,8 @@ fn rebuild(paths: &DataPaths, settings: &Settings) -> Result<(Index, RebuildStat
     let mut maps: BTreeMap<String, MapShot> = BTreeMap::new();
     for source in &sources {
         let outcome = match source {
-            Source::Archive(path) => scan_archive(path, &dir, &mut maps),
-            Source::Loose { path, key } => store_loose(path, key, &dir, &mut maps),
+            Source::Archive { game, path } => scan_archive(*game, path, &dir, &mut maps),
+            Source::Loose { path, key, .. } => store_loose(path, key, &dir, &mut maps),
         };
         // One damaged pk3 costs its own pictures and nothing else: a player
         // with a half-downloaded map still gets art for the rest.
@@ -627,6 +698,7 @@ fn rebuild(paths: &DataPaths, settings: &Settings) -> Result<(Index, RebuildStat
     }
 
     let index = Index {
+        version: INDEX_VERSION,
         built_at: timestamp::now_rfc3339(),
         sources: stamps(&sources),
         maps,
@@ -695,11 +767,23 @@ fn remove_orphans(dir: &Path, index: &Index) {
 /// disappeared, or a new pk3 appeared. Nothing else triggers a rebuild: the
 /// retail archives never change, and reading four `metadata` calls on every
 /// lookup costs nothing.
+///
+/// --- slice: game core ---
+/// A document of another [`INDEX_VERSION`] is out of date whatever its sources
+/// say. That is what drops the keys of the one-game era in one go, instead of
+/// leaving `mp/ffa1` next to `ja/mp/ffa1` for ever.
 fn ensure_index(paths: &DataPaths, settings: &Settings) -> Result<(Index, bool)> {
     let dir = cache_dir(paths);
     let Some(index) = load_index(&dir) else {
         return rebuild(paths, settings).map(|(index, _)| (index, true));
     };
+    if index.version != INDEX_VERSION {
+        log::info!(
+            "the levelshot index is version {}, rebuilding it as version {INDEX_VERSION}",
+            index.version
+        );
+        return rebuild(paths, settings).map(|(index, _)| (index, true));
+    }
     let current = stamps(&collect_sources(paths, settings));
     if current == index.sources {
         return Ok((index, false));
@@ -729,24 +813,38 @@ fn resolve(index: &Index, dir: &Path, key: &str) -> Option<Levelshot> {
 /// index is current by its own rules — no source changed — but the map was
 /// never asked for before. The scan reads only the central directory of each
 /// archive and extracts at most one entry.
-fn find_one(paths: &DataPaths, settings: &Settings, key: &str) -> Result<Option<MapShot>> {
+fn find_one(
+    paths: &DataPaths,
+    settings: &Settings,
+    game: Game,
+    key: &str,
+) -> Result<Option<MapShot>> {
     let dir = cache_dir(paths);
     paths::create_dir(&dir)?;
+    // The entry inside an archive is named after the map, not after the key:
+    // the prefix belongs to the index, not to the pk3.
+    let map = key.strip_prefix(&format!("{}/", game.id())).unwrap_or(key);
     let wanted: Vec<String> = IMAGE_EXTENSIONS
         .iter()
-        .map(|extension| format!("{key}.{extension}"))
+        .map(|extension| format!("{map}.{extension}"))
         .collect();
 
     let mut found: Option<MapShot> = None;
-    for source in collect_sources(paths, settings) {
+    // Only the sources of this game: the other game's archives cannot hold
+    // this key, and opening them would be the cost this shortcut exists to
+    // avoid.
+    for source in collect_sources(paths, settings)
+        .into_iter()
+        .filter(|source| source.game() == game)
+    {
         let outcome = match &source {
-            Source::Loose { path, key: loose } if loose == key => {
+            Source::Loose { path, key: loose, .. } if loose == key => {
                 let mut maps = BTreeMap::new();
                 let stored = store_loose(path, key, &dir, &mut maps);
                 stored.map(|()| maps.remove(key))
             }
             Source::Loose { .. } => Ok(None),
-            Source::Archive(path) => find_in_archive(path, &wanted, key, &dir),
+            Source::Archive { path, .. } => find_in_archive(path, &wanted, key, &dir),
         };
         match outcome {
             // Later wins, exactly as in a rebuild.
@@ -800,19 +898,25 @@ fn find_in_archive(
 /// scan for `levelshots/<map>.*`, so a pk3 added while the launcher was open
 /// works without a full rebuild. A second miss on the same key is remembered
 /// and answered without touching the disk.
+/// --- slice: game core ---
+/// `game` says whose map this is; leaving it out means the active game. The
+/// same name is a different picture in the two games, so a lookup that guessed
+/// would show a Jedi Academy screenshot on a Jedi Outcast server.
 #[tauri::command]
 pub async fn get_levelshot(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
     shots: tauri::State<'_, LevelshotState>,
     map: String,
+    game: Option<crate::game::Game>,
 ) -> Result<Option<Levelshot>> {
-    let key = map_key(&map);
+    let settings = state.settings()?;
+    let game = settings.game_or_active(game);
+    let key = index_key(game, &map);
     if key.is_empty() {
         return Ok(None);
     }
     let paths = state.paths()?;
-    let settings = state.settings()?;
     let dir = cache_dir(&paths);
 
     // One lookup at a time: the Servers screen mounts a card per row, and
@@ -839,7 +943,7 @@ pub async fn get_levelshot(
     let found = blocking("a levelshot lookup", {
         let paths = paths.clone();
         let key = key.clone();
-        move || find_one(&paths, &settings, &key)
+        move || find_one(&paths, &settings, game, &key)
     })
     .await?;
 
@@ -978,10 +1082,10 @@ mod tests {
         paths.ensure().expect("data folders");
         let game = temp.path().join("GameData");
         fs::create_dir_all(game.join("base")).expect("game folder");
-        let settings = Settings {
-            game_data_path: Some(game.display().to_string()),
-            ..Settings::default()
-        };
+        let mut settings = Settings::default();
+        settings
+            .game_data_paths
+            .insert(Game::JediAcademy, game.display().to_string());
         (temp, paths, settings)
     }
 
@@ -1036,7 +1140,7 @@ mod tests {
     #[test]
     fn sources_follow_the_load_order_of_the_engine() {
         let (_temp, paths, settings) = workspace();
-        let base = Path::new(settings.game_data_path.as_deref().unwrap()).join("base");
+        let base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         write_pk3(&base.join("assets0.pk3"), &[]);
         write_pk3(&base.join("dl_extra.pk3"), &[]);
         write_pk3(&base.join("zzz_maps.pk3"), &[]);
@@ -1066,7 +1170,7 @@ mod tests {
     #[test]
     fn a_changed_pk3_makes_the_index_stale() {
         let (_temp, paths, settings) = workspace();
-        let base = Path::new(settings.game_data_path.as_deref().unwrap()).join("base");
+        let base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         let pk3 = base.join("assets0.pk3");
         write_pk3(
             &pk3,
@@ -1075,7 +1179,7 @@ mod tests {
 
         let (first, rebuilt) = ensure_index(&paths, &settings).expect("first index");
         assert!(rebuilt);
-        assert!(first.maps.contains_key("mp/ffa1"));
+        assert!(first.maps.contains_key("ja/mp/ffa1"));
 
         let (_, rebuilt) = ensure_index(&paths, &settings).expect("second index");
         assert!(!rebuilt, "an unchanged source must not cost a rebuild");
@@ -1090,7 +1194,7 @@ mod tests {
         );
         let (third, rebuilt) = ensure_index(&paths, &settings).expect("third index");
         assert!(rebuilt);
-        assert!(third.maps.contains_key("mb2_smuggler"));
+        assert!(third.maps.contains_key("ja/mb2_smuggler"));
         assert_eq!(third.sources.len(), 2);
     }
 
@@ -1237,7 +1341,7 @@ mod tests {
     #[test]
     fn the_last_source_wins_and_orphans_go_away() {
         let (_temp, paths, settings) = workspace();
-        let base = Path::new(settings.game_data_path.as_deref().unwrap()).join("base");
+        let base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         write_pk3(
             &base.join("assets0.pk3"),
             &[
@@ -1251,14 +1355,14 @@ mod tests {
         );
 
         let (index, _) = rebuild(&paths, &settings).expect("rebuild");
-        let winner = index.maps.get("mp/ffa1").expect("ffa1");
+        let winner = index.maps.get("ja/mp/ffa1").expect("ffa1");
         assert_eq!((winner.width, winner.height), (32, 16));
         assert!(winner.source.ends_with("zzz_pack.pk3"));
 
         // Drop the second archive and the picture it left behind must go.
         fs::remove_file(base.join("zzz_pack.pk3")).expect("remove");
         let (index, _) = rebuild(&paths, &settings).expect("second rebuild");
-        assert_eq!(index.maps.get("mp/ffa1").map(|shot| shot.width), Some(64));
+        assert_eq!(index.maps.get("ja/mp/ffa1").map(|shot| shot.width), Some(64));
 
         let files: Vec<String> = fs::read_dir(cache_dir(&paths))
             .expect("cache folder")
@@ -1271,7 +1375,7 @@ mod tests {
     #[test]
     fn a_targeted_lookup_finds_a_map_the_index_never_saw() {
         let (_temp, paths, settings) = workspace();
-        let base = Path::new(settings.game_data_path.as_deref().unwrap()).join("base");
+        let base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         write_pk3(
             &base.join("mb2_smuggler.pk3"),
             &[(
@@ -1280,21 +1384,139 @@ mod tests {
             )],
         );
 
-        let found = find_one(&paths, &settings, "mb2_smuggler")
+        let found = find_one(&paths, &settings, Game::JediAcademy, "ja/mb2_smuggler")
             .expect("lookup")
             .expect("a picture");
-        assert_eq!(found.file, "mb2_smuggler.jpg");
+        assert_eq!(found.file, "ja__mb2_smuggler.jpg");
         assert_eq!((found.width, found.height), (48, 24));
 
-        assert!(find_one(&paths, &settings, "mp/ffa1")
+        assert!(find_one(&paths, &settings, Game::JediAcademy, "ja/mp/ffa1")
             .expect("lookup")
             .is_none());
+    }
+
+    // --- slice: game core ---
+
+    #[test]
+    fn a_key_carries_the_game_in_front_of_the_map() {
+        assert_eq!(index_key(Game::JediAcademy, "MP/FFA1"), "ja/mp/ffa1");
+        assert_eq!(index_key(Game::JediOutcast, "ffa_bespin"), "jo/ffa_bespin");
+        // The map key rules still apply underneath.
+        assert_eq!(index_key(Game::JediOutcast, "maps\\CTF_Yavin.bsp"), "jo/ctf_yavin");
+        // A key of `ja/` names no map.
+        assert_eq!(index_key(Game::JediAcademy, "  "), "");
+    }
+
+    #[test]
+    fn a_key_flattens_into_a_file_name_with_the_game_in_it() {
+        assert_eq!(
+            cache_file_name("ja/mp/ffa1", "jpg").as_deref(),
+            Some("ja__mp__ffa1.jpg")
+        );
+        assert_eq!(
+            cache_file_name("jo/ffa_bespin", "jpg").as_deref(),
+            Some("jo__ffa_bespin.jpg")
+        );
+    }
+
+    #[test]
+    fn the_same_map_name_in_two_games_is_two_pictures() {
+        // `ffa_bespin` is a map in both games and a different picture in each.
+        // Without the game in the key one of them would overwrite the other in
+        // the index and in the cache folder.
+        let (_temp, paths, mut settings) = workspace();
+        let ja_base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
+        write_pk3(
+            &ja_base.join("assets0.pk3"),
+            &[("levelshots/ffa_bespin.jpg", picture(64, 64, ImageFormat::Jpeg))],
+        );
+
+        let jo = _temp.path().join("JK2GameData");
+        let jo_base = jo.join("base");
+        fs::create_dir_all(&jo_base).expect("the Jedi Outcast folder");
+        settings
+            .game_data_paths
+            .insert(Game::JediOutcast, jo.display().to_string());
+        write_pk3(
+            &jo_base.join("assets0.pk3"),
+            &[("levelshots/ffa_bespin.jpg", picture(32, 16, ImageFormat::Jpeg))],
+        );
+
+        let (index, _) = rebuild(&paths, &settings).expect("rebuild");
+        let ja = index.maps.get("ja/ffa_bespin").expect("the Jedi Academy one");
+        let jo_shot = index.maps.get("jo/ffa_bespin").expect("the Jedi Outcast one");
+        assert_eq!((ja.width, ja.height), (64, 64));
+        assert_eq!((jo_shot.width, jo_shot.height), (32, 16));
+        // Two keys, two files: the names differ by their prefix alone.
+        assert_eq!(ja.file, "ja__ffa_bespin.jpg");
+        assert_eq!(jo_shot.file, "jo__ffa_bespin.jpg");
+        assert!(cache_dir(&paths).join("ja__ffa_bespin.jpg").is_file());
+        assert!(cache_dir(&paths).join("jo__ffa_bespin.jpg").is_file());
+    }
+
+    #[test]
+    fn a_lookup_reads_only_the_archives_of_its_own_game() {
+        // A Jedi Outcast map is not in the Jedi Academy archives, and opening
+        // them to prove it is the cost this filter exists to avoid.
+        let (_temp, paths, mut settings) = workspace();
+        let ja_base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
+        write_pk3(
+            &ja_base.join("assets0.pk3"),
+            &[("levelshots/ffa_bespin.jpg", picture(64, 64, ImageFormat::Jpeg))],
+        );
+        let jo = _temp.path().join("JK2GameData");
+        fs::create_dir_all(jo.join("base")).expect("the Jedi Outcast folder");
+        settings
+            .game_data_paths
+            .insert(Game::JediOutcast, jo.display().to_string());
+
+        // The Jedi Academy picture is found under the Jedi Academy key.
+        assert!(
+            find_one(&paths, &settings, Game::JediAcademy, "ja/ffa_bespin")
+                .expect("lookup")
+                .is_some()
+        );
+        // And the same map name under the other game finds nothing, rather
+        // than reaching into the archives of the game it does not belong to.
+        assert!(
+            find_one(&paths, &settings, Game::JediOutcast, "jo/ffa_bespin")
+                .expect("lookup")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn an_index_of_the_one_game_era_is_thrown_away_rather_than_read() {
+        // Version 1 keyed on the map name alone. Keeping those entries would
+        // leave `mp/ffa1` next to `ja/mp/ffa1` in the document for ever.
+        let (_temp, paths, settings) = workspace();
+        let base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
+        write_pk3(
+            &base.join("assets0.pk3"),
+            &[("levelshots/mp/ffa1.jpg", picture(64, 64, ImageFormat::Jpeg))],
+        );
+
+        // Build the current index, then stamp it as the old shape with the old
+        // keys and the sources it really has, so only the version can force it.
+        let (mut stale, _) = rebuild(&paths, &settings).expect("first index");
+        stale.version = 1;
+        stale.maps = BTreeMap::from([(
+            "mp/ffa1".to_string(),
+            stale.maps.values().next().expect("a picture").clone(),
+        )]);
+        save_index(&cache_dir(&paths), &stale).expect("write the stale index");
+
+        let (index, rebuilt) = ensure_index(&paths, &settings).expect("index");
+        assert!(rebuilt, "a document of another version is rebuilt");
+        assert_eq!(index.version, INDEX_VERSION);
+        assert!(index.maps.contains_key("ja/mp/ffa1"));
+        assert!(!index.maps.contains_key("mp/ffa1"));
     }
 
     #[test]
     fn a_client_folder_beats_the_game_folder() {
         let (_temp, paths, settings) = workspace();
-        let base = Path::new(settings.game_data_path.as_deref().unwrap()).join("base");
+        let base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         write_pk3(
             &base.join("assets0.pk3"),
             &[("levelshots/mp/ffa1.jpg", picture(64, 64, ImageFormat::Jpeg))],
@@ -1307,7 +1529,7 @@ mod tests {
         );
 
         let (index, _) = rebuild(&paths, &settings).expect("rebuild");
-        let shot = index.maps.get("mp/ffa1").expect("ffa1");
+        let shot = index.maps.get("ja/mp/ffa1").expect("ffa1");
         assert_eq!((shot.width, shot.height), (16, 8));
     }
 
@@ -1325,12 +1547,11 @@ mod tests {
         let temp = TempDir::new().expect("temp dir");
         let paths = DataPaths::new(temp.path().to_path_buf());
         paths.ensure().expect("data folders");
-        let settings = Settings {
-            game_data_path: Some(
-                "D:\\SteamLibrary\\steamapps\\common\\Jedi Academy\\GameData".to_string(),
-            ),
-            ..Settings::default()
-        };
+        let mut settings = Settings::default();
+        settings.game_data_paths.insert(
+            Game::JediAcademy,
+            "D:\\SteamLibrary\\steamapps\\common\\Jedi Academy\\GameData".to_string(),
+        );
 
         let (index, stats) = rebuild(&paths, &settings).expect("rebuild");
         println!(

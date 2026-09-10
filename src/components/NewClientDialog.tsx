@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 
-import { errorMessage } from "../lib/ipc";
+import { errorMessage, type Game } from "../lib/ipc";
 import {
+  useActiveGame,
   useCreateClient,
-  useEngines,
+  useEnginesOfGame,
+  useGames,
   useInstallEngine,
   useSettings,
   useUpdateSettings,
 } from "../lib/queries";
-import { Button, Input, Toggle } from "./ui";
+import { Button, Input, RadioCard, Toggle } from "./ui";
 
 interface NewClientDialogProps {
   onClose: () => void;
@@ -23,8 +25,15 @@ interface NewClientDialogProps {
  * so the dialog does not offer it.
  */
 export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
-  const engines = useEngines();
   const settings = useSettings();
+  // --- slice: game core ---
+  // The game comes first: it decides which engines the list below offers.
+  // It starts on the active game, which is Jedi Academy until the switcher
+  // slice gives the player a way to change it.
+  const activeGame = useActiveGame();
+  const games = useGames();
+  const [game, setGame] = useState<Game>(activeGame);
+  const engines = useEnginesOfGame(game);
   const createClient = useCreateClient();
   const updateSettings = useUpdateSettings();
   const installEngine = useInstallEngine();
@@ -34,12 +43,18 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
   const [makeDefault, setMakeDefault] = useState(false);
   const [downloadEngine, setDownloadEngine] = useState(true);
 
-  // Preselect the recommended engine as soon as the registry arrives.
+  // Follow the active game until the player touches the choice: the settings
+  // answer one render after the dialog mounts.
+  useEffect(() => setGame(activeGame), [activeGame]);
+
+  // Preselect the recommended engine of the chosen game, and drop a selection
+  // that belongs to the other game the moment the game changes.
   useEffect(() => {
-    if (engineId || !engines.data?.length) return;
-    const recommended = engines.data.find((engine) => engine.recommended);
-    setEngineId((recommended ?? engines.data[0]).id);
-  }, [engines.data, engineId]);
+    if (engines.length === 0) return;
+    if (engines.some((engine) => engine.id === engineId)) return;
+    const recommended = engines.find((engine) => engine.recommended);
+    setEngineId((recommended ?? engines[0]).id);
+  }, [engines, engineId]);
 
   // The first client is the default one whether the player asks or not.
   useEffect(() => {
@@ -51,13 +66,19 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
   const submit = () => {
     if (!canSubmit) return;
     createClient.mutate(
-      { name: name.trim(), engineId },
+      { name: name.trim(), engineId, game },
       {
         onSuccess: (client) => {
           // One field, one patch: the rest of the document stays as it is on
           // disk, including anything edited outside the launcher.
           if (makeDefault) {
-            updateSettings.mutate({ defaultClientId: client.id });
+            // --- slice: game core ---
+            // Both fields: the Play button still reads the single one, and
+            // the per-game map is what the switcher slice will read.
+            updateSettings.mutate({
+              defaultClientId: client.id,
+              defaultClientIds: { [client.game]: client.id },
+            });
           }
           // The dialog closes first: the download takes a minute, and its
           // progress belongs on the card, not in a modal nobody can leave.
@@ -94,9 +115,23 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
           name you will recognise in the client list.
         </p>
 
+        {/* --- slice: game core --- the game before the engine list. */}
+        <label className="block text-label-xs text-fg-muted pt-24 pb-8">Game</label>
+        <div className="grid grid-cols-2 gap-8" role="radiogroup" aria-label="Game">
+          {(games.data ?? []).map((entry) => (
+            <RadioCard
+              key={entry.id}
+              name="new-client-game"
+              selected={entry.id === game}
+              onSelect={() => setGame(entry.id)}
+              title={entry.displayName}
+            />
+          ))}
+        </div>
+
         <label className="block text-label-xs text-fg-muted pt-24 pb-8">Engine</label>
         <div className="grid grid-cols-2 gap-8">
-          {(engines.data ?? []).map((engine) => (
+          {engines.map((engine) => (
             <button
               key={engine.id}
               type="button"

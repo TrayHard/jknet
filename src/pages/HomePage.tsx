@@ -157,6 +157,7 @@ export function HomePage() {
           {lastServer ? (
             <MapPreview
               map={lastServer.map}
+              game={lastServer.game}
               serverName={lastServer.hostnameClean}
               className="w-240 h-140 shrink-0"
             />
