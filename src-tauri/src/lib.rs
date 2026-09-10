@@ -154,6 +154,16 @@ pub fn run() {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
+            // --- slice: account ---
+            // From here on a hub that refuses the stored token signs the
+            // launcher out, instead of leaving a signed-in sidebar over a
+            // screen where every call fails. The client reports the refusal,
+            // `account` owns what it means.
+            let signed_out = app.handle().clone();
+            app.state::<hub::HubClient>()
+                .report_refusals_to(move |token| {
+                    account::expire_session(&signed_out, token);
+                });
             // --- slice: friends ---
             // The heartbeat and the live socket. Both start signed out and
             // cost nothing until a token appears, and neither of them touches

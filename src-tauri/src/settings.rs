@@ -181,11 +181,10 @@ pub struct SettingsPatch {
 
     // --- slice: account ---
     pub hub_url: Option<String>,
-    /// Only the account commands send this. It is here so that one document
-    /// describes the settings file, and so that a patch carrying a whole
-    /// document still round-trips.
+    /// Read and thrown away. See [`SettingsPatch::apply`].
     #[serde(deserialize_with = "sent")]
     pub hub_token: Option<Option<String>>,
+    /// Read and thrown away, for the same reason as the token above.
     #[serde(deserialize_with = "sent")]
     pub hub_user: Option<Option<HubUser>>,
 }
@@ -209,6 +208,16 @@ impl SettingsPatch {
     /// A blank string in a path or an id counts as no value: an empty
     /// `gameDataPath` is not a folder, and storing one would make the Clients
     /// screen show a path of nothing.
+    ///
+    /// Two fields are deliberately not copied. `hubToken` and `hubUser` belong
+    /// to the sign-in and are written by `crate::account` alone; a patch
+    /// carrying them is read and dropped. The command behind this is
+    /// `update_settings`, which anything running in the webview can call, and a
+    /// token settable from there would be a way around `begin_sign_in` and
+    /// `poll_sign_in` — the launcher would talk to the hub as whoever a
+    /// crafted `invoke` says. The fields stay declared so that a caller who
+    /// sends a whole settings document still gets it accepted rather than
+    /// refused by `deny_unknown_fields`.
     pub fn apply(self, settings: &mut Settings) {
         if let Some(value) = self.game_data_path {
             settings.game_data_path = non_empty(value);
@@ -236,14 +245,10 @@ impl SettingsPatch {
         }
         if let Some(value) = self.hub_url {
             // A blank address means "back to the default", which is what the
-            // Settings screen offers when the field is cleared.
+            // Settings screen offers when the field is cleared. A `null` is
+            // not a way to clear it: an address is always in force, and the
+            // one the field falls back to is the default hub.
             settings.hub_url = hub::normalize_hub_url(&value);
-        }
-        if let Some(value) = self.hub_token {
-            settings.hub_token = non_empty(value);
-        }
-        if let Some(value) = self.hub_user {
-            settings.hub_user = value;
         }
     }
 
@@ -475,10 +480,52 @@ mod tests {
     #[test]
     fn a_whole_settings_document_still_parses_as_a_patch() {
         // Every field of `Settings` has a counterpart here, so a caller that
-        // sends the lot keeps working.
+        // sends the lot is answered rather than refused.
         let text = serde_json::to_string(&filled()).expect("settings serialize");
         let mut settings = Settings::default();
         patch(&text).apply(&mut settings);
-        assert_eq!(settings, filled());
+
+        // The two the sign-in owns stay behind; everything else lands.
+        assert_eq!(
+            settings,
+            Settings {
+                hub_token: None,
+                hub_user: None,
+                ..filled()
+            }
+        );
+    }
+
+    #[test]
+    fn a_patch_cannot_sign_the_launcher_in() {
+        // `update_settings` is callable from the webview. A token settable
+        // there would be a way around `begin_sign_in` and `poll_sign_in`: the
+        // launcher would talk to the hub as whoever a crafted `invoke` says.
+        let mut settings = Settings::default();
+        patch(
+            r#"{"hubToken":"deadbeef","hubUser":{"id":"01JBX7Q2","displayName":"Not Me",
+                "avatarUrl":null,"provider":"jkhub","providerName":"not_me",
+                "createdAt":"2026-09-10T10:00:00Z"}}"#,
+        )
+        .apply(&mut settings);
+        assert_eq!(settings.hub_token, None);
+        assert_eq!(settings.hub_user, None);
+
+        // And it cannot sign the launcher out either: the token of a session
+        // in force survives a patch that names it.
+        let mut signed_in = filled();
+        patch(r#"{"hubToken":null,"hubUser":null}"#).apply(&mut signed_in);
+        assert_eq!(signed_in.hub_token.as_deref(), Some("0123456789abcdef"));
+        assert!(signed_in.hub_user.is_some());
+    }
+
+    #[test]
+    fn a_null_hub_address_leaves_the_one_in_force_alone() {
+        // `hubUrl` is not one of the nullable fields: an address is always in
+        // force. The way back to the default is a blank string, which is what
+        // clearing the field on the Settings screen sends.
+        let mut settings = filled();
+        patch(r#"{"hubUrl":null}"#).apply(&mut settings);
+        assert_eq!(settings.hub_url, "https://hub.jknet.gg");
     }
 }

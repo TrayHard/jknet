@@ -612,9 +612,25 @@ export interface SignInPoll {
   error: string | null;
 }
 
+/**
+ * Why the account changed.
+ *
+ * `expired` is the only one nobody asked for: the hub answered `401` to a call
+ * that carried the stored token, so the core forgot it. That is the one worth a
+ * message on screen — the others are the answer to something the player just
+ * did.
+ */
+export type AccountChangeReason =
+  | "signedIn"
+  | "signedOut"
+  | "renamed"
+  | "deleted"
+  | "expired";
+
 /** Payload of `account:changed`. */
 export interface AccountChanged {
   signedIn: boolean;
+  reason: AccountChangeReason;
 }
 
 /** Emitted by the core after every sign-in, sign-out and rename. */

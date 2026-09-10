@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Route, Routes } from "react-router";
 
+// --- slice: account ---
+import { AccountProvider } from "./components/AccountProvider";
 import { AppShell } from "./components/AppShell";
 import { AppUpdateProvider } from "./components/AppUpdateProvider";
 // --- slice: friends ---
@@ -48,31 +50,36 @@ export default function App() {
           {/* Same reason, plus the toast host: the launcher's own download
               runs while the player keeps browsing servers. */}
           <AppUpdateProvider>
-            {/* --- slice: friends --- */}
-            {/* An invitation arrives on any screen, and answering it
-                navigates away from the one it arrived on. */}
-            <FriendsProvider>
-              <HashRouter>
-                <Routes>
-                  {/* Everything behind the first run. An unknown hash lands on
-                      Home inside the shell, which is where the navigation is. */}
-                  <Route element={<OnboardingGate />}>
-                    <Route element={<AppShell />}>
-                      <Route path="/" element={<HomePage />} />
-                      <Route path="/servers" element={<ServersPage />} />
-                      <Route path="/library" element={<LibraryPage />} />
-                      <Route path="/clients" element={<ClientsPage />} />
-                      <Route path="/friends" element={<FriendsPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="*" element={<HomePage />} />
+            {/* --- slice: account --- */}
+            {/* A session the hub ends by itself has to say so, whichever
+                screen the player is on. Inside the toast column it uses. */}
+            <AccountProvider>
+              {/* --- slice: friends --- */}
+              {/* An invitation arrives on any screen, and answering it
+                  navigates away from the one it arrived on. */}
+              <FriendsProvider>
+                <HashRouter>
+                  <Routes>
+                    {/* Everything behind the first run. An unknown hash lands
+                        on Home inside the shell, where the navigation is. */}
+                    <Route element={<OnboardingGate />}>
+                      <Route element={<AppShell />}>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/servers" element={<ServersPage />} />
+                        <Route path="/library" element={<LibraryPage />} />
+                        <Route path="/clients" element={<ClientsPage />} />
+                        <Route path="/friends" element={<FriendsPage />} />
+                        <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="*" element={<HomePage />} />
+                      </Route>
                     </Route>
-                  </Route>
-                  <Route element={<AppShell withSidebar={false} />}>
-                    <Route path="/onboarding" element={<OnboardingPage />} />
-                  </Route>
-                </Routes>
-              </HashRouter>
-            </FriendsProvider>
+                    <Route element={<AppShell withSidebar={false} />}>
+                      <Route path="/onboarding" element={<OnboardingPage />} />
+                    </Route>
+                  </Routes>
+                </HashRouter>
+              </FriendsProvider>
+            </AccountProvider>
           </AppUpdateProvider>
         </ToastsProvider>
       </GameEventsProvider>
