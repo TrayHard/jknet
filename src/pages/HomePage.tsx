@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { Page, PageHeader } from "../components/PageHeader";
-import { Badge, Button, EmptyState } from "../components/ui";
+import { TopServers } from "../components/servers/TopServers";
+import { Badge, Button } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
 import {
   useClients,
@@ -140,11 +141,7 @@ export function HomePage() {
       </section>
 
       <section className="pt-24">
-        <EmptyState
-          icon={<Play size={24} />}
-          title="Trusted servers show up here"
-          text="The server browser lands in a later task. It will list community servers with ping, map and player count."
-        />
+        <TopServers />
       </section>
     </Page>
   );

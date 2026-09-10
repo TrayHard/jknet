@@ -33,6 +33,25 @@ pub struct Settings {
     /// type them in a shortcut: `+set r_mode -1 +set cl_renderer rd-rend2`.
     /// Split on whitespace with double-quoted groups kept whole.
     pub extra_launch_args: String,
+
+    // --- slice: servers ---
+    /// Servers starred in the browser, as `ip:port`. The star belongs to the
+    /// player and not to the server list, so it survives every refresh and
+    /// every cache wipe.
+    pub favorite_servers: Vec<String>,
+    /// Servers the player connected to, newest first, capped at 50 entries by
+    /// `add_server_history`.
+    pub server_history: Vec<ServerHistoryEntry>,
+}
+
+/// One line of `server_history`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerHistoryEntry {
+    /// `ip:port` of the server, the same key the browser uses.
+    pub address: String,
+    /// When Connect was last pressed, RFC 3339 in UTC.
+    pub last_connected: String,
 }
 
 impl Settings {
