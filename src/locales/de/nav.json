@@ -1,24 +1,24 @@
 {
   "groups": {
-    "play": "Play",
-    "manage": "Manage",
+    "play": "Spielen",
+    "manage": "Verwalten",
     "community": "Community"
   },
   "items": {
-    "home": "Home",
-    "servers": "Servers",
-    "library": "Library",
+    "home": "Start",
+    "servers": "Server",
+    "library": "Bibliothek",
     "clients": "Clients",
-    "friends": "Friends",
-    "settings": "Settings"
+    "friends": "Freunde",
+    "settings": "Einstellungen"
   },
   "user": {
-    "guest": "Guest",
-    "noClient": "No client yet",
-    "openAccount": "Account settings",
-    "signIn": "Sign in"
+    "guest": "Gast",
+    "noClient": "Noch kein Client",
+    "openAccount": "Kontoeinstellungen",
+    "signIn": "Anmelden"
   },
   "gameSwitch": {
-    "label": "Game"
+    "label": "Spiel"
   }
 }

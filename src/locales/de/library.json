@@ -1,92 +1,92 @@
 {
-  "title": "Library",
-  "subtitle": "Skins, hilts, maps and mods, installed into the client you choose.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} files · {{enabled}} enabled · {{size}}",
-  "noEngine": "no engine",
-  "searchPlaceholder": "Search files",
-  "browseJkhub": "Browse JKHub",
-  "addFiles": "Add files",
-  "pickTitle": "Add pk3 files",
-  "pickFilter": "Jedi Academy archives",
+  "title": "Bibliothek",
+  "subtitle": "Skins, Griffe, Maps und Mods, installiert in den Client Ihrer Wahl.",
+  "subtitleClient": "{{client}} · {{engine}} · {{files}} Dateien · {{enabled}} aktiv · {{size}}",
+  "noEngine": "keine Engine",
+  "searchPlaceholder": "Dateien durchsuchen",
+  "browseJkhub": "JKHub durchsuchen",
+  "addFiles": "Dateien hinzufügen",
+  "pickTitle": "pk3-Dateien hinzufügen",
+  "pickFilter": "Jedi-Academy-Archive",
   "clientBar": {
     "label": "Client",
-    "hint": "Files are installed into this client only. Another client with the same engine keeps its own set. {{game}} clients are listed here; switch game in the sidebar for the other ones."
+    "hint": "Dateien werden nur in diesen Client installiert. Ein anderer Client mit derselben Engine behält seinen eigenen Satz. Hier stehen die Clients für {{game}}; für die anderen wechseln Sie das Spiel in der Seitenleiste."
   },
   "tabs": {
-    "installed": "Installed",
-    "jkhub": "Browse JKHub",
+    "installed": "Installiert",
+    "jkhub": "JKHub durchsuchen",
     "updates": "Updates"
   },
   "sort": {
-    "label": "Sort by",
-    "recent": "Recent",
+    "label": "Sortieren nach",
+    "recent": "Neueste",
     "name": "Name",
-    "size": "Size"
+    "size": "Größe"
   },
   "categories": {
-    "all": "All",
+    "all": "Alle",
     "skin": "Skins",
-    "hilt": "Hilts",
+    "hilt": "Griffe",
     "map": "Maps",
     "mod": "Mods",
     "hud": "HUD & UI",
     "sound": "Sounds",
-    "other": "Other"
+    "other": "Sonstiges"
   },
   "categoryOne": {
     "skin": "Skin",
-    "hilt": "Hilt",
+    "hilt": "Griff",
     "map": "Map",
     "mod": "Mod",
     "hud": "HUD",
     "sound": "Sound",
-    "other": "Other"
+    "other": "Sonstiges"
   },
-  "onlyEnabled": "Only enabled",
-  "onlyEnabledSwitch": "Show only enabled files",
+  "onlyEnabled": "Nur aktive",
+  "onlyEnabledSwitch": "Nur aktive Dateien anzeigen",
   "card": {
-    "addedByHand": "Added by hand",
+    "addedByHand": "Von Hand hinzugefügt",
     "sourceWithFolder": "{{source}} · {{folder}}",
-    "conflict": "Conflict",
-    "enable": "Enable {{file}}",
-    "remove": "Remove {{file}}",
-    "removeHint": "Remove from this client"
+    "conflict": "Konflikt",
+    "enable": "{{file}} aktivieren",
+    "remove": "{{file}} entfernen",
+    "removeHint": "Aus diesem Client entfernen"
   },
   "empty": {
-    "noClientsTitle": "No {{game}} clients yet",
-    "noClientsText": "A library file is installed into a client. Create one and this list starts filling up.",
-    "newClient": "New client",
-    "noFilesTitle": "{{client}} has no files yet",
-    "noFilesText": "Find skins, hilts, maps and mods on JKHub, then add the pk3 files here. You can also drop them straight onto this window.",
-    "filteredTitle": "Nothing matches",
-    "filteredText": "No file in this client matches the search and the filters. Clear them to see the whole library.",
-    "updatesTitle": "No updates yet",
-    "updatesText": "Once files carry a JKHub version, the ones with a newer release show up here."
+    "noClientsTitle": "Noch keine Clients für {{game}}",
+    "noClientsText": "Eine Bibliotheksdatei wird in einen Client installiert. Legen Sie einen an, dann füllt sich diese Liste.",
+    "newClient": "Neuer Client",
+    "noFilesTitle": "In {{client}} liegen noch keine Dateien",
+    "noFilesText": "Finden Sie Skins, Griffe, Maps und Mods auf JKHub und fügen Sie die pk3-Dateien hier hinzu. Sie können sie auch direkt auf dieses Fenster ziehen.",
+    "filteredTitle": "Keine Treffer",
+    "filteredText": "Keine Datei in diesem Client passt zur Suche und zu den Filtern. Leeren Sie beides, um die ganze Bibliothek zu sehen.",
+    "updatesTitle": "Noch keine Updates",
+    "updatesText": "Sobald Dateien eine Version von JKHub tragen, erscheinen hier die mit einer neueren Ausgabe."
   },
   "fallback": {
-    "thisClient": "this client",
-    "theClient": "the client"
+    "thisClient": "diesem Client",
+    "theClient": "den Client"
   },
   "skipped": {
-    "rename": "Rename it to {{name}}.",
-    "title_one": "{{count}} file was not added",
-    "title_other": "{{count}} files were not added"
+    "title_one": "{{count}} Datei wurde nicht hinzugefügt",
+    "title_other": "{{count}} Dateien wurden nicht hinzugefügt",
+    "rename": "Benennen Sie sie in {{name}} um."
   },
   "drop": {
-    "title": "Drop pk3 files to install them into {{client}}"
+    "title": "Ziehen Sie pk3-Dateien hierher, um sie in {{client}} zu installieren"
   },
   "conflicts": {
-    "notice": "{{count}} files change the same content. The engine loads the last one and ignores the rest.",
-    "see": "See what wins",
-    "title": "Files that change the same content",
-    "body": "{{files}} archives of {{client}} carry {{paths}} shared paths. The engine reads the last one it loads and ignores the rest.",
-    "wins": "Wins",
-    "hidden": "Hidden",
-    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the archives to see the rest."
+    "notice": "{{count}} Dateien ändern denselben Inhalt. Die Engine lädt die letzte und lässt den Rest liegen.",
+    "see": "Ansehen, was gewinnt",
+    "title": "Dateien, die denselben Inhalt ändern",
+    "body": "{{files}} Archive in {{client}} tragen {{paths}} gemeinsame Pfade. Die Engine liest das zuletzt geladene und lässt den Rest liegen.",
+    "wins": "Gewinnt",
+    "hidden": "Verdeckt",
+    "truncated": "Aufgeführt sind nur die ersten {{shown}} von {{total}} Pfaden. Deaktivieren Sie eines der Archive, um den Rest zu sehen."
   },
   "remove": {
-    "title": "Remove {{file}} from {{client}}?",
-    "body": "{{fileName}}, {{size}}. The file is deleted from the client's {{folder}} folder. Other clients keep their own copy.",
-    "confirm": "Remove file"
+    "title": "{{file}} aus {{client}} entfernen?",
+    "body": "{{fileName}}, {{size}}. Die Datei wird aus dem Ordner {{folder}} des Clients gelöscht. Andere Clients behalten ihre eigene Kopie.",
+    "confirm": "Datei entfernen"
   }
 }
