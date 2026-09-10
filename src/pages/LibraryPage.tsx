@@ -364,10 +364,11 @@ export function LibraryPage() {
         ))}
       </nav>
 
-      {/* TODO(jkhub-game): the Browse JKHub tab of the JKHub slice takes the
-          active game — a Jedi Outcast file is not installable into a Jedi
-          Academy client — so pass `activeGame` into whatever prop that tab
-          exposes once the two branches are merged. */}
+      {/* Both tabs work in the active game. The Installed tab gets it through
+          the client picker above, which offers this game's clients only; the
+          Browse JKHub tab reads it itself with `useActiveGame` and browses that
+          game's roots, so a Jedi Outcast file is never offered for install into
+          a Jedi Academy client. */}
       {tab === "installed" ? (
         <InstalledTab
           clients={clientOptions.length}
