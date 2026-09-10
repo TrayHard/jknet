@@ -1,65 +1,65 @@
 {
-  "title": "Settings",
-  "subtitle": "Language, launch, downloads, appearance and account.",
+  "title": "Ustawienia",
+  "subtitle": "Język, uruchamianie, pobieranie, wygląd i konto.",
   "dataFolder": {
-    "title": "Data folder",
-    "text": "Clients, library and logs live here.",
-    "open": "Open JKNet folder"
+    "title": "Folder danych",
+    "text": "Tu leżą klienci, biblioteka i dzienniki.",
+    "open": "Otwórz folder JKNet"
   },
   "language": {
-    "title": "Language",
-    "text": "The launcher speaks the language you pick here. Server names, map names and file titles stay as their authors wrote them.",
-    "label": "Interface language",
-    "system": "System language",
-    "systemWith": "System language ({{language}})",
-    "needsTranslation": "This language is not translated yet and shows English."
+    "title": "Język",
+    "text": "Launcher mówi w języku, który tu wybierzesz. Nazwy serwerów, nazwy map i tytuły plików zostają takie, jakie napisali ich autorzy.",
+    "label": "Język interfejsu",
+    "system": "Język systemu",
+    "systemWith": "Język systemu ({{language}})",
+    "needsTranslation": "Ten język nie jest jeszcze przetłumaczony i pokazuje angielski."
   },
   "gameFiles": {
-    "title": "Game files",
-    "text": "JKNet reads the archives in these folders and writes nothing into them. One game is enough; set up the other whenever you like.",
-    "row": "{{game}} files",
-    "playStarts": "Play starts {{client}}",
-    "noDefault": "No default client yet",
-    "locate": "Locate",
-    "change": "Change",
-    "pickTitle": "Select the {{game}} GameData folder",
-    "invalid": "No {{game}} files in {{path}}. Missing: {{missing}}."
+    "title": "Pliki gry",
+    "text": "JKNet czyta archiwa w tych folderach i nic do nich nie zapisuje. Jedna gra wystarczy; drugą skonfigurujesz, kiedy zechcesz.",
+    "row": "Pliki gry {{game}}",
+    "playStarts": "Graj uruchamia: {{client}}",
+    "noDefault": "Brak domyślnego klienta",
+    "locate": "Wskaż",
+    "change": "Zmień",
+    "pickTitle": "Wybierz folder GameData gry {{game}}",
+    "invalid": "Brak plików gry {{game}} w {{path}}. Brakuje: {{missing}}."
   },
   "launch": {
-    "title": "Launch",
-    "label": "Extra launch arguments",
+    "title": "Uruchamianie",
+    "label": "Dodatkowe argumenty uruchamiania",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Appended to every client, exactly as in a shortcut. Example: <0>+set r_fullscreen 0 +set r_mode 4</0>. Double quotes keep a value with a space together."
+    "hint": "Dopisywane do każdego klienta, dokładnie jak w skrócie. Przykład: <0>+set r_fullscreen 0 +set r_mode 4</0>. Podwójny cudzysłów trzyma razem wartość ze spacją."
   },
   "onboarding": {
-    "title": "First-time setup",
-    "text": "Walks through game files, a client and an account again. Nothing you have set up is removed.",
-    "action": "Run first-time setup again"
+    "title": "Konfiguracja początkowa",
+    "text": "Prowadzi jeszcze raz przez pliki gry, klienta i konto. Nic z tego, co już ustawiono, nie znika.",
+    "action": "Uruchom konfigurację początkową ponownie"
   },
   "cache": {
-    "title": "Cache",
-    "mapPictures": "Map pictures",
-    "reading": "Reading the index…",
+    "title": "Pamięć podręczna",
+    "mapPictures": "Obrazki map",
+    "reading": "Odczytywanie indeksu…",
+    "count_one": "{{count}} mapa ma obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "count_few": "{{count}} mapy mają obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "count_many": "{{count}} map ma obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "count_other": "{{count}} mapy ma obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
     "perGame": "{{count}} {{game}}",
-    "lastRebuild": "Last rebuild: {{maps}} pictures from {{sources}} files in {{elapsed}}.",
-    "rebuild": "Rebuild",
-    "rebuilding": "Rebuilding…",
-    "count_one": "{{count}} map has a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_few": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_many": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded.",
-    "count_other": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded."
+    "lastRebuild": "Ostatnia przebudowa: {{maps}} obrazków z {{sources}} plików w {{elapsed}}.",
+    "rebuild": "Przebuduj",
+    "rebuilding": "Przebudowywanie…"
   },
   "rest": {
-    "title": "The rest of the settings is not wired up yet",
-    "text": "The Downloads and Appearance sections arrive together with the features they control."
+    "title": "Reszta ustawień nie jest jeszcze podłączona",
+    "text": "Sekcje Pobieranie i Wygląd pojawią się razem z funkcjami, którymi sterują."
   },
   "about": {
-    "title": "About",
-    "text": "JKNet updates itself from GitHub Releases. Every package is signed, and an unsigned one is refused.",
-    "version": "Version {{version}}",
-    "versionUnknown": "Version unknown",
+    "title": "O programie",
+    "text": "JKNet aktualizuje się z GitHub Releases. Każdy pakiet jest podpisany, a niepodpisany zostaje odrzucony.",
+    "version": "Wersja {{version}}",
+    "versionUnknown": "Wersja nieznana",
     "license": "GPL-3.0-or-later",
-    "check": "Check for updates",
-    "install": "Install and restart"
+    "check": "Sprawdź aktualizacje",
+    "install": "Zainstaluj i uruchom ponownie"
   }
 }
