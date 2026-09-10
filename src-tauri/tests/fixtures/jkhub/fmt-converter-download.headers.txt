@@ -1,0 +1,35 @@
+HTTP/1.1 301 Moved Permanently
+Date: Thu, 10 Sep 2026 12:03:16 GMT
+Content-Type: text/html;charset=UTF-8
+Connection: keep-alive
+Server: cloudflare
+X-IPS-LoggedIn: 0
+Vary: Cookie
+X-XSS-Protection: 0
+Cross-Origin-Opener-Policy: same-origin
+X-Frame-Options: sameorigin
+Content-Security-Policy: frame-ancestors 'self'
+X-Content-Security-Policy: frame-ancestors 'self'
+Referrer-Policy: strict-origin-when-cross-origin
+Expires: 0
+Cache-Control: no-cache, no-store, must-revalidate, max-age=0, s-maxage=0
+Location: https://mrwonko.de/g2tools/jk3-to-jk2/
+cf-cache-status: DYNAMIC
+Strict-Transport-Security: max-age=31536000; preload
+X-Content-Type-Options: nosniff
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=sMSOhaaToBu8SgOlrg0CfA%2FwWNvpikbXUZ0JkMTZL5D%2FB8b9iFstiAZCJ%2Be%2F%2FtpJY8v%2B8vrBhNHF356xQdS6SqyjXu2SEs3pWhR5jHGTsdhtuBYrARp6xdSq1Mo%3D"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+CF-RAY: a38e49dc4cdd3107-TBS
+alt-svc: h3=":443"; ma=86400
+
+HTTP/1.1 200 OK
+Server: nginx/1.24.0 (Ubuntu)
+Date: Thu, 10 Sep 2026 12:03:17 GMT
+Content-Type: text/html
+Content-Length: 2754
+Last-Modified: Tue, 18 Aug 2026 08:52:57 GMT
+Connection: keep-alive
+ETag: "6a841d69-ac2"
+X-Clacks-Overhead: GNU Terry Pratchett
+Accept-Ranges: bytes
+

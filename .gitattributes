@@ -1,0 +1,7 @@
+# Saved pages of jkhub.org, kept byte for byte.
+#
+# They are evidence, not source: the parsers in `src-tauri/src/jkhub/parse.rs`
+# are tested against exactly what the site sent, and a checkout that rewrote
+# their line endings would no longer be that. `-text` switches the conversion
+# off in both directions.
+src-tauri/tests/fixtures/** -text

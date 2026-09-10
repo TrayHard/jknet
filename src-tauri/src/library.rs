@@ -70,6 +70,17 @@ const MAX_DISPLAY_NAME: usize = 96;
 /// Emitted after every change so an open Library screen can refetch.
 const EVENT_CHANGED: &str = "library:changed";
 
+// --- slice: jkhub ---
+/// Folder inside `home\` the launcher keeps its own notes in.
+///
+/// It sits under `home\` rather than next to `client.json` so that a client
+/// folder copied by hand carries its notes with its files. The engine lists
+/// only `.pk3` names, so a folder starting with a dot is invisible to it.
+const NOTES_FOLDER: &str = ".jknet";
+
+/// Where each installed file came from, keyed by `<folder>/<file name>`.
+const PROVENANCE: &str = "provenance.json";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -107,9 +118,14 @@ pub struct LibraryItem {
     pub enabled: bool,
     /// UTC time the file appeared in the client, RFC 3339.
     pub added_at: String,
-    /// Where the file came from: `local` for a file added from disk, a JKHub
-    /// reference once downloads exist.
+    /// Where the file came from: `local` for a file added from disk,
+    /// `jkhub` for one the JKHub tab installed.
     pub source: Option<String>,
+    // --- slice: jkhub ---
+    /// What the JKHub tab wrote down about this file, when it installed it.
+    /// `None` for anything added by hand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<crate::jkhub::types::Provenance>,
     /// SHA-1 of the whole archive, `None` when the file could not be read.
     pub sha1: Option<String>,
     /// Free text the player typed. Nothing writes it yet.
@@ -334,6 +350,8 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
     let dir = client_dir(data, client_id)?;
     let files = scan(&dir.join("home"));
     let mut sidecar = read_sidecar(&dir);
+    // --- slice: jkhub ---
+    let provenance = read_provenance(&dir);
     let mut changed = false;
     let mut items = Vec::with_capacity(files.len());
     let mut present = BTreeSet::new();
@@ -352,6 +370,14 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
                 meta
             }
         };
+        // --- slice: jkhub ---
+        // The record of a JKHub install outranks whatever the sidecar
+        // remembers: it is the only one of the two that names a file id.
+        let from_jkhub = provenance.get(&id).cloned();
+        let source = match &from_jkhub {
+            Some(entry) => Some(entry.source.clone()),
+            None => meta.source,
+        };
         items.push(LibraryItem {
             id,
             folder: file.folder.clone(),
@@ -361,9 +387,10 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
             size: file.size,
             enabled: file.enabled,
             added_at: meta.added_at,
-            source: meta.source,
+            source,
             sha1: meta.sha1,
             notes: meta.notes,
+            provenance: from_jkhub,
         });
     }
 
@@ -753,6 +780,7 @@ fn add_files(
             source: meta.source,
             sha1: meta.sha1,
             notes: None,
+            provenance: None,
         });
     }
 
@@ -1049,8 +1077,44 @@ fn write_sidecar(client_dir: &Path, sidecar: &Sidecar) -> Result<()> {
     fs::write(&file, text).map_err(|e| AppError::io_path("cannot write", &file, e))
 }
 
+// --- slice: jkhub ---
+
+/// Reads `home\.jknet\provenance.json`, treating an unreadable one as empty.
+///
+/// Provenance is a note, not a source of truth: the file on disk is. A
+/// document the launcher cannot parse costs the JKHub badge on a card and
+/// nothing else, so it is logged and skipped rather than propagated.
+pub(crate) fn read_provenance(
+    client_dir: &Path,
+) -> BTreeMap<String, crate::jkhub::types::Provenance> {
+    let file = client_dir.join("home").join(NOTES_FOLDER).join(PROVENANCE);
+    let Ok(text) = fs::read_to_string(&file) else {
+        return BTreeMap::new();
+    };
+    match serde_json::from_str(&text) {
+        Ok(entries) => entries,
+        Err(e) => {
+            log::warn!("cannot parse {}: {e}, ignoring it", file.display());
+            BTreeMap::new()
+        }
+    }
+}
+
+/// Writes the provenance document, creating `home\.jknet\` if needed.
+pub(crate) fn write_provenance(
+    client_dir: &Path,
+    entries: &BTreeMap<String, crate::jkhub::types::Provenance>,
+) -> Result<()> {
+    let dir = client_dir.join("home").join(NOTES_FOLDER);
+    paths::create_dir(&dir)?;
+    let file = dir.join(PROVENANCE);
+    let text = serde_json::to_string_pretty(entries)
+        .map_err(|e| AppError::json("cannot serialize the provenance sidecar", e))?;
+    fs::write(&file, text).map_err(|e| AppError::io_path("cannot write", &file, e))
+}
+
 /// Tells an open Library screen that the client's files changed.
-fn notify(app: &tauri::AppHandle, client_id: &str) {
+pub(crate) fn notify(app: &tauri::AppHandle, client_id: &str) {
     let payload = LibraryChanged {
         client_id: client_id.to_string(),
     };
