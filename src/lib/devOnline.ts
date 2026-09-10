@@ -1,5 +1,5 @@
 /**
- * Talking to `scripts/mock-hub.mjs` from a plain browser.
+ * Talking to `scripts/mock-online.mjs` from a plain browser.
  *
  * --- slice: friends ---
  *
@@ -7,7 +7,7 @@
  * with `Tauri runtime is not available` — which is the whole review of the
  * Friends screen reduced to one error line, because that screen is nothing but
  * commands. This module stands in for the eight of them by calling the mock
- * hub over `fetch`, so the layout can be checked without building the core and
+ * service over `fetch`, so the layout can be checked without building the core and
  * without `npm run tauri dev`.
  *
  * It is development scaffolding, not a feature:
@@ -20,7 +20,7 @@
  * - `join_friend` fails on purpose: starting a process is exactly what a
  *   browser cannot do, and pretending otherwise would hide the difference.
  *
- * Start the mock first: `node scripts/mock-hub.mjs`.
+ * Start the mock first: `node scripts/mock-online.mjs`.
  */
 
 import type { FriendsView, Invite, Presence, RequestSent } from "./ipc";
@@ -28,11 +28,11 @@ import type { FriendsView, Invite, Presence, RequestSent } from "./ipc";
 /**
  * Where the stand-in listens.
  *
- * `?hub=http://127.0.0.1:8799` points somewhere else, which is what a machine
- * already running the real hub on the stock port needs.
+ * `?online=http://127.0.0.1:8799` points somewhere else, which is what a machine
+ * already running the real service on the stock port needs.
  */
-const HUB =
-  new URLSearchParams(window.location.search).get("hub") ?? "http://127.0.0.1:8787";
+const ONLINE =
+  new URLSearchParams(window.location.search).get("online") ?? "http://127.0.0.1:8787";
 
 /**
  * The token the mock issued, fetched once.
@@ -45,7 +45,7 @@ const HUB =
 let issued: Promise<string> | null = null;
 
 function token(): Promise<string> {
-  issued ??= fetch(`${HUB}/v1/dev/token`, { method: "POST" })
+  issued ??= fetch(`${ONLINE}/v1/dev/token`, { method: "POST" })
     .then((response) => response.json() as Promise<{ token: string }>)
     .then((answer) => answer.token)
     .catch((e: unknown) => {
@@ -72,12 +72,12 @@ const PRESENCE: Presence = {
   since: new Date().toISOString(),
 };
 
-async function hub<T>(
+async function call<T>(
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const response = await fetch(`${HUB}${path}`, {
+  const response = await fetch(`${ONLINE}${path}`, {
     method,
     headers: {
       authorization: `Bearer ${await token()}`,
@@ -89,7 +89,7 @@ async function hub<T>(
   const parsed: unknown = text === "" ? null : JSON.parse(text);
   if (!response.ok) {
     const detail = parsed as { error?: { message?: string } } | null;
-    throw new Error(detail?.error?.message ?? `the mock hub answered ${response.status}`);
+    throw new Error(detail?.error?.message ?? `the mock service answered ${response.status}`);
   }
   return parsed as T;
 }
@@ -111,13 +111,13 @@ async function view(): Promise<FriendsView> {
     return SIGNED_OUT;
   }
   const [friends, invites] = await Promise.all([
-    hub<Pick<FriendsView, "friends" | "incoming" | "outgoing">>("GET", "/v1/friends"),
-    hub<Invite[]>("GET", "/v1/invites"),
+    call<Pick<FriendsView, "friends" | "incoming" | "outgoing">>("GET", "/v1/friends"),
+    call<Invite[]>("GET", "/v1/invites"),
   ]);
   return { signedIn: true, live: false, ...friends, invites, presence: PRESENCE };
 }
 
-/** Runs one command against the mock hub. Unknown commands reject. */
+/** Runs one command against the mock service. Unknown commands reject. */
 export async function devFriends<T>(
   command: string,
   args: Record<string, unknown> = {},
@@ -127,7 +127,7 @@ export async function devFriends<T>(
     case "get_friends_state":
       return (await view()) as T;
     case "send_friend_request": {
-      const answer = await hub<{ to?: { displayName: string }; friend?: { user: { displayName: string } } }>(
+      const answer = await call<{ to?: { displayName: string }; friend?: { user: { displayName: string } } }>(
         "POST",
         "/v1/friends/requests",
         { query: args.query },
@@ -146,18 +146,18 @@ export async function devFriends<T>(
       return result as T;
     }
     case "accept_friend_request":
-      await hub("POST", `/v1/friends/requests/${id}/accept`);
+      await call("POST", `/v1/friends/requests/${id}/accept`);
       return (await view()) as T;
     case "decline_friend_request":
-      await hub("DELETE", `/v1/friends/requests/${id}`);
+      await call("DELETE", `/v1/friends/requests/${id}`);
       return (await view()) as T;
     case "remove_friend":
-      await hub("DELETE", `/v1/friends/${String(args.userId)}`);
+      await call("DELETE", `/v1/friends/${String(args.userId)}`);
       return (await view()) as T;
     case "send_invite":
-      return (await hub<Invite>("POST", "/v1/invites", args)) as T;
+      return (await call<Invite>("POST", "/v1/invites", args)) as T;
     case "dismiss_invite":
-      await hub("DELETE", `/v1/invites/${id}`);
+      await call("DELETE", `/v1/invites/${id}`);
       return (await view()) as T;
     default:
       // `join_friend` lands here, and so does anything added later without a

@@ -5,7 +5,7 @@ export function providerName(provider: string): string {
   if (provider === "jkhub") return "JKHub";
   if (provider === "discord") return "Discord";
   if (provider === "dev") return "the developer provider";
-  // A provider the hub grew after this build shipped. Its own name is a
+  // A provider the service grew after this build shipped. Its own name is a
   // better answer than "unknown".
   return provider;
 }

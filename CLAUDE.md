@@ -1,6 +1,6 @@
 # Проект: лаунчер JKNet
 
-JKNet — десктопный лаунчер мультиплеера Star Wars Jedi Knight на Tauri 2: ядро на Rust, фронтенд на React, TypeScript и Tailwind CSS v4. Работают все пять экранов: **Home**, **Clients**, **Library**, **Servers** и **Friends** — установка движка, запуск игры, файлы pk3 клиента, браузер серверов, вход на хаб JKNet и друзья.
+JKNet — десктопный лаунчер мультиплеера Star Wars Jedi Knight на Tauri 2: ядро на Rust, фронтенд на React, TypeScript и Tailwind CSS v4. Работают все пять экранов: **Home**, **Clients**, **Library**, **Servers** и **Friends** — установка движка, запуск игры, файлы pk3 клиента, браузер серверов, вход в JKNet Online и друзья.
 
 ## Язык
 
@@ -23,7 +23,7 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 | Проверить линтером | `cargo clippy --all-targets -- -D warnings` в `src-tauri` |
 | Прогнать тесты ядра | `cargo test` в `src-tauri` |
 | Собрать установщик | `npm run tauri build` |
-| Поднять заглушку хаба | `node scripts/mock-hub.mjs` |
+| Поднять заглушку JKNet Online | `node scripts/mock-online.mjs` |
 
 Не запускайте `npm run tauri dev` из агента без прямой просьбы: команда открывает окно и не завершается.
 
@@ -59,7 +59,8 @@ src/
   lib/useAppUpdate.ts    проверка, загрузка и установка обновления лаунчера
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
   lib/format.ts          cn, formatBytes, shortenPath
-  lib/devHub.ts          подмена команд друзей вызовами к заглушке хаба вне Tauri
+  lib/devOnline.ts       подмена команд друзей вызовами к заглушке JKNet
+                         Online вне Tauri
 src-tauri/
   src/lib.rs             сборка приложения, плагины, список команд
   src/state.rs           общее состояние: config_root и настройки
@@ -74,14 +75,14 @@ src-tauri/
   src/launch.rs          запуск клиента, слежение за процессом, остановка
   src/library.rs         файлы pk3 одного клиента в его папке home\
   src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
-  src/hub/               клиент хаба JKNet: типы контракта, запросы, ошибки
+  src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
                          разборщики страниц, скачивание и установка в клиента
   src/account.rs         вход через браузер и команды учётной записи
   src/friends/           друзья, присутствие, приглашения и живой сокет
   capabilities/          разрешения окна main
 scripts/
-  mock-hub.mjs           заглушка хаба на Node без зависимостей
+  mock-online.mjs        заглушка JKNet Online на Node без зависимостей
   make-brand-assets.ps1  растровые копии знака из public/jknet_logo.png
 public/
   jknet_logo.png         мастер-файл знака, 846 px

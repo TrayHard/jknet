@@ -32,7 +32,7 @@ export function Sidebar() {
   const gameClients = clientsOfGame(clients.data, activeGame);
   const defaultClient = useDefaultClient();
 
-  const user = account.data?.hubSignedIn ? (account.data.hubUser ?? null) : null;
+  const user = account.data?.onlineSignedIn ? (account.data.onlineUser ?? null) : null;
 
   return (
     <nav className="flex flex-col shrink-0 w-232 bg-sidebar border-r border-line-subtle">

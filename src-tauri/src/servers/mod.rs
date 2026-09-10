@@ -974,7 +974,7 @@ fn edit_settings(
     edit(&mut settings);
     settings.save(state)?;
     state.set_settings(settings.clone())?;
-    // --- slice: account --- the hub token never crosses the IPC boundary.
+    // --- slice: account --- the service token never crosses the IPC boundary.
     Ok(settings.redacted())
 }
 

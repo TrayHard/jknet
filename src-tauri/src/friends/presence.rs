@@ -1,9 +1,9 @@
-//! Telling the hub where the player is.
+//! Telling the service where the player is.
 //!
 //! ## The state machine
 //!
 //! The launcher owns two of the three statuses of the contract. `offline` is
-//! never sent: the hub derives it from a missing heartbeat, which is also what
+//! never sent: the service derives it from a missing heartbeat, which is also what
 //! covers a launcher killed from the task manager.
 //!
 //! ```text
@@ -23,7 +23,7 @@
 //! same function, so a push that failed on the transition is repaired by the
 //! next tick rather than by a retry loop of its own.
 //!
-//! The hub answers a heartbeat that repeats itself by storing it and telling
+//! The service answers a heartbeat that repeats itself by storing it and telling
 //! nobody: friends get `presence.updated` only when a field actually changes.
 //! That is why the launcher may push the same document every 30 s without
 //! filling anybody's socket with noise.
@@ -43,7 +43,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use crate::clients;
-use crate::hub::{HubClient, HubContext, Presence, PresenceUpdate};
+use crate::online::{OnlineClient, OnlineContext, Presence, PresenceUpdate};
 use crate::launch::{GameExited, GameStarted};
 use crate::servers;
 use crate::state::AppState;
@@ -151,7 +151,7 @@ fn in_game(app: &AppHandle, started: &GameStarted) -> Presence {
 pub async fn set_and_push(app: &AppHandle, presence: Presence) {
     app.state::<FriendsState>().set_presence(presence);
     // The screen shows the player's own presence — the Invite button only
-    // appears while in a game — so the window is told whether or not the hub
+    // appears while in a game — so the window is told whether or not the service
     // was reachable. A nudge rather than a payload: the window reads the
     // presence back from `get_friends_state` along with everything else.
     if let Err(e) = app.emit(EVENT_CHANGED, ()) {
@@ -168,7 +168,7 @@ async fn push(app: &AppHandle) {
     let Ok(settings) = app.state::<AppState>().settings() else {
         return;
     };
-    let ctx = HubContext::from_settings(&settings);
+    let ctx = OnlineContext::from_settings(&settings);
     if !ctx.signed_in() {
         return;
     }
@@ -178,7 +178,7 @@ async fn push(app: &AppHandle) {
         return;
     }
     let update = PresenceUpdate::from(&presence);
-    match app.state::<HubClient>().put_presence(&ctx, &update).await {
+    match app.state::<OnlineClient>().put_presence(&ctx, &update).await {
         Ok(_) => log::debug!("presence: {}", update.status),
         Err(e) => log::debug!("cannot report presence: {e}"),
     }
@@ -207,12 +207,12 @@ mod tests {
     }
 
     #[test]
-    fn only_the_two_reportable_statuses_reach_the_hub() {
+    fn only_the_two_reportable_statuses_reach_the_service() {
         let mut presence = online();
         assert!(presence.is_reportable());
         presence.status = Presence::OFFLINE.into();
         assert!(!presence.is_reportable());
-        // A status the hub grew after this launcher was built is not something
+        // A status the service grew after this launcher was built is not something
         // to report either: the launcher only ever says these two.
         presence.status = "away".into();
         assert!(!presence.is_reportable());
@@ -248,7 +248,7 @@ mod tests {
     }
 
     #[test]
-    fn the_heartbeat_fits_three_times_into_the_timeout_of_the_hub() {
+    fn the_heartbeat_fits_three_times_into_the_timeout_of_the_service() {
         // The contract marks a player offline 90 s after the last heartbeat.
         // A tick that no longer divides that is a player who blinks out while
         // still playing.

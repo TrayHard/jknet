@@ -1,8 +1,8 @@
 //! Friends, presence and invites.
 //!
-//! The launcher is one client of the JKNet hub, a small HTTPS service that
+//! The launcher is one client of JKNet Online, a small HTTPS service that
 //! knows who is signed in, who is friends with whom and where everybody is
-//! playing. `crate::hub` owns the wire; this module holds everything built on
+//! playing. `crate::online` owns the wire; this module holds everything built on
 //! top of it that is not the sign-in: the commands the Friends screen calls,
 //! the background reporter that says where the player is, and the socket that
 //! hears about everybody else.
@@ -14,23 +14,23 @@
 //!
 //! ## Signed in, signed out
 //!
-//! One field decides: `settings.hub_token`. `crate::account` writes it; this
-//! module only ever reads it, through [`crate::hub::HubContext`]. Nothing here
+//! One field decides: `settings.online_token`. `crate::account` writes it; this
+//! module only ever reads it, through [`crate::online::OnlineContext`]. Nothing here
 //! fails because nobody is signed in — [`get_friends_state`] answers
 //! `signedIn: false` and the two background tasks stay quiet — so the Friends
 //! screen can render its sign-in prompt without a special case in the
 //! frontend.
 //!
-//! A build whose hub address is blank reads the same way. `HubContext` calls
-//! such a launcher signed out whatever `hub_token` holds, so the background
+//! A build whose service address is blank reads the same way. `OnlineContext` calls
+//! such a launcher signed out whatever `online_token` holds, so the background
 //! tasks never start and no command reaches the network; the commands that
-//! need an account answer `AppError::HubNotConfigured` instead of
+//! need an account answer `AppError::OnlineNotConfigured` instead of
 //! `AppError::SignedOut`, because signing in is not the cure.
 //!
 //! Signing in and out is an event, not a poll. `account:changed` bumps
 //! [`FriendsState::note_account_change`], and both background tasks wake on
 //! it: the heartbeat sends the first push of a fresh sign-in at once, and the
-//! live socket closes the one holding a token the hub has just revoked.
+//! live socket closes the one holding a token the service has just revoked.
 //!
 //! ## Events
 //!
@@ -44,7 +44,7 @@
 //! calling [`get_friends_state`], which keeps one writer for the three lists.
 
 #[cfg(test)]
-mod hub_tests;
+mod online_tests;
 pub mod live;
 pub mod presence;
 
@@ -61,8 +61,9 @@ use crate::account::{AccountChanged, ACCOUNT_CHANGED_EVENT};
 use crate::error::{AppError, Result};
 // --- slice: game switch --- the port of a friend's server names their game.
 use crate::game::Game;
-use crate::hub::{
-    Friend, FriendRequest, HubClient, HubContext, Invite, NewInvite, Presence, SendRequestResult,
+use crate::online::{
+    Friend, FriendRequest, Invite, NewInvite, OnlineClient, OnlineContext, Presence,
+    SendRequestResult,
 };
 use crate::launch::{self, LaunchState, RunningGame};
 use crate::state::AppState;
@@ -83,7 +84,7 @@ const MAX_QUERY_LEN: usize = 96;
 
 /// What this module keeps between calls.
 ///
-/// Nothing here is a copy of the hub's data: the friends lists are fetched on
+/// Nothing here is a copy of the service's data: the friends lists are fetched on
 /// demand, because a stale list on screen is worse than a spinner and the
 /// document is small.
 pub struct FriendsState {
@@ -91,7 +92,7 @@ pub struct FriendsState {
     presence: Mutex<Presence>,
     /// Whether the live socket is up right now.
     live: AtomicBool,
-    /// A fingerprint of the hub and the token the launcher is working as.
+    /// A fingerprint of the service and the token the launcher is working as.
     ///
     /// The two background tasks wait on it, so a sign-in or a sign-out reaches
     /// them without a poll. It is a fingerprint rather than a counter because
@@ -159,11 +160,11 @@ impl FriendsState {
     }
 }
 
-/// A cheap fingerprint of "which account, on which hub".
+/// A cheap fingerprint of "which account, on which service".
 ///
 /// Not reversible and never logged: it exists to tell one token from another,
 /// not to stand in for one.
-fn account_fingerprint(ctx: &HubContext) -> u64 {
+fn account_fingerprint(ctx: &OnlineContext) -> u64 {
     let mut hasher = DefaultHasher::new();
     ctx.base_url.hash(&mut hasher);
     ctx.token.hash(&mut hasher);
@@ -176,7 +177,7 @@ pub fn start(app: &AppHandle) {
     // `account:changed` that carries nothing but a rename is recognised as
     // one. Nothing is listening yet, which is why this wakes nobody.
     if let Ok(settings) = app.state::<AppState>().settings() {
-        let ctx = HubContext::from_settings(&settings);
+        let ctx = OnlineContext::from_settings(&settings);
         app.state::<FriendsState>()
             .note_account(account_fingerprint(&ctx));
     }
@@ -188,7 +189,7 @@ pub fn start(app: &AppHandle) {
 /// Turns `account:changed` into the wake-up both tasks wait on.
 ///
 /// Signing out has to stop the heartbeat and close the socket now rather than
-/// when the hub gets round to revoking them; signing in has to start both
+/// when the service gets round to revoking them; signing in has to start both
 /// without the player waiting out a 30 s tick.
 fn watch_the_account(app: &AppHandle) {
     let handle = app.clone();
@@ -207,7 +208,7 @@ fn watch_the_account(app: &AppHandle) {
         let Ok(settings) = handle.state::<AppState>().settings() else {
             return;
         };
-        let fingerprint = account_fingerprint(&HubContext::from_settings(&settings));
+        let fingerprint = account_fingerprint(&OnlineContext::from_settings(&settings));
         if state.note_account(fingerprint) {
             log::info!("friends: the account changed, signed in: {signed_in}");
         }
@@ -226,7 +227,7 @@ fn watch_the_account(app: &AppHandle) {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendsView {
-    /// False when `settings.hub_token` is empty. The rest is then empty too.
+    /// False when `settings.online_token` is empty. The rest is then empty too.
     pub signed_in: bool,
     /// Whether the live socket is up. False means the lists refresh on a
     /// timer instead of the moment something changes.
@@ -247,7 +248,7 @@ pub struct FriendsView {
 #[serde(rename_all = "camelCase")]
 pub struct RequestSent {
     /// `requested` when the other side has to accept, `accepted` when they had
-    /// already asked and the hub joined the two halves.
+    /// already asked and the service joined the two halves.
     pub outcome: &'static str,
     /// Who the request reached, for the line the screen prints.
     pub display_name: String,
@@ -264,31 +265,31 @@ pub struct RequestSent {
 pub async fn get_friends_state(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
 ) -> Result<FriendsView> {
-    let ctx = HubContext::from_settings(&state.settings()?);
+    let ctx = OnlineContext::from_settings(&state.settings()?);
     if !ctx.signed_in() {
         return Ok(signed_out(&app));
     }
-    collect(&app, &hub, &ctx).await
+    collect(&app, &online, &ctx).await
 }
 
 /// Asks somebody to be friends.
 ///
 /// `query` is a display name, `provider:providerName` such as `jkhub:kyle_k`,
-/// or a user id — the contract lets the hub decide which, so the launcher only
+/// or a user id — the contract lets the service decide which, so the launcher only
 /// checks that there is something to send.
 #[tauri::command]
 pub async fn send_friend_request(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     query: String,
 ) -> Result<RequestSent> {
     let ctx = require_account(&state)?;
     let query = clean_query(&query)?;
-    let sent = hub.send_friend_request(&ctx, &query).await?;
-    let state = collect(&app, &hub, &ctx).await?;
+    let sent = online.send_friend_request(&ctx, &query).await?;
+    let state = collect(&app, &online, &ctx).await?;
     outcome_of(sent, state)
 }
 
@@ -297,12 +298,12 @@ pub async fn send_friend_request(
 pub async fn accept_friend_request(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     id: String,
 ) -> Result<FriendsView> {
     let ctx = require_account(&state)?;
-    hub.accept_request(&ctx, &id).await?;
-    collect(&app, &hub, &ctx).await
+    online.accept_request(&ctx, &id).await?;
+    collect(&app, &online, &ctx).await
 }
 
 /// Declines an incoming request, or cancels one this player sent: the contract
@@ -311,12 +312,12 @@ pub async fn accept_friend_request(
 pub async fn decline_friend_request(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     id: String,
 ) -> Result<FriendsView> {
     let ctx = require_account(&state)?;
-    hub.decline_request(&ctx, &id).await?;
-    collect(&app, &hub, &ctx).await
+    online.decline_request(&ctx, &id).await?;
+    collect(&app, &online, &ctx).await
 }
 
 /// Ends a friendship.
@@ -324,12 +325,12 @@ pub async fn decline_friend_request(
 pub async fn remove_friend(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     user_id: String,
 ) -> Result<FriendsView> {
     let ctx = require_account(&state)?;
-    hub.remove_friend(&ctx, &user_id).await?;
-    collect(&app, &hub, &ctx).await
+    online.remove_friend(&ctx, &user_id).await?;
+    collect(&app, &online, &ctx).await
 }
 
 /// Invites one friend to the server this player is on.
@@ -339,7 +340,7 @@ pub async fn remove_friend(
 #[tauri::command]
 pub async fn send_invite(
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     to_user_id: String,
     server_address: String,
     server_name: Option<String>,
@@ -352,7 +353,7 @@ pub async fn send_invite(
             "an invite needs a server address".into(),
         ));
     }
-    hub.create_invite(
+    online.create_invite(
         &ctx,
         &NewInvite {
             to_user_id,
@@ -369,12 +370,12 @@ pub async fn send_invite(
 pub async fn dismiss_invite(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     id: String,
 ) -> Result<FriendsView> {
     let ctx = require_account(&state)?;
-    hub.dismiss_invite(&ctx, &id).await?;
-    collect(&app, &hub, &ctx).await
+    online.dismiss_invite(&ctx, &id).await?;
+    collect(&app, &online, &ctx).await
 }
 
 /// Starts the default client on the server a friend is playing on.
@@ -386,12 +387,12 @@ pub async fn dismiss_invite(
 pub async fn join_friend(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     launch: tauri::State<'_, LaunchState>,
     user_id: String,
 ) -> Result<RunningGame> {
     let ctx = require_account(&state)?;
-    let list = hub.get_friends(&ctx).await?;
+    let list = online.get_friends(&ctx).await?;
     let address = joinable_address(&list.friends, &user_id)?;
     // --- slice: game switch ---
     // Presence carries no game, so the port answers for it: following a friend
@@ -412,15 +413,15 @@ pub async fn join_friend(
 /// Where to call and who to call as, or the error that sends the player to the
 /// Account card on the Settings screen.
 ///
-/// Refusing here rather than letting the hub answer `401` costs no round trip
+/// Refusing here rather than letting the service answer `401` costs no round trip
 /// and gives the player the sentence that names the cure. The two refusals are
-/// different cures, so they are different errors: a build with no hub cannot
+/// different cures, so they are different errors: a build with no service cannot
 /// be signed in to at all, while a signed-out one is one button away.
-fn require_account(state: &AppState) -> Result<HubContext> {
-    let ctx = HubContext::from_settings(&state.settings()?);
-    // --- slice: hub gate ---
+fn require_account(state: &AppState) -> Result<OnlineContext> {
+    let ctx = OnlineContext::from_settings(&state.settings()?);
+    // --- slice: online gate ---
     if !ctx.configured() {
-        return Err(AppError::HubNotConfigured);
+        return Err(AppError::OnlineNotConfigured);
     }
     if !ctx.signed_in() {
         return Err(AppError::SignedOut);
@@ -438,10 +439,14 @@ fn signed_out(app: &AppHandle) -> FriendsView {
 }
 
 /// Fetches both documents the screen needs and puts them in one answer.
-async fn collect(app: &AppHandle, hub: &HubClient, ctx: &HubContext) -> Result<FriendsView> {
+async fn collect(
+    app: &AppHandle,
+    online: &OnlineClient,
+    ctx: &OnlineContext,
+) -> Result<FriendsView> {
     // Two independent requests: waiting for them in turn would double the
     // time the screen spends on its spinner for no reason.
-    let (list, mut invites) = tokio::try_join!(hub.get_friends(ctx), hub.list_invites(ctx))?;
+    let (list, mut invites) = tokio::try_join!(online.get_friends(ctx), online.list_invites(ctx))?;
 
     sort_invites(&mut invites);
     let state = app.state::<FriendsState>();
@@ -462,7 +467,7 @@ async fn collect(app: &AppHandle, hub: &HubClient, ctx: &HubContext) -> Result<F
 /// The contract has two happy endings and tells them apart by status code:
 /// `201` with the new request, and `200` with a friendship, which is what
 /// happens when the other side had already asked. `SendRequestResult` carries
-/// exactly one of the two, so a document with neither is a hub that broke its
+/// exactly one of the two, so a document with neither is a service that broke its
 /// own contract rather than a case the screen has to draw.
 fn outcome_of(sent: SendRequestResult, state: FriendsView) -> Result<RequestSent> {
     if let Some(request) = sent.request {
@@ -479,9 +484,9 @@ fn outcome_of(sent: SendRequestResult, state: FriendsView) -> Result<RequestSent
             state,
         });
     }
-    Err(AppError::Hub {
+    Err(AppError::Online {
         code: "internal".into(),
-        message: "the hub accepted the request without saying what happened".into(),
+        message: "the service accepted the request without saying what happened".into(),
     })
 }
 
@@ -490,7 +495,7 @@ fn sort_invites(invites: &mut [Invite]) {
     invites.sort_by(|a, b| b.created_at.cmp(&a.created_at));
 }
 
-/// Trims a friend query and refuses the two shapes the hub cannot use.
+/// Trims a friend query and refuses the two shapes the service cannot use.
 fn clean_query(query: &str) -> Result<String> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
@@ -509,7 +514,7 @@ fn clean_query(query: &str) -> Result<String> {
 /// The address a friend can be joined at, or the reason there is none.
 ///
 /// Split out of [`join_friend`] because the three refusals are the whole
-/// behaviour worth testing, and the command around them needs a live hub.
+/// behaviour worth testing, and the command around them needs a live service.
 fn joinable_address(friends: &[Friend], user_id: &str) -> Result<String> {
     let friend = friends
         .iter()
@@ -566,16 +571,16 @@ fn blank_to_none(value: Option<String>) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hub::HubUser;
+    use crate::online::OnlineUser;
 
     fn friend(id: &str, name: &str, presence: Presence) -> Friend {
         Friend {
-            user: HubUser {
+            user: OnlineUser {
                 id: id.into(),
                 display_name: name.into(),
                 provider: "jkhub".into(),
                 provider_name: name.to_lowercase(),
-                ..HubUser::default()
+                ..OnlineUser::default()
             },
             presence,
             friends_since: "2026-01-01T00:00:00Z".into(),
@@ -654,7 +659,7 @@ mod tests {
         assert!(clean_query("").is_err());
         assert!(clean_query("   \n ").is_err());
         // A paste of a whole profile page must not spend one of the ten
-        // friend requests the hub allows per minute.
+        // friend requests the service allows per minute.
         assert!(clean_query(&"n".repeat(MAX_QUERY_LEN + 1)).is_err());
         assert!(clean_query(&"n".repeat(MAX_QUERY_LEN)).is_ok());
     }
@@ -688,9 +693,9 @@ mod tests {
     fn the_two_endings_of_a_friend_request_are_told_apart_by_which_field_is_set() {
         let asked = SendRequestResult {
             request: Some(FriendRequest {
-                to: HubUser {
+                to: OnlineUser {
                     display_name: "Dash Rendar".into(),
-                    ..HubUser::default()
+                    ..OnlineUser::default()
                 },
                 ..FriendRequest::default()
             }),
@@ -700,7 +705,7 @@ mod tests {
         assert_eq!(sent.outcome, "requested");
         assert_eq!(sent.display_name, "Dash Rendar");
 
-        // `200`: they had already asked, so the hub joined the two halves and
+        // `200`: they had already asked, so the service joined the two halves and
         // answered with the friendship instead of a request.
         let joined = SendRequestResult {
             request: None,
@@ -710,7 +715,7 @@ mod tests {
         assert_eq!(sent.outcome, "accepted");
         assert_eq!(sent.display_name, "Kyle");
 
-        // Neither field is a hub that broke its own contract, not a state the
+        // Neither field is a service that broke its own contract, not a state the
         // screen has to draw.
         let nothing = SendRequestResult::default();
         assert!(outcome_of(nothing, FriendsView::default()).is_err());
@@ -737,8 +742,8 @@ mod tests {
         let state = FriendsState::default();
         let mut tasks = state.account_changes();
 
-        let signed_out = HubContext::default();
-        let signed_in = HubContext {
+        let signed_out = OnlineContext::default();
+        let signed_in = OnlineContext {
             base_url: "http://127.0.0.1:8787".into(),
             token: Some("0123456789abcdef".into()),
         };
@@ -762,15 +767,15 @@ mod tests {
         );
     }
 
-    // --- slice: hub gate ---
+    // --- slice: online gate ---
 
     #[test]
-    fn a_build_without_a_hub_keeps_both_background_tasks_quiet() {
+    fn a_build_without_a_service_keeps_both_background_tasks_quiet() {
         // The two gates are one question asked in two places: the heartbeat
-        // stops at `HubContext::signed_in` in `presence::push`, and the live
-        // socket at `HubContext::ws_url` in `live::socket_url`. A stale token
+        // stops at `OnlineContext::signed_in` in `presence::push`, and the live
+        // socket at `OnlineContext::ws_url` in `live::socket_url`. A stale token
         // in `settings.json` must not get past either.
-        let ctx = HubContext {
+        let ctx = OnlineContext {
             base_url: String::new(),
             token: Some("0123456789abcdef".into()),
         };

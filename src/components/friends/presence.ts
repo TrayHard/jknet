@@ -40,7 +40,7 @@ export function statusLine(presence: Presence): string {
 /**
  * "Last seen 20 minutes ago", down to a date once it stops being useful.
  *
- * The hub sends RFC 3339, and a launcher whose clock is behind the hub's would
+ * The service sends RFC 3339, and a launcher whose clock is behind the service's would
  * otherwise print a time in the future; a difference below a minute reads as
  * "just now" either way.
  */

@@ -1,7 +1,7 @@
 /**
- * A stand-in for the JKNet hub, for developing the launcher without one.
+ * A stand-in for JKNet Online, for developing the launcher without one.
  *
- * The real hub is a separate service. This script answers the part of API v1
+ * The real service is a separate service. This script answers the part of API v1
  * the launcher uses — sign-in, the account, friends, presence, invites and the
  * live socket — keeps everything in memory, and depends on nothing but Node
  * itself, so it starts in the time it takes to read this sentence and forgets
@@ -9,10 +9,10 @@
  *
  * Run it:
  *
- *     node scripts/mock-hub.mjs
- *     node scripts/mock-hub.mjs --port 8799
+ *     node scripts/mock-online.mjs
+ *     node scripts/mock-online.mjs --port 8799
  *
- * Then point the launcher at it: the stock `hubUrl` is already
+ * Then point the launcher at it: the stock `onlineUrl` is already
  * `http://127.0.0.1:8787`, which is where this listens by default.
  *
  * What it implements:
@@ -39,14 +39,14 @@
  * Environment:
  *
  *     PORT                  8787       where to listen
- *     MOCK_HUB_PROVIDERS    dev        providers that may open a session
- *     MOCK_HUB_DEV_DELAY_MS 3000       how long a dev session stays pending
+ *     MOCK_ONLINE_PROVIDERS    dev        providers that may open a session
+ *     MOCK_ONLINE_DEV_DELAY_MS 3000       how long a dev session stays pending
  *                                      when no browser opens its form
- *     MOCK_HUB_TAKEN_NAME   Taken      display name that answers 409
+ *     MOCK_ONLINE_TAKEN_NAME   Taken      display name that answers 409
  *
  * What it is not: it does not check the shape of what you send it beyond what
  * the launcher needs to see refused, and it has no persistence. A test that
- * needs a hub to behave badly should say so here.
+ * needs a service to behave badly should say so here.
  *
  * No dependencies on purpose. The WebSocket handshake and framing at the end
  * are RFC 6455 by hand, and cover only what the contract uses — text frames,
@@ -58,17 +58,17 @@ import { createHash, randomBytes } from "node:crypto";
 
 const PORT = Number(argOrEnv("--port", "PORT", "8787"));
 const HOST = "127.0.0.1";
-const PROVIDERS = (process.env.MOCK_HUB_PROVIDERS ?? "dev")
+const PROVIDERS = (process.env.MOCK_ONLINE_PROVIDERS ?? "dev")
   .split(",")
   .map((name) => name.trim())
   .filter(Boolean);
-const DEV_DELAY_MS = Number(process.env.MOCK_HUB_DEV_DELAY_MS ?? "3000");
-const TAKEN_NAME = process.env.MOCK_HUB_TAKEN_NAME ?? "Taken";
+const DEV_DELAY_MS = Number(process.env.MOCK_ONLINE_DEV_DELAY_MS ?? "3000");
+const TAKEN_NAME = process.env.MOCK_ONLINE_TAKEN_NAME ?? "Taken";
 
 /** Every provider of the contract, so an unknown one is a 400 and not a 503. */
 const KNOWN_PROVIDERS = ["jkhub", "discord", "dev"];
 
-/** The hub pings this often, and moves a friend around on the same beat. */
+/** The service pings this often, and moves a friend around on the same beat. */
 const PING_INTERVAL_MS = 20_000;
 /** How long after a connection the scripted invite arrives. */
 const INVITE_DELAY_MS = 40_000;
@@ -77,9 +77,9 @@ const MISSED_PONGS_ALLOWED = 3;
 
 /** Sign-in sessions by id. A session lives ten minutes, as in the contract. */
 const sessions = new Map();
-/** Session id by the `state` its dev form carries, as on the real hub. */
+/** Session id by the `state` its dev form carries, as on the real service. */
 const states = new Map();
-/** The one account this hub has, created by the first completed sign-in. */
+/** The one account this service has, created by the first completed sign-in. */
 let account = null;
 /** The token of that account. Cleared by a logout or a delete. */
 let token = null;
@@ -165,13 +165,13 @@ const server = createServer((request, response) => {
     .catch((e) => {
       // A mock that throws should say so on the console rather than hang the
       // launcher that is waiting for it.
-      console.error(`mock-hub: ${e instanceof Error ? e.stack : e}`);
+      console.error(`mock-online: ${e instanceof Error ? e.stack : e}`);
       send(response, 500, { error: { code: "internal", message: String(e) } });
     });
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`mock-hub listening on http://${HOST}:${PORT}`);
+  console.log(`mock-online listening on http://${HOST}:${PORT}`);
   console.log(`  providers: ${PROVIDERS.join(", ") || "(none)"}`);
   console.log(`  a dev sign-in completes after ${DEV_DELAY_MS} ms`);
   console.log(`  a ping every ${PING_INTERVAL_MS / 1000} s, an invite after ${INVITE_DELAY_MS / 1000} s`);
@@ -274,7 +274,7 @@ function route(request, response, url, body) {
     return withAuth(request, response, () => {
       const gone = drop(requestMatch[1]);
       if (!gone) return fail(response, 404, "not_found", "That request is gone.");
-      // The real hub tells the other side, and says it with `friend.removed`:
+      // The real service tells the other side, and says it with `friend.removed`:
       // a declined or cancelled request is one more relationship that is not
       // there any more.
       broadcast("friend.removed", { userId: gone });
@@ -360,7 +360,7 @@ function createLoginSession(response, body) {
     });
   }
   if (!PROVIDERS.includes(provider)) {
-    // What the real hub answers until JKHub and Discord issue OAuth clients.
+    // What the real service answers until JKHub and Discord issue OAuth clients.
     const name = provider === "jkhub" ? "JKHub" : "Discord";
     return send(response, 503, {
       error: {
@@ -371,7 +371,7 @@ function createLoginSession(response, body) {
   }
 
   const session = newSession(provider, body?.deviceName ?? null);
-  console.log(`mock-hub: session ${session.id} opened for ${provider}`);
+  console.log(`mock-online: session ${session.id} opened for ${provider}`);
 
   // The dev provider needs no browser: a launcher under test must not depend
   // on someone clicking a button. A browser that does open the form cancels
@@ -421,7 +421,7 @@ function readLoginSession(response, rawId) {
 
 /** The page the browser lands on: a form that asks for a display name.
  *
- *  The real hub does the same, and its form submits to
+ *  The real service does the same, and its form submits to
  *  `/v1/auth/dev/callback?state=…&name=…`. The `dev` provider has no
  *  authorization code, so `name` stands where a real provider sends `code`;
  *  the launcher never sees either, it only opens the URL and polls.
@@ -503,7 +503,7 @@ function complete(session, displayName) {
   session.status = "done";
   session.token = token;
   session.user = account;
-  console.log(`mock-hub: session ${session.id} completed as ${account.displayName}`);
+  console.log(`mock-online: session ${session.id} completed as ${account.displayName}`);
 }
 
 /** A session without its secret, which is what a poll gets by default. */
@@ -604,7 +604,7 @@ function incomingInvite() {
   };
 }
 
-/** Matches a display name, a `provider:name` or an id, as the hub does. */
+/** Matches a display name, a `provider:name` or an id, as the service does. */
 function matches(who, query) {
   const wanted = query.trim().toLowerCase();
   return (
@@ -630,7 +630,7 @@ function offline() {
 // ---------------------------------------------------------------------------
 
 /**
- * The real hub needs none of this: the launcher is not a browser origin, and
+ * The real service needs none of this: the launcher is not a browser origin, and
  * the contract says so. The mock allows everything because `npm run dev` puts
  * the same frontend on `http://localhost:14xx`, and reviewing the Friends
  * screen there is half of what this file is for.

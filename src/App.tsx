@@ -51,7 +51,7 @@ export default function App() {
               runs while the player keeps browsing servers. */}
           <AppUpdateProvider>
             {/* --- slice: account --- */}
-            {/* A session the hub ends by itself has to say so, whichever
+            {/* A session the service ends by itself has to say so, whichever
                 screen the player is on. Inside the toast column it uses. */}
             <AccountProvider>
               {/* --- slice: friends --- */}
