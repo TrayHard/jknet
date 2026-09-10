@@ -7,7 +7,7 @@
 //!
 //! | Module           | Responsibility                                  |
 //! | ---------------- | ----------------------------------------------- |
-//! | `paths`          | data folders under `%LOCALAPPDATA%\JKNet` and their command |
+//! | `paths`          | data folders under `%LOCALAPPDATA%\org.jknet.launcher` and their command |
 //! | `settings`       | `settings.json` and its two commands            |
 //! | `state`          | shared state injected into every command        |
 //! | `game_files`     | finding `GameData` with `assets0.pk3`..`assets3.pk3` |
@@ -31,43 +31,99 @@ mod settings;
 mod state;
 mod timestamp;
 
+use std::path::PathBuf;
+
 use engine_install::InstallState;
 use launch::LaunchState;
 use state::AppState;
+use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
 
 /// Keeps a log file small enough to attach to a bug report.
 const MAX_LOG_FILE_SIZE: u128 = 2 * 1024 * 1024;
 
+/// Resolves the folder that holds `settings.json`.
+///
+/// Tauri answers `%LOCALAPPDATA%\org.jknet.launcher`, the folder named after
+/// the bundle identifier. That is on purpose: the NSIS installer owns
+/// `%LOCALAPPDATA%\JKNet`, and its uninstaller offers to delete exactly the
+/// folder resolved here. The two fallbacks cover a machine where the resolver
+/// finds nothing, and go to stderr because the log file lives under the path
+/// this function returns.
+fn resolve_config_root(app: &tauri::App) -> PathBuf {
+    match app.path().app_local_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            eprintln!("jknet: {e}, resolving the data folder from the environment");
+            paths::config_root().unwrap_or_else(|e| {
+                eprintln!("jknet: {e}, falling back to the temp folder");
+                std::env::temp_dir().join("org.jknet.launcher")
+            })
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app_state = AppState::bootstrap();
-    let log_dir = app_state
-        .paths()
-        .map(|paths| paths.logs)
-        .unwrap_or_else(|_| std::env::temp_dir().join("JKNet").join("logs"));
-
     tauri::Builder::default()
-        .plugin(
-            // Stdout and a file, and deliberately no `TargetKind::Webview`:
-            // `src/main.tsx` mirrors the frontend console into this plugin, so
-            // a webview target would send every line straight back to it.
-            tauri_plugin_log::Builder::new()
-                .level(log::LevelFilter::Info)
-                .max_file_size(MAX_LOG_FILE_SIZE)
-                .target(Target::new(TargetKind::Stdout))
-                .target(Target::new(TargetKind::Folder {
-                    path: log_dir,
-                    file_name: Some("jknet".to_string()),
-                }))
-                .build(),
-        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // --- slice: installer ---
         // `relaunch()` after the update installer hands control back.
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
+            // Everything below needs the config root, and the config root needs
+            // an `AppHandle`, so the whole bootstrap lives in `setup`. Nothing
+            // from the webview can arrive first: Tauri runs `setup` inside
+            // `build()`, before the event loop starts pumping messages.
+            let config_root = resolve_config_root(app);
+            // Earlier builds wrote into `%LOCALAPPDATA%\JKNet`. Their files
+            // move here once, before anything reads `settings.json`. The report
+            // waits for the log plugin a few lines down.
+            let migration = match paths::legacy_config_root() {
+                Ok(legacy_root) => {
+                    let report = paths::migrate_legacy_root(&legacy_root, &config_root);
+                    Some((legacy_root, report))
+                }
+                Err(e) => {
+                    eprintln!("jknet: {e}, skipping the move out of the old data folder");
+                    None
+                }
+            };
+
+            let app_state = AppState::bootstrap(config_root);
+            let log_dir = app_state
+                .paths()
+                .map(|paths| paths.logs)
+                .unwrap_or_else(|_| std::env::temp_dir().join("org.jknet.launcher").join("logs"));
+
+            // Stdout and a file, and deliberately no `TargetKind::Webview`:
+            // `src/main.tsx` mirrors the frontend console into this plugin, so
+            // a webview target would send every line straight back to it.
+            //
+            // `targets` replaces the plugin's own list, and `target` would
+            // extend it. The default list holds `TargetKind::LogDir`, which
+            // writes `JKNet.log` into `app_log_dir()` — the same folder, and on
+            // a case-insensitive disk the same file, as the folder target
+            // below. Two appenders on one file wrote every line twice.
+            app.handle().plugin(
+                tauri_plugin_log::Builder::new()
+                    .level(log::LevelFilter::Info)
+                    .max_file_size(MAX_LOG_FILE_SIZE)
+                    .targets([
+                        Target::new(TargetKind::Stdout),
+                        Target::new(TargetKind::Folder {
+                            path: log_dir,
+                            file_name: Some("jknet".to_string()),
+                        }),
+                    ])
+                    .build(),
+            )?;
+            if let Some((legacy_root, report)) = &migration {
+                report.report(legacy_root, &app_state.config_root);
+            }
+            app.manage(app_state);
+
             #[cfg(desktop)]
             {
                 app.handle()
@@ -80,7 +136,6 @@ pub fn run() {
             log::info!("JKNet {} started", app.package_info().version);
             Ok(())
         })
-        .manage(app_state)
         // --- slice: launch ---
         // The running game lives in its own managed value: a process handle
         // has no business sitting behind the settings lock. The set of clients
