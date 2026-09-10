@@ -3,6 +3,8 @@ import { createContext, use, type ReactNode } from "react";
 
 import { formatBytes } from "../lib/format";
 import { useAppUpdate, type AppUpdate } from "../lib/useAppUpdate";
+// --- slice: friends ---
+import { ToastSlot } from "./ToastsProvider";
 import { Button, Toast } from "./ui";
 
 /**
@@ -53,7 +55,10 @@ function UpdateToastHost({ update }: { update: AppUpdate }) {
   const failed = update.stage === "error" && update.error !== null;
 
   return (
-    <div className="fixed bottom-24 right-24 z-50 flex flex-col gap-12">
+    // --- slice: friends ---
+    // The corner moved into `ToastsProvider` so the update notice and an
+    // invitation share one column instead of covering each other.
+    <ToastSlot>
       <Toast
         variant={failed ? "error" : "info"}
         title={
@@ -85,7 +90,7 @@ function UpdateToastHost({ update }: { update: AppUpdate }) {
         // with it.
         onDismiss={downloading ? undefined : update.dismiss}
       />
-    </div>
+    </ToastSlot>
   );
 }
 

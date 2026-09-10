@@ -16,3 +16,10 @@ export { StepBadges } from "./StepBadges";
 export { Toggle } from "./Toggle";
 // --- slice: installer ---
 export { Toast, type ToastVariant } from "./Toast";
+// --- slice: friends ---
+export {
+  Avatar,
+  initials,
+  type AvatarSize,
+  type AvatarStatus,
+} from "./Avatar";

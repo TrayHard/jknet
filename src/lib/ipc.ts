@@ -47,6 +47,11 @@ export interface Settings {
   // --- slice: onboarding ---
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
+  // --- slice: friends (temporary, replaced by hub module at merge) ---
+  /** Base address of the JKNet hub. `null` uses the development default. */
+  hubUrl: string | null;
+  /** Bearer token of the signed-in player. `null` means signed out. */
+  hubToken: string | null;
 }
 
 /**
@@ -67,6 +72,9 @@ export interface SettingsPatch {
   serverHistory?: ServerHistoryEntry[];
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
+  // --- slice: friends (temporary, replaced by hub module at merge) ---
+  hubUrl?: string | null;
+  hubToken?: string | null;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
@@ -354,6 +362,9 @@ export interface EngineInstallProgress {
 export interface GameStarted {
   clientId: string;
   pid: number;
+  // --- slice: friends ---
+  /** The `+connect` address, or `null` when the game opened on its menu. */
+  connect: string | null;
 }
 
 /** Payload of `launch:game-exited`. */
@@ -472,4 +483,152 @@ export const serversIpc = {
     call<Settings>("set_server_favorite", { address, favorite }),
   addServerHistory: (address: string) =>
     call<Settings>("add_server_history", { address }),
+};
+
+// ---------------------------------------------------------------------------
+// --- slice: friends ---
+//
+// The JKNet hub: friends, presence and invites. Every type here mirrors a
+// structure of `src-tauri/src/friends/types.rs`, which in turn mirrors the
+// `## Types` table of the hub contract, so the three stay readable side by
+// side. The launcher never talks to the hub from the frontend: a token in a
+// webview is a token in the devtools network tab.
+// ---------------------------------------------------------------------------
+
+/**
+ * Calls a friends command, or the mock hub when the page is in a browser.
+ *
+ * The Friends screen is nothing but commands, so outside Tauri it would be one
+ * error line and no layout at all. In a development build the call goes to
+ * `scripts/mock-hub.mjs` over `fetch` instead; `import.meta.env.DEV` is a
+ * compile-time constant, so both the branch and `devHub.ts` behind it are gone
+ * from a production bundle. Inside Tauri nothing changes.
+ */
+function callFriends<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  if (import.meta.env.DEV && !isTauri()) {
+    return import("./devHub").then((module) => module.devFriends<T>(command, args));
+  }
+  return call<T>(command, args);
+}
+
+/** A person on the hub. */
+export interface HubUser {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+  /** `jkhub`, `discord` or `dev`. */
+  provider: string;
+  /** Their name at that provider, for example `kyle_k`. */
+  providerName: string;
+  createdAt: string;
+}
+
+/** Where a player is. `offline` is derived by the hub from a missed heartbeat. */
+export type PresenceStatus = "online" | "in_game" | "offline";
+
+export interface Presence {
+  status: PresenceStatus;
+  /** `ip:port` of the server, when the player joined one from JKNet. */
+  serverAddress: string | null;
+  /** Host name of that server, colour codes removed. */
+  serverName: string | null;
+  /** Name of the JKNet client they started. */
+  clientName: string | null;
+  /** RFC 3339 time the status last changed. */
+  since: string;
+}
+
+export interface Friend {
+  user: HubUser;
+  presence: Presence;
+  friendsSince: string;
+}
+
+/** A friend request; which list it is in says whether it is mine to accept. */
+export interface FriendRequest {
+  id: string;
+  from: HubUser;
+  to: HubUser;
+  createdAt: string;
+}
+
+export interface Invite {
+  id: string;
+  from: HubUser;
+  serverAddress: string;
+  serverName: string | null;
+  message: string | null;
+  createdAt: string;
+  /** The hub drops an invite ten minutes after it was made. */
+  expiresAt: string;
+}
+
+/** `src-tauri/src/friends/mod.rs`: everything the Friends screen renders. */
+export interface FriendsView {
+  /** False while nobody is signed in. The lists are then empty, not absent. */
+  signedIn: boolean;
+  /** Whether the live socket is up; false means updates arrive on a timer. */
+  live: boolean;
+  friends: Friend[];
+  incoming: FriendRequest[];
+  outgoing: FriendRequest[];
+  /** Invites addressed to me, newest first. */
+  invites: Invite[];
+  /** What the launcher reports about me. */
+  presence: Presence;
+}
+
+/** The answer of `send_friend_request`. */
+export interface SendRequestResult {
+  /** `requested`, or `accepted` when they had already asked me. */
+  outcome: "requested" | "accepted";
+  displayName: string;
+  state: FriendsView;
+}
+
+/** Payload of `friends:presence`. */
+export interface PresenceUpdated {
+  userId: string;
+  presence: Presence;
+}
+
+/** Event names the friends slice emits. */
+export const friendsEvents = {
+  /** A nudge with no payload: read the lists again. */
+  changed: "friends:changed",
+  /** One friend moved: patch one row. */
+  presence: "friends:presence",
+  /** An `Invite` arrived. */
+  invite: "friends:invite",
+} as const;
+
+export const friendsIpc = {
+  getFriendsState: () => callFriends<FriendsView>("get_friends_state"),
+  /** `query` is a display name, `provider:name` or a user id. */
+  sendFriendRequest: (query: string) =>
+    callFriends<SendRequestResult>("send_friend_request", { query }),
+  acceptFriendRequest: (id: string) =>
+    callFriends<FriendsView>("accept_friend_request", { id }),
+  /** Declines a request sent to me, or cancels one I sent. */
+  declineFriendRequest: (id: string) =>
+    callFriends<FriendsView>("decline_friend_request", { id }),
+  removeFriend: (userId: string) => callFriends<FriendsView>("remove_friend", { userId }),
+  sendInvite: (
+    toUserId: string,
+    serverAddress: string,
+    serverName?: string | null,
+    message?: string | null,
+  ) =>
+    callFriends<Invite>("send_invite", {
+      toUserId,
+      serverAddress,
+      serverName: serverName ?? null,
+      message: message ?? null,
+    }),
+  dismissInvite: (id: string) => callFriends<FriendsView>("dismiss_invite", { id }),
+  /** Starts the default client on the server that friend is playing on. */
+  joinFriend: (userId: string) => callFriends<RunningGame>("join_friend", { userId }),
 };

@@ -1,7 +1,7 @@
 import { Library, Monitor, Server, Settings, User, Users } from "lucide-react";
 import { useNavigate } from "react-router";
 
-import { useClients, useSettings } from "../lib/queries";
+import { useClients, useOnlineFriendCount, useSettings } from "../lib/queries";
 import { NavItem } from "./ui";
 
 /**
@@ -12,6 +12,10 @@ export function Sidebar() {
   const navigate = useNavigate();
   const settings = useSettings();
   const clients = useClients();
+  // --- slice: friends ---
+  // Undefined while signed out or still loading, which leaves the counter off
+  // rather than claiming zero friends are online.
+  const friendsOnline = useOnlineFriendCount();
 
   const defaultClient = clients.data?.find(
     (client) => client.id === settings.data?.defaultClientId,
@@ -36,7 +40,12 @@ export function Sidebar() {
         </Group>
 
         <Group title="Community">
-          <NavItem to="/friends" icon={<Users size={20} />} label="Friends" />
+          <NavItem
+            to="/friends"
+            icon={<Users size={20} />}
+            label="Friends"
+            count={friendsOnline}
+          />
         </Group>
       </div>
 

@@ -23,6 +23,7 @@ JKNet — десктопный лаунчер мультиплеера Jedi Acad
 | Проверить линтером | `cargo clippy --all-targets -- -D warnings` в `src-tauri` |
 | Прогнать тесты ядра | `cargo test` в `src-tauri` |
 | Собрать установщик | `npm run tauri build` |
+| Поднять макет хаба | `node scripts/mock-hub.mjs` |
 
 Не запускайте `npm run tauri dev` из агента без прямой просьбы: команда открывает окно и не завершается.
 
@@ -35,11 +36,13 @@ src/
   styles/fonts.css       локальные шрифты @fontsource
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
                          ClientSettingsDialog, GameEventsProvider,
-                         AppUpdateProvider, AboutCard
+                         AppUpdateProvider, AboutCard, ToastsProvider,
+                         FriendsProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
-                         RadioCard, StepBadges, Toast
+                         RadioCard, StepBadges, Toast, Avatar
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
+  components/friends/    экран Friends: строка, панель друга, заявки, presence.ts
   pages/                 по одному файлу на маршрут
   pages/onboarding/      три шага первого запуска и защита маршрутов
   lib/ipc.ts             типизированные обёртки над invoke
@@ -49,6 +52,7 @@ src/
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
   lib/flags.ts           ACCOUNTS_ENABLED и другие выключатели незаконченного
   lib/format.ts          cn, formatBytes, shortenPath
+  lib/devHub.ts          подмена команд друзей вызовами к макету хаба вне Tauri
 src-tauri/
   src/lib.rs             сборка приложения, плагины, список команд
   src/state.rs           общее состояние: config_root и настройки
@@ -61,7 +65,10 @@ src-tauri/
   src/servers/           браузер серверов: мастер-серверы, ping, кеш
   src/launch.rs          запуск клиента, слежение за процессом, остановка
   src/library.rs         файлы pk3 одного клиента в его папке home\
+  src/friends/           хаб JKNet: друзья, присутствие, приглашения
   capabilities/          разрешения окна main
+scripts/
+  mock-hub.mjs           макет хаба JKNet на голом Node для разработки
 ```
 
 ## Модель сущностей
