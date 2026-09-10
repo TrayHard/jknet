@@ -4,6 +4,8 @@ import { useNavigate } from "react-router";
 
 import { FriendPanel } from "../components/friends/FriendPanel";
 import { FriendRow } from "../components/friends/FriendRow";
+// --- slice: game switch ---
+import { useMissingClientToast } from "../components/MissingClientToast";
 import {
   GROUPS,
   GROUP_TITLES,
@@ -17,18 +19,24 @@ import { Badge, Button, EmptyState, Input } from "../components/ui";
 import {
   errorMessage,
   HUB_NOT_CONFIGURED_TEXT,
+  type Friend,
   type Presence,
 } from "../lib/ipc";
+// --- slice: game switch ---
+import { findDefaultClient, gameFromServerAddress } from "../lib/game";
 import {
   useAcceptFriendRequest,
+  useClients,
   useDeclineFriendRequest,
   useFriendsState,
+  useGames,
   useHubConfigured,
   useJoinFriend,
   useRemoveFriend,
   useRunningGame,
   useSendFriendRequest,
   useSendInvite,
+  useSettings,
 } from "../lib/queries";
 
 /** What the panel reads before the first answer arrives: no game, no server. */
@@ -64,6 +72,27 @@ export function FriendsPage() {
   const remove = useRemoveFriend();
   const invite = useSendInvite();
   const join = useJoinFriend();
+
+  // --- slice: game switch ---
+  // Presence names a server, not a game, so the port of the address answers
+  // for it — the same rule as `Game::from_server_port` in the core, which is
+  // what `join_friend` uses to pick the client. Checking it here as well is
+  // what turns «no default Jedi Outcast client» from an error line under the
+  // list into a toast that offers to make one.
+  const clients = useClients();
+  const settings = useSettings();
+  const games = useGames().data;
+  const missingClientToast = useMissingClientToast();
+
+  const joinFriend = (friend: Friend) => {
+    const game = gameFromServerAddress(friend.presence.serverAddress, games);
+    if (findDefaultClient(clients.data, settings.data, game) === undefined) {
+      missingClientToast(game);
+      return;
+    }
+    setNote(null);
+    join.mutate(friend.user.id);
+  };
 
   const view = friends.data;
   const groups = useMemo(
@@ -225,14 +254,7 @@ export function FriendsPage() {
                       friend={friend}
                       selected={friend.user.id === selectedId}
                       onSelect={() => setSelectedId(friend.user.id)}
-                      onJoin={
-                        canLaunch
-                          ? () => {
-                              setNote(null);
-                              join.mutate(friend.user.id);
-                            }
-                          : undefined
-                      }
+                      onJoin={canLaunch ? () => joinFriend(friend) : undefined}
                       joining={join.isPending && join.variables === friend.user.id}
                     />
                   ))}
@@ -283,10 +305,7 @@ export function FriendsPage() {
                   ? `Invite sent to ${selected.user.displayName}.`
                   : null
             }
-            onJoin={() => {
-              setNote(null);
-              join.mutate(selected.user.id);
-            }}
+            onJoin={() => joinFriend(selected)}
             onInvite={() => {
               const server = myServer(view?.presence ?? NO_PRESENCE);
               if (server === null) return;

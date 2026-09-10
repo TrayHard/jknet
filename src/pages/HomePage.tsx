@@ -1,12 +1,16 @@
 import { AlertTriangle, Play, Plus, Square } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
+import { GameFilesNotice } from "../components/GameFilesNotice";
 import { MapPreview } from "../components/MapPreview";
+import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 import { TopServers } from "../components/servers/TopServers";
 import { Badge, Button } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
+// --- slice: game switch ---
+import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
   useCachedServers,
   useClients,
@@ -32,21 +36,37 @@ export function HomePage() {
   const runningGame = useRunningGame();
 
   const [error, setError] = useState<string | null>(null);
+  // --- slice: game switch ---
+  const [newClientOpen, setNewClientOpen] = useState(false);
 
-  const defaultClient = clients.data?.find(
-    (client) => client.id === settings.data?.defaultClientId,
-  );
+  // --- slice: game switch ---
+  // The hero belongs to the game the switcher is on. A player who owns both
+  // games has two Play buttons, one behind each segment, and the one on screen
+  // is the one that can reach the servers listed under it.
+  const activeGame = useActiveGame();
+  const { label: gameName } = useGameNames();
+  const defaultClient = useDefaultClient();
   // --- slice: maps ---
   // The map of the server Connect was last pressed on, when the browser still
   // has that row. History is the launcher's, not the client's, so this follows
   // the last connection of any client. Nothing is fetched for it: both the
   // history and the cached list are already on screen elsewhere.
-  const lastAddress = settings.data?.serverHistory[0]?.address ?? null;
+  //
+  // --- slice: game switch ---
+  // The newest entry that belongs to the active game, not simply the newest:
+  // the cached list holds one game, so a Jedi Outcast connection at the top of
+  // the history must not blank the picture on the Jedi Academy screen.
   const cachedServers = useCachedServers();
-  const lastServer =
-    lastAddress === null
-      ? undefined
-      : cachedServers.data?.find((row) => row.address === lastAddress);
+  const lastServer = useMemo(() => {
+    const rows = cachedServers.data ?? [];
+    if (rows.length === 0) return undefined;
+    const byAddress = new Map(rows.map((row) => [row.address, row]));
+    for (const entry of settings.data?.serverHistory ?? []) {
+      const row = byAddress.get(entry.address);
+      if (row !== undefined) return row;
+    }
+    return undefined;
+  }, [cachedServers.data, settings.data?.serverHistory]);
   const running = runningGame.data ?? null;
   const runningClient = clients.data?.find((client) => client.id === running?.clientId);
   const canPlay =
@@ -65,8 +85,13 @@ export function HomePage() {
     <Page>
       <PageHeader
         title="Home"
-        subtitle="Jump back in, or pick a server from the browser."
+        subtitle={`${gameName(activeGame)} · jump back in, or pick a server from the browser.`}
       />
+
+      {/* --- slice: game switch --- a game with no folder is a setup step, not
+          a failure: the notice says where to point the launcher and the rest of
+          the screen keeps working. */}
+      <GameFilesNotice className="mb-16" />
 
       {error ? (
         <div
@@ -98,7 +123,7 @@ export function HomePage() {
               <h2 className="text-display-xl text-fg">
                 {running
                   ? `Running: ${runningClient?.name ?? running.clientId}`
-                  : (defaultClient?.name ?? "No default client")}
+                  : (defaultClient?.name ?? `No ${gameName(activeGame)} client yet`)}
               </h2>
               <p className="text-body-md text-fg-secondary max-w-[560px]">
                 {running ? (
@@ -109,13 +134,24 @@ export function HomePage() {
                 ) : defaultClient ? (
                   "Start the default client and pick a server from the in-game menu."
                 ) : (
-                  "Create a client on the Clients screen, then mark it as the default one."
+                  // --- slice: game switch --- the hero of a game with no
+                  // client is the invitation to make one, not a dead button.
+                  `A client is an engine build with its own files and settings. Make one and ${gameName(activeGame)} is one press away.`
                 )}
               </p>
             </div>
-  
+
             <div className="flex items-center gap-12">
-              {running ? (
+              {!running && defaultClient === undefined ? (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={<Plus size={20} />}
+                  onClick={() => setNewClientOpen(true)}
+                >
+                  Create a {gameName(activeGame)} client
+                </Button>
+              ) : running ? (
                 <Button
                   variant="danger"
                   size="lg"
@@ -168,6 +204,15 @@ export function HomePage() {
       <section className="pt-24">
         <TopServers />
       </section>
+
+      {/* --- slice: game switch --- the dialog already opens on the active
+          game, so the button above needs to do nothing but open it. */}
+      {newClientOpen ? (
+        <NewClientDialog
+          onClose={() => setNewClientOpen(false)}
+          onError={setError}
+        />
+      ) : null}
     </Page>
   );
 }
