@@ -534,8 +534,8 @@ cargo test --lib -- --ignored --nocapture indexes_the_retail_archives
 | `send_invite` | `toUserId`, `serverAddress`, `serverName`, `message` | `Invite` | готова |
 | `dismiss_invite` | `id` | `FriendsView` | готова |
 | `join_friend` | `userId` | `RunningGame` | готова |
-| `jkhub_categories` | `game`, `refresh` | `JkhubCategories` | готова |
-| `jkhub_list` | `categoryId`, `sort`, `page`, `refresh` | `JkhubListing` | готова |
+| `jkhub_categories` | `game?`, `refresh` | `JkhubCategories` | готова |
+| `jkhub_list` | `game?`, `categoryId`, `sort`, `page`, `refresh` | `JkhubListing` | готова |
 | `jkhub_file` | `id`, `refresh` | `JkhubFile` | готова |
 | `jkhub_resolve_download` | `id` | `JkhubDownload` | готова |
 | `jkhub_install` | `id`, `clientId`, `replace` | `JkhubInstallResult` | готова |
@@ -655,6 +655,12 @@ cache\jkhub\
 ```
 
 Срок жизни документа берётся из заголовка `Cache-Control` ответа и ограничивается диапазоном от 1 минуты до суток; без заголовка действует срок из таблицы. Просроченная запись не удаляется: если сайт недоступен, ответ приходит из неё с признаком `stale: true`, и экран показывает бейдж **From cache**. Миниатюры на диск не кладутся — их грузит webview прямо с jkhub.org, и сайт отдаёт их со сроком в месяц. Команда `jkhub_clear_cache` удаляет папку целиком вместе со скачанными архивами.
+
+### Игра
+
+Вкладка показывает каталог активной игры. Команды `jkhub_categories` и `jkhub_list` принимают необязательный `game` типа `Game`, как `get_cached_servers` и `get_levelshot`: без него ядро подставляет `activeGame` из настроек тем же методом `Settings::game_or_active`. Экран передаёт игру явно, чтобы она попала в ключ React Query, и при смене игры выбранная категория сбрасывается: в дереве другой игры её нет.
+
+Перечисление `JkhubGame { Ja, Jo, Both }` в `types.rs` осталось, но отвечает на другой вопрос — чья это полка на сайте. Значение `Both` описывает корень 74 Both Games/Other, у которого в `Game` пары нет. Преобразование `From<Game>` даёт полку по игре, метод `JkhubGame::matches(game: Game)` отвечает, показывать ли полку при просмотре этой игры, и `Both` подходит обеим. Идентификаторы serde `ja` и `jo` у обоих типов совпадают, поэтому поле `game` категории и файла на проводе выглядит одинаково с обеих сторон.
 
 ### Дерево категорий
 

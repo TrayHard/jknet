@@ -976,12 +976,15 @@ export const friendsIpc = {
 // `src-tauri/src/jkhub/types.rs` one to one.
 
 /**
- * Which game a category or a file belongs to.
+ * Which game a category or a file on JKHub belongs to.
  *
- * `both` is a property of the JKHub tree, where `Both Games/Other` is a root
- * of its own; the launcher's own notion of a game has only the first two.
+ * Not the game the player browses in — that one is a `Game`, and every JKHub
+ * call takes it as one. This says whose shelf a category or a file sits on,
+ * and the site has a third answer for that: `Both Games/Other` is a root of
+ * its own, and what is under it belongs to both games. The first two ids are
+ * the ids of `Game`.
  */
-export type JkhubGame = "ja" | "jo" | "both";
+export type JkhubGame = Game | "both";
 
 /** How a listing is ordered. Maps to the `sortby` parameter of the site. */
 export type JkhubSort =
@@ -1006,7 +1009,8 @@ export interface JkhubCategory {
 }
 
 export interface JkhubCategories {
-  game: JkhubGame;
+  /** The game the tree was walked for: one of the launcher's two. */
+  game: Game;
   /** Depth first: a root, then its children, then theirs. */
   categories: JkhubCategory[];
   fetchedAt: string;
@@ -1157,12 +1161,33 @@ export const jkhubEvents = {
   installed: "jkhub:installed",
 } as const;
 
+/**
+ * The JKHub catalogue.
+ *
+ * --- slice: game core ---
+ * The two calls that depend on a game take an optional one, the way the server
+ * browser and the map pictures do: leaving it out means the active game, which
+ * the core reads from the settings.
+ */
 export const jkhubIpc = {
   /** The category tree of one game. `refresh` skips a fresh cache entry. */
-  categories: (game: JkhubGame, refresh = false) =>
-    call<JkhubCategories>("jkhub_categories", { game, refresh }),
-  list: (categoryId: number, sort: JkhubSort, page: number, refresh = false) =>
-    call<JkhubListing>("jkhub_list", { categoryId, sort, page, refresh }),
+  categories: (game?: Game, refresh = false) =>
+    call<JkhubCategories>("jkhub_categories", { game: game ?? null, refresh }),
+  /** `game` names the tree the category's slug is read from. */
+  list: (
+    categoryId: number,
+    sort: JkhubSort,
+    page: number,
+    game?: Game,
+    refresh = false,
+  ) =>
+    call<JkhubListing>("jkhub_list", {
+      game: game ?? null,
+      categoryId,
+      sort,
+      page,
+      refresh,
+    }),
   file: (id: number, refresh = false) =>
     call<JkhubFile>("jkhub_file", { id, refresh }),
   /** Follows the download button without fetching the archive. */
