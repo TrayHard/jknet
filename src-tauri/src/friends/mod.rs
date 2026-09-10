@@ -692,6 +692,39 @@ mod tests {
         assert_eq!(view.presence.status, Presence::OFFLINE);
     }
 
+    #[tokio::test]
+    async fn only_a_different_account_wakes_the_background_tasks() {
+        // The wake-up is what makes a sign-out stop the heartbeat and close
+        // the socket, and a rename leave both alone. Both halves are one line
+        // apart in `watch_the_account`, so both are worth pinning.
+        let state = FriendsState::default();
+        let mut tasks = state.account_changes();
+
+        let signed_out = HubContext::default();
+        let signed_in = HubContext {
+            base_url: "http://127.0.0.1:8787".into(),
+            token: Some("0123456789abcdef".into()),
+        };
+
+        assert!(state.note_account(account_fingerprint(&signed_in)));
+        assert!(tasks.changed().await.is_ok(), "signing in wakes the tasks");
+
+        // The same account again: `update_display_name` announces the same
+        // event, and a rename must not drop a working socket.
+        assert!(!state.note_account(account_fingerprint(&signed_in)));
+
+        assert!(state.note_account(account_fingerprint(&signed_out)));
+        assert!(tasks.changed().await.is_ok(), "signing out wakes the tasks");
+
+        // Nothing else is pending, so a task that goes back to waiting waits.
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), tasks.changed())
+                .await
+                .is_err(),
+            "the tasks were woken by something that did not change"
+        );
+    }
+
     #[test]
     fn the_view_reaches_the_frontend_in_camel_case() {
         let json = serde_json::to_string(&FriendsView::default()).expect("serializes");
