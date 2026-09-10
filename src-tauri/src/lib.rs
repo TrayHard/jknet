@@ -31,6 +31,7 @@ mod settings;
 mod state;
 mod timestamp;
 
+use engine_install::InstallState;
 use launch::LaunchState;
 use state::AppState;
 use tauri_plugin_log::{Target, TargetKind};
@@ -73,8 +74,10 @@ pub fn run() {
         .manage(app_state)
         // --- slice: launch ---
         // The running game lives in its own managed value: a process handle
-        // has no business sitting behind the settings lock.
+        // has no business sitting behind the settings lock. The set of clients
+        // with an install in flight is separate for the same reason.
         .manage(LaunchState::default())
+        .manage(InstallState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -84,7 +87,7 @@ pub fn run() {
             engines::list_engines,
             clients::list_clients,
             clients::create_client,
-            clients::rename_client,
+            clients::update_client,
             clients::delete_client,
             launch::launch_client,
             // --- slice: library ---

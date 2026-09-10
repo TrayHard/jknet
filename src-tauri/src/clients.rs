@@ -23,12 +23,17 @@ use serde::{Deserialize, Serialize};
 use crate::engines;
 use crate::error::{AppError, Result};
 use crate::paths::{self, DataPaths};
+use crate::settings::Settings;
 use crate::state::AppState;
 use crate::timestamp;
 
 /// Longest client name the launcher accepts. Long names break the card layout
 /// and say nothing extra.
 const MAX_NAME_LEN: usize = 48;
+
+/// Longest mod folder the launcher accepts. `fs_game` names a folder inside
+/// `home\`, and no mod on JKHub comes close to this.
+const MAX_FS_GAME_LEN: usize = 64;
 
 /// A client instance as stored in `client.json`.
 ///
@@ -114,18 +119,35 @@ pub fn create_client(
     Ok(client)
 }
 
-/// Renames a client. The folder keeps its slug: a path that another part of
-/// the launcher stored must stay valid.
+/// Changes the parts of a client the player may edit: its name and its mod
+/// folder.
+///
+/// A field left out of the call keeps its value. The folder on disk keeps its
+/// slug even when the name changes: a path that another part of the launcher
+/// stored must stay valid. An `fs_game` that is blank clears the field, which
+/// puts the client back on the default folder of its engine.
 #[tauri::command]
-pub fn rename_client(
+pub fn update_client(
     state: tauri::State<'_, AppState>,
-    id: String,
-    name: String,
+    client_id: String,
+    name: Option<String>,
+    fs_game: Option<String>,
 ) -> Result<Client> {
     let paths = state.paths()?;
-    let mut client = read_record(&paths, &id)?;
-    client.name = validate_name(&name)?;
+    let mut client = read_record(&paths, &client_id)?;
+    if let Some(name) = name {
+        client.name = validate_name(&name)?;
+    }
+    if let Some(fs_game) = fs_game {
+        client.fs_game = validate_fs_game(&fs_game)?;
+    }
     write_record(&paths, &client)?;
+    log::info!(
+        "updated client {}: name {:?}, fs_game {:?}",
+        client.id,
+        client.name,
+        client.fs_game
+    );
     Ok(client)
 }
 
@@ -143,8 +165,9 @@ pub fn delete_client(state: tauri::State<'_, AppState>, id: String) -> Result<()
     fs::remove_dir_all(&dir).map_err(|e| AppError::io_path("cannot delete", &dir, e))?;
     log::info!("deleted client {id}");
 
-    // A deleted client must not stay the default one.
-    let mut settings = state.settings()?;
+    // A deleted client must not stay the default one. The document comes from
+    // disk, so this write carries over whatever else changed there.
+    let mut settings = Settings::current(&state)?;
     if settings.default_client_id.as_deref() == Some(id.as_str()) {
         settings.default_client_id = None;
         settings.save(&state)?;
@@ -225,6 +248,34 @@ fn validate_name(name: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
+/// Checks a mod folder name and turns a blank one into `None`.
+///
+/// The value reaches the engine as `+set fs_game` and becomes a folder under
+/// `home\`, so it has to stay a plain name: a separator, a drive letter or a
+/// `..` would send the engine, and the Library screen with it, outside the
+/// client. Letters, digits, `_`, `-` and `+` cover every mod folder in use,
+/// `+` because of names like `ja+`.
+fn validate_fs_game(value: &str) -> Result<Option<String>> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    if trimmed.chars().count() > MAX_FS_GAME_LEN {
+        return Err(AppError::InvalidInput(format!(
+            "the mod folder is longer than {MAX_FS_GAME_LEN} characters"
+        )));
+    }
+    let plain = trimmed
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '+'));
+    if !plain {
+        return Err(AppError::InvalidInput(format!(
+            "the mod folder {trimmed:?} may hold only letters, digits, _, - and +"
+        )));
+    }
+    Ok(Some(trimmed.to_string()))
+}
+
 /// Turns a name into a folder-safe slug: lowercase ASCII letters, digits and
 /// single hyphens. A name without usable characters becomes `client`.
 fn slugify(name: &str) -> String {
@@ -281,5 +332,40 @@ mod tests {
         assert_eq!(validate_name("  Duel  ").unwrap(), "Duel");
         assert!(validate_name("   ").is_err());
         assert!(validate_name(&"x".repeat(MAX_NAME_LEN + 1)).is_err());
+    }
+
+    #[test]
+    fn a_mod_folder_is_one_plain_name() {
+        assert_eq!(validate_fs_game("japlus").unwrap().as_deref(), Some("japlus"));
+        assert_eq!(validate_fs_game("  mme  ").unwrap().as_deref(), Some("mme"));
+        assert_eq!(validate_fs_game("ja+").unwrap().as_deref(), Some("ja+"));
+        assert_eq!(validate_fs_game("MB_II-2").unwrap().as_deref(), Some("MB_II-2"));
+    }
+
+    #[test]
+    fn a_blank_mod_folder_means_the_default_of_the_engine() {
+        assert_eq!(validate_fs_game("").unwrap(), None);
+        assert_eq!(validate_fs_game("   ").unwrap(), None);
+    }
+
+    #[test]
+    fn a_mod_folder_cannot_leave_the_client() {
+        for value in [
+            "..",
+            ".",
+            "base/../evil",
+            "base\\evil",
+            "C:\\Windows",
+            "my mod",
+            "мод",
+            "base.pk3",
+            "*",
+        ] {
+            assert!(
+                validate_fs_game(value).is_err(),
+                "{value} should be refused"
+            );
+        }
+        assert!(validate_fs_game(&"x".repeat(MAX_FS_GAME_LEN + 1)).is_err());
     }
 }

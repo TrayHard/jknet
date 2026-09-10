@@ -16,15 +16,15 @@
 //! address, which is plenty for four engines behind a ten-minute cache, and
 //! the rate-limit answer is turned into a sentence a player can act on.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
-use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+use tokio::io::AsyncWriteExt;
 
 use crate::clients::{self, Client};
 use crate::engines::{self, Engine, EngineRelease};
@@ -333,6 +333,62 @@ fn rate_limit_message(headers: &reqwest::header::HeaderMap, status: u16) -> Opti
 }
 
 // ---------------------------------------------------------------------------
+// One install per client
+// ---------------------------------------------------------------------------
+
+/// The clients an install is running for, managed by Tauri next to
+/// [`crate::state::AppState`].
+///
+/// Two installs of the same client would stream into the same `.part` file and
+/// then wipe and refill the same `engine\` folder, one behind the other, and
+/// leave the player with a folder that holds half of each build. The interface
+/// disables its buttons while an install runs; this refuses the call that gets
+/// through anyway, from a double click, a second window, or a retry.
+#[derive(Debug, Default)]
+pub struct InstallState {
+    busy: Mutex<HashSet<String>>,
+}
+
+impl InstallState {
+    /// Claims a client for the caller, or refuses because someone holds it.
+    fn claim<'a>(&'a self, client_id: &str) -> Result<InstallGuard<'a>> {
+        let mut busy = self
+            .busy
+            .lock()
+            .map_err(|_| AppError::State("the engine install lock is poisoned".into()))?;
+        if !busy.insert(client_id.to_string()) {
+            return Err(AppError::Busy(format!(
+                "an engine installation is already running for {client_id}. Wait for it to finish."
+            )));
+        }
+        Ok(InstallGuard {
+            state: self,
+            client_id: client_id.to_string(),
+        })
+    }
+}
+
+/// Releases the claim when the install ends, however it ends.
+#[derive(Debug)]
+struct InstallGuard<'a> {
+    state: &'a InstallState,
+    client_id: String,
+}
+
+impl Drop for InstallGuard<'_> {
+    fn drop(&mut self) {
+        match self.state.busy.lock() {
+            Ok(mut busy) => {
+                busy.remove(&self.client_id);
+            }
+            // A poisoned lock would keep the client busy until the launcher
+            // restarts, which is worse than the panic that poisoned it.
+            Err(e) => log::error!("cannot release the install claim of {}: {e}", self.client_id),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Installing
 // ---------------------------------------------------------------------------
 
@@ -340,12 +396,18 @@ fn rate_limit_message(headers: &reqwest::header::HeaderMap, status: u16) -> Opti
 ///
 /// `tag` picks a release by name; `None` takes the newest one. The client
 /// record comes back updated, and the caller does not have to re-read it.
+///
+/// A second call for the same client is refused before anything touches the
+/// disk, and without a progress event: the event would replace the running
+/// install's progress bar with an error the player did not cause.
 pub async fn install(
     app: &AppHandle,
+    installs: &InstallState,
     paths: &DataPaths,
     client_id: &str,
     tag: Option<&str>,
 ) -> Result<Client> {
+    let _claim = installs.claim(client_id)?;
     match install_inner(app, paths, client_id, tag).await {
         Ok(client) => Ok(client),
         Err(e) => {
@@ -490,6 +552,12 @@ async fn download(
     let response = http_client()?.get(&release.asset_url).send().await?;
     let status = response.status();
     if !status.is_success() {
+        // The archive normally lives on a CDN outside `api.github.com`, where
+        // the anonymous quota does not apply, but a redirect back to the API
+        // exists and the answer has to read as a wait, not as a dead link.
+        if let Some(message) = rate_limit_message(response.headers(), status.as_u16()) {
+            return Err(AppError::RateLimited(message));
+        }
         return Err(AppError::Network(format!(
             "{} answered {status}",
             release.asset_url
@@ -499,9 +567,15 @@ async fn download(
 
     // A partial file must never be mistaken for a finished one, so the bytes
     // land next to the target and are renamed once the stream ends.
+    //
+    // The sink is `tokio::fs`, not `std::fs`: a blocking `write_all` between
+    // two `await`s holds a runtime worker for the length of a disk write, and
+    // this loop runs it for every chunk of a 50 MB archive. The heavy step
+    // after it, unpacking, goes to `spawn_blocking` for the same reason.
     let partial = file.with_extension("part");
-    let mut sink =
-        File::create(&partial).map_err(|e| AppError::io_path("cannot create", &partial, e))?;
+    let mut sink = tokio::fs::File::create(&partial)
+        .await
+        .map_err(|e| AppError::io_path("cannot create", &partial, e))?;
     let mut stream = response.bytes_stream();
     let mut downloaded: u64 = 0;
     let mut last_emit = std::time::Instant::now();
@@ -520,6 +594,7 @@ async fn download(
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         sink.write_all(&chunk)
+            .await
             .map_err(|e| AppError::io_path("cannot write", &partial, e))?;
         downloaded += chunk.len() as u64;
         if last_emit.elapsed().as_millis() >= PROGRESS_INTERVAL_MS {
@@ -536,7 +611,14 @@ async fn download(
             );
         }
     }
+    // `flush` alone empties the buffer of the writer; `sync_all` is what makes
+    // the bytes survive a power cut, and the rename below must not promote a
+    // file the disk has not taken yet.
     sink.flush()
+        .await
+        .map_err(|e| AppError::io_path("cannot write", &partial, e))?;
+    sink.sync_all()
+        .await
         .map_err(|e| AppError::io_path("cannot write", &partial, e))?;
     drop(sink);
 
@@ -692,7 +774,7 @@ fn sanitize_file_stem(tag: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
 
     /// Builds a zip in memory and writes it next to the target folder.
@@ -881,6 +963,30 @@ mod tests {
         left.insert("x-ratelimit-remaining", "37".parse().expect("header"));
         assert!(rate_limit_message(&left, 403).is_none());
         assert!(rate_limit_message(&HeaderMap::new(), 403).is_none());
+    }
+
+    #[test]
+    fn one_install_per_client_at_a_time() {
+        let installs = InstallState::default();
+        let first = installs
+            .claim("everyday")
+            .expect("the first install claims the client");
+        let second = installs
+            .claim("everyday")
+            .expect_err("the second install of the same client is refused");
+        assert!(
+            matches!(second, AppError::Busy(_)),
+            "unexpected error: {second}"
+        );
+
+        // A different client is a different folder and a different archive.
+        let other = installs.claim("duel").expect("another client is free");
+        drop(other);
+
+        drop(first);
+        installs
+            .claim("everyday")
+            .expect("the claim is released when the install ends");
     }
 
     /// The one test that needs the internet. Run it by hand:

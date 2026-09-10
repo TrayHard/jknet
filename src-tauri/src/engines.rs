@@ -276,16 +276,18 @@ pub async fn list_engine_releases(
 /// `clients\<slug>\engine\`.
 ///
 /// Returns the updated client record. Progress arrives through
-/// `launch:engine-install-progress` while the command runs.
+/// `launch:engine-install-progress` while the command runs. A second call for
+/// a client whose install has not finished is refused with `AppError::Busy`.
 #[tauri::command]
 pub async fn install_engine(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
+    installs: tauri::State<'_, engine_install::InstallState>,
     client_id: String,
     tag: Option<String>,
 ) -> Result<Client> {
     let paths = state.paths()?;
-    engine_install::install(&app, &paths, &client_id, tag.as_deref()).await
+    engine_install::install(&app, &installs, &paths, &client_id, tag.as_deref()).await
 }
 
 /// Compares the installed tag with the newest published one.
