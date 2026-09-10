@@ -18,6 +18,13 @@
 //! rather than half-supported: the only Rust readers for it wrap `unrar`,
 //! whose licence forbids writing a competing compressor and is a question for
 //! the user, not a decision to smuggle into a dependency list.
+//!
+//! One more rule, and the strictest of them: the name of an archive entry
+//! never decides where a file lands. Only its last segment does, and only
+//! when that segment is a plain file name — see [`entry_file_name`] and
+//! [`destination`]. Everything the site hands out is written by a member of
+//! the community and moderated by nobody, so an entry name is a string from a
+//! stranger.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -90,7 +97,7 @@ pub fn extract(path: &Path, entries: &[Pk3Entry], target: &Path) -> Result<Vec<S
                 .first()
                 .ok_or_else(|| AppError::Archive("nothing to install".into()))?
                 .file_name;
-            let destination = target.join(name);
+            let destination = destination(target, name)?;
             fs::copy(path, &destination)
                 .map_err(|e| AppError::io_path("cannot copy into", &destination, e))?;
             Ok(vec![name.clone()])
@@ -108,10 +115,15 @@ pub fn conflicts(entries: &[Pk3Entry], target: &Path) -> Vec<String> {
     entries
         .iter()
         .filter(|entry| {
-            let file = target.join(&entry.file_name);
+            // A name [`destination`] refuses is not a collision: nothing can
+            // be installed under it, and `extract` says so with an error.
+            let Ok(file) = destination(target, &entry.file_name) else {
+                return false;
+            };
             // The library disables a file by renaming it, so a disabled copy
             // is a collision too: installing over it would leave two.
-            file.exists() || target.join(format!("{}.disabled", entry.file_name)).exists()
+            let disabled = file.with_file_name(format!("{}.disabled", entry.file_name));
+            file.exists() || disabled.exists()
         })
         .map(|entry| entry.file_name.clone())
         .collect()
@@ -157,7 +169,7 @@ fn extract_zip(path: &Path, entries: &[Pk3Entry], target: &Path) -> Result<Vec<S
     let mut written = Vec::new();
     for entry in entries {
         let mut source = archive.by_name(&entry.path)?;
-        let destination = target.join(&entry.file_name);
+        let destination = destination(target, &entry.file_name)?;
         let mut sink = fs::File::create(&destination)
             .map_err(|e| AppError::io_path("cannot create", &destination, e))?;
         std::io::copy(&mut source, &mut sink)
@@ -196,7 +208,15 @@ fn extract_7z(path: &Path, entries: &[Pk3Entry], target: &Path) -> Result<Vec<St
             let Some(wanted) = wanted.iter().find(|candidate| candidate.path == entry.name) else {
                 return Ok(true);
             };
-            let destination = target.join(&wanted.file_name);
+            // The same rule as the zip path: a 7z entry name is a string from
+            // a stranger too, and this is the only place it becomes a path.
+            let destination = match destination(target, &wanted.file_name) {
+                Ok(destination) => destination,
+                Err(e) => {
+                    failure = Some(e);
+                    return Ok(false);
+                }
+            };
             let mut buffer = Vec::new();
             if let Err(e) = source.read_to_end(&mut buffer) {
                 failure = Some(AppError::io_path("cannot read from", path, e));
@@ -233,7 +253,8 @@ fn collect(name: &str, contents: &mut ArchiveContents) {
     if skip(&normalised) {
         return;
     }
-    let Some(file_name) = normalised.rsplit('/').next() else {
+    let Some(file_name) = entry_file_name(name) else {
+        log::debug!("jkhub: the archive entry {name} is not installable under its own name");
         return;
     };
     if !file_name.to_ascii_lowercase().ends_with(".pk3") {
@@ -246,10 +267,118 @@ fn collect(name: &str, contents: &mut ArchiveContents) {
 }
 
 /// Whether an entry is one of the two kinds of junk an archive carries.
+///
+/// `.` and `..` are not junk: they are an attempt at walking out of the
+/// archive, not a hidden file, and since the rule below keeps nothing but the
+/// last segment they cost the destination nothing. Dropping the entry would
+/// only lose a pk3 the player asked for.
 fn skip(path: &str) -> bool {
     path.split('/').any(|segment| {
-        segment.eq_ignore_ascii_case(MACOS_JUNK) || segment.starts_with('.')
+        segment.eq_ignore_ascii_case(MACOS_JUNK)
+            || (segment.starts_with('.') && segment != "." && segment != "..")
     })
+}
+
+/// The name an archive entry may be installed under, if any.
+///
+/// Review finding (High, `review-jkhub-switch.md`): an entry name is a string
+/// from a stranger's archive, and on Windows one of them can take over the
+/// whole destination. `Path::join` treats a drive-relative component as a
+/// fresh start, so
+///
+/// ```text
+/// "…\clients\everyday\home\base".join("evil.pk3")   = "…\home\base\evil.pk3"
+/// "…\clients\everyday\home\base".join("C:evil.pk3") = "C:evil.pk3"
+/// ```
+///
+/// and the second path resolves against whatever the current directory of
+/// drive `C:` happens to be — a place neither the launcher nor the player
+/// chose. The old rule split on `/` alone, so `C:evil.pk3` (a drive letter
+/// with no separator after it) passed as a file name.
+///
+/// The rule now: split on both separators, take the last segment, and accept
+/// it only when it is a plain file name.
+fn entry_file_name(entry: &str) -> Option<&str> {
+    // Both separators, because a zip written on Windows spells its paths with
+    // `\` and the format does not forbid it.
+    let last = entry.rsplit(['/', '\\']).next()?;
+    is_plain_file_name(last).then_some(last)
+}
+
+/// Whether a name names a file and nothing else.
+///
+/// Deliberately narrow: `*?"<>|` are left out only because Windows refuses
+/// them at `File::create` anyway, while everything here would otherwise be
+/// accepted by the filesystem and mean something other than what it says.
+fn is_plain_file_name(name: &str) -> bool {
+    if name.is_empty() || name == "." || name == ".." {
+        return false;
+    }
+    // A separator or a drive letter turns the name back into a path; a NUL
+    // and its fellow control characters end it early for whatever reads it.
+    if name.contains([':', '/', '\\']) || name.chars().any(char::is_control) {
+        return false;
+    }
+    // Windows silently trims these, so `evil.pk3 ` and `evil.pk3` would be the
+    // same file under two names, and `kyle.pk3.` would install as `kyle.pk3`.
+    if name.starts_with([' ', '.']) || name.ends_with([' ', '.']) {
+        return false;
+    }
+    !is_reserved_device(name)
+}
+
+/// The DOS device names Windows still answers to, with or without extension.
+///
+/// `CON.pk3` opens the console rather than a file, and `LPT1.pk3` a printer
+/// port, so a name like either never reaches `File::create`.
+fn is_reserved_device(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default();
+    if ["CON", "PRN", "AUX", "NUL"]
+        .iter()
+        .any(|reserved| stem.eq_ignore_ascii_case(reserved))
+    {
+        return true;
+    }
+    // COM1..COM9 and LPT1..LPT9. The fourth byte is checked before the name is
+    // split there, and an ASCII digit is always a character boundary, so a
+    // name of four bytes that is not four characters cannot panic here.
+    let bytes = stem.as_bytes();
+    bytes.len() == 4
+        && matches!(bytes[3], b'1'..=b'9')
+        && (stem[..3].eq_ignore_ascii_case("COM") || stem[..3].eq_ignore_ascii_case("LPT"))
+}
+
+/// The one place an entry name becomes a path on disk.
+///
+/// Three checks: the name is a plain file name, the join left the file in
+/// `target`, and the folder the file would land in is still the client's own
+/// once the filesystem has had its say. The first refuses everything known to
+/// escape; the other two are defence in depth, and they are what would catch
+/// the next trick nobody has thought of.
+fn destination(target: &Path, file_name: &str) -> Result<PathBuf> {
+    if !is_plain_file_name(file_name) {
+        return Err(AppError::Archive(format!(
+            "{file_name} is not a plain file name, so nothing was installed under it"
+        )));
+    }
+    let destination = PathBuf::from(target).join(file_name);
+    if destination.parent() != Some(target) {
+        return Err(AppError::Archive(format!(
+            "{file_name} would install outside {}",
+            target.display()
+        )));
+    }
+    let escaped = matches!(
+        (destination.parent().map(Path::canonicalize), target.canonicalize()),
+        (Some(Ok(parent)), Ok(root)) if !parent.starts_with(&root)
+    );
+    if escaped {
+        return Err(AppError::Archive(format!(
+            "{file_name} would install outside {}",
+            target.display()
+        )));
+    }
+    Ok(destination)
 }
 
 /// Drops repeats and orders the result, so two runs install the same set.
@@ -433,6 +562,120 @@ mod tests {
             vec!["taken.pk3".to_string(), "off.pk3".to_string()],
             "a disabled file still owns its name"
         );
+    }
+
+    /// Review finding (High): the entry name decides nothing but the file
+    /// name, and only when that name is a plain one.
+    #[test]
+    fn an_entry_name_is_reduced_to_its_last_segment_or_refused() {
+        // The finding itself: a drive letter with no separator after it used
+        // to pass whole, and `Path::join` would then drop the client folder.
+        assert_eq!(entry_file_name("C:file.pk3"), None);
+        assert_eq!(entry_file_name("c:file.pk3"), None);
+        // A drive letter with a path after it keeps only the last segment.
+        assert_eq!(entry_file_name(r"C:\x\y.pk3"), Some("y.pk3"));
+        assert_eq!(entry_file_name(r"\\server\share\z.pk3"), Some("z.pk3"));
+        assert_eq!(entry_file_name(r"..\z.pk3"), Some("z.pk3"));
+        assert_eq!(entry_file_name("dir/../z.pk3"), Some("z.pk3"));
+        assert_eq!(entry_file_name("maps/foo.pk3"), Some("foo.pk3"));
+        assert_eq!(entry_file_name("plain.pk3"), Some("plain.pk3"));
+        // Nothing left after the last separator, and the two names that mean
+        // a folder rather than a file.
+        assert_eq!(entry_file_name("maps/"), None);
+        assert_eq!(entry_file_name(".."), None);
+        assert_eq!(entry_file_name("."), None);
+        // Windows trims a trailing space or dot, so two names would collide.
+        assert_eq!(entry_file_name("evil.pk3 "), None);
+        assert_eq!(entry_file_name("evil.pk3."), None);
+        assert_eq!(entry_file_name(" evil.pk3"), None);
+        // A NUL ends the name early for whatever reads it next.
+        assert_eq!(entry_file_name("evil\0.pk3"), None);
+        // Device names, which open a device instead of creating a file.
+        assert_eq!(entry_file_name("CON.pk3"), None);
+        assert_eq!(entry_file_name("nul.pk3"), None);
+        assert_eq!(entry_file_name("com1.pk3"), None);
+        assert_eq!(entry_file_name("LPT9.pk3"), None);
+        // …and the names that only look like one.
+        assert_eq!(entry_file_name("COM0.pk3"), Some("COM0.pk3"));
+        assert_eq!(entry_file_name("CONSOLE.pk3"), Some("CONSOLE.pk3"));
+        assert_eq!(entry_file_name("сом1.pk3"), Some("сом1.pk3"), "Cyrillic");
+    }
+
+    #[test]
+    fn a_hand_made_entry_cannot_escape_the_client_either() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let target = dir.path().join("home").join("base");
+        fs::create_dir_all(&target).expect("the target exists");
+        let source = dir.path().join("kyle.pk3");
+        fs::write(&source, b"pk3").expect("a file");
+
+        // `collect` never produces such an entry; `destination` is what makes
+        // that impossible to work around from anywhere else in the module.
+        for name in ["C:evil.pk3", r"..\evil.pk3", "CON.pk3", "sub/evil.pk3"] {
+            let entries = vec![Pk3Entry {
+                path: name.into(),
+                file_name: name.into(),
+            }];
+            let error = extract(&source, &entries, &target).expect_err(name);
+            assert!(matches!(error, AppError::Archive(_)), "{name}: {error}");
+            assert!(conflicts(&entries, &target).is_empty(), "{name}");
+        }
+        assert_eq!(
+            fs::read_dir(&target).expect("the folder is readable").count(),
+            0,
+            "nothing was written"
+        );
+    }
+
+    #[test]
+    fn a_drive_relative_entry_name_cannot_take_over_the_destination() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let archive = zip_with(
+            dir.path(),
+            "evil.zip",
+            &[
+                ("C:evil.pk3", b"drive relative"),
+                (r"C:\dir\drive.pk3", b"drive"),
+                (r"..\parent.pk3", b"parent"),
+                ("sub/../up.pk3", b"up"),
+                ("__MACOSX/mac.pk3", b"junk"),
+                ("CON.pk3", b"device"),
+                ("maps/foo.pk3", b"map"),
+            ],
+        );
+        let contents = read_archive(&archive).expect("the zip opens");
+        assert_eq!(
+            contents
+                .pk3
+                .iter()
+                .map(|entry| entry.file_name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["drive.pk3", "foo.pk3", "parent.pk3", "up.pk3"],
+            "only the last segment survives, and only when it is a file name"
+        );
+
+        let target = dir.path().join("home").join("base");
+        fs::create_dir_all(&target).expect("the target exists");
+        let mut written = extract(&archive, &contents.pk3, &target).expect("it extracts");
+        written.sort();
+        assert_eq!(written, ["drive.pk3", "foo.pk3", "parent.pk3", "up.pk3"]);
+
+        let mut landed: Vec<String> = fs::read_dir(&target)
+            .expect("the folder is readable")
+            .map(|entry| entry.expect("an entry").file_name().to_string_lossy().to_string())
+            .collect();
+        landed.sort();
+        assert_eq!(landed, ["drive.pk3", "foo.pk3", "parent.pk3", "up.pk3"]);
+        assert_eq!(fs::read(target.join("up.pk3")).expect("written"), b"up");
+        // Nothing walked up to the client folder, to its parent, or anywhere
+        // else the archive tried to name.
+        for stray in ["evil.pk3", "parent.pk3", "mac.pk3", "CON.pk3"] {
+            assert!(!dir.path().join(stray).exists(), "{stray} in the temp root");
+            assert!(
+                !dir.path().join("home").join(stray).exists(),
+                "{stray} beside the target"
+            );
+        }
     }
 
     #[test]

@@ -16,6 +16,17 @@ import { Button } from "./ui";
 export const NEW_CLIENT_PARAM = "new";
 
 /**
+ * The search parameter that says which game the new client is for.
+ *
+ * Review finding (Low): the toast knows the game — it is in its own title —
+ * but used to send the player to a dialog that started on the game of the
+ * sidebar. A friend on a Jedi Outcast server while the sidebar shows Jedi
+ * Academy is exactly the case the toast exists for, so the game travels with
+ * the route.
+ */
+export const NEW_CLIENT_GAME_PARAM = "game";
+
+/**
  * The toast for «you have no client of this game».
  *
  * Two screens run into the same wall: **Connect** on a server row and **Join
@@ -49,7 +60,9 @@ export function useMissingClientToast(): (game: Game) => void {
             variant="primary"
             onClick={() => {
               dismiss(id);
-              void navigate(`/clients?${NEW_CLIENT_PARAM}=1`);
+              void navigate(
+                `/clients?${NEW_CLIENT_PARAM}=1&${NEW_CLIENT_GAME_PARAM}=${game}`,
+              );
             }}
           >
             Create client

@@ -16,6 +16,7 @@
 //! does, and a stale one is the one failure this flow has.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use futures_util::StreamExt;
 use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_TYPE};
@@ -24,10 +25,11 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 
 use crate::error::{AppError, Result};
+use crate::paths::DataPaths;
 
 use super::client::{self, JkhubClient};
 use super::parse;
-use super::types::{DownloadProgress, JkhubDownload};
+use super::types::{DownloadProgress, JkhubDownload, JkhubInstallOutcome};
 
 /// Event the Library screen listens to while an archive is coming down.
 pub const PROGRESS_EVENT: &str = "jkhub:download-progress";
@@ -240,6 +242,103 @@ pub fn sanitize(name: &str) -> String {
     }
 }
 
+// ---------------------------------------------------------------------------
+// What happens to an archive nobody installed
+// ---------------------------------------------------------------------------
+
+/// How long the archive of an install that did not install is kept.
+///
+/// Long enough for the player to come back to the screen and press the button
+/// the outcome offered, short enough that a day of declined installs does not
+/// live in `cache\jkhub\downloads\` for the rest of the launcher's life.
+pub const KEPT_FOR: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// Why the archive of a finished attempt is still worth its disk, if it is.
+///
+/// Review finding (Low): the archive used to be deleted after `Installed` and
+/// after nothing else, so every declined install left a file — up to 217 MB of
+/// it — that only **Clear JKHub cache** could remove. Deleting it after every
+/// other outcome instead would be wrong in the other direction: three of the
+/// outcomes put a button on screen that needs those exact bytes. So the answer
+/// is per outcome, and [`sweep`] is what bounds the ones that are kept.
+pub fn keep_reason(outcome: &JkhubInstallOutcome) -> Option<&'static str> {
+    match outcome {
+        // The files are in the client; the archive is dead weight.
+        JkhubInstallOutcome::Installed { .. } => None,
+        // Nothing was downloaded: the record points at another site.
+        JkhubInstallOutcome::External { .. } => None,
+        // The screen offers «Replace and install», which reads these bytes
+        // again. Fetching a 217 MB map twice to answer one question is not a
+        // trade the player agreed to.
+        JkhubInstallOutcome::Conflicts { .. } => Some("the player can still replace and install"),
+        // Both of these put «Show the archive» on screen, and a button that
+        // reveals a file deleted a moment ago is worse than the disk it saves.
+        JkhubInstallOutcome::NoPk3Files { .. } | JkhubInstallOutcome::Unsupported { .. } => {
+            Some("the screen offers Show the archive")
+        }
+    }
+}
+
+/// Removes the archives of attempts that ended more than `kept_for` ago.
+///
+/// Returns how many folders went. Called at startup: an install that ended
+/// yesterday cannot be resumed by any screen open today, and a failure here is
+/// a warning in the log rather than something that holds up the window.
+pub fn sweep(data: &DataPaths, kept_for: Duration) -> usize {
+    let downloads = data.cache.join("jkhub").join("downloads");
+    let Ok(entries) = std::fs::read_dir(&downloads) else {
+        return 0;
+    };
+    let now = SystemTime::now();
+    let mut removed = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() || !is_stale(newest_change(&path), now, kept_for) {
+            continue;
+        }
+        match std::fs::remove_dir_all(&path) {
+            Ok(()) => {
+                removed += 1;
+                log::info!("jkhub: dropped the stale download in {}", path.display());
+            }
+            Err(e) => log::warn!("cannot remove {}: {e}", path.display()),
+        }
+    }
+    removed
+}
+
+/// Whether a download folder has outlived its welcome.
+fn is_stale(changed: Option<SystemTime>, now: SystemTime, kept_for: Duration) -> bool {
+    match changed {
+        // A folder whose age the filesystem will not say is a folder nothing
+        // can ever decide to keep, so it goes rather than staying forever.
+        None => true,
+        // A time in the future — a clock the player moved back, a file copied
+        // from another machine — reads as brand new, which errs towards
+        // keeping a file somebody may still want.
+        Some(changed) => now
+            .duration_since(changed)
+            .map(|age| age >= kept_for)
+            .unwrap_or(false),
+    }
+}
+
+/// When anything in a folder last changed, the folder itself included.
+///
+/// The folder's own timestamp moves when a file is written into it, but only
+/// on some filesystems, so the files are asked too.
+fn newest_change(dir: &Path) -> Option<SystemTime> {
+    let own = std::fs::metadata(dir).and_then(|meta| meta.modified()).ok();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return own;
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| entry.metadata().and_then(|meta| meta.modified()).ok())
+        .chain(own)
+        .max()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -329,6 +428,81 @@ mod tests {
         assert_eq!(&bytes[..2], b"PK", "a zip starts with PK");
         std::fs::write(dir.path().join(&file_name), &bytes).expect("it lands on disk");
         println!("live: {file_name}, {size} bytes, {url}");
+    }
+
+    /// Review finding (Low): the archive of an attempt that did not install.
+    #[test]
+    fn only_an_outcome_with_nothing_left_to_press_loses_its_archive() {
+        let kept = [
+            JkhubInstallOutcome::Conflicts {
+                files: vec!["kyle.pk3".into()],
+            },
+            JkhubInstallOutcome::NoPk3Files {
+                entries: vec!["Readme.txt".into()],
+                archive_path: "C:\\cache\\x.zip".into(),
+            },
+            JkhubInstallOutcome::Unsupported {
+                format: "rar".into(),
+                archive_path: Some("C:\\cache\\x.rar".into()),
+                url: "https://jkhub.org/files/file/1-x/".into(),
+            },
+        ];
+        for outcome in kept {
+            assert!(
+                keep_reason(&outcome).is_some(),
+                "a button on screen still needs {outcome:?}"
+            );
+        }
+
+        let dropped = [
+            JkhubInstallOutcome::Installed {
+                files: vec!["kyle.pk3".into()],
+            },
+            JkhubInstallOutcome::External {
+                url: "https://mrwonko.de/".into(),
+            },
+        ];
+        for outcome in dropped {
+            assert_eq!(keep_reason(&outcome), None, "{outcome:?}");
+        }
+    }
+
+    #[test]
+    fn an_archive_kept_for_a_retry_does_not_stay_for_ever() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let data = crate::paths::DataPaths::new(dir.path().to_path_buf());
+        data.ensure().expect("the layout is created");
+        let downloads = data.cache.join("jkhub").join("downloads");
+
+        assert_eq!(sweep(&data, KEPT_FOR), 0, "no folder, nothing to do");
+
+        for id in ["1", "2"] {
+            std::fs::create_dir_all(downloads.join(id)).expect("a download folder");
+            std::fs::write(downloads.join(id).join("x.zip"), b"zip").expect("an archive");
+        }
+        // A stray file rather than a folder: whatever put it there, it is not
+        // a download and the sweep leaves it alone.
+        std::fs::write(downloads.join("notes.txt"), b"text").expect("a stray file");
+
+        assert_eq!(sweep(&data, KEPT_FOR), 0, "both were downloaded just now");
+        assert!(downloads.join("1").is_dir());
+
+        // Nothing may be kept for no time at all, which is every folder.
+        assert_eq!(sweep(&data, Duration::ZERO), 2);
+        assert!(!downloads.join("1").exists());
+        assert!(!downloads.join("2").exists());
+        assert!(downloads.join("notes.txt").exists(), "not a download");
+    }
+
+    #[test]
+    fn the_age_of_a_download_decides_and_a_clock_that_went_back_does_not() {
+        let now = SystemTime::now();
+        let day = Duration::from_secs(24 * 60 * 60);
+        assert!(is_stale(Some(now - day - Duration::from_secs(1)), now, day));
+        assert!(is_stale(Some(now - day), now, day), "exactly a day is spent");
+        assert!(!is_stale(Some(now - Duration::from_secs(3600)), now, day));
+        assert!(!is_stale(Some(now + day), now, day), "a clock moved back");
+        assert!(is_stale(None, now, day), "an age nobody can read");
     }
 
     #[test]

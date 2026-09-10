@@ -182,6 +182,13 @@ pub fn run() {
             // Built here rather than per call: the session a `csrfKey` belongs
             // to is the session that jar holds.
             jkhub::manage(app.handle());
+            // --- review: downloads of failed installs are never removed ---
+            // An install that ended yesterday cannot be resumed by any screen
+            // open today, so its archive goes. A scan of a folder with a
+            // handful of entries, and a failure inside is a line in the log.
+            if let Ok(paths) = app.state::<AppState>().paths() {
+                jkhub::download::sweep(&paths, jkhub::download::KEPT_FOR);
+            }
 
             log::info!("JKNet {} started", app.package_info().version);
             // --- slice: online gate ---
