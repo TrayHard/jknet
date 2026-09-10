@@ -44,6 +44,9 @@ export interface Settings {
   favoriteServers: string[];
   /** Servers Connect was pressed on, newest first, capped at 50. */
   serverHistory: ServerHistoryEntry[];
+  // --- slice: onboarding ---
+  /** False until the player has been through the three first-run steps. */
+  onboardingCompleted: boolean;
 }
 
 /**
@@ -62,6 +65,8 @@ export interface SettingsPatch {
   extraLaunchArgs?: string;
   favoriteServers?: string[];
   serverHistory?: ServerHistoryEntry[];
+  // --- slice: onboarding ---
+  onboardingCompleted?: boolean;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
