@@ -234,10 +234,13 @@ export interface LibraryItem {
   size: number;
   enabled: boolean;
   addedAt: string;
-  /** `local` for a file added from disk, a JKHub reference later. */
+  /** `local` for a file added from disk, `jkhub` for one installed here. */
   source: string | null;
   sha1: string | null;
   notes: string | null;
+  // --- slice: jkhub ---
+  /** What the JKHub tab wrote down when it installed the file. */
+  provenance?: JkhubProvenance | null;
 }
 
 /** What `inspect_pk3` reads out of an archive without installing it. */
@@ -841,4 +844,210 @@ export const friendsIpc = {
   dismissInvite: (id: string) => callFriends<FriendsView>("dismiss_invite", { id }),
   /** Starts the default client on the server that friend is playing on. */
   joinFriend: (userId: string) => callFriends<RunningGame>("join_friend", { userId }),
+};
+
+// --- slice: jkhub -----------------------------------------------------------
+//
+// Browsing jkhub.org from inside the launcher. Types mirror
+// `src-tauri/src/jkhub/types.rs` one to one.
+
+/**
+ * Which game a category or a file belongs to.
+ *
+ * `both` is a property of the JKHub tree, where `Both Games/Other` is a root
+ * of its own; the launcher's own notion of a game has only the first two.
+ */
+export type JkhubGame = "ja" | "jo" | "both";
+
+/** How a listing is ordered. Maps to the `sortby` parameter of the site. */
+export type JkhubSort =
+  | "recentlyUpdated"
+  | "newest"
+  | "mostDownloaded"
+  | "topRated"
+  | "name";
+
+export interface JkhubCategory {
+  id: number;
+  slug: string;
+  name: string;
+  /** `null` for a root of the tree. */
+  parentId: number | null;
+  game: JkhubGame;
+  /** Files in the category, `null` when the site printed no count. */
+  fileCount: number | null;
+  /** False for a container such as Maps, which holds only children. */
+  hasFiles: boolean;
+  url: string;
+}
+
+export interface JkhubCategories {
+  game: JkhubGame;
+  /** Depth first: a root, then its children, then theirs. */
+  categories: JkhubCategory[];
+  fetchedAt: string;
+  /** True when the site was unreachable and this came out of the cache. */
+  stale: boolean;
+}
+
+export interface JkhubAuthor {
+  name: string;
+  url: string | null;
+  avatarUrl: string | null;
+}
+
+export interface JkhubRating {
+  value: number;
+  count: number;
+}
+
+export interface JkhubScreenshot {
+  url: string;
+  thumbnailUrl: string | null;
+}
+
+export interface JkhubChangelogEntry {
+  version: string;
+  url: string | null;
+}
+
+/** One card of a listing. A card carries less than a file page. */
+export interface JkhubCardData {
+  id: number;
+  slug: string;
+  title: string;
+  url: string;
+  author: JkhubAuthor | null;
+  thumbnailUrl: string | null;
+  description: string;
+  downloads: number | null;
+  date: string | null;
+  /** `Updated` or `Submitted`: which date the card printed. */
+  dateLabel: string | null;
+  tags: string[];
+  rating: JkhubRating | null;
+}
+
+export interface JkhubListing {
+  categoryId: number;
+  sort: JkhubSort;
+  page: number;
+  pages: number;
+  perPage: number;
+  cards: JkhubCardData[];
+  fetchedAt: string;
+  stale: boolean;
+}
+
+/** Everything a file page carries. `jkhub_file` adds `fetchedAt` and `stale`. */
+export interface JkhubFile {
+  id: number;
+  slug: string;
+  title: string;
+  url: string;
+  game: JkhubGame;
+  categoryId: number | null;
+  categoryName: string | null;
+  author: JkhubAuthor | null;
+  /** Plain text from JSON-LD. Never render it as HTML: there is no sanitizer. */
+  description: string;
+  submittedAt: string | null;
+  updatedAt: string | null;
+  version: string | null;
+  views: number;
+  downloads: number;
+  comments: number;
+  reviews: number;
+  rating: JkhubRating | null;
+  screenshots: JkhubScreenshot[];
+  tags: string[];
+  changelog: JkhubChangelogEntry[];
+  fetchedAt: string;
+  stale: boolean;
+}
+
+/** Where the download button of a file leads. */
+export type JkhubDownload =
+  | {
+      kind: "hosted";
+      url: string;
+      fileName: string;
+      size: number | null;
+      contentType: string | null;
+    }
+  | { kind: "external"; url: string };
+
+/**
+ * What became of an install.
+ *
+ * Four of the five are answers rather than failures: the player decides what
+ * happens next, and a list of names does not fit into an error string.
+ */
+export type JkhubInstallOutcome =
+  | { kind: "installed"; files: string[] }
+  | { kind: "conflicts"; files: string[] }
+  | { kind: "noPk3Files"; entries: string[]; archivePath: string }
+  | { kind: "external"; url: string }
+  | {
+      kind: "unsupported";
+      format: string;
+      archivePath: string | null;
+      url: string;
+    };
+
+export type JkhubInstallResult = JkhubInstallOutcome & {
+  fileId: number;
+  clientId: string;
+  /** Folder inside `home\` the files went to. */
+  folder: string;
+};
+
+/** What `provenance.json` remembers about one installed file. */
+export interface JkhubProvenance {
+  source: string;
+  fileId: number;
+  version: string | null;
+  updatedAt: string | null;
+  installedAt: string;
+  title: string;
+  url: string;
+}
+
+/** Payload of `jkhub:download-progress`. */
+export interface JkhubDownloadProgress {
+  fileId: number;
+  received: number;
+  /** Zero when the server sent no length. */
+  total: number;
+}
+
+/** Payload of `jkhub:installed`. */
+export interface JkhubInstalled {
+  fileId: number;
+  clientId: string;
+  files: string[];
+}
+
+export const jkhubEvents = {
+  downloadProgress: "jkhub:download-progress",
+  installed: "jkhub:installed",
+} as const;
+
+export const jkhubIpc = {
+  /** The category tree of one game. `refresh` skips a fresh cache entry. */
+  categories: (game: JkhubGame, refresh = false) =>
+    call<JkhubCategories>("jkhub_categories", { game, refresh }),
+  list: (categoryId: number, sort: JkhubSort, page: number, refresh = false) =>
+    call<JkhubListing>("jkhub_list", { categoryId, sort, page, refresh }),
+  file: (id: number, refresh = false) =>
+    call<JkhubFile>("jkhub_file", { id, refresh }),
+  /** Follows the download button without fetching the archive. */
+  resolveDownload: (id: number) =>
+    call<JkhubDownload>("jkhub_resolve_download", { id }),
+  /** Downloads if needed and installs into a client. */
+  install: (id: number, clientId: string, replace = false) =>
+    call<JkhubInstallResult>("jkhub_install", { id, clientId, replace }),
+  /** Opens the file page in the system browser. */
+  open: (id: number) => call<void>("jkhub_open", { id }),
+  clearCache: () => call<void>("jkhub_clear_cache"),
 };

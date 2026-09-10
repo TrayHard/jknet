@@ -24,6 +24,8 @@ import {
   hubErrorCode,
   hubErrorMessage,
   ipc,
+  jkhubEvents,
+  jkhubIpc,
   launchIpc,
   levelshotsIpc,
   libraryIpc,
@@ -41,6 +43,12 @@ import {
   type HubProvider,
   type HubUser,
   type Invite,
+  type JkhubCategories,
+  type JkhubDownloadProgress,
+  type JkhubFile,
+  type JkhubGame,
+  type JkhubListing,
+  type JkhubSort,
   type Levelshot,
   type LibraryItem,
   type PresenceUpdated,
@@ -1141,4 +1149,133 @@ export function useFriendsEvents(): void {
       for (const stop of stops) stop();
     };
   }, [queryClient, configured]);
+}
+
+// --- slice: jkhub -----------------------------------------------------------
+//
+// Browsing jkhub.org. Keys live under one prefix so the Refresh action can
+// invalidate the whole tab at once, and the listing is paged by hand rather
+// than with `useInfiniteQuery`: the screen loads one page at a time and keeps
+// what it has, which is also what the client-side filter searches over.
+
+export const jkhubKeys = {
+  all: ["jkhub"] as const,
+  categories: (game: JkhubGame) => ["jkhub", "categories", game] as const,
+  list: (categoryId: number, sort: JkhubSort, page: number) =>
+    ["jkhub", "list", categoryId, sort, page] as const,
+  file: (id: number) => ["jkhub", "file", id] as const,
+};
+
+/** The category tree of one game. Cached on disk by the core for a day. */
+export function useJkhubCategories(
+  game: JkhubGame,
+  enabled = true,
+): UseQueryResult<JkhubCategories> {
+  return useQuery({
+    queryKey: jkhubKeys.categories(game),
+    queryFn: () => jkhubIpc.categories(game),
+    enabled: enabled && isTauri(),
+    // The core answers from its own cache, so a refetch on every focus would
+    // be wasted work rather than a fresh tree.
+    staleTime: 60 * 60_000,
+  });
+}
+
+/** One page of one category, 25 cards. Idle until a category is picked. */
+export function useJkhubListing(
+  categoryId: number | null,
+  sort: JkhubSort,
+  page: number,
+): UseQueryResult<JkhubListing> {
+  return useQuery({
+    queryKey: jkhubKeys.list(categoryId ?? 0, sort, page),
+    queryFn: () => jkhubIpc.list(categoryId as number, sort, page),
+    enabled: categoryId != null && isTauri(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** One file page. Idle until a card is opened. */
+export function useJkhubFile(id: number | null): UseQueryResult<JkhubFile> {
+  return useQuery({
+    queryKey: jkhubKeys.file(id ?? 0),
+    queryFn: () => jkhubIpc.file(id as number),
+    enabled: id != null && isTauri(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Drops every cached JKHub answer, so the next render asks the site again. */
+export function useRefreshJkhub() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    async (game: JkhubGame) => {
+      // `refresh: true` is what makes the core ignore its own disk cache; the
+      // invalidation below is what makes React Query ask for it.
+      await jkhubIpc.categories(game, true);
+      await queryClient.invalidateQueries({ queryKey: jkhubKeys.all });
+    },
+    [queryClient],
+  );
+}
+
+/**
+ * Installs one file into one client.
+ *
+ * The answer is not always "installed": a name collision, an archive with no
+ * pk3, a record that links to another site and a format JKNet cannot open all
+ * come back in the success path, and the screen decides what to offer next.
+ */
+export function useJkhubInstall(clientId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, replace }: { id: number; replace?: boolean }) =>
+      jkhubIpc.install(id, clientId as string, replace ?? false),
+    onSuccess: (result) => {
+      if (result.kind !== "installed") return;
+      queryClient.invalidateQueries({
+        queryKey: libraryKeys.items(result.clientId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: libraryKeys.conflicts(result.clientId),
+      });
+    },
+  });
+}
+
+/**
+ * Bytes received while an archive comes down, per file id.
+ *
+ * One listener for the whole tab: a card and the details panel both need the
+ * number, and a listener per card would mean twenty-five subscriptions.
+ */
+export function useJkhubDownloadProgress(): Map<number, JkhubDownloadProgress> {
+  const [progress, setProgress] = useState<Map<number, JkhubDownloadProgress>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<JkhubDownloadProgress>(
+      jkhubEvents.downloadProgress,
+      (event) => {
+        setProgress((current) => {
+          const next = new Map(current);
+          next.set(event.payload.fileId, event.payload);
+          return next;
+        });
+      },
+    ).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  return progress;
 }

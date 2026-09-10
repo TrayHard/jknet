@@ -15,6 +15,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ConflictsDialog } from "../components/library/ConflictsDialog";
+import { JkhubBrowser } from "../components/library/JkhubBrowser";
 import { LibraryCard } from "../components/library/LibraryCard";
 import { RemoveItemDialog } from "../components/library/RemoveItemDialog";
 import { Select, type SelectOption } from "../components/library/Select";
@@ -367,22 +368,18 @@ export function LibraryPage() {
           onBrowse={browseJkhub}
           onAdd={() => void pickFiles()}
         />
+      ) : tab === "jkhub" ? (
+        // --- slice: jkhub ---
+        <JkhubBrowser
+          clientId={clientId}
+          clientName={client?.name ?? "the client"}
+          installed={all}
+        />
       ) : (
         <EmptyState
           icon={<ExternalLink size={24} />}
-          title={tab === "jkhub" ? "Browsing JKHub is not here yet" : "No updates yet"}
-          text={
-            tab === "jkhub"
-              ? "Searching and downloading from JKHub inside the launcher arrives in a later task. The site opens in your browser meanwhile."
-              : "Once files carry a JKHub version, the ones with a newer release show up here."
-          }
-          action={
-            tab === "jkhub" ? (
-              <Button icon={<ExternalLink size={16} />} onClick={browseJkhub}>
-                Open JKHub
-              </Button>
-            ) : undefined
-          }
+          title="No updates yet"
+          text="Once files carry a JKHub version, the ones with a newer release show up here."
         />
       )}
 

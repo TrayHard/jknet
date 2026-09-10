@@ -131,6 +131,36 @@ pub enum AppError {
     /// [`HUB_NOT_CONFIGURED_CODE`] is the code inside it.
     #[error("hub {}: JKNet Hub is not configured in this build", HUB_NOT_CONFIGURED_CODE)]
     HubNotConfigured,
+
+    // --- slice: jkhub ---
+    /// jkhub.org could not be reached, answered with a status the reader does
+    /// not expect, or has no cached copy of what was asked for. Separate from
+    /// [`AppError::Network`] because the cure is different: the screens fall
+    /// back to a stale cache and say so, rather than retrying.
+    #[error("JKHub is unreachable: {0}")]
+    JkhubUnavailable(String),
+
+    /// A page of jkhub.org did not hold what the parser needs. Its own
+    /// variant because it means the site changed, not that the network did,
+    /// and the log line is what points at the parser to fix.
+    #[error("JKHub page not understood: {what}")]
+    JkhubParse { what: String },
+
+    /// Fetching an archive failed: a refused key, a redirect that went
+    /// nowhere, or a stream that stopped short of the announced size.
+    #[error("JKHub download failed: {0}")]
+    JkhubDownload(String),
+
+    /// The archive is in a format this build cannot open. `rar` is the only
+    /// one so far; the screens answer it with **Open on JKHub**.
+    #[error("archives of type {format} cannot be opened by JKNet")]
+    ArchiveUnsupported { format: String },
+
+    /// The archive opened and holds no pk3 at all, which is what a config or
+    /// a script package looks like. The names are in the message because the
+    /// question the player asks next is "then what is inside".
+    #[error("the archive holds no pk3 file: {entries}")]
+    NoPk3Files { entries: String },
 }
 
 // --- slice: hub gate ---
