@@ -10,20 +10,25 @@
 //! | `types.rs` | the wire structures, unchanged on the way to the frontend |
 //! | `client.rs`| the HTTP client, the error mapping and the pure checks |
 //!
-//! The commands that use it live in `crate::account`, and the Friends screen
-//! is meant to call the same [`HubClient`] rather than a second one: one
-//! connection pool, one place where a token is attached to a request.
+//! Two modules call it and neither owns it: `crate::account` signs in and
+//! keeps the account, `crate::friends` does everything else. One connection
+//! pool, one place where a token is attached to a request.
 
 mod client;
+/// `pub(crate)` for its `MockHub` helper: the live-socket test of
+/// `crate::friends` starts the same stand-in.
 #[cfg(test)]
-mod mock_tests;
+pub(crate) mod mock_tests;
 mod types;
 
 pub use client::{
     is_http_url, is_local_hub, normalize_display_name, normalize_hub_url, HubClient, HubContext,
     DEFAULT_HUB_URL, PROVIDERS,
 };
+// Only what another module names. `LoginSession`, `Me` and `FriendsList` are
+// answers of `client.rs` that the callers destructure rather than name, so
+// re-exporting them would be a public surface nothing asks for.
 pub use types::{
-    Friend, FriendRequest, FriendsList, HubUser, Invite, LoginSession, Me, NewInvite, Presence,
-    PresenceUpdate, SendRequestResult, SignInPoll,
+    Friend, FriendRemoved, FriendRequest, HubUser, Invite, LiveFrame, NewInvite, Presence,
+    PresenceUpdate, PresenceUpdated, SendRequestResult, SignInPoll,
 };

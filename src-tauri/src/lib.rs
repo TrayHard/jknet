@@ -20,20 +20,18 @@
 //! | `levelshots`     | map pictures extracted from the player's pk3 files |
 //! | `hub`            | the JKNet hub: its wire types and its HTTP client |
 //! | `account`        | signing in to the hub and owning the account    |
+//! | `friends`        | friends, presence and invites on top of `hub`   |
 
 mod account;
 mod clients;
 mod engine_install;
 mod engines;
 mod error;
+mod friends;
 mod game_files;
-// --- slice: account ---
-// The module implements the whole of hub API v1, and this slice calls the
-// sign-in and account half of it. The friends, presence and invite calls have
-// no caller until the Friends screen lands, and they are written now because
-// both halves are one contract: a second client would be a second place where
-// a token is attached to a request. Drop the attribute once they are called.
-#[allow(dead_code, unused_imports)]
+// The one client of hub API v1. `account` calls its sign-in half and
+// `friends` the rest, so a token is attached to a request in one place and
+// one connection pool serves both.
 mod hub;
 mod launch;
 mod levelshots;
@@ -47,6 +45,7 @@ mod timestamp;
 use std::path::PathBuf;
 
 use engine_install::InstallState;
+use friends::FriendsState;
 use launch::LaunchState;
 use levelshots::LevelshotState;
 use state::AppState;
@@ -155,6 +154,12 @@ pub fn run() {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
+            // --- slice: friends ---
+            // The heartbeat and the live socket. Both start signed out and
+            // cost nothing until a token appears, and neither of them touches
+            // the window, so nothing here can hold up the first frame.
+            friends::start(app.handle());
+
             log::info!("JKNet {} started", app.package_info().version);
             Ok(())
         })
@@ -174,6 +179,11 @@ pub fn run() {
         // nothing here goes stale when the player signs in or points the
         // launcher at another hub.
         .manage(hub::HubClient::new())
+        // --- slice: friends ---
+        // The presence the launcher reports and whether the live socket is
+        // up. Kept apart from `AppState` for the same reason as the two above:
+        // a background task must not queue behind a settings write.
+        .manage(FriendsState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -218,6 +228,15 @@ pub fn run() {
             account::sign_out,
             account::update_display_name,
             account::delete_account,
+            // --- slice: friends ---
+            friends::get_friends_state,
+            friends::send_friend_request,
+            friends::accept_friend_request,
+            friends::decline_friend_request,
+            friends::remove_friend,
+            friends::send_invite,
+            friends::dismiss_invite,
+            friends::join_friend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

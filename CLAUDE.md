@@ -1,6 +1,6 @@
 # Проект: лаунчер JKNet
 
-JKNet — десктопный лаунчер мультиплеера Jedi Academy на Tauri 2: ядро на Rust, фронтенд на React, TypeScript и Tailwind CSS v4. Работают все четыре экрана: **Home**, **Clients**, **Library** и **Servers** — установка движка, запуск игры, файлы pk3 клиента и браузер серверов.
+JKNet — десктопный лаунчер мультиплеера Jedi Academy на Tauri 2: ядро на Rust, фронтенд на React, TypeScript и Tailwind CSS v4. Работают все пять экранов: **Home**, **Clients**, **Library**, **Servers** и **Friends** — установка движка, запуск игры, файлы pk3 клиента, браузер серверов, вход на хаб JKNet и друзья.
 
 ## Язык
 
@@ -37,13 +37,14 @@ src/
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
                          ClientSettingsDialog, GameEventsProvider,
                          AppUpdateProvider, AboutCard, MapPreview,
-                         MapPicturesCard
+                         MapPicturesCard, ToastsProvider, FriendsProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
-                         RadioCard, StepBadges, Toast
+                         RadioCard, StepBadges, Toast, Avatar
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
-  components/account/    учётная запись: карточка Settings, аватар, кнопки
-                         провайдеров, ожидание браузера, диалог
+  components/account/    учётная запись: карточка Settings, кнопки провайдеров,
+                         ожидание браузера, диалог
+  components/friends/    экран Friends: строка, панель друга, заявки, presence.ts
   pages/                 по одному файлу на маршрут
   pages/onboarding/      три шага первого запуска и защита маршрутов
   lib/ipc.ts             типизированные обёртки над invoke
@@ -51,8 +52,8 @@ src/
   lib/useGameEvents.ts   подписка на события установки движка и запуска игры
   lib/useAppUpdate.ts    проверка, загрузка и установка обновления лаунчера
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
-  lib/flags.ts           ACCOUNTS_ENABLED и другие выключатели незаконченного
   lib/format.ts          cn, formatBytes, shortenPath
+  lib/devHub.ts          подмена команд друзей вызовами к заглушке хаба вне Tauri
 src-tauri/
   src/lib.rs             сборка приложения, плагины, список команд
   src/state.rs           общее состояние: config_root и настройки
@@ -68,6 +69,7 @@ src-tauri/
   src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
   src/hub/               клиент хаба JKNet: типы контракта, запросы, ошибки
   src/account.rs         вход через браузер и команды учётной записи
+  src/friends/           друзья, присутствие, приглашения и живой сокет
   capabilities/          разрешения окна main
 scripts/
   mock-hub.mjs           заглушка хаба на Node без зависимостей

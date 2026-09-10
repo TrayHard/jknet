@@ -99,6 +99,13 @@ pub enum AppError {
     #[error("image error: {0}")]
     Image(String),
 
+    // --- slice: friends ---
+    /// Nobody is signed in, so there is no token to talk to the hub with. Its
+    /// own variant because the cure is the Account card on the Settings
+    /// screen, not a retry.
+    #[error("sign in to JKNet to see your friends")]
+    SignedOut,
+
     // --- slice: account ---
     /// The JKNet hub refused a request and said why in the code of its error
     /// document: `not_found`, `unauthorized`, `forbidden`, `invalid`,

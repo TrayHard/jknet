@@ -454,6 +454,21 @@ fn read_cache(file: &PathBuf) -> Vec<ServerInfo> {
     }
 }
 
+// --- slice: friends ---
+/// The host name the last refresh saw at `address`, colour codes removed.
+///
+/// Best effort by design: the answer decorates a presence report, so a missing
+/// cache or an address nobody has scanned yet costs a friend the server name
+/// in their status line and nothing more.
+pub(crate) fn cached_name_for(state: &AppState, address: &str) -> Option<String> {
+    let file = cache_file(state).ok()?;
+    read_cache(&file)
+        .into_iter()
+        .find(|server| server.address == address)
+        .map(|server| server.hostname_clean)
+        .filter(|name| !name.trim().is_empty())
+}
+
 /// Writes the cache. A failure is logged, not returned: the player already has
 /// the list on screen and cannot act on a disk error here.
 fn write_cache(file: &PathBuf, servers: &[ServerInfo]) {

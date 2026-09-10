@@ -29,7 +29,7 @@
 //! frontend gets instead is [`AccountState`]: whether a token exists, and who
 //! it belongs to.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::Emitter;
 use tauri_plugin_opener::OpenerExt;
 
@@ -46,7 +46,11 @@ use crate::state::AppState;
 pub const ACCOUNT_CHANGED_EVENT: &str = "account:changed";
 
 /// Payload of [`ACCOUNT_CHANGED_EVENT`].
-#[derive(Debug, Clone, Serialize)]
+///
+/// `Deserialize` as well as `Serialize`: `crate::friends` listens for this
+/// event to start and stop its heartbeat and its live socket, and a listener
+/// receives the payload as the JSON text it was emitted as.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountChanged {
     pub signed_in: bool,
