@@ -20,7 +20,6 @@ import { PageHeader } from "../components/PageHeader";
 import { ServerDetails } from "../components/servers/ServerDetails";
 import { ROW_COLUMNS, ServerRow } from "../components/servers/ServerRow";
 import { SkeletonRows } from "../components/servers/SkeletonRow";
-import { Select, type SelectOption } from "../components/servers/Select";
 import { Tabs, type TabDefinition } from "../components/servers/Tabs";
 import {
   applyFilters,
@@ -44,7 +43,14 @@ import {
   scanLabel,
   scanView,
 } from "../components/servers/refreshView";
-import { Button, EmptyState, Input, Toggle } from "../components/ui";
+import {
+  Button,
+  EmptyState,
+  Input,
+  Select,
+  Toggle,
+  type SelectOption,
+} from "../components/ui";
 import { cn } from "../lib/format";
 import {
   errorMessage,
@@ -518,18 +524,21 @@ function FilterRow({
     <div className="flex flex-wrap items-center gap-8 pt-4">
       <Select
         label="Mode"
+        ariaLabel="Mode"
         value={filters.gametype}
         options={modes}
         onChange={(gametype) => onChange({ ...filters, gametype })}
       />
       <Select
         label="Mod"
+        ariaLabel="Mod"
         value={filters.modName}
         options={mods}
         onChange={(modName) => onChange({ ...filters, modName })}
       />
       <Select
         label="Players"
+        ariaLabel="Players"
         value={filters.players}
         options={[
           { value: "any", label: "Any" },
@@ -542,6 +551,7 @@ function FilterRow({
       />
       <Select
         label="Version"
+        ariaLabel="Version"
         value={filters.protocol}
         options={versions}
         onChange={(protocol) => onChange({ ...filters, protocol })}

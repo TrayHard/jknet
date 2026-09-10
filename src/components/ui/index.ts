@@ -13,6 +13,11 @@ export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 export { NavItem } from "./NavItem";
 export { RadioCard } from "./RadioCard";
+export {
+  Select,
+  type SelectOption,
+  type SelectSize,
+} from "./Select";
 export { StepBadges } from "./StepBadges";
 export { Toggle } from "./Toggle";
 // --- slice: installer ---
