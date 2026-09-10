@@ -14,6 +14,8 @@ import {
 } from "../ui";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
+// --- slice: jkhub index startup ---
+import { JkhubIndexing } from "./JkhubIndexing";
 import { JkhubTree } from "./JkhubTree";
 // --- slice: i18n ---
 import { useErrorText } from "../../i18n/errors";
@@ -22,6 +24,7 @@ import { useActiveGame, useGameNames } from "../../lib/game";
 import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
+  useCancelJkhubIndex,
   useJkhubCategories,
   useJkhubDownloadProgress,
   useJkhubFile,
@@ -105,6 +108,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   const refreshListing = useRefreshJkhubListing();
   const refreshCategories = useRefreshJkhubCategories();
   const refreshIndex = useRefreshJkhubIndex();
+  const cancelIndex = useCancelJkhubIndex();
   const progress = useJkhubDownloadProgress();
   const install = useJkhubInstall(clientId);
   const details = useJkhubFile(openFile);
@@ -169,7 +173,9 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
 
   // A crawl of the other game must not put a progress line on this one.
   const building = status.data?.building === true;
-  const step = indexing.get(game);
+  // The event is the fresher of the two; the answer of the status is what a tab
+  // opened halfway through a crawl has instead of the events it missed.
+  const step = indexing.get(game) ?? status.data?.progress ?? null;
 
   const indexLine = () => {
     if (building && step) {
@@ -177,7 +183,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     }
     if (building) return t("index.startingUp");
     const state = status.data;
-    if (!state?.indexed) return t("index.missing");
+    if (!state?.available) return t("index.missing");
     if (state.age < A_DAY) {
       return t("index.line", { time: format.age(state.age), count: state.files });
     }
@@ -252,6 +258,16 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
       refreshListing({ game, categoryId: null, sort, pages: 0, fileId: openFile }),
     ])
       .then(([update]) => {
+        // A run the player stopped is neither an update nor a catalogue that
+        // was already current, and saying either would be a lie.
+        if (update.cancelled) {
+          toasts.show("jkhub:index", {
+            variant: "info",
+            title: t("index.stoppedTitle"),
+            text: t("index.stoppedToast", { count: update.requests }),
+          });
+          return;
+        }
         const changed = update.added + update.updated + update.removed;
         toasts.show("jkhub:index", {
           variant: "success",
@@ -266,6 +282,19 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
               : t("index.currentText", { count: update.files }),
         });
       })
+      .catch((e: unknown) => setFailure(errorText(e)))
+      .finally(() => setRefreshing(false));
+  };
+
+  // --- slice: jkhub index startup ---
+  // **Cancel** on the blocking panel. The core stops between pages and keeps
+  // whatever index it had, which with nothing indexed is nothing at all — so
+  // the panel switches to the empty state with **Try again** rather than
+  // letting a half-read catalogue on screen.
+  const runCancel = () => {
+    setRefreshing(true);
+    setFailure(null);
+    void cancelIndex(game)
       .catch((e: unknown) => setFailure(errorText(e)))
       .finally(() => setRefreshing(false));
   };
@@ -315,6 +344,25 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             {tCommon("actions.tryAgain")}
           </Button>
         }
+      />
+    );
+  }
+
+  // --- slice: jkhub index startup ---
+  // Nothing to list and nothing to search: no crawl of this machine and no
+  // copy inside the build. The tree and the grid would both be empty, and a
+  // search box over an empty catalogue answers «nothing matches» to every
+  // word — so the whole tab becomes the wait instead, with one button to stop
+  // it. Every shipped build carries a snapshot, so this is a safety net and
+  // not the normal first run.
+  if (status.data != null && !status.data.available) {
+    return (
+      <JkhubIndexing
+        building={building}
+        step={step}
+        busy={refreshing}
+        onCancel={runCancel}
+        onRetry={() => runRefresh(true)}
       />
     );
   }

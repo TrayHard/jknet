@@ -1623,6 +1623,27 @@ export function useRefreshJkhubIndex() {
   );
 }
 
+// --- slice: jkhub index startup ---
+
+/**
+ * Stops the crawl of one game.
+ *
+ * The **Cancel** action of the blocking panel. The core answers `cancelled`
+ * from the call that was running and leaves the index alone; this hook drops
+ * the status key so the panel stops saying «indexing» without waiting out the
+ * two-second poll.
+ */
+export function useCancelJkhubIndex() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    async (game: Game) => {
+      await jkhubIpc.cancelIndex(game);
+      await queryClient.invalidateQueries({ queryKey: jkhubKeys.index(game) });
+    },
+    [queryClient],
+  );
+}
+
 export function useJkhubDownloadProgress(): Map<number, JkhubDownloadProgress> {
   const [progress, setProgress] = useState<Map<number, JkhubDownloadProgress>>(
     () => new Map(),
