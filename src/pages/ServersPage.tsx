@@ -37,6 +37,12 @@ import {
   type SortColumn,
   type SortDirection,
 } from "../components/servers/filter";
+import {
+  respondedSoFar,
+  rowsToHold,
+  scanLabel,
+  scanView,
+} from "../components/servers/refreshView";
 import { Button, EmptyState, Input, Toggle } from "../components/ui";
 import { cn } from "../lib/format";
 import {
@@ -92,15 +98,26 @@ export function ServersPage() {
 
   const startRefresh = refresh.refresh;
   const attempted = useRef(false);
+  // The scan waits for the list on disk. It is a few milliseconds away, and
+  // starting without it would leave the screen holding an empty table for the
+  // four seconds the scan takes — the skeleton belongs to the first run of a
+  // fresh install, not to every visit.
+  const cacheSettled = !cached.isPending;
   useEffect(() => {
-    if (attempted.current || !isTauri()) return;
+    if (attempted.current || !isTauri() || !cacheSettled) return;
     attempted.current = true;
     if (Date.now() - lastAutoRefresh < AUTO_REFRESH_AFTER_MS) return;
     lastAutoRefresh = Date.now();
     startRefresh();
-  }, [startRefresh]);
+  }, [startRefresh, cacheSettled]);
 
-  const all = useMemo(() => cached.data ?? [], [cached.data]);
+  const live = useMemo(() => cached.data ?? [], [cached.data]);
+  // The rows the whole screen works from. While a scan runs they are the ones
+  // it started with, so counts, tabs, filter options and the table agree with
+  // each other and none of them moves under the cursor.
+  const held = useHeldRows(live, refresh.running);
+  const view = scanView(live, held, refresh.running);
+  const all = view.rows;
   const historyAddresses = useMemo(
     () => (settings.data?.serverHistory ?? []).map((entry) => entry.address),
     [settings.data],
@@ -163,7 +180,6 @@ export function ServersPage() {
   };
 
   const listError = cached.error !== null ? errorMessage(cached.error) : null;
-  const firstScan = refresh.running && all.length === 0;
 
   return (
     <div className="flex flex-col h-full p-24">
@@ -235,46 +251,61 @@ export function ServersPage() {
       ) : null}
 
       <div className="flex flex-1 min-h-0 gap-16 pt-12">
-        <div className="flex flex-col flex-1 min-w-0">
-          <SortHeader
-            column={sortColumn}
-            direction={sortDirection}
-            onToggle={toggleSort}
-          />
-          <div className="flex-1 min-h-0 overflow-y-auto pt-4">
-            {firstScan ? (
-              <SkeletonRows count={10} />
-            ) : visible.length === 0 ? (
-              <EmptyState
-                className="mt-24"
-                icon={<ServerIcon size={24} />}
-                title={emptyTitle(tab, all.length)}
-                text={emptyText(tab, all.length, hiddenBotOnly)}
-                action={
-                  tab === "all" && all.length === 0 ? (
-                    <Button icon={<RefreshCw size={16} />} onClick={startRefresh}>
-                      Refresh
-                    </Button>
-                  ) : undefined
-                }
-              />
-            ) : (
-              visible.map((server) => (
-                <ServerRow
-                  key={server.address}
-                  server={server}
-                  selected={server.address === selectedAddress}
-                  onSelect={() => setSelectedAddress(server.address)}
-                  onToggleFavorite={() =>
-                    setFavorite.mutate({
-                      address: server.address,
-                      favorite: !server.favorite,
-                    })
+        <div className="relative flex flex-col flex-1 min-w-0">
+          {/* The loader covers this region and nothing else, so the search
+              box, the filters and the tabs stay usable during a scan. `inert`
+              keeps the Tab key out of the rows it hides. */}
+          <div
+            className="flex flex-col flex-1 min-h-0"
+            inert={view.frozen}
+            aria-busy={view.frozen}
+          >
+            <SortHeader
+              column={sortColumn}
+              direction={sortDirection}
+              onToggle={toggleSort}
+            />
+            <div className="flex-1 min-h-0 overflow-y-auto pt-4">
+              {view.skeleton ? (
+                <SkeletonRows count={10} />
+              ) : visible.length === 0 ? (
+                <EmptyState
+                  className="mt-24"
+                  icon={<ServerIcon size={24} />}
+                  title={emptyTitle(tab, all.length)}
+                  text={emptyText(tab, all.length, hiddenBotOnly)}
+                  action={
+                    tab === "all" && all.length === 0 ? (
+                      <Button icon={<RefreshCw size={16} />} onClick={startRefresh}>
+                        Refresh
+                      </Button>
+                    ) : undefined
                   }
                 />
-              ))
-            )}
+              ) : (
+                visible.map((server) => (
+                  <ServerRow
+                    key={server.address}
+                    server={server}
+                    selected={server.address === selectedAddress}
+                    onSelect={() => setSelectedAddress(server.address)}
+                    onToggleFavorite={() =>
+                      setFavorite.mutate({
+                        address: server.address,
+                        favorite: !server.favorite,
+                      })
+                    }
+                  />
+                ))
+              )}
+            </div>
           </div>
+
+          {view.frozen ? (
+            <ScanOverlay
+              label={scanLabel(respondedSoFar(live, held), refresh.progress)}
+            />
+          ) : null}
         </div>
 
         {selected === undefined ? (
@@ -313,6 +344,51 @@ export function ServersPage() {
       </div>
     </div>
   );
+}
+
+/**
+ * The loader over the held-still table.
+ *
+ * It sits inside the table column, so the search box, the filters, the tabs
+ * and the details panel of the selected server stay where they were and stay
+ * usable. Being a plain element, it also swallows every click and wheel tick
+ * aimed at the rows underneath.
+ */
+function ScanOverlay({ label }: { label: string }) {
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-app/70 backdrop-blur-[1px]">
+      <span
+        role="status"
+        className="inline-flex items-center gap-8 px-12 py-8 rounded-md border border-line bg-surface text-body-sm text-fg-secondary shadow-card"
+      >
+        <RefreshCw size={16} className="animate-spin text-fg-accent" />
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The rows as they were when the running scan started.
+ *
+ * The list is captured on the edge, not on every render: a scan that begins
+ * with rows on screen keeps exactly those until it ends, whatever the batches
+ * do to the query cache in between. Refs rather than state because nothing
+ * here needs a render of its own — the flag that flips already causes one.
+ */
+function useHeldRows(
+  live: ServerInfo[],
+  scanning: boolean,
+): ServerInfo[] | null {
+  const held = useRef<ServerInfo[] | null>(null);
+  const wasScanning = useRef(false);
+
+  if (scanning !== wasScanning.current) {
+    wasScanning.current = scanning;
+    held.current = rowsToHold(live, scanning);
+  }
+
+  return held.current;
 }
 
 /** The Mode, Mod, Players and Version dropdowns, plus **Reset filters**. */
