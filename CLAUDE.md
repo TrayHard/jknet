@@ -34,7 +34,7 @@ src/
   styles/tokens.css      токены дизайна из Figma
   styles/fonts.css       локальные шрифты @fontsource
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
-                         GameEventsProvider
+                         ClientSettingsDialog, GameEventsProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
@@ -97,6 +97,8 @@ src-tauri/
 ## Соглашения
 
 - Новую команду ядра добавляйте в трёх местах: модуль в `src-tauri/src`, список в `tauri::generate_handler!` в `lib.rs`, обёртка в `src/lib/ipc.ts`. Компоненты вызывают команды только через хуки из `lib/queries.ts`.
+- Настройки меняйте патчем: отправляйте в `update_settings` только изменённые поля. Документ из кеша React Query целиком не отправляйте, иначе запись затрёт поля, изменённые другим писателем.
+- Долгую операцию защищайте от повторного запуска в ядре, а не только выключенной кнопкой: множество занятых `clientId` в состоянии Tauri, как `InstallState` в `engine_install.rs`.
 - Вызов Tauri из фронтенда закрывайте проверкой `isTauri` из `lib/runtime.ts`. Команда `npm run dev` открывает тот же код в браузере, где `window.__TAURI_INTERNALS__` нет и любой вызов бросает `TypeError`.
 - Ошибки возвращайте вариантом `AppError` из `src-tauri/src/error.rs`. Строку в `Err` не пишите: вариант делает журнал доступным для поиска.
 - Разрешения в `src-tauri/capabilities/default.json` добавляйте по одному, только под то, что действительно вызываете.
