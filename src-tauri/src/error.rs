@@ -92,6 +92,20 @@ pub enum AppError {
     /// game already running.
     #[error("cannot launch: {0}")]
     Launch(String),
+
+    // --- slice: account ---
+    /// The JKNet hub refused a request and said why in the code of its error
+    /// document: `not_found`, `unauthorized`, `forbidden`, `invalid`,
+    /// `conflict`, `rate_limited`, `provider_error` or `internal`.
+    ///
+    /// The code is part of the rendered message on purpose. An `AppError`
+    /// reaches the frontend as a plain string, and the screens have to tell
+    /// the codes apart: `provider_error` means "JKHub has not issued an OAuth
+    /// client yet, keep the guest button", while `conflict` on the same screen
+    /// means "that display name is taken, type another one". `hubErrorCode`
+    /// in `src/lib/ipc.ts` reads the prefix back out.
+    #[error("hub {code}: {message}")]
+    Hub { code: String, message: String },
 }
 
 impl From<reqwest::Error> for AppError {
