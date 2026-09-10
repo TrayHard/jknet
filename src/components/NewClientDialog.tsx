@@ -18,6 +18,15 @@ import {
 import { Button, Input, RadioCard, Toggle } from "./ui";
 
 interface NewClientDialogProps {
+  /**
+   * Game to start on, when something other than the sidebar asked for the
+   * dialog.
+   *
+   * Review finding (Low): the **Create client** toast on the Friends screen
+   * appears about a friend's game, which is not always the game of the
+   * sidebar. Given here, it wins over the active game and stops following it.
+   */
+  game?: Game;
   onClose: () => void;
   onError: (message: string) => void;
 }
@@ -29,7 +38,11 @@ interface NewClientDialogProps {
  * Copying files from another client is in the design but not in the core yet,
  * so the dialog does not offer it.
  */
-export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
+export function NewClientDialog({
+  game: requested,
+  onClose,
+  onError,
+}: NewClientDialogProps) {
   const settings = useSettings();
   // --- slice: game core ---
   // The game comes first: it decides which engines the list below offers.
@@ -37,7 +50,7 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
   // slice gives the player a way to change it.
   const activeGame = useActiveGame();
   const games = useGames();
-  const [game, setGame] = useState<Game>(activeGame);
+  const [game, setGame] = useState<Game>(requested ?? activeGame);
   const engines = useEnginesOfGame(game);
   const createClient = useCreateClient();
   const updateSettings = useUpdateSettings();
@@ -49,8 +62,12 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
   const [downloadEngine, setDownloadEngine] = useState(true);
 
   // Follow the active game until the player touches the choice: the settings
-  // answer one render after the dialog mounts.
-  useEffect(() => setGame(activeGame), [activeGame]);
+  // answer one render after the dialog mounts. A caller that named a game is
+  // not overruled by that answer — it asked for this game on purpose.
+  useEffect(() => {
+    if (requested) return;
+    setGame(activeGame);
+  }, [activeGame, requested]);
 
   // Preselect the recommended engine of the chosen game, and drop a selection
   // that belongs to the other game the moment the game changes.
