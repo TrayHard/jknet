@@ -1,0 +1,366 @@
+{
+  "game": "ja",
+  "generatedAt": "2026-09-10T14:17:32Z",
+  "categories": [
+    {
+      "id": 41,
+      "slug": "jedi-academy",
+      "name": "Jedi Academy",
+      "parentId": null,
+      "game": "ja",
+      "fileCount": 3299,
+      "hasFiles": false,
+      "url": "https://jkhub.org/files/category/41-jedi-academy/"
+    },
+    {
+      "id": 38,
+      "slug": "audio",
+      "name": "Audio",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 52,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/38-audio/"
+    },
+    {
+      "id": 72,
+      "slug": "code-mods",
+      "name": "Code Mods",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 73,
+      "hasFiles": false,
+      "url": "https://jkhub.org/files/category/72-code-mods/"
+    },
+    {
+      "id": 11,
+      "slug": "client-side",
+      "name": "Client-Side",
+      "parentId": 72,
+      "game": "ja",
+      "fileCount": 32,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/11-client-side/"
+    },
+    {
+      "id": 25,
+      "slug": "server-side",
+      "name": "Server-Side",
+      "parentId": 72,
+      "game": "ja",
+      "fileCount": 28,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/25-server-side/"
+    },
+    {
+      "id": 76,
+      "slug": "single-player",
+      "name": "Single Player",
+      "parentId": 72,
+      "game": "ja",
+      "fileCount": 13,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/76-single-player/"
+    },
+    {
+      "id": 32,
+      "slug": "configuration-files",
+      "name": "Configuration Files",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 16,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/32-configuration-files/"
+    },
+    {
+      "id": 10,
+      "slug": "cosmetic-mods",
+      "name": "Cosmetic Mods",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 349,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/10-cosmetic-mods/"
+    },
+    {
+      "id": 23,
+      "slug": "guns-explosives",
+      "name": "Guns & Explosives",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 61,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/23-guns-explosives/"
+    },
+    {
+      "id": 24,
+      "slug": "lightsabers-melee",
+      "name": "Lightsabers & Melee",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/24-lightsabers-melee/"
+    },
+    {
+      "id": 71,
+      "slug": "maps",
+      "name": "Maps",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": false,
+      "url": "https://jkhub.org/files/category/71-maps/"
+    },
+    {
+      "id": 16,
+      "slug": "capture-the-flag",
+      "name": "Capture The Flag",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 62,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/16-capture-the-flag/"
+    },
+    {
+      "id": 28,
+      "slug": "duel",
+      "name": "Duel",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 122,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/28-duel/"
+    },
+    {
+      "id": 34,
+      "slug": "entity-mods",
+      "name": "Entity Mods",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 13,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/34-entity-mods/"
+    },
+    {
+      "id": 13,
+      "slug": "free-for-all",
+      "name": "Free For All",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 367,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/13-free-for-all/"
+    },
+    {
+      "id": 15,
+      "slug": "mixed-gametypes",
+      "name": "Mixed Gametypes",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 148,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/15-mixed-gametypes/"
+    },
+    {
+      "id": 33,
+      "slug": "other-gamemodes",
+      "name": "Other Gamemodes",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 23,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/33-other-gamemodes/"
+    },
+    {
+      "id": 17,
+      "slug": "siege",
+      "name": "Siege",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 18,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/17-siege/"
+    },
+    {
+      "id": 35,
+      "slug": "source-files",
+      "name": "Source FIles",
+      "parentId": 71,
+      "game": "ja",
+      "fileCount": 14,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/35-source-files/"
+    },
+    {
+      "id": 73,
+      "slug": "media",
+      "name": "Media",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": false,
+      "url": "https://jkhub.org/files/category/73-media/"
+    },
+    {
+      "id": 31,
+      "slug": "demos",
+      "name": "Demos",
+      "parentId": 73,
+      "game": "ja",
+      "fileCount": 4,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/31-demos/"
+    },
+    {
+      "id": 39,
+      "slug": "frag-movies",
+      "name": "Frag Movies",
+      "parentId": 73,
+      "game": "ja",
+      "fileCount": 0,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/39-frag-movies/"
+    },
+    {
+      "id": 37,
+      "slug": "original-assets",
+      "name": "Original Assets",
+      "parentId": 73,
+      "game": "ja",
+      "fileCount": 1,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/37-original-assets/"
+    },
+    {
+      "id": 8,
+      "slug": "videos",
+      "name": "Videos",
+      "parentId": 73,
+      "game": "ja",
+      "fileCount": 54,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/8-videos/"
+    },
+    {
+      "id": 29,
+      "slug": "mod-bundles",
+      "name": "Mod Bundles",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 3,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/29-mod-bundles/"
+    },
+    {
+      "id": 36,
+      "slug": "npcs",
+      "name": "NPCs",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/36-npcs/"
+    },
+    {
+      "id": 2,
+      "slug": "official-releases",
+      "name": "Official Releases",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": 13,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/2-official-releases/"
+    },
+    {
+      "id": 19,
+      "slug": "prefabs",
+      "name": "Prefabs",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/19-prefabs/"
+    },
+    {
+      "id": 5,
+      "slug": "player-models",
+      "name": "Player Models",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/5-player-models/"
+    },
+    {
+      "id": 4,
+      "slug": "skins",
+      "name": "Skins",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/4-skins/"
+    },
+    {
+      "id": 30,
+      "slug": "single-player",
+      "name": "Single Player",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/30-single-player/"
+    },
+    {
+      "id": 1,
+      "slug": "utilities",
+      "name": "Utilities",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/1-utilities/"
+    },
+    {
+      "id": 6,
+      "slug": "vehicles",
+      "name": "Vehicles",
+      "parentId": 41,
+      "game": "ja",
+      "fileCount": null,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/6-vehicles/"
+    },
+    {
+      "id": 74,
+      "slug": "both-gamesother",
+      "name": "Both Games/Other",
+      "parentId": null,
+      "game": "both",
+      "fileCount": 124,
+      "hasFiles": false,
+      "url": "https://jkhub.org/files/category/74-both-gamesother/"
+    },
+    {
+      "id": 3,
+      "slug": "art-work",
+      "name": "Art Work",
+      "parentId": 74,
+      "game": "both",
+      "fileCount": 28,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/3-art-work/"
+    },
+    {
+      "id": 75,
+      "slug": "utilities",
+      "name": "Utilities",
+      "parentId": 74,
+      "game": "both",
+      "fileCount": 96,
+      "hasFiles": true,
+      "url": "https://jkhub.org/files/category/75-utilities/"
+    }
+  ]
+}

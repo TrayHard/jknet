@@ -3,11 +3,15 @@
 //! Layout, under the data root:
 //!
 //! ```text
-//! cache\jkhub\categories-<game>.json      the tree, 24 h
+//! cache\jkhub\categories-<game>.json      the tree, 7 days
 //! cache\jkhub\list-<id>-<sort>-<page>.json one page of a listing, 30 min
 //! cache\jkhub\file-<id>.json               one file page, 30 min
 //! cache\jkhub\downloads\<fileId>\<name>    the archive, until it is installed
 //! ```
+//!
+//! The tree has a third source below the two of them: a snapshot bundled with
+//! the build (`snapshot.rs`). It is read only when the cache holds nothing,
+//! and the walk that follows overwrites it here.
 //!
 //! Two rules decide the design:
 //!
@@ -32,9 +36,13 @@ use crate::error::{AppError, Result};
 use crate::paths::{self, DataPaths};
 use crate::timestamp;
 
-/// How long the category tree is treated as current, in seconds. The tree
-/// changes a few times a year.
-pub const CATEGORIES_TTL: u64 = 24 * 60 * 60;
+/// How long the category tree is treated as current, in seconds.
+///
+/// A week. The tree changes a few times a year, and walking it costs about
+/// twenty requests — a day was short enough that a player who opens the tab
+/// most days paid for a walk most days. The file counts inside the tree age
+/// with it and can lag the site by that week; nothing else in it moves.
+pub const CATEGORIES_TTL: u64 = 7 * 24 * 60 * 60;
 
 /// How long a listing page or a file page is treated as current, in seconds.
 pub const PAGE_TTL: u64 = 30 * 60;

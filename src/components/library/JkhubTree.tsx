@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { cn } from "../../lib/format";
@@ -9,6 +9,10 @@ interface JkhubTreeProps {
   categories: JkhubCategory[];
   selected: number | null;
   onSelect: (category: JkhubCategory) => void;
+  /** Walks the tree again. Twenty requests, so it asks before it is used. */
+  onUpdate: () => void;
+  /** True while that walk is running. */
+  updating: boolean;
 }
 
 /**
@@ -21,8 +25,19 @@ interface JkhubTreeProps {
  * `Contest Entries` never reaches this component: the core drops the root, as
  * it is a temporary category that is usually empty (research report,
  * section 2).
+ *
+ * The header carries **Update categories** rather than the toolbar next to the
+ * cards. Walking the tree costs about twenty requests to jkhub.org and the
+ * tree changes a few times a year, so it is deliberately the quietest control
+ * on the tab: **Refresh** above the cards reads the listing, not this.
  */
-export function JkhubTree({ categories, selected, onSelect }: JkhubTreeProps) {
+export function JkhubTree({
+  categories,
+  selected,
+  onSelect,
+  onUpdate,
+  updating,
+}: JkhubTreeProps) {
   const [open, setOpen] = useState<Set<number>>(() => new Set());
 
   const children = useMemo(() => {
@@ -97,11 +112,38 @@ export function JkhubTree({ categories, selected, onSelect }: JkhubTreeProps) {
     );
   };
 
-  if (roots.length === 0) {
-    return <p className="text-body-sm text-fg-muted">No categories yet.</p>;
-  }
+  const header = (
+    <div className="flex items-center gap-8 pb-8">
+      <span className="text-label-xs text-fg-muted flex-1">Categories</span>
+      <button
+        type="button"
+        onClick={onUpdate}
+        disabled={updating}
+        title="Walk the JKHub category tree again. Takes about twenty requests."
+        className={cn(
+          "inline-flex items-center gap-4 rounded-sm text-label-xs",
+          "transition-colors duration-150",
+          updating
+            ? "text-fg-muted cursor-default"
+            : "text-fg-muted hover:text-fg cursor-pointer",
+        )}
+      >
+        <RefreshCw size={12} className={updating ? "animate-spin" : undefined} />
+        {updating ? "Updating…" : "Update categories"}
+      </button>
+    </div>
+  );
 
   return (
-    <ul className="flex flex-col gap-2">{roots.map((root) => render(root, 0))}</ul>
+    <>
+      {header}
+      {roots.length === 0 ? (
+        <p className="text-body-sm text-fg-muted">No categories yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {roots.map((root) => render(root, 0))}
+        </ul>
+      )}
+    </>
   );
 }

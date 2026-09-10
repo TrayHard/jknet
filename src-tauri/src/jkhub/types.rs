@@ -323,6 +323,17 @@ pub struct InstalledEvent {
     pub files: Vec<String>,
 }
 
+/// Payload of `jkhub:categories-updated`.
+///
+/// Sent when the walk behind an answer produced a newer tree. Carries the game
+/// and nothing else: the screen refetches that one tree rather than reading a
+/// second copy of it out of an event.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoriesUpdatedEvent {
+    pub game: Game,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

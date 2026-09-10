@@ -24,8 +24,11 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 | Прогнать тесты ядра | `cargo test` в `src-tauri` |
 | Собрать установщик | `npm run tauri build` |
 | Поднять заглушку хаба | `node scripts/mock-hub.mjs` |
+| Переписать снимок категорий JKHub | `powershell -ExecutionPolicy Bypass -File scripts/refresh-jkhub-categories.ps1` |
 
 Не запускайте `npm run tauri dev` из агента без прямой просьбы: команда открывает окно и не завершается.
+
+Скрипт `refresh-jkhub-categories.ps1` обходит jkhub.org и переписывает `src-tauri/resources/jkhub/categories-*.json` — дерево категорий, вшитое в сборку. Запускайте его перед выпуском и коммитьте оба файла. Обход стоит около сорока запросов к чужому сайту, поэтому в цикле его не запускают. Ключ `-DryRun` печатает команду и пути, ничего не меняя. Подробности — в разделе [«JKHub» документа об архитектуре](docs/architecture.md#jkhub).
 
 ## Структура
 
@@ -76,13 +79,18 @@ src-tauri/
   src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
   src/hub/               клиент хаба JKNet: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
-                         разборщики страниц, скачивание и установка в клиента
+                         снимок дерева категорий в сборке, разборщики страниц,
+                         скачивание и установка в клиента
+  resources/jkhub/       categories-ja.json и categories-jo.json: дерево
+                         категорий, с которого вкладка рисуется до обхода
   src/account.rs         вход через браузер и команды учётной записи
   src/friends/           друзья, присутствие, приглашения и живой сокет
   capabilities/          разрешения окна main
 scripts/
   mock-hub.mjs           заглушка хаба на Node без зависимостей
   make-brand-assets.ps1  растровые копии знака из public/jknet_logo.png
+  refresh-jkhub-categories.ps1
+                         обход jkhub.org и перезапись снимка категорий
 public/
   jknet_logo.png         мастер-файл знака, 846 px
   brand/                 копии знака 64, 128, 256 и 512 px для интерфейса
