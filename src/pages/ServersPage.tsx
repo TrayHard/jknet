@@ -25,16 +25,19 @@ import {
   applyFilters,
   applyTab,
   DEFAULT_DIRECTION,
+  DEFAULT_FILTERS,
   distinctValues,
-  filtersAreEmpty,
-  NO_FILTERS,
+  filtersAreDefault,
+  isBotOnly,
   sortServers,
+  totalBots,
+  totalRealPlayers,
   type ServerFilters,
   type ServerTab,
   type SortColumn,
   type SortDirection,
 } from "../components/servers/filter";
-import { Button, EmptyState, Input } from "../components/ui";
+import { Button, EmptyState, Input, Toggle } from "../components/ui";
 import { cn } from "../lib/format";
 import {
   errorMessage,
@@ -81,7 +84,7 @@ export function ServersPage() {
   const launchClient = useLaunchClient();
 
   const [tab, setTab] = useState<ServerTab>("all");
-  const [filters, setFilters] = useState<ServerFilters>(NO_FILTERS);
+  const [filters, setFilters] = useState<ServerFilters>(DEFAULT_FILTERS);
   const [sortColumn, setSortColumn] = useState<SortColumn>("players");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
@@ -115,9 +118,15 @@ export function ServersPage() {
   const selected = visible.find((row) => row.address === selectedAddress);
   const status = useServerStatus(selected?.address ?? null);
 
-  const playersOnline = useMemo(
-    () => all.reduce((sum, row) => sum + (row.humans ?? row.clients), 0),
-    [all],
+  // Both counts run over the whole list, not the filtered one: the head of the
+  // subtitle already says "X of N servers", so the rest describes the network
+  // rather than the current search box.
+  const playersOnline = useMemo(() => totalRealPlayers(all), [all]);
+  const botsOnline = useMemo(() => totalBots(all), [all]);
+  /** Rows the bot switch takes off the table, for the empty state to name. */
+  const hiddenBotOnly = useMemo(
+    () => (filters.hideBotOnly ? all.filter(isBotOnly).length : 0),
+    [all, filters.hideBotOnly],
   );
   const secondsAgo = useSecondsSince(refresh.refreshedAt);
 
@@ -164,6 +173,7 @@ export function ServersPage() {
           visible: visible.length,
           total: all.length,
           players: playersOnline,
+          bots: botsOnline,
           secondsAgo,
           scanning: refresh.running,
           progress: refresh.progress,
@@ -239,7 +249,7 @@ export function ServersPage() {
                 className="mt-24"
                 icon={<ServerIcon size={24} />}
                 title={emptyTitle(tab, all.length)}
-                text={emptyText(tab, all.length)}
+                text={emptyText(tab, all.length, hiddenBotOnly)}
                 action={
                   tab === "all" && all.length === 0 ? (
                     <Button icon={<RefreshCw size={16} />} onClick={startRefresh}>
@@ -382,11 +392,24 @@ function FilterRow({
         options={versions}
         onChange={(protocol) => onChange({ ...filters, protocol })}
       />
+      {/* The same shell as a Select, but the control inside is the switch.
+          Nesting the Toggle in a clickable shell would nest two buttons. */}
+      <div className="inline-flex items-center gap-8 h-36 pl-12 pr-8 rounded-md bg-input border border-line">
+        <span className="text-label-xs text-fg-muted shrink-0">Bots</span>
+        <span className="text-body-sm-medium text-fg shrink-0 whitespace-nowrap">
+          Hide bot-only
+        </span>
+        <Toggle
+          label="Hide servers where every player is a bot"
+          checked={filters.hideBotOnly}
+          onChange={(hideBotOnly) => onChange({ ...filters, hideBotOnly })}
+        />
+      </div>
       <Button
         variant="ghost"
         size="sm"
-        disabled={filtersAreEmpty(filters)}
-        onClick={() => onChange(NO_FILTERS)}
+        disabled={filtersAreDefault(filters)}
+        onClick={() => onChange(DEFAULT_FILTERS)}
       >
         Reset filters
       </Button>
@@ -500,16 +523,23 @@ function buildTabs(
   ];
 }
 
-/** The line under the title: what is shown, out of what, and how fresh. */
+/**
+ * The line under the title: what is shown, out of what, and how fresh.
+ *
+ * "Players" means people. The bots are named separately so the number nobody
+ * can act on cannot be mistaken for the one they can.
+ */
 function describeCounts(state: {
   visible: number;
   total: number;
   players: number;
+  bots: number;
   secondsAgo: number | null;
   scanning: boolean;
   progress: ServersDoneEvent | null;
 }): string {
-  const { visible, total, players, secondsAgo, scanning, progress } = state;
+  const { visible, total, players, bots, secondsAgo, scanning, progress } =
+    state;
   const head =
     total === 0
       ? "No servers yet"
@@ -517,8 +547,10 @@ function describeCounts(state: {
         ? `${total} servers`
         : `${visible} of ${total} servers`;
   const middle = total === 0 ? "" : ` · ${players} players online`;
+  const botTail =
+    total === 0 || bots === 0 ? "" : ` · ${bots} bots hidden from counts`;
 
-  if (scanning) return `${head}${middle} · asking the master servers`;
+  if (scanning) return `${head}${middle}${botTail} · asking the master servers`;
 
   const silent =
     progress === null || progress.responded === progress.total
@@ -526,7 +558,7 @@ function describeCounts(state: {
       : ` · ${progress.total - progress.responded} did not answer`;
   const tail =
     secondsAgo === null ? "" : ` · refreshed ${formatAge(secondsAgo)} ago`;
-  return `${head}${middle}${tail}${silent}`;
+  return `${head}${middle}${botTail}${tail}${silent}`;
 }
 
 function formatAge(seconds: number): string {
@@ -544,7 +576,11 @@ function emptyTitle(tab: ServerTab, total: number): string {
   return total === 0 ? "No servers yet" : "Nothing matches the filters";
 }
 
-function emptyText(tab: ServerTab, total: number): string {
+function emptyText(
+  tab: ServerTab,
+  total: number,
+  hiddenBotOnly: number,
+): string {
   switch (tab) {
     case "lan":
       return "Broadcast discovery on the local network arrives in a later task.";
@@ -555,8 +591,17 @@ function emptyText(tab: ServerTab, total: number): string {
     case "trusted":
       return "The bundled list of vouched-for community servers is empty in this build.";
     default:
-      return total === 0
-        ? "Press Refresh to ask the master servers who is online."
+      if (total === 0) {
+        return "Press Refresh to ask the master servers who is online.";
+      }
+      // A player who filtered everything away deserves to know that the bot
+      // switch is holding part of the list back.
+      return hiddenBotOnly > 0
+        ? `Widen the filters, or clear the search box. ${hiddenBotOnly} ${
+            hiddenBotOnly === 1 ? "server has" : "servers have"
+          } bots and nobody else; turn off Hide bot-only to see ${
+            hiddenBotOnly === 1 ? "it" : "them"
+          }.`
         : "Widen the filters, or clear the search box.";
   }
 }
