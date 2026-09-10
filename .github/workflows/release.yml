@@ -1,0 +1,60 @@
+name: Release
+
+# Builds the NSIS installer, signs the update package and opens a draft
+# release. Publishing stays a human action: the updater reads
+# `releases/latest/download/latest.json`, which a draft does not serve, so the
+# release reaches players only when somebody presses Publish.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    permissions:
+      # tauri-action creates the release and uploads the installer with the
+      # workflow token; without write access it fails after the whole build.
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The bundler reads the updater key from the environment only: a
+          # .env file is not consulted. Without these two the build produces
+          # the installer and then fails at the signing step, because
+          # tauri.conf.json sets bundle.createUpdaterArtifacts.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          # __VERSION__ is replaced with the version in tauri.conf.json, so a
+          # manual run produces the same names as a tag push does.
+          tagName: v__VERSION__
+          releaseName: JKNet v__VERSION__
+          releaseBody: "See the assets below to download and install JKNet."
+          releaseDraft: true
+          prerelease: false
+          # Writes latest.json next to the installer: the manifest the updater
+          # in the installed launcher asks for. It defaults to true; the line
+          # stays because the release is worthless without that file.
+          uploadUpdaterJson: true

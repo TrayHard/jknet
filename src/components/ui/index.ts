@@ -14,3 +14,5 @@ export { NavItem } from "./NavItem";
 export { RadioCard } from "./RadioCard";
 export { StepBadges } from "./StepBadges";
 export { Toggle } from "./Toggle";
+// --- slice: installer ---
+export { Toast, type ToastVariant } from "./Toast";

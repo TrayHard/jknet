@@ -34,9 +34,10 @@ src/
   styles/tokens.css      токены дизайна из Figma
   styles/fonts.css       локальные шрифты @fontsource
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
-                         ClientSettingsDialog, GameEventsProvider
+                         ClientSettingsDialog, GameEventsProvider,
+                         AppUpdateProvider, AboutCard
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
-                         RadioCard, StepBadges
+                         RadioCard, StepBadges, Toast
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
   pages/                 по одному файлу на маршрут
@@ -44,6 +45,7 @@ src/
   lib/ipc.ts             типизированные обёртки над invoke
   lib/queries.ts         хуки React Query и ключи запросов
   lib/useGameEvents.ts   подписка на события установки движка и запуска игры
+  lib/useAppUpdate.ts    проверка, загрузка и установка обновления лаунчера
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
   lib/flags.ts           ACCOUNTS_ENABLED и другие выключатели незаконченного
   lib/format.ts          cn, formatBytes, shortenPath
