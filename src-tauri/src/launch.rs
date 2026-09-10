@@ -68,6 +68,16 @@
 //! Nothing is written into the game folder: `fs_basepath` is a read root, the
 //! engine writes through `fs_homepath`, and `fs_copyfiles` stays 0.
 //!
+//! One more 1.4.1 rule follows from the same root. `CL_InitUI` creates the
+//! JK2MV menu as a native module, `VM_Create("jk2mvmenu", qtrue, ...)`, and
+//! `Sys_LoadModuleLibrary` with that override flag tries a single path,
+//! `<fs_basepath>\jk2mvmenu_<arch>.dll` (sys_win32.cpp). The DLL sits in the
+//! unpacked build, not in GameData, and copying it into the game folder is
+//! out of the question, so the launcher passes `+set mv_menuOverride 1`: the
+//! engine skips the module and runs the retail UI from the archives. The
+//! player loses the JK2MV menu, keeps every engine feature, and can drop the
+//! override through the extra launch arguments.
+//!
 //! The price is that `clients\<slug>\engine\` is no longer on the search path,
 //! so the archives JK2MV ships there — `base\assetsmv.pk3` and
 //! `base\assetsmv2.pk3` — have to be mirrored into `clients\<slug>\home\base\`
@@ -234,6 +244,16 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     set("fs_homepath", plan.home_dir.display().to_string());
     if let Some(fs_game) = plan.fs_game.map(str::trim).filter(|v| !v.is_empty()) {
         set("fs_game", fs_game.to_string());
+    }
+    if spec.launch_layout == LaunchLayout::TwoRoots {
+        // JK2MV's own menu is a native module loaded with `mvOverride`, and
+        // `Sys_LoadModuleLibrary` (sys_win32.cpp, 1.4.1) then tries exactly one
+        // path: `<fs_basepath>\jk2mvmenu_<arch>.dll`. With the game folder on
+        // `fs_basepath` that file would have to live inside GameData, which
+        // JKNet never writes into. `mv_menuOverride 1` makes `CL_InitUI` skip
+        // the module and run the retail UI from the pk3 archives instead. It
+        // goes before the settings and extra args so the player can override it.
+        set("mv_menuOverride", "1".to_string());
     }
 
     args.extend(plan.settings_args.iter().cloned());
@@ -700,8 +720,14 @@ mod tests {
                 "+set",
                 "fs_homepath",
                 "C:\\JKNet\\clients\\jk2\\home",
+                "+set",
+                "mv_menuOverride",
+                "1",
             ]
         );
+        // `mv_menuOverride 1` is part of the layout: the JK2MV menu module is
+        // loaded only from `<fs_basepath>\jk2mvmenu_<arch>.dll`, and the game
+        // folder is never written into. The retail UI from the archives runs.
         // `fs_assetspath` is still sent: harmless in 1.4.1, and the value the
         // `master` build reads. `fs_cdpath` does not exist in this engine.
         assert!(!args.iter().any(|arg| arg == "fs_cdpath"));
@@ -764,12 +790,18 @@ mod tests {
         with.connect = Some("jk2.example.org:28070");
 
         let args = build_launch_args(&with);
+        // Jedi Outcast adds exactly one triple of its own after `fs_game`:
+        // the menu override the module docs explain. Everything after it is
+        // the shared tail.
         assert_eq!(
             &args[9..],
             [
                 "+set",
                 "fs_game",
                 "mv",
+                "+set",
+                "mv_menuOverride",
+                "1",
                 "+set",
                 "r_mode",
                 "-1",
