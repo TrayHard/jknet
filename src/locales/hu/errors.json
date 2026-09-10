@@ -17,6 +17,7 @@
   "gameMismatch": "{{reason}}",
   "gameDataMissing": "A {{game}} játékfájljai: {{reason}}",
   "engineFile": "Ez a fájl a motor változatához tartozik, nem a könyvtárhoz, ezért a JKNet nem tudja kikapcsolni vagy eltávolítani: {{file}}",
+  "basepathOccupied": "A(z) {{path}} valódi mappa, nem az a hivatkozás, amelyet a JKNet tart ott. Helyezze át vagy törölje, majd indítsa el újra a játékot.",
   "jkhubUnavailable": "A JKHub nem érhető el: {{reason}}",
   "jkhubParse": "Egy JKHub-oldalt nem sikerült beolvasni: {{what}}. Az oldal valószínűleg megváltozott.",
   "jkhubDownload": "A letöltés nem sikerült a JKHub oldaláról: {{reason}}",

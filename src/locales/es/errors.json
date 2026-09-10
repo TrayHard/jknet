@@ -17,6 +17,7 @@
   "gameMismatch": "{{reason}}",
   "gameDataMissing": "Archivos de {{game}}: {{reason}}",
   "engineFile": "{{file}} pertenece a la compilación del motor, no a la biblioteca, así que JKNet no puede desactivarlo ni quitarlo.",
+  "basepathOccupied": "{{path}} es una carpeta real, no el enlace que JKNet mantiene ahí. Muévela o elimínala y vuelve a iniciar el juego.",
   "jkhubUnavailable": "JKHub no está accesible: {{reason}}",
   "jkhubParse": "No se pudo leer una página de JKHub: {{what}}. Lo más probable es que el sitio haya cambiado.",
   "jkhubDownload": "La descarga desde JKHub falló: {{reason}}",
