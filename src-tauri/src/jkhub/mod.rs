@@ -409,17 +409,24 @@ pub async fn jkhub_install(
     // workers the whole launcher shares.
     let archive_for_task = archive.clone();
     let target_for_task = target.clone();
-    let outcome = tokio::task::spawn_blocking(move || {
+    let unpacked = tokio::task::spawn_blocking(move || {
         unpack(&archive_for_task, &target_for_task, replace)
     })
     .await
-    .map_err(|e| AppError::Archive(format!("the unpacker stopped: {e}")))??;
+    .map_err(|e| AppError::Archive(format!("the unpacker stopped: {e}")))?;
+    // --- review: downloads of failed installs are never removed ---
+    // An unpack that failed outright leaves nothing on screen pointing at the
+    // archive, so the bytes go with the error.
+    let outcome = match unpacked {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            cache::forget_download(&data, id);
+            return Err(e);
+        }
+    };
 
     if let JkhubInstallOutcome::Installed { files } = &outcome {
         record(&client_dir, &folder, files, &view.file)?;
-        // The archive was only ever a cache entry; once its files are in the
-        // client it is dead weight.
-        cache::forget_download(&data, id);
         library::notify(&app, &client_id);
         if let Err(e) = app.emit(
             INSTALLED_EVENT,
@@ -435,6 +442,16 @@ pub async fn jkhub_install(
             "jkhub: installed {} file(s) of {id} into {client_id}\\{folder}",
             files.len()
         );
+    }
+
+    // --- review: downloads of failed installs are never removed ---
+    // The archive was only ever a cache entry. It goes as soon as nothing the
+    // player can press still needs it — which is more than the installed case
+    // and less than every other one; `download::keep_reason` holds the rule,
+    // and `download::sweep` at startup ages out what it keeps.
+    match download::keep_reason(&outcome) {
+        Some(why) => log::debug!("jkhub: keeping the archive of {id}, {why}"),
+        None => cache::forget_download(&data, id),
     }
 
     Ok(JkhubInstallResult {

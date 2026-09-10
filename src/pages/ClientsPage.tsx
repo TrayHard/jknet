@@ -18,7 +18,10 @@ import { useSearchParams } from "react-router";
 import { ClientSettingsDialog } from "../components/ClientSettingsDialog";
 import { useGameEventsContext } from "../components/GameEventsProvider";
 // --- slice: game switch ---
-import { NEW_CLIENT_PARAM } from "../components/MissingClientToast";
+import {
+  NEW_CLIENT_GAME_PARAM,
+  NEW_CLIENT_PARAM,
+} from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState } from "../components/ui";
@@ -28,6 +31,7 @@ import {
   type Client,
   type Engine,
   type EngineInstallProgress,
+  type Game,
   type RunningGame,
   type SettingsPatch,
 } from "../lib/ipc";
@@ -36,6 +40,7 @@ import { formatBytes, shortenPath } from "../lib/format";
 import {
   clientsOfGame,
   defaultClientPatch,
+  isGame,
   otherGame,
   resolveDefaultClientId,
   useActiveGame,
@@ -92,24 +97,30 @@ export function ClientsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Review finding (Low): the game the toast came about, when it named one.
+  // Kept in state because the effect below drops the parameter it arrived in.
+  const [newClientGame, setNewClientGame] = useState<Game | undefined>(undefined);
 
   // --- slice: game switch ---
-  // A toast elsewhere sent the player here to make a client. The parameter is
+  // A toast elsewhere sent the player here to make a client. The parameters are
   // dropped as the dialog opens, so closing it and reloading does not reopen.
   const [search, setSearch] = useSearchParams();
   const askedForNew = search.get(NEW_CLIENT_PARAM) !== null;
+  const askedForGame = search.get(NEW_CLIENT_GAME_PARAM);
   useEffect(() => {
     if (!askedForNew) return;
+    setNewClientGame(isGame(askedForGame) ? askedForGame : undefined);
     setDialogOpen(true);
     setSearch(
       (current) => {
         const next = new URLSearchParams(current);
         next.delete(NEW_CLIENT_PARAM);
+        next.delete(NEW_CLIENT_GAME_PARAM);
         return next;
       },
       { replace: true },
     );
-  }, [askedForNew, setSearch]);
+  }, [askedForNew, askedForGame, setSearch]);
 
   // Only the changed fields go to the core: the cached document would carry
   // back stale values for everything else and overwrite `settings.json`.
@@ -373,7 +384,11 @@ export function ClientsPage() {
 
       {dialogOpen ? (
         <NewClientDialog
-          onClose={() => setDialogOpen(false)}
+          game={newClientGame}
+          onClose={() => {
+            setDialogOpen(false);
+            setNewClientGame(undefined);
+          }}
           onError={(message) => setError(message)}
         />
       ) : null}

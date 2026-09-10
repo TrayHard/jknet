@@ -292,10 +292,27 @@ function Outcome({ result, onRevealArchive }: OutcomeProps) {
     );
   }
   if (result.kind === "unsupported") {
+    // Review finding (Low): the archive is on disk for this outcome exactly as
+    // it is for the one below, so the player gets the same way to reach it
+    // instead of being sent back to the site to download it a second time.
+    const archivePath = result.archivePath;
     return (
       <Notice tone="warm">
-        The archive is a .{result.format}, which JKNet cannot open yet. Open the
-        file on JKHub and unpack it by hand.
+        <span>
+          The archive is a .{result.format}, which JKNet cannot open yet.
+          {archivePath
+            ? " It is downloaded already: unpack it by hand into the client's folder."
+            : " Open the file on JKHub and unpack it by hand."}
+        </span>
+        {archivePath ? (
+          <Button
+            size="sm"
+            icon={<FolderOpen size={14} />}
+            onClick={() => onRevealArchive(archivePath)}
+          >
+            Show the archive
+          </Button>
+        ) : null}
       </Notice>
     );
   }
