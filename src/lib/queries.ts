@@ -7,6 +7,7 @@
 
 import {
   useMutation,
+  useMutationState,
   useQuery,
   useQueryClient,
   type UseQueryResult,
@@ -34,6 +35,7 @@ import {
   type ServersDoneEvent,
   type ServerStatus,
   type Settings,
+  type SettingsPatch,
   type TrustedServer,
 } from "./ipc";
 import { isTauri } from "./runtime";
@@ -79,10 +81,16 @@ export function useGameFiles(): UseQueryResult<GameFilesCandidate[]> {
   });
 }
 
+/**
+ * Saves the fields that changed.
+ *
+ * Pass a patch, never the whole cached document: the file on disk may hold a
+ * field the launcher has not read back, and sending everything would erase it.
+ */
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (settings: Settings) => ipc.updateSettings(settings),
+    mutationFn: (patch: SettingsPatch) => ipc.updateSettings(patch),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings, settings);
       // The data folder may have moved and the game folder may have changed.
@@ -98,6 +106,25 @@ export function useCreateClient() {
   return useMutation({
     mutationFn: ({ name, engineId }: { name: string; engineId: string }) =>
       ipc.createClient(name, engineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+/** Renames a client, changes its mod folder, or both. */
+export function useUpdateClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      clientId,
+      name,
+      fsGame,
+    }: {
+      clientId: string;
+      name?: string;
+      fsGame?: string;
+    }) => ipc.updateClient(clientId, { name, fsGame }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
     },
@@ -207,6 +234,8 @@ export function useRenameLibraryItem(clientId: string | null) {
 export const launchKeys = {
   /** Releases of one engine. Invalidated by nothing: the core caches them. */
   releases: (engineId: string) => ["engine-releases", engineId] as const,
+  /** Shared by every `install_engine` mutation, whichever screen started it. */
+  installEngine: ["install-engine"] as const,
   /** Update check of one client. */
   engineUpdate: (clientId: string) => ["engine-update", clientId] as const,
   /** The one game JKNet started, or `null`. */
@@ -265,6 +294,9 @@ export function useRunningGame(): UseQueryResult<RunningGame | null> {
 export function useInstallEngine() {
   const queryClient = useQueryClient();
   return useMutation({
+    // The shared key is what lets any screen see that an install is in
+    // flight; see `usePendingInstalls`.
+    mutationKey: launchKeys.installEngine,
     mutationFn: ({ clientId, tag }: { clientId: string; tag?: string }) =>
       launchIpc.installEngine(clientId, tag),
     onSuccess: (client) => {
@@ -274,6 +306,23 @@ export function useInstallEngine() {
       });
     },
   });
+}
+
+/**
+ * Clients with an `install_engine` call in flight.
+ *
+ * The progress event only starts once the core answers, so a card that goes
+ * by the event alone leaves its buttons live for the seconds in between — long
+ * enough for a second click to reach the core. The mutation cache covers that
+ * window, and it covers the install the New client dialog started as well: the
+ * dialog closes before the first event arrives.
+ */
+export function usePendingInstalls(): string[] {
+  return useMutationState({
+    filters: { mutationKey: launchKeys.installEngine, status: "pending" },
+    select: (mutation) =>
+      (mutation.state.variables as { clientId: string } | undefined)?.clientId,
+  }).filter((clientId): clientId is string => clientId !== undefined);
 }
 
 export function useLaunchClient() {

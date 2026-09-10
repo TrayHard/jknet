@@ -46,6 +46,24 @@ export interface Settings {
   serverHistory: ServerHistoryEntry[];
 }
 
+/**
+ * `src-tauri/src/settings.rs`: a partial update of the settings.
+ *
+ * Send the fields you changed and nothing else. A field left out keeps its
+ * value on disk, which is what stops the launcher from writing its own cached
+ * copy over a `settings.json` edited elsewhere. An explicit `null` clears one
+ * of the three nullable fields.
+ */
+export interface SettingsPatch {
+  gameDataPath?: string | null;
+  defaultClientId?: string | null;
+  closeOnLaunch?: boolean;
+  dataDirOverride?: string | null;
+  extraLaunchArgs?: string;
+  favoriteServers?: string[];
+  serverHistory?: ServerHistoryEntry[];
+}
+
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
 export interface ServerHistoryEntry {
   address: string;
@@ -122,8 +140,9 @@ export interface Client {
 
 export const ipc = {
   getSettings: () => call<Settings>("get_settings"),
-  updateSettings: (settings: Settings) =>
-    call<Settings>("update_settings", { settings }),
+  /** Applies a patch and answers with the whole document as it landed. */
+  updateSettings: (patch: SettingsPatch) =>
+    call<Settings>("update_settings", { patch }),
   getDataPaths: () => call<DataPaths>("get_data_paths"),
 
   detectGameFiles: () => call<GameFilesCandidate[]>("detect_game_files"),
@@ -135,8 +154,19 @@ export const ipc = {
   listClients: () => call<Client[]>("list_clients"),
   createClient: (name: string, engineId: string) =>
     call<Client>("create_client", { name, engineId }),
-  renameClient: (id: string, name: string) =>
-    call<Client>("rename_client", { id, name }),
+  /**
+   * Changes the name, the mod folder, or both. A field left out keeps its
+   * value; an empty `fsGame` clears it back to the default of the engine.
+   */
+  updateClient: (
+    clientId: string,
+    changes: { name?: string; fsGame?: string },
+  ) =>
+    call<Client>("update_client", {
+      clientId,
+      name: changes.name ?? null,
+      fsGame: changes.fsGame ?? null,
+    }),
   deleteClient: (id: string) => call<void>("delete_client", { id }),
 
   // `launchClient` moved to `launchIpc` below when it stopped being a stub.

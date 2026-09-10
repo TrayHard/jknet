@@ -8,11 +8,13 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Settings as SettingsIcon,
   Square,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
 
+import { ClientSettingsDialog } from "../components/ClientSettingsDialog";
 import { useGameEventsContext } from "../components/GameEventsProvider";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
@@ -24,7 +26,7 @@ import {
   type Engine,
   type EngineInstallProgress,
   type RunningGame,
-  type Settings,
+  type SettingsPatch,
 } from "../lib/ipc";
 import { formatBytes, shortenPath } from "../lib/format";
 import {
@@ -36,6 +38,7 @@ import {
   useGameFiles,
   useInstallEngine,
   useLaunchClient,
+  usePendingInstalls,
   useRunningGame,
   useSettings,
   useStopGame,
@@ -59,15 +62,21 @@ export function ClientsPage() {
   const launchClient = useLaunchClient();
   const stopGame = useStopGame();
   const runningGame = useRunningGame();
+  // Two sources, because neither covers the whole install on its own: the
+  // mutation knows about the call from the click until the core answers, the
+  // event knows about the download and the unpacking after that.
+  const pendingInstalls = usePendingInstalls();
   const { installs, clearInstall } = useGameEventsContext();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const patchSettings = (patch: Partial<Settings>) => {
-    if (!settings.data) return;
+  // Only the changed fields go to the core: the cached document would carry
+  // back stale values for everything else and overwrite `settings.json`.
+  const patchSettings = (patch: SettingsPatch) => {
     setError(null);
-    updateSettings.mutate({ ...settings.data, ...patch }, {
+    updateSettings.mutate(patch, {
       onError: (e) => setError(errorMessage(e)),
     });
   };
@@ -219,8 +228,10 @@ export function ClientsPage() {
                 engine={engines.data?.find((engine) => engine.id === client.engineId)}
                 isDefault={client.id === settings.data?.defaultClientId}
                 install={installs[client.id]}
+                installPending={pendingInstalls.includes(client.id)}
                 running={runningGame.data ?? null}
                 onMakeDefault={() => patchSettings({ defaultClientId: client.id })}
+                onEdit={() => setEditing(client)}
                 onDelete={() =>
                   deleteClient.mutate(client.id, {
                     onError: (e) => setError(errorMessage(e)),
@@ -289,6 +300,14 @@ export function ClientsPage() {
           onError={(message) => setError(message)}
         />
       ) : null}
+
+      {editing ? (
+        <ClientSettingsDialog
+          client={editing}
+          engine={engines.data?.find((engine) => engine.id === editing.engineId)}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
     </Page>
   );
 }
@@ -299,9 +318,12 @@ interface ClientCardProps {
   isDefault: boolean;
   /** Progress of the install of this client, when one is running. */
   install: EngineInstallProgress | undefined;
+  /** True between the click on Install and the first progress event. */
+  installPending: boolean;
   /** The game JKNet started, whichever client it belongs to. */
   running: RunningGame | null;
   onMakeDefault: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   onInstall: () => void;
   onLaunch: () => void;
@@ -313,16 +335,21 @@ function ClientCard({
   engine,
   isDefault,
   install,
+  installPending,
   running,
   onMakeDefault,
+  onEdit,
   onDelete,
   onInstall,
   onLaunch,
   onStop,
 }: ClientCardProps) {
   const engineName = engine?.name ?? client.engineId;
-  const installing =
+  const showProgress =
     install !== undefined && (install.phase === "download" || install.phase === "extract");
+  // What the buttons go by: the command may be in flight before the first
+  // progress event, and both states mean the engine folder is being rewritten.
+  const installing = showProgress || installPending;
   const installed = client.engineVersion !== null;
   const isRunning = running?.clientId === client.id;
   const otherIsRunning = running !== null && !isRunning;
@@ -350,26 +377,37 @@ function ClientCard({
           </div>
           <span className="text-mono-xs text-fg-muted">
             {client.id} · created {client.createdAt.slice(0, 10)}
+            {client.fsGame ? ` · fs_game ${client.fsGame}` : ""}
           </span>
         </div>
         <div className="flex flex-col gap-8 shrink-0">
           <Button size="sm" onClick={onMakeDefault} disabled={isDefault}>
             {isDefault ? "Default" : "Make default"}
           </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Trash2 size={14} />}
-            onClick={onDelete}
-            disabled={isRunning || installing}
-          >
-            Delete
-          </Button>
+          <div className="flex items-center gap-4">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<SettingsIcon size={14} />}
+              onClick={onEdit}
+              aria-label={`Settings of ${client.name}`}
+              title="Name and mod folder"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Trash2 size={14} />}
+              onClick={onDelete}
+              disabled={isRunning || installing}
+            >
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* Engine state: install, progress, or launch ---------------------- */}
-      {installing && install ? (
+      {showProgress && install ? (
         <InstallProgressBar progress={install} />
       ) : install?.phase === "error" ? (
         <p className="text-body-sm text-fg-danger break-words">{install.message}</p>

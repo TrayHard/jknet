@@ -1,26 +1,34 @@
 import { openPath } from "@tauri-apps/plugin-opener";
 import { AlertTriangle, FolderOpen, SlidersHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Page, PageHeader } from "../components/PageHeader";
-import { Button, EmptyState } from "../components/ui";
+import { Button, EmptyState, Input } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
-import { useDataPaths } from "../lib/queries";
+import { useDataPaths, useSettings, useUpdateSettings } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 
 /**
- * Placeholder for the settings screens.
+ * Settings: the data folder and the launch arguments.
  *
- * The data folder is already here, because it is the one setting a player may
- * need before anything else works, and because a support answer often starts
- * with "open that folder and send me the log".
+ * The rest of the design — Downloads, Appearance, Account — arrives with the
+ * features it controls. These two are here because they are the settings a
+ * player needs before anything else works, and because a support answer often
+ * starts with "open that folder and send me the log".
  */
 export function SettingsPage() {
   const dataPaths = useDataPaths();
+  const settings = useSettings();
   const [error, setError] = useState<string | null>(null);
 
   const dataRoot = dataPaths.data?.dataRoot ?? null;
-  const failure = error ?? (dataPaths.error ? errorMessage(dataPaths.error) : null);
+  const failure =
+    error ??
+    (dataPaths.error
+      ? errorMessage(dataPaths.error)
+      : settings.error
+        ? errorMessage(settings.error)
+        : null);
 
   /** Hands the folder to the file manager. Scoped to `$LOCALDATA/JKNet` in
    * `capabilities/default.json`, so a data folder moved elsewhere reports
@@ -67,11 +75,74 @@ export function SettingsPage() {
         </Button>
       </section>
 
+      <ExtraLaunchArgs onError={setError} />
+
       <EmptyState
         icon={<SlidersHorizontal size={24} />}
-        title="Settings are not wired up yet"
-        text="The Launch, Downloads, Appearance and Account sections arrive together with the features they control."
+        title="The rest of the settings is not wired up yet"
+        text="The Downloads, Appearance and Account sections arrive together with the features they control."
       />
     </Page>
+  );
+}
+
+/**
+ * The Launch card: tokens appended to the command line of every client.
+ *
+ * The field saves on blur, and Enter blurs it, so one edit is one write. The
+ * patch carries this field alone: the document on disk may hold values the
+ * launcher has not read back, and sending the whole thing would erase them.
+ */
+function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
+  const settings = useSettings();
+  const updateSettings = useUpdateSettings();
+
+  const stored = settings.data?.extraLaunchArgs ?? "";
+  const [value, setValue] = useState(stored);
+
+  // Follow the stored value: it arrives one render after the screen mounts,
+  // and a save elsewhere in the launcher changes it too.
+  useEffect(() => setValue(stored), [stored]);
+
+  const save = () => {
+    const next = value.trim();
+    if (settings.data === undefined || next === stored) return;
+    updateSettings.mutate(
+      { extraLaunchArgs: next },
+      { onError: (e) => onError(errorMessage(e)) },
+    );
+  };
+
+  return (
+    <section className="rounded-lg border border-line bg-surface p-16 mb-24">
+      <h2 className="text-heading-sm text-fg pb-4">Launch</h2>
+      <label
+        className="block text-label-xs text-fg-muted pt-12 pb-8"
+        htmlFor="extra-launch-args"
+      >
+        Extra launch arguments
+      </label>
+      <Input
+        id="extra-launch-args"
+        value={value}
+        placeholder="+set r_fullscreen 0 +set r_mode 4"
+        disabled={settings.data === undefined}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={save}
+        // Enter takes the focus away, which runs the same save as a click
+        // outside does. One edit stays one write.
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+      />
+      <p className="text-body-sm text-fg-secondary pt-8">
+        Appended to every client, exactly as in a shortcut. Example:{" "}
+        <span className="text-mono-sm">+set r_fullscreen 0 +set r_mode 4</span>.
+        Double quotes keep a value with a space together.
+      </p>
+      {updateSettings.isPending ? (
+        <p className="text-body-sm text-fg-muted pt-4">Saving…</p>
+      ) : null}
+    </section>
   );
 }

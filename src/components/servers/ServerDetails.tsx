@@ -16,6 +16,8 @@ interface ServerDetailsProps {
   onConnect: () => void;
   /** False when there is no default client to start. */
   canConnect: boolean;
+  /** True while a launch is in flight, so the button cannot start a second. */
+  connecting: boolean;
   /** Shown under the button when `canConnect` is false. */
   hint?: ReactNode;
 }
@@ -28,6 +30,7 @@ export function ServerDetails({
   playersError,
   onConnect,
   canConnect,
+  connecting,
   hint,
 }: ServerDetailsProps) {
   const [copied, setCopied] = useState(false);
@@ -113,10 +116,10 @@ export function ServerDetails({
           size="lg"
           block
           icon={<Play size={18} />}
-          disabled={!canConnect}
+          disabled={!canConnect || connecting}
           onClick={onConnect}
         >
-          Connect
+          {connecting ? "Starting…" : "Connect"}
         </Button>
         {canConnect ? null : hint}
       </div>

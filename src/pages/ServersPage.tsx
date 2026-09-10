@@ -142,6 +142,9 @@ export function ServersPage() {
    */
   const connect = () => {
     if (selected === undefined || defaultClient === undefined) return;
+    // The core refuses a second game anyway; stopping here keeps the player
+    // from seeing "is already running" after their own double click.
+    if (launchClient.isPending) return;
     setConnectError(null);
     addHistory.mutate(selected.address);
     launchClient.mutate(
@@ -284,6 +287,7 @@ export function ServersPage() {
                 : `No player list: ${errorMessage(status.error)}`
             }
             canConnect={defaultClient !== undefined}
+            connecting={launchClient.isPending}
             onConnect={connect}
             hint={
               <p className="text-body-sm text-fg-muted text-center">
