@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Route, Routes } from "react-router";
 
 import { AppShell } from "./components/AppShell";
+import { GameEventsProvider } from "./components/GameEventsProvider";
 import { ClientsPage } from "./pages/ClientsPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { HomePage } from "./pages/HomePage";
@@ -32,22 +33,25 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <HashRouter>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/servers" element={<ServersPage />} />
-            <Route path="/library" element={<LibraryPage />} />
-            <Route path="/clients" element={<ClientsPage />} />
-            <Route path="/friends" element={<FriendsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route element={<AppShell withSidebar={false} />}>
-            <Route path="/onboarding" element={<OnboardingPage />} />
-          </Route>
-          <Route path="*" element={<HomePage />} />
-        </Routes>
-      </HashRouter>
+      {/* Above the router: an engine install must survive a route change. */}
+      <GameEventsProvider>
+        <HashRouter>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/servers" element={<ServersPage />} />
+              <Route path="/library" element={<LibraryPage />} />
+              <Route path="/clients" element={<ClientsPage />} />
+              <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
+            <Route element={<AppShell withSidebar={false} />}>
+              <Route path="/onboarding" element={<OnboardingPage />} />
+            </Route>
+            <Route path="*" element={<HomePage />} />
+          </Routes>
+        </HashRouter>
+      </GameEventsProvider>
     </QueryClientProvider>
   );
 }

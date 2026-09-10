@@ -4,6 +4,7 @@ import { errorMessage, type Settings } from "../lib/ipc";
 import {
   useCreateClient,
   useEngines,
+  useInstallEngine,
   useSettings,
   useUpdateSettings,
 } from "../lib/queries";
@@ -26,10 +27,12 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
   const settings = useSettings();
   const createClient = useCreateClient();
   const updateSettings = useUpdateSettings();
+  const installEngine = useInstallEngine();
 
   const [name, setName] = useState("");
   const [engineId, setEngineId] = useState("");
   const [makeDefault, setMakeDefault] = useState(false);
+  const [downloadEngine, setDownloadEngine] = useState(true);
 
   // Preselect the recommended engine as soon as the registry arrives.
   useEffect(() => {
@@ -57,6 +60,14 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
               defaultClientId: client.id,
             };
             updateSettings.mutate(next);
+          }
+          // The dialog closes first: the download takes a minute, and its
+          // progress belongs on the card, not in a modal nobody can leave.
+          if (downloadEngine) {
+            installEngine.mutate(
+              { clientId: client.id },
+              { onError: (e) => onError(errorMessage(e)) },
+            );
           }
           onClose();
         },
@@ -135,6 +146,21 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
             label="Make this client the default one"
             checked={makeDefault}
             onChange={setMakeDefault}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-16 pt-16">
+          <span className="flex flex-col">
+            <span className="text-body-md-medium text-fg">Download the engine now</span>
+            <span className="text-body-sm text-fg-muted">
+              Fetches the newest build from GitHub. Progress shows on the client
+              card.
+            </span>
+          </span>
+          <Toggle
+            label="Download the engine right after creating the client"
+            checked={downloadEngine}
+            onChange={setDownloadEngine}
           />
         </div>
 

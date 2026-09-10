@@ -10,11 +10,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 ///
 /// Falls back to the Unix epoch if the system clock is set before 1970.
 pub fn now_rfc3339() -> String {
-    let seconds = SystemTime::now()
+    from_unix_seconds(now_unix())
+}
+
+/// Returns the current time as Unix seconds.
+///
+/// The release cache stores both this and the RFC 3339 string: the string is
+/// what a human reads in the cache file, the number is what the freshness
+/// check subtracts. Keeping both spares the core an RFC 3339 parser.
+pub fn now_unix() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
-    from_unix_seconds(seconds)
+        .unwrap_or(0)
 }
 
 /// Formats Unix seconds as an RFC 3339 string in UTC.

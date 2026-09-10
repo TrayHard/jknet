@@ -31,6 +31,9 @@ use crate::timestamp;
 const MAX_NAME_LEN: usize = 48;
 
 /// A client instance as stored in `client.json`.
+///
+/// Every field added after the first release carries `serde(default)`, so a
+/// `client.json` written by an older build still loads.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Client {
@@ -44,6 +47,20 @@ pub struct Client {
     pub engine_version: Option<String>,
     /// UTC creation time, RFC 3339.
     pub created_at: String,
+
+    // --- slice: launch ---
+    /// When the engine was unpacked, RFC 3339.
+    #[serde(default)]
+    pub engine_installed_at: Option<String>,
+    /// Publication time of the installed release, RFC 3339. Three of the four
+    /// projects publish a rolling `latest` tag, so the tag alone cannot say
+    /// whether a newer build exists.
+    #[serde(default)]
+    pub engine_published_at: Option<String>,
+    /// Mod folder the client starts in, passed as `+set fs_game`. `None`
+    /// takes the default of the engine, which is `base` for all but jaMME.
+    #[serde(default)]
+    pub fs_game: Option<String>,
 }
 
 /// Lists every client, sorted by name.
@@ -88,6 +105,9 @@ pub fn create_client(
         engine_id,
         engine_version: None,
         created_at: timestamp::now_rfc3339(),
+        engine_installed_at: None,
+        engine_published_at: None,
+        fs_game: None,
     };
     write_record(&paths, &client)?;
     log::info!("created client {} on engine {}", client.id, client.engine_id);
@@ -163,7 +183,7 @@ fn read_all(paths: &DataPaths) -> Result<Vec<Client>> {
 }
 
 /// Reads one client record by id.
-fn read_record(paths: &DataPaths, id: &str) -> Result<Client> {
+pub(crate) fn read_record(paths: &DataPaths, id: &str) -> Result<Client> {
     let file = paths.client_dir(id).join("client.json");
     if !file.is_file() {
         return Err(AppError::NotFound(format!("client {id}")));
@@ -178,7 +198,7 @@ fn read_file(file: &Path) -> Result<Client> {
         .map_err(|e| AppError::json(format!("cannot parse {}", file.display()), e))
 }
 
-fn write_record(paths: &DataPaths, client: &Client) -> Result<()> {
+pub(crate) fn write_record(paths: &DataPaths, client: &Client) -> Result<()> {
     let dir = paths.client_dir(&client.id);
     paths::create_dir(&dir)?;
     let file = dir.join("client.json");
