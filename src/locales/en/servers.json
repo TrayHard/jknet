@@ -37,7 +37,7 @@
     "favorites": "Favorites",
     "history": "History",
     "lan": "LAN",
-    "lanHint": "Broadcast discovery arrives with the launch slice"
+    "lanHint": "LAN discovery is not available yet"
   },
   "columns": {
     "server": "SERVER",

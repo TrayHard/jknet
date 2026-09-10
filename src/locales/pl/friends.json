@@ -40,7 +40,7 @@
   "empty": {
     "offTitle": "Znajomi nie są jeszcze włączeni",
     "signInTitle": "Zaloguj się, aby zobaczyć znajomych",
-    "signInText": "JKNet trzyma listę znajomych w usłudze, więc znajdziesz ją na każdym komputerze, na którym się zalogujesz.",
+    "signInText": "JKNet trzyma listę znajomych w usłudze, więc jest ona dostępna na każdym komputerze po zalogowaniu.",
     "signIn": "Zaloguj się",
     "noneTitle": "Brak znajomych",
     "noneText": "Wpisz w polu powyżej nazwę wyświetlaną, nazwę jkhub: albo identyfikator użytkownika i naciśnij Dodaj znajomego.",
@@ -58,7 +58,7 @@
     "handle": "{{provider}}:{{name}}"
   },
   "notices": {
-    "nowFriends": "Ty i {{name}} jesteście teraz znajomymi.",
+    "nowFriends": "{{name}} jest teraz na liście znajomych.",
     "requestSent": "Zaproszenie wysłane do {{name}}.",
     "inviteSent": "Zaproszenie do gry wysłane do {{name}}."
   },
@@ -78,7 +78,7 @@
     "remove": "Usuń znajomego"
   },
   "invite": {
-    "toast": "{{name}} zaprasza cię na {{server}}",
+    "toast": "Zaproszenie od {{name}} na {{server}}",
     "join": "Dołącz",
     "noClient": "Najpierw wybierz domyślnego klienta na ekranie Klienci",
     "gameRunning": "Gra już działa",

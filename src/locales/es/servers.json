@@ -42,7 +42,7 @@
     "favorites": "Favoritos",
     "history": "Historial",
     "lan": "LAN",
-    "lanHint": "La detección por difusión en la red local llega con la entrega de arranque"
+    "lanHint": "La detección en la red local todavía no está disponible"
   },
   "columns": {
     "server": "SERVIDOR",

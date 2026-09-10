@@ -32,7 +32,16 @@ architecture — how to add a language, what the check script demands — are in
   they are.
 - **`<0>` and `<1>` are markup, not text.** They wrap a piece of the sentence in
   a link or in a monospaced span. Keep the pair around the same words the
-  English one wraps, and keep them in order.
+  English one wraps, and keep them in order. The check script compares the set
+  of tags between your folder and English, so a lost or invented tag fails the
+  build.
+- **One register through the whole folder.** English «you» is neutral: it is
+  neither a friend nor a form. Pick the register your language uses for a tool
+  the player runs on their own machine — the polite plural in Russian and
+  Ukrainian, `Sie` in German, `vous` in French, `usted` in Spanish, `Ön` in
+  Hungarian, the impersonal or the plain imperative in Polish — and hold it in
+  every file. Mixing registers within one folder reads as sloppiness even when
+  each sentence is right on its own.
 
 ## Length
 
@@ -55,6 +64,8 @@ Everything else wraps.
 | --- | --- |
 | `common:units.*` | The number arrives already formatted for the language in `{{value}}`. Translate only the unit and keep the space before it. |
 | `common:values.empty` | An em dash standing in for a number that is not there. Leave it as it is. |
+| `common:actions.delete`, `disable`, `remove` | Three different actions, and they need three different words. `delete` destroys the thing, `disable` switches it off and leaves it in place, `remove` detaches it without destroying it — the button that ends a friendship is `remove`, not `delete`. `common:states.deleting` and `common:states.removing` follow the verb you picked for each. |
+| `common:actions.seeAll` | A general «show the whole list», reused by any screen that shortens one. Do not name what is being listed — the screen that needs a specific label has its own key, as `home:topServers.seeAll` does. |
 | `servers:subtitle.*` | Parts of one line, joined with « · ». Each is a whole clause; none of them may end in a full stop. |
 | `servers:columns.players` | Abbreviation of «players» — the column is 76 px. |
 | `servers:details.botBadge` | A badge on one player's row, at most four characters. |
@@ -91,9 +102,10 @@ language does not use.
 
 ## When you are done
 
-Six of the eight folders are machine drafts: every key is filled and nobody has
-read them. Their `_status.json` says so with `"reviewer": null`, and that is
-what puts the warning under the **Language** card.
+Seven of the eight folders wait for a reviewer: six are machine drafts and the
+Russian one was written by hand, but nobody has read any of them end to end.
+Their `_status.json` says so with `"reviewer": null`, and that is what puts the
+warning under the **Language** card.
 
 If you are a native speaker and you have read the whole folder, put your name in
 `reviewer` and set `date` to the day you finished. The warning goes away with
