@@ -1,3 +1,4 @@
+import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
@@ -14,8 +15,13 @@ import { MapPicturesCard } from "../components/MapPicturesCard";
 import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input } from "../components/ui";
-import { errorMessage } from "../lib/ipc";
-import { useDataPaths, useSettings, useUpdateSettings } from "../lib/queries";
+import { errorMessage, ipc, type GameInfo } from "../lib/ipc";
+import {
+  useDataPaths,
+  useGames,
+  useSettings,
+  useUpdateSettings,
+} from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { ONBOARDING_ROUTE } from "./onboarding/OnboardingGate";
 
@@ -97,6 +103,9 @@ export function SettingsPage() {
         </Button>
       </section>
 
+      {/* --- slice: game core --- */}
+      <GameFilesCard onError={setError} />
+
       <ExtraLaunchArgs onError={setError} />
 
       {/* --- slice: maps --- */}
@@ -115,6 +124,91 @@ export function SettingsPage() {
       {/* --- slice: installer --- */}
       <AboutCard />
     </Page>
+  );
+}
+
+// --- slice: game core ---
+/**
+ * The Game files card: one row per game.
+ *
+ * Two games, two folders, and a player who owns one of them has an empty row
+ * for the other one. The row that is empty carries a **Locate** button; the
+ * one that is filled carries **Change**, and both save the game they belong to
+ * alone, so setting up Jedi Outcast cannot clear a Jedi Academy folder.
+ */
+function GameFilesCard({ onError }: { onError: (message: string) => void }) {
+  const settings = useSettings();
+  const games = useGames();
+  const updateSettings = useUpdateSettings();
+
+  /** Asks for a folder, checks it against this game and saves it. */
+  const locate = async (game: GameInfo) => {
+    if (!isTauri()) {
+      onError("Tauri runtime is not available");
+      return;
+    }
+    try {
+      const picked = await open({
+        directory: true,
+        multiple: false,
+        title: `Select the ${game.displayName} GameData folder`,
+      });
+      if (typeof picked !== "string") return;
+      const candidate = await ipc.validateGameData(game.id, picked);
+      if (!candidate.valid) {
+        const missing = candidate.assets
+          .filter((asset) => asset.required && !asset.present)
+          .map((asset) => asset.name)
+          .join(", ");
+        onError(`No ${game.displayName} files in ${candidate.path}. Missing: ${missing}.`);
+        return;
+      }
+      // One game per patch: the other row keeps whatever it holds.
+      updateSettings.mutate(
+        { gameDataPaths: { [game.id]: candidate.path } },
+        { onError: (e) => onError(errorMessage(e)) },
+      );
+    } catch (e) {
+      onError(errorMessage(e));
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-line bg-surface p-16 mb-24">
+      <h2 className="text-heading-sm text-fg pb-4">Game files</h2>
+      <p className="text-body-sm text-fg-secondary pb-8">
+        JKNet reads the archives in these folders and writes nothing into them.
+        One game is enough; set up the other whenever you like.
+      </p>
+
+      <ul className="flex flex-col gap-8 pt-8">
+        {(games.data ?? []).map((game) => {
+          const path = settings.data?.gameDataPaths[game.id] ?? null;
+          return (
+            <li
+              key={game.id}
+              className="flex items-center gap-16 rounded-md border border-line bg-input p-12"
+            >
+              <span className="flex-1 min-w-0 flex flex-col">
+                <span className="text-body-md-medium text-fg">
+                  {game.displayName} files
+                </span>
+                <span className="text-mono-sm text-fg-accent break-all">
+                  {path ?? "Not set"}
+                </span>
+              </span>
+              <Button
+                icon={<FolderOpen size={16} />}
+                disabled={updateSettings.isPending}
+                onClick={() => void locate(game)}
+              >
+                {path ? "Change" : "Locate"}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

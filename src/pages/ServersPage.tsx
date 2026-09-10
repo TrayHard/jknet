@@ -417,7 +417,7 @@ function FilterRow({
   const mods = useMemo<SelectOption[]>(
     () => [
       { value: "any", label: "Any" },
-      ...distinctValues(servers, "game").map((value) => ({
+      ...distinctValues(servers, "modName").map((value) => ({
         value,
         label: value,
       })),
@@ -446,9 +446,9 @@ function FilterRow({
       />
       <Select
         label="Mod"
-        value={filters.game}
+        value={filters.modName}
         options={mods}
-        onChange={(game) => onChange({ ...filters, game })}
+        onChange={(modName) => onChange({ ...filters, modName })}
       />
       <Select
         label="Players"
