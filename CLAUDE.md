@@ -74,6 +74,10 @@ src-tauri/
   capabilities/          разрешения окна main
 scripts/
   mock-hub.mjs           заглушка хаба на Node без зависимостей
+  make-brand-assets.ps1  растровые копии знака из public/jknet_logo.png
+public/
+  jknet_logo.png         мастер-файл знака, 846 px
+  brand/                 копии знака 64, 128, 256 и 512 px для интерфейса
 ```
 
 ## Модель сущностей

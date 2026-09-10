@@ -168,6 +168,8 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight: Jedi Ac
 | `src/components/` | оболочка приложения, диалоги и UI-кит |
 | `src/pages/` | экраны по маршрутам |
 | `src/lib/` | типизированные обёртки над командами и хуки React Query |
+| `public/` | знак JKNet: мастер-файл `jknet_logo.png` и растровые копии в `brand/` |
+| `scripts/` | заглушка хаба и скрипт `make-brand-assets.ps1` для копий знака |
 | `src-tauri/` | ядро на Rust, конфигурация Tauri, разрешения окна |
 | `docs/` | документация репозитория |
 

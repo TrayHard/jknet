@@ -1,13 +1,41 @@
+import { cn } from "../lib/format";
+
 interface LogoProps {
   size?: number;
   className?: string;
 }
 
 /**
- * The JKNet glyph: a hexagon around a saber hilt. Placeholder until the final
- * mark exists — the design file still lists it as unfinished.
+ * The JKNet mark: a saber inside a ring of four players.
+ *
+ * The mark is a raster, so it carries its own dark background and ignores the
+ * text colour of whatever renders it. The rounded corner turns the square tile
+ * into an app-icon shape instead of a stray rectangle on the near-black title
+ * bar. Two files back the component: the 128 px one is enough up to a 64 px
+ * box, above that the 256 px one keeps the saber sharp on a HiDPI display.
  */
 export function Logo({ size = 20, className }: LogoProps) {
+  const source = size > 64 ? "/brand/jknet-logo-256.png" : "/brand/jknet-logo-128.png";
+
+  return (
+    <img
+      src={source}
+      width={size}
+      height={size}
+      alt=""
+      draggable={false}
+      className={cn("select-none rounded-[22%]", className)}
+    />
+  );
+}
+
+/**
+ * The previous geometric mark: a hexagon around a saber hilt.
+ *
+ * It stood in for the logo until the real one arrived and is kept in the tree
+ * for now. Nothing renders it.
+ */
+export function LogoGlyph({ size = 20, className }: LogoProps) {
   return (
     <svg
       width={size}

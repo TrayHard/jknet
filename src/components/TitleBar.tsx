@@ -69,7 +69,7 @@ export function TitleBar() {
       )}
     >
       <div data-tauri-drag-region className="flex items-center gap-8 pointer-events-none">
-        <Logo size={20} className="text-fg-accent" />
+        <Logo size={20} />
         <span className="text-display-nav text-fg tracking-[0.12em]">JKNET</span>
         {version ? (
           <span className="text-mono-xs text-fg-muted">v{version}</span>

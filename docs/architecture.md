@@ -939,7 +939,7 @@ cargo test --lib -- --ignored --nocapture hub::mock_tests
 | `windows.nsis.installerIcon` | `icons/icon.ico` | значок самого установщика |
 | `windows.nsis.startMenuFolder` | `JKNet` | группа ярлыков в меню **Пуск** |
 
-Значки всех размеров собирает команда `npm run tauri icon src-tauri/icons/source.svg`. Знак нарисован геометрией без текста: растеризатор шрифтов не видит. Тот же знак лежит в `public/jknet.svg` для вкладки браузера.
+Значки всех размеров собирает команда `npm run tauri icon src-tauri/icons/source.png`. Файл `source.png` — квадрат 1024 px в формате RGBA: генератор Tauri отказывается от изображения без альфа-канала. Его и растровые копии знака для интерфейса создаёт скрипт `scripts/make-brand-assets.ps1` из мастер-файла `public/jknet_logo.png` (846 px). Интерфейс берёт знак из `public/brand/`: вкладка браузера — `jknet-logo-64.png`, компонент `Logo` — `jknet-logo-128.png` и `jknet-logo-256.png` для размеров больше 64 px. Прежний геометрический знак остаётся в дереве и никуда не подключён: `src-tauri/icons/source.svg`, `public/jknet.svg` и компонент `LogoGlyph`.
 
 Режим `currentUser` ставит программу в `%LOCALAPPDATA%\JKNet`. Папка данных лежит рядом, в `%LOCALAPPDATA%\org.jknet.launcher`: `paths.rs` берёт её у `app.path().app_local_data_dir()` и потому попадает в папку идентификатора, а не в папку имени продукта. Установщик и лаунчер не делят между собой ни одного файла.
 
