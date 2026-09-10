@@ -1,4 +1,5 @@
 import { Check, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { FriendRequest, OnlineUser } from "../../lib/ipc";
 import { Avatar, Button } from "../ui";
@@ -32,12 +33,13 @@ export function RequestList({
   dismissLabel,
   busyId,
 }: RequestListProps) {
+  const { t } = useTranslation("friends");
   if (requests.length === 0) return null;
 
   return (
     <section className="flex flex-col gap-4 pt-16">
       <span className="text-label-xs text-fg-muted px-12 pb-4">
-        {title} · {requests.length}
+        {t("requests.heading", { title, count: requests.length })}
       </span>
       {requests.map((request) => {
         const person: OnlineUser = side === "from" ? request.from : request.to;
@@ -52,8 +54,12 @@ export function RequestList({
               <span className="text-body-md-medium text-fg truncate">
                 {person.displayName}
               </span>
+              {/* The handle is the provider's own: `jkhub:kyle_k`. */}
               <span className="text-mono-xs text-fg-muted truncate">
-                {person.provider}:{person.providerName}
+                {t("requests.handle", {
+                  provider: person.provider,
+                  name: person.providerName,
+                })}
               </span>
             </span>
             {onAccept ? (
@@ -64,7 +70,7 @@ export function RequestList({
                 disabled={busy}
                 onClick={() => onAccept(request.id)}
               >
-                Accept
+                {t("requests.accept")}
               </Button>
             ) : null}
             <Button

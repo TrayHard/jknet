@@ -1,0 +1,63 @@
+{
+  "gametypes": {
+    "ja": {
+      "0": "Chacun pour soi",
+      "1": "Holocrons",
+      "2": "Maître Jedi",
+      "3": "Duel",
+      "4": "Duel de puissance",
+      "5": "Solo",
+      "6": "Match par équipes",
+      "7": "Siège",
+      "8": "Capture du drapeau",
+      "9": "Capture de l’ysalamiri"
+    },
+    "jo": {
+      "0": "Chacun pour soi",
+      "1": "Holocrons",
+      "2": "Maître Jedi",
+      "3": "Duel",
+      "4": "Solo",
+      "5": "Match par équipes",
+      "6": "Saga",
+      "7": "Capture du drapeau",
+      "8": "Capture de l’ysalamiri"
+    }
+  },
+  "gametypesShort": {
+    "ja": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "MJ",
+      "3": "DUEL",
+      "4": "PDUEL",
+      "5": "SOLO",
+      "6": "TFFA",
+      "7": "SIÈGE",
+      "8": "CTF",
+      "9": "CTY"
+    },
+    "jo": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "MJ",
+      "3": "DUEL",
+      "4": "SOLO",
+      "5": "TFFA",
+      "6": "SAGA",
+      "7": "CTF",
+      "8": "CTY"
+    }
+  },
+  "unknownGametype": "Mode {{number}}",
+  "sources": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "manual": "Choix manuel",
+    "configured": "Enregistré",
+    "configuredEarlier": "Enregistré plus tôt"
+  },
+  "map": {
+    "unknown": "carte inconnue"
+  }
+}

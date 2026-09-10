@@ -1,0 +1,80 @@
+{
+  "steps": {
+    "gameFiles": "Pliki gry",
+    "client": "Klient",
+    "account": "Konto"
+  },
+  "panel": {
+    "position": "Krok {{step}} z {{total}}",
+    "stepDone": " (ukończony)",
+    "stepCurrent": " (bieżący krok)",
+    "stepUpcoming": " (nierozpoczęty)"
+  },
+  "brand": {
+    "tagline": "Jeden launcher do multiplayera Jedi Academy.",
+    "promiseLaunch": "Uruchom dowolnego klienta jednym kliknięciem, ze Steam albo bez.",
+    "promiseClients": "Trzymaj obok siebie kilku klientów, każdego z własnymi modami.",
+    "promiseServers": "Znajdź aktywny serwer i dołącz do niego z launchera.",
+    "footer": "JKNet czyta pliki gry, które już masz. Nigdy nie zapisuje niczego do folderu gry."
+  },
+  "resolving": {
+    "heading": "Gdzie jest zainstalowana gra?",
+    "text": "JKNet potrzebuje folderu z plikami od base\\assets0.pk3 do assets3.pk3.",
+    "reading": "Odczytywanie konfiguracji…",
+    "failed": "Uruchom launcher ponownie, gdy problem zostanie rozwiązany."
+  },
+  "gameFiles": {
+    "heading": "Gdzie są zainstalowane gry?",
+    "text": "JKNet potrzebuje folderu z plikiem base\\assets0.pk3. Czyta te archiwa i nic nie zapisuje do folderu. Jedna gra wystarczy, aby przejść dalej; drugą dodasz, kiedy zechcesz.",
+    "ready": "Gotowe",
+    "notFound": "Nie znaleziono",
+    "folderGroup": "Folder gry {{game}}",
+    "assetsFound": "Znaleziono zasoby",
+    "assetsMissing": "Brak zasobów",
+    "searching": "Przeszukiwanie Steam i GOG…",
+    "noCopy": "Nie znaleziono kopii gry {{game}} w Steam ani GOG. Wskaż folder samodzielnie albo pomiń tę grę.",
+    "chooseAnother": "Wybierz inny folder",
+    "chooseAnotherText": "Wskaż folder GameData dowolnej kopii. JKNet sprawdzi go, zanim przejdziesz dalej.",
+    "pickTitle": "Wybierz folder GameData gry {{game}}",
+    "invalid": "{{path}} nie zawiera plików gry {{game}}. {{detail}}",
+    "missing": "Brakuje: {{files}}.",
+    "unreadable": "Folder nie zawiera czytelnych archiwów.",
+    "license": "JKNet nie dostarcza plików gry. Potrzebna jest licencjonowana kopia Star Wars Jedi Knight: Jedi Academy albo Jedi Knight II: Jedi Outcast ze Steam, GOG lub z płyty."
+  },
+  "client": {
+    "heading": "Utwórz pierwszego klienta",
+    "text": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. JKNet pobierze silnik za ciebie, a kolejnych klientów dodasz później.",
+    "group": "Klient",
+    "useExisting": "Użyj istniejącego klienta {{client}}",
+    "engineReady": "Silnik gotowy",
+    "noEngine": "Brak silnika",
+    "existingMeta": "{{engine}} · folder <0>clients\\{{folder}}</0>",
+    "latest": "najnowszy",
+    "manualInstall": "Tę kompilację trzeba zainstalować ręcznie.",
+    "nameLabel": "Nazwa klienta",
+    "namePlaceholder": "Codzienny",
+    "nameDefault": "Codzienny",
+    "nameHint": "Jego pliki trafiają do <0>clients\\{{folder}}</0> w folderze danych JKNet. Późniejsza zmiana nazwy klienta zachowuje ten folder.",
+    "skipDownload": "Pomiń pobieranie",
+    "askingGithub": "Pytanie GitHuba o najnowszą kompilację…",
+    "cacheNote": "Archiwum trafia do pamięci podręcznej JKNet, więc drugi klient na tym samym silniku zainstaluje się bez kolejnego pobierania.",
+    "continueWithoutWaiting": "Kontynuuj bez czekania",
+    "failedTitle": "Klient jest utworzony. Jego silnik nie jest jeszcze zainstalowany.",
+    "failedText": "Folder <0>clients\\{{folder}}</0>. Ponów pobieranie albo pomiń je i zainstaluj silnik później z ekranu Klienci."
+  },
+  "account": {
+    "offHeading": "Konta i znajomi pojawią się później",
+    "offText": "Wszystko, co dotąd ustawiono, działa bez konta. Pliki gry, ustawienia i zapisy zostają na tym komputerze.",
+    "signedInHeading": "Zalogowano",
+    "signedInText": "Lista znajomych i zaproszenia będą odtąd podążać za tym kontem.",
+    "heading": "Zaloguj się albo graj jako gość",
+    "text": "Konto jest opcjonalne. Wszystko, co dotąd ustawiono, działa bez niego, a zalogować się możesz później w Ustawieniach.",
+    "skip": "Pomiń, graj jako gość",
+    "providerFailed": "{{message}} Możesz grać jako gość i zalogować się później.",
+    "benefitsTitle": "Z kontem",
+    "benefitFriends": "Lista znajomych i zaproszenie, które działa bez przekierowania portów.",
+    "benefitSync": "Biblioteka i ulubione serwery na każdym komputerze, z którego grasz.",
+    "benefitName": "Nazwa, którą inni gracze rozpoznają, zamiast wpisywanej na każdym serwerze.",
+    "privacy": "JKNet przechowuje nazwę konta i to, kto jest twoim znajomym. Pliki gry, ustawienia i zapisy zostają na tym komputerze."
+  }
+}

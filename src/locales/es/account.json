@@ -1,0 +1,56 @@
+{
+  "notConfigured": "Las cuentas y los amigos de JKNet necesitan JKNet Online. Todavía no está abierto, así que esta versión mantiene la función desactivada. Una actualización posterior la activa por sí sola.",
+  "card": {
+    "title": "Cuenta",
+    "text": "Una cuenta de JKNet lleva su lista de amigos y sus invitaciones. No hace falta para jugar.",
+    "linked": "{{provider}} vinculado"
+  },
+  "providers": {
+    "jkhub": "JKHub",
+    "discord": "Discord",
+    "dev": "el proveedor de desarrollo",
+    "devLabel": "Desarrollo",
+    "signedInAs": "Sesión iniciada con {{provider}} como {{name}}",
+    "continueJkhub": "Continuar con JKHub",
+    "continueJkhubNote": "La cuenta que casi toda la comunidad ya tiene.",
+    "continueDiscord": "Continuar con Discord",
+    "continueDiscordNote": "Inicia su sesión con el Discord con el que juega.",
+    "developer": "Inicio de sesión de desarrollo",
+    "notAvailable": "El inicio de sesión con {{provider}} aún no está disponible."
+  },
+  "waiting": {
+    "title": "Esperando al navegador…",
+    "text": "Termine de iniciar sesión allí y vuelva a JKNet."
+  },
+  "displayName": {
+    "label": "Nombre visible",
+    "saved": "Guardado. Los demás jugadores ven este nombre.",
+    "rules": "De 3 a 24 caracteres: letras, dígitos, espacios, _ y -."
+  },
+  "danger": {
+    "title": "Zona de peligro",
+    "signOut": "Cerrar sesión",
+    "signOutText": "Conserva la cuenta. Sus clientes y su biblioteca se quedan donde están.",
+    "signingOut": "Cerrando sesión…",
+    "delete": "Eliminar los datos de la cuenta",
+    "deleteText": "Elimina del servicio la cuenta, sus amigos y sus invitaciones.",
+    "confirmTitle": "¿Eliminar su cuenta de JKNet?",
+    "confirmBody": "Su cuenta, su lista de amigos y sus invitaciones se eliminan del servicio. Sus clientes, los archivos de su biblioteca y sus ajustes se quedan en este equipo. Esto no se puede deshacer.",
+    "confirm": "Eliminar cuenta"
+  },
+  "url": {
+    "summary": "Dirección de JKNet Online (avanzado)",
+    "label": "Dirección de JKNet Online",
+    "placeholder": "http://127.0.0.1:8787",
+    "signedIn": "Cierre la sesión antes de apuntar JKNet a otro servicio.",
+    "notConfigured": "Para desarrolladores e instancias propias: una dirección http:// o https:// activa las cuentas y los amigos en este equipo.",
+    "hint": "Una dirección http:// o https://. Déjela vacía para volver al valor predeterminado."
+  },
+  "session": {
+    "expiredTitle": "Sesión cerrada: la sesión expiró",
+    "expiredText": "Vuelva a iniciar sesión en la pantalla Ajustes para ver a sus amigos.",
+    "timedOut": "El inicio de sesión tardó demasiado. Inténtelo de nuevo.",
+    "expired": "El inicio de sesión expiró. Inténtelo de nuevo.",
+    "failed": "El inicio de sesión no se completó."
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "title": "Kezdőlap",
+  "subtitle": "{{game}} · térjen vissza a játékba, vagy válasszon szervert a listából.",
+  "launchError": "{{message}} A játék mappájának megadásához vagy a motor telepítéséhez <0>nyissa meg a Kliensek képernyőt</0>.",
+  "hero": {
+    "quickPlay": "Gyors játék",
+    "inGame": "Játékban",
+    "running": "Fut: {{client}}",
+    "noClient": "Még nincs kliens a {{game}} játékhoz",
+    "runningText": "Indítás óta: <0>{{age}}</0>, folyamat: {{pid}}. A JKNet félreáll, amíg Ön játszik.",
+    "readyText": "Indítsa el az alapértelmezett klienst, és a játék menüjéből válasszon szervert.",
+    "noClientText": "A kliens a játékmotor egy változata saját fájlokkal és beállításokkal. Hozzon létre egyet, és a {{game}} egy gombnyomásra indul.",
+    "createClient": "Kliens létrehozása a {{game}} játékhoz",
+    "play": "Játék",
+    "playHint": "Jelöljön ki egy klienst alapértelmezettként",
+    "stop": "Leállítás",
+    "manageClients": "Kliensek kezelése",
+    "aMoment": "néhány másodperc"
+  },
+  "gameFiles": {
+    "title": "A JKNet nem tudja, hol vannak a {{game}} fájljai",
+    "text": "Adja meg a saját példányának <0>GameData</0> mappáját, és a játék indulásra kész. A szerverlista enélkül is működik.",
+    "locate": "Mappa megadása"
+  },
+  "topServers": {
+    "trusted": "Megbízható szerverek",
+    "busiest": "Legnépesebb szerverek",
+    "emptyTitle": "Még nincs szerver a gyorsítótárban",
+    "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",
+    "openServers": "Szerverek megnyitása",
+    "seeAll": "Összes szerver"
+  }
+}

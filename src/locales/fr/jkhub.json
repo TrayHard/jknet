@@ -1,0 +1,89 @@
+{
+  "sort": {
+    "label": "Trier par",
+    "recentlyUpdated": "Récemment mis à jour",
+    "newest": "Plus récents",
+    "mostDownloaded": "Plus téléchargés",
+    "topRated": "Mieux notés",
+    "name": "Nom"
+  },
+  "filterPlaceholder": "Filtrer les fichiers chargés",
+  "refresh": "Actualiser",
+  "fromCache": "Depuis le cache",
+  "tree": {
+    "heading": "Catégories",
+    "update": "Mettre à jour les catégories",
+    "updating": "Mise à jour…",
+    "updateHint": "Parcourt de nouveau l’arborescence des catégories JKHub. Environ vingt requêtes.",
+    "expand": "Déplier {{category}}",
+    "collapse": "Replier {{category}}",
+    "empty": "Aucune catégorie."
+  },
+  "scope": {
+    "category": "{{category}} · installation dans {{client}}",
+    "noCategory": "Choisissez une catégorie · installation dans {{client}}"
+  },
+  "loading": {
+    "categories": "Lecture des catégories JKHub…",
+    "files": "Chargement des fichiers…"
+  },
+  "empty": {
+    "browserTitle": "JKHub a besoin de la fenêtre du lanceur",
+    "browserText": "Cet onglet parle à jkhub.org via le noyau de JKNet, dont un aperçu dans le navigateur ne dispose pas.",
+    "unreachableTitle": "JKHub n’a pas répondu",
+    "categoryTitle": "Cette catégorie ne s’est pas chargée",
+    "filteredTitle": "Aucun résultat",
+    "filteredText": "Aucun fichier chargé ne correspond au filtre. Effacez-le, chargez d’autres pages ou choisissez une autre catégorie."
+  },
+  "loaded": "{{shown}} fichiers chargés sur {{total}}. Affinez la catégorie ou changez le tri pour voir les autres.",
+  "card": {
+    "open": "Ouvrir {{title}}",
+    "installed": "Installé",
+    "install": "Installer",
+    "reinstall": "Réinstaller",
+    "fallbackAuthor": "JKHub",
+    "updated": "Mis à jour le {{date}}",
+    "submitted": "Publié le {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Chargement…",
+    "fallbackTitle": "Fichier",
+    "openOnSite": "Ouvrir sur JKHub",
+    "installTo": "Installer dans {{client}}",
+    "replaceAndInstall": "Remplacer et installer",
+    "openScreenshot": "Ouvrir la capture d’écran",
+    "screenshot": "Capture d’écran",
+    "screenshotMissing": "JKHub n’a pas fourni cette capture d’écran.",
+    "author": "Auteur",
+    "authorUnknown": "Inconnu",
+    "updated": "Mis à jour",
+    "submitted": "Publié",
+    "rating": "Note",
+    "ratingValue": "{{value}} sur 5 · {{count}} avis",
+    "notRated": "Non noté",
+    "downloads": "{{count}} téléchargements",
+    "views": "{{count}} vues",
+    "comments": "{{count}} commentaires",
+    "versions": "Versions",
+    "downloading": "Téléchargement… {{received}}",
+    "downloadingOf": "Téléchargement… {{received}} sur {{total}}"
+  },
+  "install": {
+    "pickClient": "Choisissez d’abord un client ci-dessus : un fichier s’installe dans un client.",
+    "toastTitle": "Installé dans {{client}}",
+    "failedTitle": "Échec de l’installation",
+    "categoriesTitle": "Catégories mises à jour",
+    "categoriesText": "{{count}} catégories lues sur JKHub."
+  },
+  "outcome": {
+    "installed": "Installé dans {{folder}} : {{files}}.",
+    "conflicts_one": "{{files}} est déjà dans {{folder}}. Appuyez sur Remplacer et installer pour l’écraser.",
+    "conflicts_many": "{{files}} sont déjà dans {{folder}}. Appuyez sur Remplacer et installer pour les écraser.",
+    "conflicts_other": "{{files}} sont déjà dans {{folder}}. Appuyez sur Remplacer et installer pour les écraser.",
+    "external": "Cette entrée pointe vers un autre site plutôt que vers une archive : il n’y a rien à installer. Ouvrez-la sur JKHub pour suivre le lien.",
+    "unsupportedDownloaded": "L’archive est un .{{format}}, que JKNet ne sait pas encore ouvrir. Elle est déjà téléchargée : décompressez-la à la main dans le dossier du client.",
+    "unsupported": "L’archive est un .{{format}}, que JKNet ne sait pas encore ouvrir. Ouvrez le fichier sur JKHub et décompressez-le à la main.",
+    "noPk3": "L’archive ne contient aucun fichier pk3 : il n’y a rien à installer dans un client. Son contenu : {{entries}}",
+    "showArchive": "Afficher l’archive"
+  }
+}

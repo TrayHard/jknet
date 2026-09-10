@@ -54,8 +54,17 @@
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English"],
-        "displayLanguageSelector": false,
+        "languages": [
+          "English",
+          "German",
+          "Spanish",
+          "French",
+          "Hungarian",
+          "Polish",
+          "Russian",
+          "Ukrainian"
+        ],
+        "displayLanguageSelector": true,
         "installerIcon": "icons/icon.ico",
         "startMenuFolder": "JKNet"
       }

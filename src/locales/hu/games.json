@@ -1,0 +1,63 @@
+{
+  "gametypes": {
+    "ja": {
+      "0": "FFA",
+      "1": "Holokron",
+      "2": "Jedi mester",
+      "3": "Párbaj",
+      "4": "Páros párbaj",
+      "5": "Egyjátékos",
+      "6": "Csapatjáték",
+      "7": "Ostrom",
+      "8": "CTF",
+      "9": "CTY"
+    },
+    "jo": {
+      "0": "FFA",
+      "1": "Holokron",
+      "2": "Jedi mester",
+      "3": "Párbaj",
+      "4": "Egyjátékos",
+      "5": "Csapatjáték",
+      "6": "Saga",
+      "7": "CTF",
+      "8": "CTY"
+    }
+  },
+  "gametypesShort": {
+    "ja": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "JM",
+      "3": "PÁRBAJ",
+      "4": "PÁROS",
+      "5": "SP",
+      "6": "TFFA",
+      "7": "OSTROM",
+      "8": "CTF",
+      "9": "CTY"
+    },
+    "jo": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "JM",
+      "3": "PÁRBAJ",
+      "4": "SP",
+      "5": "TFFA",
+      "6": "SAGA",
+      "7": "CTF",
+      "8": "CTY"
+    }
+  },
+  "unknownGametype": "{{number}}. mód",
+  "sources": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "manual": "Kézzel megadva",
+    "configured": "Mentve",
+    "configuredEarlier": "Korábban mentve"
+  },
+  "map": {
+    "unknown": "ismeretlen pálya"
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "title": "Biblioteka",
+  "subtitle": "Skiny, rękojeści, mapy i mody instalowane do wybranego klienta.",
+  "subtitleClient": "{{client}} · {{engine}} · plików: {{files}} · włączonych: {{enabled}} · {{size}}",
+  "noEngine": "brak silnika",
+  "searchPlaceholder": "Szukaj plików",
+  "browseJkhub": "Przeglądaj JKHub",
+  "addFiles": "Dodaj pliki",
+  "pickTitle": "Dodaj pliki pk3",
+  "pickFilter": "Archiwa Jedi Academy",
+  "clientBar": {
+    "label": "Klient",
+    "hint": "Pliki trafiają tylko do tego klienta. Inny klient na tym samym silniku ma własny zestaw. Wymienieni są tu klienci {{game}}; drugą grę wybierzesz na pasku bocznym."
+  },
+  "tabs": {
+    "installed": "Zainstalowane",
+    "jkhub": "Przeglądaj JKHub",
+    "updates": "Aktualizacje"
+  },
+  "sort": {
+    "label": "Sortuj według",
+    "recent": "Ostatnie",
+    "name": "Nazwa",
+    "size": "Rozmiar"
+  },
+  "categories": {
+    "all": "Wszystkie",
+    "skin": "Skiny",
+    "hilt": "Rękojeści",
+    "map": "Mapy",
+    "mod": "Mody",
+    "hud": "HUD i UI",
+    "sound": "Dźwięki",
+    "other": "Inne"
+  },
+  "categoryOne": {
+    "skin": "Skin",
+    "hilt": "Rękojeść",
+    "map": "Mapa",
+    "mod": "Mod",
+    "hud": "HUD",
+    "sound": "Dźwięk",
+    "other": "Inne"
+  },
+  "onlyEnabled": "Tylko włączone",
+  "onlyEnabledSwitch": "Pokaż tylko włączone pliki",
+  "card": {
+    "addedByHand": "Dodane ręcznie",
+    "sourceWithFolder": "{{source}} · {{folder}}",
+    "conflict": "Konflikt",
+    "enable": "Włącz {{file}}",
+    "remove": "Usuń {{file}}",
+    "removeHint": "Usuń z tego klienta"
+  },
+  "empty": {
+    "noClientsTitle": "Brak klientów {{game}}",
+    "noClientsText": "Plik biblioteki instaluje się do klienta. Utwórz pierwszego, a lista zacznie się zapełniać.",
+    "newClient": "Nowy klient",
+    "noFilesTitle": "{{client}} nie ma jeszcze plików",
+    "noFilesText": "Znajdź skiny, rękojeści, mapy i mody na JKHub, a potem dodaj tutaj pliki pk3. Możesz je też upuścić prosto na to okno.",
+    "filteredTitle": "Brak wyników",
+    "filteredText": "Żaden plik tego klienta nie pasuje do wyszukiwania i filtrów. Wyczyść je, aby zobaczyć całą bibliotekę.",
+    "updatesTitle": "Brak aktualizacji",
+    "updatesText": "Gdy pliki będą miały wersję z JKHub, pojawią się tu te z nowszym wydaniem."
+  },
+  "fallback": {
+    "thisClient": "Ten klient",
+    "theClient": "wybrany klient"
+  },
+  "skipped": {
+    "title_one": "{{count}} plik nie został dodany",
+    "title_few": "{{count}} pliki nie zostały dodane",
+    "title_many": "{{count}} plików nie zostało dodanych",
+    "title_other": "{{count}} pliku nie zostało dodane",
+    "rename": "Zmień jego nazwę na {{name}}."
+  },
+  "drop": {
+    "title": "Upuść pliki pk3, aby zainstalować je do: {{client}}"
+  },
+  "conflicts": {
+    "notice": "Liczba plików zmieniających tę samą zawartość: {{count}}. Silnik wczytuje ostatni z nich i pomija resztę.",
+    "see": "Zobacz, który wygrywa",
+    "title": "Pliki zmieniające tę samą zawartość",
+    "body": "{{client}}: {{files}} archiwów niesie {{paths}} wspólnych ścieżek. Silnik czyta to, które wczyta jako ostatnie, i pomija resztę.",
+    "wins": "Wygrywa",
+    "hidden": "Ukryty",
+    "truncated": "Wypisano tylko pierwsze {{shown}} z {{total}} ścieżek. Wyłącz jedno z archiwów, aby zobaczyć resztę."
+  },
+  "remove": {
+    "title": "{{client}}: usunąć {{file}}?",
+    "body": "{{fileName}}, {{size}}. Plik zostanie skasowany z folderu {{folder}} tego klienta. Pozostali klienci zachowują własną kopię.",
+    "confirm": "Usuń plik"
+  }
+}

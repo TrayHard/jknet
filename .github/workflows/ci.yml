@@ -1,6 +1,6 @@
 name: CI
 
-# The five gates of CLAUDE.md, on the only platform the launcher supports.
+# The six gates of CLAUDE.md, on the only platform the launcher supports.
 # Windows is not a preference here: `game_files.rs` reads the registry behind
 # `cfg(windows)`, so a Linux runner would compile a different program.
 
@@ -38,6 +38,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # --- slice: i18n ---
+      # `npm run build` runs this as `prebuild` as well. The separate step is
+      # what makes a translation gap read as a translation gap in the job log
+      # instead of as a failed build.
+      - name: Translations
+        run: npm run i18n:check
 
       # `npm run build` is `tsc && vite build`, so it typechecks too. The
       # separate gate stays because it is the one a developer runs, and a

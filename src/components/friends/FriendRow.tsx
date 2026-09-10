@@ -1,9 +1,11 @@
 import { Gamepad2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import type { Friend } from "../../lib/ipc";
 import { Avatar, Button } from "../ui";
-import { canJoin, statusLine } from "./presence";
+import { canJoin } from "./presence";
+import { useStatusLine } from "./useStatusLine";
 
 interface FriendRowProps {
   friend: Friend;
@@ -30,6 +32,8 @@ export function FriendRow({
   onJoin,
   joining = false,
 }: FriendRowProps) {
+  const { t } = useTranslation("friends");
+  const statusLine = useStatusLine();
   const offline = friend.presence.status === "offline";
   const joinable = onJoin !== undefined && canJoin(friend);
 
@@ -90,7 +94,7 @@ export function FriendRow({
               : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
           )}
         >
-          {joining ? "Starting…" : "Join"}
+          {joining ? t("row.joining") : t("row.join")}
         </Button>
       ) : null}
     </div>

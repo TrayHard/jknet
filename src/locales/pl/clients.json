@@ -1,0 +1,86 @@
+{
+  "title": "Klienci",
+  "subtitle": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Nadaj mu nazwę i gotowe.",
+  "newClient": "Nowy klient",
+  "gameFiles": {
+    "title": "Pliki gry {{game}}",
+    "titleFallback": "Pliki gry",
+    "ready": "Gotowe",
+    "notSet": "Nie ustawiono",
+    "text": "JKNet czyta <0>{{range}}</0> z tego folderu i nigdy do niego nie zapisuje.",
+    "searching": "Szukanie kopii w Steam i GOG…",
+    "noCopy": "Nie znaleziono kopii",
+    "foundThrough": "Znaleziono przez {{source}}. Potwierdź, aby zacząć z niej korzystać.",
+    "changeFolder": "Zmień folder",
+    "useThisFolder": "Użyj tego folderu",
+    "pickTitle": "Wybierz folder GameData",
+    "invalid": "Brak plików gry w {{path}}. Brakuje: {{missing}}."
+  },
+  "list": {
+    "heading": "Twoi klienci",
+    "emptyTitle": "Brak klientów {{game}}",
+    "emptyText": "Klient to nazwana kompilacja silnika z własnymi modami i ustawieniami. Utwórz go, a pojawi się tutaj.",
+    "otherGame_one": "{{count}} klient {{game}} — przełącz grę na pasku bocznym, aby go zobaczyć.",
+    "otherGame_few": "{{count}} klientów {{game}} — przełącz grę na pasku bocznym, aby ich zobaczyć.",
+    "otherGame_many": "{{count}} klientów {{game}} — przełącz grę na pasku bocznym, aby ich zobaczyć.",
+    "otherGame_other": "{{count}} klientów {{game}} — przełącz grę na pasku bocznym, aby ich zobaczyć."
+  },
+  "card": {
+    "default": "Domyślny",
+    "makeDefault": "Ustaw jako domyślny",
+    "running": "Działa",
+    "engineNotInstalled": "Silnik niezainstalowany",
+    "meta": "{{id}} · utworzono {{date}}",
+    "metaWithMod": "{{id}} · utworzono {{date}} · fs_game {{mod}}",
+    "delete": "Usuń",
+    "settingsOf": "Ustawienia klienta {{client}}",
+    "settingsHint": "Nazwa i folder moda",
+    "installedOn": "zainstalowano {{date}}",
+    "manualInstall": "Tę kompilację trzeba zainstalować ręcznie."
+  },
+  "engine": {
+    "launch": "Uruchom",
+    "stop": "Zatrzymaj",
+    "otherRunning": "Inny klient już działa",
+    "installFirst": "Najpierw zainstaluj silnik",
+    "checkUpdates": "Sprawdź aktualizacje",
+    "updateTo": "Zaktualizuj do {{version}}",
+    "updateToNewest": "Zaktualizuj do najnowszej kompilacji",
+    "upToDate": "Aktualny",
+    "install": "Zainstaluj silnik",
+    "installVersion": "Zainstaluj silnik {{version}}"
+  },
+  "engines": {
+    "heading": "Silniki {{game}}",
+    "recommended": "Zalecany"
+  },
+  "newDialog": {
+    "title": "Nowy klient",
+    "text": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Nadaj mu nazwę, którą rozpoznasz na liście klientów.",
+    "game": "Gra",
+    "engine": "Silnik",
+    "name": "Nazwa",
+    "namePlaceholder": "Codzienny",
+    "makeDefault": "Ustaw jako domyślny",
+    "makeDefaultText": "Przycisk Graj na ekranie Start uruchamia domyślnego klienta bieżącej gry. Każda gra ma własnego.",
+    "makeDefaultSwitch": "Ustaw tego klienta jako domyślnego",
+    "download": "Pobierz silnik teraz",
+    "downloadText": "Pobiera najnowszą kompilację z GitHuba. Postęp widać na karcie klienta.",
+    "downloadSwitch": "Pobierz silnik zaraz po utworzeniu klienta",
+    "create": "Utwórz klienta"
+  },
+  "settingsDialog": {
+    "title": "Ustawienia klienta",
+    "text": "Folder na dysku zachowuje nazwę <0>{{id}}</0>, więc zmiana nazwy nie zepsuje ścieżki, którą launcher już zapisał.",
+    "name": "Nazwa",
+    "namePlaceholder": "Codzienny",
+    "modFolder": "Folder moda (fs_game)",
+    "modFolderHint": "Klient startuje w tym folderze swojego katalogu domowego, przekazanym jako <0>+set fs_game</0>. Tylko litery, cyfry, <1>_</1>, <2>-</2> i <3>+</3>. Zostaw puste, aby użyć <4>{{folder}}</4> — wartości domyślnej dla {{engine}}.",
+    "engineFallback": "tego silnika"
+  },
+  "missingToast": {
+    "title": "Brak klienta {{game}}",
+    "text": "Utwórz go, a stanie się klientem, którym startuje ta gra. Klienci {{game}} są niezależni od klientów drugiej gry.",
+    "action": "Utwórz klienta"
+  }
+}

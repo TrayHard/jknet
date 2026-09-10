@@ -1,5 +1,6 @@
 import { AlertTriangle, Search, UserPlus, Users, Wifi, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { FriendPanel } from "../components/friends/FriendPanel";
@@ -8,7 +9,6 @@ import { FriendRow } from "../components/friends/FriendRow";
 import { useMissingClientToast } from "../components/MissingClientToast";
 import {
   GROUPS,
-  GROUP_TITLES,
   groupFriends,
   matchesSearch,
   myServer,
@@ -16,12 +16,9 @@ import {
 import { RequestList } from "../components/friends/RequestList";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState, Input } from "../components/ui";
-import {
-  errorMessage,
-  ONLINE_NOT_CONFIGURED_TEXT,
-  type Friend,
-  type Presence,
-} from "../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import type { Friend, Presence } from "../lib/ipc";
 // --- slice: game switch ---
 import { findDefaultClient, gameFromServerAddress } from "../lib/game";
 import {
@@ -56,6 +53,10 @@ const NO_PRESENCE: Presence = {
  * with each other while a write settles.
  */
 export function FriendsPage() {
+  const { t } = useTranslation("friends");
+  const { t: tAccount } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const navigate = useNavigate();
   const friends = useFriendsState();
   const running = useRunningGame();
@@ -118,8 +119,8 @@ export function FriendsPage() {
         setSearch("");
         setNote(
           result.outcome === "accepted"
-            ? `You and ${result.displayName} are now friends.`
-            : `Request sent to ${result.displayName}.`,
+            ? t("notices.nowFriends", { name: result.displayName })
+            : t("notices.requestSent", { name: result.displayName }),
         );
       },
     });
@@ -132,14 +133,11 @@ export function FriendsPage() {
   if (onlineConfigured === false) {
     return (
       <Page>
-        <PageHeader
-          title="Friends"
-          subtitle="See who is online and join their server in one click."
-        />
+        <PageHeader title={t("title")} subtitle={t("subtitle")} />
         <EmptyState
           icon={<Users size={24} />}
-          title="Friends are not switched on yet"
-          text={ONLINE_NOT_CONFIGURED_TEXT}
+          title={t("empty.offTitle")}
+          text={tAccount("notConfigured")}
         />
       </Page>
     );
@@ -148,14 +146,11 @@ export function FriendsPage() {
   if (view !== undefined && !view.signedIn) {
     return (
       <Page>
-        <PageHeader
-          title="Friends"
-          subtitle="See who is online and join their server in one click."
-        />
+        <PageHeader title={t("title")} subtitle={t("subtitle")} />
         <EmptyState
           icon={<Users size={24} />}
-          title="Sign in to see your friends"
-          text="JKNet keeps your friends list on the service, so it follows you to any machine you sign in on."
+          title={t("empty.signInTitle")}
+          text={t("empty.signInText")}
           action={
             <Button
               variant="primary"
@@ -164,7 +159,7 @@ export function FriendsPage() {
               // sits under three others.
               onClick={() => void navigate("/settings?section=account")}
             >
-              Sign in
+              {t("empty.signIn")}
             </Button>
           }
         />
@@ -175,17 +170,17 @@ export function FriendsPage() {
   return (
     <div className="flex flex-col h-full p-24">
       <PageHeader
-        title="Friends"
+        title={t("title")}
         subtitle={
           view === undefined
-            ? "Loading your friends…"
-            : `${view.friends.length} friends · ${online} online`
+            ? t("loading")
+            : t("subtitleCounts", { friends: view.friends.length, online })
         }
         actions={
           <>
             <Input
               icon={<Search size={16} />}
-              placeholder="Search, or type a name to add"
+              placeholder={t("searchPlaceholder")}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={(event) => {
@@ -199,7 +194,7 @@ export function FriendsPage() {
               disabled={search.trim() === "" || sendRequest.isPending}
               onClick={addFriend}
             >
-              {sendRequest.isPending ? "Sending…" : "Add friend"}
+              {sendRequest.isPending ? tCommon("states.sending") : t("addFriend")}
             </Button>
           </>
         }
@@ -209,44 +204,53 @@ export function FriendsPage() {
         <div className="flex items-center gap-8 pb-8">
           <Badge tone={view.live ? "success" : "neutral"}>
             {view.live ? <Wifi size={12} /> : <WifiOff size={12} />}
-            {view.live ? "Live" : "Reconnecting"}
+            {view.live ? t("live.on") : t("live.off")}
           </Badge>
           <span className="text-body-sm text-fg-muted">
-            {view.live
-              ? "Changes arrive the moment they happen."
-              : "The service is out of reach; the list refreshes every 30 seconds."}
+            {view.live ? t("live.onText") : t("live.offText")}
           </span>
         </div>
       ) : null}
 
       <Notice text={note} onClear={() => setNote(null)} />
-      <Notice text={errorOf(friends.error ?? sendRequest.error)} tone="error" />
-      <Notice text={errorOf(join.error ?? remove.error ?? accept.error)} tone="error" />
+      <Notice
+        text={errorOf(errorText, friends.error ?? sendRequest.error)}
+        tone="error"
+      />
+      <Notice
+        text={errorOf(errorText, join.error ?? remove.error ?? accept.error)}
+        tone="error"
+      />
 
       <div className="flex flex-1 min-h-0 gap-16 pt-8">
         <div className="flex flex-col flex-1 min-w-0 overflow-y-auto">
           {view === undefined ? (
-            <p className="text-body-sm text-fg-muted px-12 py-24">Loading…</p>
+            <p className="text-body-sm text-fg-muted px-12 py-24">
+              {tCommon("states.loading")}
+            </p>
           ) : view.friends.length === 0 ? (
             <EmptyState
               className="mt-24"
               icon={<Users size={24} />}
-              title="No friends yet"
-              text="Type a display name, a jkhub: name or a user id in the box above and press Add friend."
+              title={t("empty.noneTitle")}
+              text={t("empty.noneText")}
             />
           ) : visible === 0 ? (
             <EmptyState
               className="mt-24"
               icon={<Search size={24} />}
-              title={`Nobody matches “${search.trim()}”`}
-              text="Press Add friend to send them a request instead."
+              title={t("empty.noMatchTitle", { query: search.trim() })}
+              text={t("empty.noMatchText")}
             />
           ) : (
             GROUPS.map((group) =>
               groups[group].length === 0 ? null : (
                 <section key={group} className="flex flex-col gap-4 pb-12">
                   <span className="text-label-xs text-fg-muted px-12 pb-4">
-                    {GROUP_TITLES[group]} · {groups[group].length}
+                    {t("requests.heading", {
+                      title: t(`groups.${group}`),
+                      count: groups[group].length,
+                    })}
                   </span>
                   {groups[group].map((friend) => (
                     <FriendRow
@@ -264,20 +268,20 @@ export function FriendsPage() {
           )}
 
           <RequestList
-            title="Friend requests"
+            title={t("requests.incoming")}
             requests={view?.incoming ?? []}
             side="from"
             onAccept={(id) => accept.mutate(id)}
             onDismiss={(id) => decline.mutate(id)}
-            dismissLabel="Decline"
+            dismissLabel={t("requests.decline")}
             busyId={accept.isPending ? accept.variables : decline.variables}
           />
           <RequestList
-            title="Sent requests"
+            title={t("requests.outgoing")}
             requests={view?.outgoing ?? []}
             side="to"
             onDismiss={(id) => decline.mutate(id)}
-            dismissLabel="Cancel"
+            dismissLabel={t("requests.cancel")}
             busyId={decline.isPending ? decline.variables : undefined}
           />
         </div>
@@ -287,9 +291,7 @@ export function FriendsPage() {
             <span className="flex items-center justify-center size-48 rounded-full bg-surface text-fg-muted">
               <Users size={24} />
             </span>
-            <p className="text-body-sm text-fg-muted">
-              Select a friend to join their game or invite them to yours.
-            </p>
+            <p className="text-body-sm text-fg-muted">{t("empty.pickFriend")}</p>
           </aside>
         ) : (
           <FriendPanel
@@ -300,9 +302,9 @@ export function FriendsPage() {
             removing={remove.isPending}
             inviteNote={
               invite.error
-                ? errorMessage(invite.error)
+                ? errorText(invite.error)
                 : invite.isSuccess && invite.variables?.toUserId === selected.user.id
-                  ? `Invite sent to ${selected.user.displayName}.`
+                  ? t("notices.inviteSent", { name: selected.user.displayName })
                   : null
             }
             onJoin={() => joinFriend(selected)}
@@ -337,6 +339,7 @@ function Notice({
   tone?: "info" | "error";
   onClear?: () => void;
 }) {
+  const { t } = useTranslation("common");
   if (text === null) return null;
   return (
     <div
@@ -354,7 +357,7 @@ function Notice({
           className="text-fg-muted hover:text-fg cursor-pointer"
           onClick={onClear}
         >
-          Dismiss
+          {t("actions.dismiss")}
         </button>
       ) : null}
     </div>
@@ -362,6 +365,9 @@ function Notice({
 }
 
 /** The message of the first failure among several mutations, or `null`. */
-function errorOf(error: unknown): string | null {
-  return error == null ? null : errorMessage(error);
+function errorOf(
+  errorText: (error: unknown) => string,
+  error: unknown,
+): string | null {
+  return error == null ? null : errorText(error);
 }

@@ -1,0 +1,33 @@
+{
+  "title": "Accueil",
+  "subtitle": "{{game}} · reprenez le jeu, ou choisissez un serveur dans la liste.",
+  "launchError": "{{message}} <0>Ouvrez l’écran Clients</0> pour indiquer le dossier du jeu ou installer le moteur.",
+  "hero": {
+    "quickPlay": "Partie rapide",
+    "inGame": "En jeu",
+    "running": "En cours : {{client}}",
+    "noClient": "Aucun client {{game}}",
+    "runningText": "Démarré il y a <0>{{age}}</0>, processus {{pid}}. Le lanceur s’efface pendant que vous jouez.",
+    "readyText": "Lancez le client par défaut et choisissez un serveur dans le menu du jeu.",
+    "noClientText": "Un client est une version d’un moteur avec ses propres fichiers et paramètres. Créez-en un et {{game}} démarre en un clic.",
+    "createClient": "Créer un client {{game}}",
+    "play": "Jouer",
+    "playHint": "Désignez un client comme client par défaut",
+    "stop": "Arrêter",
+    "manageClients": "Gérer les clients",
+    "aMoment": "un instant"
+  },
+  "gameFiles": {
+    "title": "JKNet ne sait pas où sont vos fichiers {{game}}",
+    "text": "Indiquez-lui le dossier <0>GameData</0> de votre copie et le jeu est prêt à démarrer. La liste des serveurs fonctionne sans lui.",
+    "locate": "Localiser les fichiers"
+  },
+  "topServers": {
+    "trusted": "Serveurs de confiance",
+    "busiest": "Serveurs les plus remplis",
+    "emptyTitle": "Aucun serveur dans le cache",
+    "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",
+    "openServers": "Ouvrir Serveurs",
+    "seeAll": "Tout voir"
+  }
+}

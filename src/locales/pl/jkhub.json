@@ -1,0 +1,90 @@
+{
+  "sort": {
+    "label": "Sortuj według",
+    "recentlyUpdated": "Ostatnio zaktualizowane",
+    "newest": "Najnowsze",
+    "mostDownloaded": "Najczęściej pobierane",
+    "topRated": "Najwyżej oceniane",
+    "name": "Nazwa"
+  },
+  "filterPlaceholder": "Filtruj wczytane pliki",
+  "refresh": "Odśwież",
+  "fromCache": "Z pamięci podręcznej",
+  "tree": {
+    "heading": "Kategorie",
+    "update": "Zaktualizuj kategorie",
+    "updating": "Aktualizowanie…",
+    "updateHint": "Ponownie przechodzi drzewo kategorii JKHub. Wymaga około dwudziestu zapytań.",
+    "expand": "Rozwiń {{category}}",
+    "collapse": "Zwiń {{category}}",
+    "empty": "Brak kategorii."
+  },
+  "scope": {
+    "category": "{{category}} · instalacja do: {{client}}",
+    "noCategory": "Wybierz kategorię · instalacja do: {{client}}"
+  },
+  "loading": {
+    "categories": "Odczytywanie kategorii JKHub…",
+    "files": "Wczytywanie plików…"
+  },
+  "empty": {
+    "browserTitle": "JKHub wymaga okna launchera",
+    "browserText": "Ta karta rozmawia z jkhub.org przez rdzeń JKNet, którego podgląd w przeglądarce nie ma.",
+    "unreachableTitle": "JKHub nie odpowiedział",
+    "categoryTitle": "Ta kategoria się nie wczytała",
+    "filteredTitle": "Brak wyników",
+    "filteredText": "Żaden wczytany plik nie pasuje do filtra. Wyczyść go, wczytaj kolejne strony albo wybierz inną kategorię."
+  },
+  "loaded": "Wczytano {{shown}} z {{total}} plików. Zawęź kategorię albo zmień kolejność, aby zobaczyć resztę.",
+  "card": {
+    "open": "Otwórz {{title}}",
+    "installed": "Zainstalowane",
+    "install": "Zainstaluj",
+    "reinstall": "Zainstaluj ponownie",
+    "fallbackAuthor": "JKHub",
+    "updated": "Zaktualizowano {{date}}",
+    "submitted": "Dodano {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Wczytywanie…",
+    "fallbackTitle": "Plik",
+    "openOnSite": "Otwórz na JKHub",
+    "installTo": "Zainstaluj do: {{client}}",
+    "replaceAndInstall": "Zastąp i zainstaluj",
+    "openScreenshot": "Otwórz zrzut ekranu",
+    "screenshot": "Zrzut ekranu",
+    "screenshotMissing": "JKHub nie udostępnił tego zrzutu ekranu.",
+    "author": "Autor",
+    "authorUnknown": "Nieznany",
+    "updated": "Zaktualizowano",
+    "submitted": "Dodano",
+    "rating": "Ocena",
+    "ratingValue": "{{value}} z 5 · recenzji: {{count}}",
+    "notRated": "Bez oceny",
+    "downloads": "Pobrania: {{count}}",
+    "views": "Wyświetlenia: {{count}}",
+    "comments": "Komentarze: {{count}}",
+    "versions": "Wersje",
+    "downloading": "Pobieranie… {{received}}",
+    "downloadingOf": "Pobieranie… {{received}} z {{total}}"
+  },
+  "install": {
+    "pickClient": "Najpierw wybierz klienta powyżej: plik instaluje się do klienta.",
+    "toastTitle": "Zainstalowano do: {{client}}",
+    "failedTitle": "Instalacja nie powiodła się",
+    "categoriesTitle": "Kategorie zaktualizowane",
+    "categoriesText": "Odczytano z JKHub kategorii: {{count}}."
+  },
+  "outcome": {
+    "installed": "Zainstalowano {{files}} w folderze {{folder}}.",
+    "conflicts_one": "{{files}} już jest w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "conflicts_few": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "conflicts_many": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "conflicts_other": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "external": "Ten wpis prowadzi do innej strony, a nie do archiwum, więc nie ma czego instalować. Otwórz go na JKHub, aby przejść dalej za odnośnikiem.",
+    "unsupportedDownloaded": "Archiwum ma format .{{format}}, którego JKNet jeszcze nie otwiera. Jest już pobrane: rozpakuj je ręcznie do folderu klienta.",
+    "unsupported": "Archiwum ma format .{{format}}, którego JKNet jeszcze nie otwiera. Otwórz plik na JKHub i rozpakuj go ręcznie.",
+    "noPk3": "Archiwum nie zawiera pliku pk3, więc nie ma czego zainstalować do klienta. W środku: {{entries}}",
+    "showArchive": "Pokaż archiwum"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "title": "Start",
+  "subtitle": "{{game}} · wróć do gry albo wybierz serwer z przeglądarki.",
+  "launchError": "{{message}} <0>Otwórz ekran Klienci</0>, aby wskazać folder gry lub zainstalować silnik.",
+  "hero": {
+    "quickPlay": "Szybka gra",
+    "inGame": "W grze",
+    "running": "Działa: {{client}}",
+    "noClient": "Brak klienta {{game}}",
+    "runningText": "Uruchomiono <0>{{age}}</0> temu, proces {{pid}}. Launcher schodzi na bok, dopóki grasz.",
+    "readyText": "Uruchom domyślnego klienta i wybierz serwer w menu gry.",
+    "noClientText": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Utwórz go, a {{game}} uruchomisz jednym kliknięciem.",
+    "createClient": "Utwórz klienta {{game}}",
+    "play": "Graj",
+    "playHint": "Oznacz klienta jako domyślnego",
+    "stop": "Zatrzymaj",
+    "manageClients": "Zarządzaj klientami",
+    "aMoment": "chwilę"
+  },
+  "gameFiles": {
+    "title": "JKNet nie wie, gdzie są pliki gry {{game}}",
+    "text": "Wskaż folder <0>GameData</0> swojej kopii, a gra będzie gotowa do uruchomienia. Przeglądanie serwerów działa i bez tego.",
+    "locate": "Wskaż pliki"
+  },
+  "topServers": {
+    "trusted": "Zaufane serwery",
+    "busiest": "Najbardziej oblegane serwery",
+    "emptyTitle": "Brak serwerów w pamięci podręcznej",
+    "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",
+    "openServers": "Otwórz Serwery",
+    "seeAll": "Zobacz wszystkie"
+  }
+}

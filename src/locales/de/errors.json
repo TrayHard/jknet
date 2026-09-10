@@ -1,0 +1,41 @@
+{
+  "io": "{{context}}: {{reason}}",
+  "json": "{{context}}: {{reason}}",
+  "path": "Ein Ordner, den JKNet braucht, ist nicht verfügbar: {{path}}",
+  "notFound": "Nicht gefunden: {{what}}",
+  "invalidInput": "Damit kann JKNet nichts anfangen: {{reason}}",
+  "alreadyExists": "Das gibt es bereits: {{what}}",
+  "busy": "{{reason}}",
+  "state": "JKNet hat den Überblick über den eigenen Zustand verloren: {{reason}}. Starten Sie den Launcher neu.",
+  "network": "Der Netzwerkaufruf ist fehlgeschlagen: {{reason}}",
+  "notImplemented": "Noch nicht gebaut: {{what}}",
+  "rateLimited": "{{reason}}",
+  "archive": "Das Archiv ließ sich nicht lesen: {{reason}}",
+  "launch": "Das Spiel kann nicht starten: {{reason}}",
+  "image": "Das Bild der Map ließ sich nicht lesen: {{reason}}",
+  "signedOut": "Melden Sie sich bei JKNet an, um Ihre Freunde zu sehen",
+  "gameMismatch": "{{reason}}",
+  "gameDataMissing": "Spieldateien von {{game}}: {{reason}}",
+  "engineFile": "{{file}} gehört zum Engine-Build und nicht zur Bibliothek, deshalb kann JKNet die Datei weder abschalten noch entfernen.",
+  "basepathOccupied": "{{path}} ist ein echter Ordner und nicht die Verknüpfung, die JKNet dort hält. Verschieben oder löschen Sie ihn und starten Sie das Spiel erneut.",
+  "jkhubUnavailable": "JKHub ist nicht erreichbar: {{reason}}",
+  "jkhubParse": "Eine Seite von JKHub ließ sich nicht lesen: {{what}}. Wahrscheinlich hat sich die Website geändert.",
+  "jkhubDownload": "Der Download von JKHub ist fehlgeschlagen: {{reason}}",
+  "archiveUnsupported": "Ein Archiv im Format .{{format}} kann JKNet noch nicht öffnen.",
+  "noPk3Files": "Das Archiv enthält keine pk3-Datei: {{entries}}",
+  "online": {
+    "notFound": "JKNet Online kennt dieses Konto nicht.",
+    "unauthorized": "JKNet Online hat die Sitzung abgelehnt. Melden Sie sich erneut an.",
+    "forbidden": "JKNet Online lässt das nicht zu.",
+    "invalid": "JKNet Online hat die Anfrage abgelehnt: {{message}}",
+    "conflict": "Dieser Name ist vergeben. Geben Sie einen anderen ein.",
+    "rateLimited": "Zu viele Anfragen an JKNet Online. Warten Sie einen Moment und versuchen Sie es erneut.",
+    "providerError": "Der Anmeldedienst ist noch nicht verfügbar: {{message}}",
+    "internal": "JKNet Online hat ein Problem bei sich selbst. Versuchen Sie es später erneut.",
+    "notConfigured": "JKNet Online ist noch nicht offen, deshalb hält diese Version Konten und Freunde ausgeschaltet."
+  },
+  "frontend": {
+    "noRuntime": "Die Tauri-Laufzeitumgebung ist nicht verfügbar",
+    "unexpected": "Unerwarteter Fehler"
+  }
+}

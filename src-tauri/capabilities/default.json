@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions of the main window: custom title bar, file and folder pickers, core events including drag and drop, logging, saved window geometry, external links, opening %LOCALAPPDATA%\\org.jknet.launcher in the file manager, stepping aside while the game runs, and updating the launcher itself.",
+  "description": "Permissions of the main window: custom title bar, file and folder pickers, core events including drag and drop, logging, saved window geometry, external links, opening %LOCALAPPDATA%\\org.jknet.launcher in the file manager, stepping aside while the game runs, reading the system locale to pick the interface language, and updating the launcher itself.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -25,6 +25,7 @@
     },
     "window-state:default",
     "updater:default",
-    "process:allow-restart"
+    "process:allow-restart",
+    "os:allow-locale"
   ]
 }

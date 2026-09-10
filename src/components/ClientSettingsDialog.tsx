@@ -1,6 +1,9 @@
 import { useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 
-import { errorMessage, type Client, type Engine } from "../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import type { Client, Engine } from "../lib/ipc";
 import { useUpdateClient } from "../lib/queries";
 import { Button, Input } from "./ui";
 
@@ -24,6 +27,9 @@ export function ClientSettingsDialog({
   engine,
   onClose,
 }: ClientSettingsDialogProps) {
+  const { t } = useTranslation("clients");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const updateClient = useUpdateClient();
 
   const [name, setName] = useState(client.name);
@@ -41,7 +47,7 @@ export function ClientSettingsDialog({
         onSuccess: onClose,
         // The dialog stays open on a rejected mod folder: the player has to
         // see which field the core refused.
-        onError: (e) => setError(errorMessage(e)),
+        onError: (e) => setError(errorText(e)),
       },
     );
   };
@@ -51,31 +57,34 @@ export function ClientSettingsDialog({
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-24"
       role="dialog"
       aria-modal="true"
-      aria-label="Client settings"
+      aria-label={t("settingsDialog.title")}
       onKeyDown={(event) => {
         if (event.key === "Escape") onClose();
       }}
     >
       <div className="w-full max-w-[520px] rounded-xl border border-line bg-surface p-24 shadow-popover">
-        <h2 className="text-display-md text-fg">Client settings</h2>
+        <h2 className="text-display-md text-fg">{t("settingsDialog.title")}</h2>
         <p className="text-body-sm text-fg-secondary pt-4">
-          The folder on disk keeps its name{" "}
-          <span className="text-mono-sm">{client.id}</span>, so a rename cannot
-          break a path the launcher already stored.
+          <Trans
+            t={t}
+            i18nKey="settingsDialog.text"
+            values={{ id: client.id }}
+            components={[<span className="text-mono-sm" />]}
+          />
         </p>
 
         <label
           className="block text-label-xs text-fg-muted pt-24 pb-8"
           htmlFor="client-settings-name"
         >
-          Name
+          {t("settingsDialog.name")}
         </label>
         <Input
           id="client-settings-name"
           value={name}
           autoFocus
           maxLength={48}
-          placeholder="Everyday"
+          placeholder={t("settingsDialog.namePlaceholder")}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") save();
@@ -86,7 +95,7 @@ export function ClientSettingsDialog({
           className="block text-label-xs text-fg-muted pt-16 pb-8"
           htmlFor="client-settings-fs-game"
         >
-          Mod folder (fs_game)
+          {t("settingsDialog.modFolder")}
         </label>
         <Input
           id="client-settings-fs-game"
@@ -99,15 +108,21 @@ export function ClientSettingsDialog({
           }}
         />
         <p className="text-body-sm text-fg-muted pt-8">
-          The client starts in this folder of its home directory, passed as{" "}
-          <span className="text-mono-sm">+set fs_game</span>. Letters, digits,{" "}
-          <span className="text-mono-sm">_</span>,{" "}
-          <span className="text-mono-sm">-</span> and{" "}
-          <span className="text-mono-sm">+</span> only. Leave it empty for{" "}
-          <span className="text-mono-sm">
-            {engine?.defaultFsGame ?? "base"}
-          </span>
-          , the default of {engine?.name ?? "the engine"}.
+          <Trans
+            t={t}
+            i18nKey="settingsDialog.modFolderHint"
+            values={{
+              folder: engine?.defaultFsGame ?? "base",
+              engine: engine?.name ?? t("settingsDialog.engineFallback"),
+            }}
+            components={[
+              <span className="text-mono-sm" />,
+              <span className="text-mono-sm" />,
+              <span className="text-mono-sm" />,
+              <span className="text-mono-sm" />,
+              <span className="text-mono-sm" />,
+            ]}
+          />
         </p>
 
         {error ? (
@@ -117,9 +132,11 @@ export function ClientSettingsDialog({
         ) : null}
 
         <div className="flex items-center justify-end gap-8 pt-24">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{tCommon("actions.cancel")}</Button>
           <Button variant="primary" disabled={!canSave} onClick={save}>
-            {updateClient.isPending ? "Saving…" : "Save"}
+            {updateClient.isPending
+              ? tCommon("states.saving")
+              : tCommon("actions.save")}
           </Button>
         </div>
       </div>

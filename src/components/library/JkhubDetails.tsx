@@ -10,8 +10,11 @@ import {
   Star,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { cn, formatBytes } from "../../lib/format";
+// --- slice: i18n ---
+import { useFormat } from "../../i18n/useFormat";
+import { cn } from "../../lib/format";
 import type { JkhubFile, JkhubInstallResult } from "../../lib/ipc";
 import { Badge, Button, Dialog } from "../ui";
 
@@ -63,6 +66,9 @@ export function JkhubDetails({
   onOpenSite,
   onRevealArchive,
 }: JkhubDetailsProps) {
+  const { t } = useTranslation("jkhub");
+  const { t: tCommon } = useTranslation("common");
+  const format = useFormat();
   const [zoomed, setZoomed] = useState<string | null>(null);
   // Addresses that answered with an error. A picture the site withdrew shows
   // its own placeholder instead of an empty frame, and the thumbnail failing
@@ -71,7 +77,11 @@ export function JkhubDetails({
   const fail = (url: string) =>
     setBroken((current) => new Set(current).add(url));
 
-  const title = file?.title ?? (loading ? "Loading…" : "File");
+  // The title of a file page is the author's own, so it is only stood in for
+  // while the page has not arrived.
+  const title =
+    file?.title ??
+    (loading ? t("details.loadingTitle") : t("details.fallbackTitle"));
   const conflicts = result?.kind === "conflicts" ? result.files : null;
 
   return (
@@ -83,10 +93,10 @@ export function JkhubDetails({
         actions={
           <>
             <Button variant="ghost" onClick={onClose}>
-              Close
+              {tCommon("actions.close")}
             </Button>
             <Button icon={<ExternalLink size={16} />} onClick={onOpenSite}>
-              Open on JKHub
+              {t("details.openOnSite")}
             </Button>
             <Button
               variant="primary"
@@ -95,8 +105,8 @@ export function JkhubDetails({
               onClick={() => onInstall(conflicts != null)}
             >
               {conflicts != null
-                ? "Replace and install"
-                : `Install to ${clientName}`}
+                ? t("details.replaceAndInstall")
+                : t("details.installTo", { client: clientName })}
             </Button>
           </>
         }
@@ -112,7 +122,7 @@ export function JkhubDetails({
             <div className="flex flex-wrap items-center gap-8">
               {installed ? (
                 <Badge tone="success" icon={<Check size={12} />}>
-                  Installed
+                  {t("card.installed")}
                 </Badge>
               ) : null}
               {file.version ? <Badge tone="accent">v{file.version}</Badge> : null}
@@ -121,7 +131,7 @@ export function JkhubDetails({
               ) : null}
               {file.stale ? (
                 <Badge tone="warm" icon={<AlertTriangle size={12} />}>
-                  From cache
+                  {t("fromCache")}
                 </Badge>
               ) : null}
             </div>
@@ -135,7 +145,7 @@ export function JkhubDetails({
                       <button
                         type="button"
                         onClick={() => setZoomed(shot.url)}
-                        aria-label="Open the screenshot"
+                        aria-label={t("details.openScreenshot")}
                         className="block h-120 w-200 overflow-hidden rounded-md border border-line cursor-pointer"
                       >
                         {broken.has(preview) ? (
@@ -161,15 +171,24 @@ export function JkhubDetails({
             ) : null}
 
             <dl className="grid grid-cols-2 gap-x-24 gap-y-8">
-              <Fact label="Author" value={file.author?.name ?? "Unknown"} />
-              <Fact label="Updated" value={date(file.updatedAt)} />
-              <Fact label="Submitted" value={date(file.submittedAt)} />
               <Fact
-                label="Rating"
+                label={t("details.author")}
+                value={file.author?.name ?? t("details.authorUnknown")}
+              />
+              <Fact label={t("details.updated")} value={format.date(file.updatedAt)} />
+              <Fact
+                label={t("details.submitted")}
+                value={format.date(file.submittedAt)}
+              />
+              <Fact
+                label={t("details.rating")}
                 value={
                   file.rating
-                    ? `${file.rating.value.toFixed(1)} of 5 · ${file.rating.count} reviews`
-                    : "Not rated"
+                    ? t("details.ratingValue", {
+                        value: file.rating.value.toFixed(1),
+                        count: file.rating.count,
+                      })
+                    : t("details.notRated")
                 }
               />
             </dl>
@@ -177,15 +196,15 @@ export function JkhubDetails({
             <div className="flex items-center gap-16 text-mono-xs text-fg-muted">
               <span className="inline-flex items-center gap-4">
                 <ArrowDownCircle size={12} aria-hidden />
-                {file.downloads.toLocaleString("en-US")} downloads
+                {t("details.downloads", { count: format.number(file.downloads) })}
               </span>
               <span className="inline-flex items-center gap-4">
                 <Star size={12} aria-hidden />
-                {file.views.toLocaleString("en-US")} views
+                {t("details.views", { count: format.number(file.views) })}
               </span>
               <span className="inline-flex items-center gap-4">
                 <MessageSquare size={12} aria-hidden />
-                {file.comments.toLocaleString("en-US")} comments
+                {t("details.comments", { count: format.number(file.comments) })}
               </span>
             </div>
 
@@ -209,7 +228,9 @@ export function JkhubDetails({
 
             {file.changelog.length > 0 ? (
               <div className="flex flex-col gap-4">
-                <span className="text-label-xs text-fg-muted">Versions</span>
+                <span className="text-label-xs text-fg-muted">
+                  {t("details.versions")}
+                </span>
                 <span className="text-body-sm text-fg-secondary">
                   {file.changelog.map((entry) => entry.version).join(", ")}
                 </span>
@@ -218,8 +239,14 @@ export function JkhubDetails({
 
             {progress ? (
               <p className="text-body-sm text-fg-secondary">
-                Downloading… {formatBytes(progress.received)}
-                {progress.total > 0 ? ` of ${formatBytes(progress.total)}` : ""}
+                {progress.total > 0
+                  ? t("details.downloadingOf", {
+                      received: format.bytes(progress.received),
+                      total: format.bytes(progress.total),
+                    })
+                  : t("details.downloading", {
+                      received: format.bytes(progress.received),
+                    })}
               </p>
             ) : null}
 
@@ -228,7 +255,9 @@ export function JkhubDetails({
             ) : null}
           </div>
         ) : loading ? (
-          <p className="text-body-sm text-fg-muted pt-16">Loading…</p>
+          <p className="text-body-sm text-fg-muted pt-16">
+            {tCommon("states.loading")}
+          </p>
         ) : null}
       </Dialog>
 
@@ -237,13 +266,13 @@ export function JkhubDetails({
           className="fixed inset-0 z-60 flex items-center justify-center bg-overlay p-24"
           role="dialog"
           aria-modal="true"
-          aria-label="Screenshot"
+          aria-label={t("details.screenshot")}
           onClick={() => setZoomed(null)}
         >
           {broken.has(zoomed) ? (
             <p className="flex items-center gap-8 rounded-md border border-line bg-surface p-24 text-body-sm text-fg-muted">
               <ImageOff size={16} />
-              JKHub did not serve this screenshot.
+              {t("details.screenshotMissing")}
             </p>
           ) : (
             <img
@@ -268,28 +297,31 @@ interface OutcomeProps {
 
 /** The sentence and the action that go with an install that did not install. */
 function Outcome({ result, onRevealArchive }: OutcomeProps) {
+  const { t } = useTranslation("jkhub");
+
   if (result.kind === "installed") {
     return (
       <Notice tone="success">
-        Installed {result.files.join(", ")} into {result.folder}.
+        {t("outcome.installed", {
+          files: result.files.join(", "),
+          folder: result.folder,
+        })}
       </Notice>
     );
   }
   if (result.kind === "conflicts") {
     return (
       <Notice tone="warm">
-        {result.files.join(", ")} already {result.files.length === 1 ? "is" : "are"}{" "}
-        in {result.folder}. Press Replace and install to overwrite.
+        {t("outcome.conflicts", {
+          count: result.files.length,
+          files: result.files.join(", "),
+          folder: result.folder,
+        })}
       </Notice>
     );
   }
   if (result.kind === "external") {
-    return (
-      <Notice tone="warm">
-        This entry links to another site rather than an archive, so there is
-        nothing to install. Open it on JKHub to follow the link.
-      </Notice>
-    );
+    return <Notice tone="warm">{t("outcome.external")}</Notice>;
   }
   if (result.kind === "unsupported") {
     // Review finding (Low): the archive is on disk for this outcome exactly as
@@ -299,10 +331,9 @@ function Outcome({ result, onRevealArchive }: OutcomeProps) {
     return (
       <Notice tone="warm">
         <span>
-          The archive is a .{result.format}, which JKNet cannot open yet.
           {archivePath
-            ? " It is downloaded already: unpack it by hand into the client's folder."
-            : " Open the file on JKHub and unpack it by hand."}
+            ? t("outcome.unsupportedDownloaded", { format: result.format })
+            : t("outcome.unsupported", { format: result.format })}
         </span>
         {archivePath ? (
           <Button
@@ -310,7 +341,7 @@ function Outcome({ result, onRevealArchive }: OutcomeProps) {
             icon={<FolderOpen size={14} />}
             onClick={() => onRevealArchive(archivePath)}
           >
-            Show the archive
+            {t("outcome.showArchive")}
           </Button>
         ) : null}
       </Notice>
@@ -319,16 +350,18 @@ function Outcome({ result, onRevealArchive }: OutcomeProps) {
   return (
     <Notice tone="warm">
       <span>
-        The archive holds no pk3 file, so there is nothing to install into a
-        client. Inside it: {result.entries.slice(0, 8).join(", ")}
-        {result.entries.length > 8 ? "…" : ""}
+        {t("outcome.noPk3", {
+          entries:
+            result.entries.slice(0, 8).join(", ") +
+            (result.entries.length > 8 ? "…" : ""),
+        })}
       </span>
       <Button
         size="sm"
         icon={<FolderOpen size={14} />}
         onClick={() => onRevealArchive(result.archivePath)}
       >
-        Show the archive
+        {t("outcome.showArchive")}
       </Button>
     </Notice>
   );
@@ -363,17 +396,6 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dd className="text-body-sm text-fg">{value}</dd>
     </div>
   );
-}
-
-function date(value: string | null): string {
-  if (!value) return "Unknown";
-  const when = new Date(value);
-  if (Number.isNaN(when.getTime())) return value;
-  return when.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 /**

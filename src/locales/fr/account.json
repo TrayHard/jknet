@@ -1,0 +1,56 @@
+{
+  "notConfigured": "Les comptes et les amis JKNet ont besoin de JKNet Online. Le service n’est pas encore ouvert : cette version garde la fonction désactivée. Une mise à jour ultérieure l’activera d’elle-même.",
+  "card": {
+    "title": "Compte",
+    "text": "Un compte JKNet porte votre liste d’amis et vos invitations. Il n’est pas nécessaire pour jouer.",
+    "linked": "{{provider}} lié"
+  },
+  "providers": {
+    "jkhub": "JKHub",
+    "discord": "Discord",
+    "dev": "le fournisseur développeur",
+    "devLabel": "Développeur",
+    "signedInAs": "Connecté via {{provider}} en tant que {{name}}",
+    "continueJkhub": "Continuer avec JKHub",
+    "continueJkhubNote": "Le compte que la plupart de la communauté possède déjà.",
+    "continueDiscord": "Continuer avec Discord",
+    "continueDiscordNote": "Vous connecte avec le Discord sur lequel vous jouez.",
+    "developer": "Connexion développeur",
+    "notAvailable": "La connexion via {{provider}} n’est pas encore disponible."
+  },
+  "waiting": {
+    "title": "En attente du navigateur…",
+    "text": "Terminez la connexion là-bas, puis revenez dans JKNet."
+  },
+  "displayName": {
+    "label": "Nom affiché",
+    "saved": "Enregistré. Les autres joueurs voient ce nom.",
+    "rules": "De 3 à 24 caractères : lettres, chiffres, espaces, _ et -."
+  },
+  "danger": {
+    "title": "Zone de danger",
+    "signOut": "Se déconnecter",
+    "signOutText": "Le compte est conservé. Vos clients et votre bibliothèque restent en place.",
+    "signingOut": "Déconnexion…",
+    "delete": "Supprimer les données du compte",
+    "deleteText": "Supprime le compte, vos amis et vos invitations du service.",
+    "confirmTitle": "Supprimer votre compte JKNet ?",
+    "confirmBody": "Votre compte, votre liste d’amis et vos invitations sont supprimés du service. Vos clients, vos fichiers de bibliothèque et vos paramètres restent sur cette machine. Cette action est irréversible.",
+    "confirm": "Supprimer le compte"
+  },
+  "url": {
+    "summary": "Adresse JKNet Online (avancé)",
+    "label": "Adresse JKNet Online",
+    "placeholder": "http://127.0.0.1:8787",
+    "signedIn": "Déconnectez-vous avant de pointer JKNet vers un autre service.",
+    "notConfigured": "Pour les développeurs et les instances auto-hébergées : une adresse http:// ou https:// active les comptes et les amis sur cette machine.",
+    "hint": "Une adresse http:// ou https://. Laissez vide pour revenir à la valeur par défaut."
+  },
+  "session": {
+    "expiredTitle": "Déconnecté : la session a expiré",
+    "expiredText": "Reconnectez-vous sur l’écran Paramètres pour voir vos amis.",
+    "timedOut": "La connexion a pris trop de temps. Réessayez.",
+    "expired": "La connexion a expiré. Réessayez.",
+    "failed": "La connexion ne s’est pas terminée."
+  }
+}

@@ -13,6 +13,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 // --- slice: game switch ---
@@ -32,9 +33,11 @@ import {
   Toggle,
   type SelectOption,
 } from "../components/ui";
-import { cn, formatBytes } from "../lib/format";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import { useFormat } from "../i18n/useFormat";
+import { cn } from "../lib/format";
 import {
-  errorMessage,
   LIBRARY_CHANGED_EVENT,
   type LibraryCategory,
   type LibraryChanged,
@@ -67,17 +70,9 @@ const JKHUB_FILES = "https://jkhub.org/files/";
 type LibraryTab = "installed" | "jkhub" | "updates";
 type SortMode = "recent" | "name" | "size";
 
-const TABS: Array<{ id: LibraryTab; label: string }> = [
-  { id: "installed", label: "Installed" },
-  { id: "jkhub", label: "Browse JKHub" },
-  { id: "updates", label: "Updates" },
-];
-
-const SORTS: SelectOption[] = [
-  { value: "recent", label: "Recent" },
-  { value: "name", label: "Name" },
-  { value: "size", label: "Size" },
-];
+// --- slice: i18n --- the ids are the state, the labels come from the catalog.
+const TAB_IDS: LibraryTab[] = ["installed", "jkhub", "updates"];
+const SORT_IDS: SortMode[] = ["recent", "name", "size"];
 
 /**
  * The Library screen: the pk3 files of one client.
@@ -88,6 +83,10 @@ const SORTS: SelectOption[] = [
  * the game folder.
  */
 export function LibraryPage() {
+  const { t } = useTranslation("library");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
+  const format = useFormat();
   const clients = useClients();
   const settings = useSettings();
   const engines = useEngines();
@@ -146,7 +145,7 @@ export function LibraryPage() {
     setError(null);
     addFiles.mutate(paths, {
       onSuccess: (result) => setSkipped(result.skipped),
-      onError: (e) => setError(errorMessage(e)),
+      onError: (e) => setError(errorText(e)),
     });
   };
 
@@ -180,7 +179,7 @@ export function LibraryPage() {
         if (cancelled) fn();
         else unlisten = fn;
       })
-      .catch((e: unknown) => setError(errorMessage(e)));
+      .catch((e: unknown) => setError(errorText(e)));
     return () => {
       cancelled = true;
       unlisten?.();
@@ -212,18 +211,18 @@ export function LibraryPage() {
     try {
       const picked = await open({
         multiple: true,
-        title: "Add pk3 files",
-        filters: [{ name: "Jedi Academy archives", extensions: ["pk3"] }],
+        title: t("pickTitle"),
+        filters: [{ name: t("pickFilter"), extensions: ["pk3"] }],
       });
       if (Array.isArray(picked)) install(picked);
     } catch (e) {
-      setError(errorMessage(e));
+      setError(errorText(e));
     }
   };
 
   const browseJkhub = () => {
     if (!isTauri()) return;
-    void openUrl(JKHUB_FILES).catch((e: unknown) => setError(errorMessage(e)));
+    void openUrl(JKHUB_FILES).catch((e: unknown) => setError(errorText(e)));
   };
 
   // ---------------------------------------------------------------------
@@ -280,14 +279,20 @@ export function LibraryPage() {
   const engineName =
     engines.data?.find((engine) => engine.id === client?.engineId)?.name ??
     client?.engineId ??
-    "no engine";
+    t("noEngine");
 
   const subtitle = client
-    ? `${client.name} · ${engineName} · ${all.length} files · ${enabledCount} enabled · ${formatBytes(totalSize)}`
-    : "Skins, hilts, maps and mods, installed into the client you choose.";
+    ? t("subtitleClient", {
+        client: client.name,
+        engine: engineName,
+        files: all.length,
+        enabled: enabledCount,
+        size: format.bytes(totalSize),
+      })
+    : t("subtitle");
 
   const queryError = clients.error ?? items.error ?? conflicts.error ?? null;
-  const failure = error ?? (queryError ? errorMessage(queryError) : null);
+  const failure = error ?? (queryError ? errorText(queryError) : null);
   const busy = addFiles.isPending || setEnabled.isPending || removeItem.isPending;
 
   const clientOptions: SelectOption[] = clientList.map((entry) => ({
@@ -298,19 +303,19 @@ export function LibraryPage() {
   return (
     <Page>
       <PageHeader
-        title="Library"
+        title={t("title")}
         subtitle={subtitle}
         actions={
           <>
             <Input
               icon={<Search size={16} />}
-              placeholder="Search files"
+              placeholder={t("searchPlaceholder")}
               value={search}
               className="w-232"
               onChange={(event) => setSearch(event.target.value)}
             />
             <Button icon={<ExternalLink size={16} />} onClick={browseJkhub}>
-              Browse JKHub
+              {t("browseJkhub")}
             </Button>
             <Button
               variant="primary"
@@ -318,7 +323,7 @@ export function LibraryPage() {
               disabled={!clientId || busy}
               onClick={() => void pickFiles()}
             >
-              Add files
+              {t("addFiles")}
             </Button>
           </>
         }
@@ -336,38 +341,36 @@ export function LibraryPage() {
 
       {/* Client bar ------------------------------------------------------ */}
       <section className="flex items-center gap-12 rounded-lg border border-line bg-surface p-12 mb-16">
-        <span className="text-label-xs text-fg-muted">Client</span>
+        <span className="text-label-xs text-fg-muted">{t("clientBar.label")}</span>
         <Select
-          ariaLabel="Client"
+          ariaLabel={t("clientBar.label")}
           options={clientOptions}
-          placeholder="Nothing to choose"
+          placeholder={tCommon("select.nothingToChoose")}
           value={clientId ?? ""}
           onChange={setClientId}
           className="w-200"
         />
         <p className="text-body-sm text-fg-muted flex-1 min-w-0">
-          Files are installed into this client only. Another client with the
-          same engine keeps its own set. {gameName(activeGame)} clients are
-          listed here; switch game in the sidebar for the other ones.
+          {t("clientBar.hint", { game: gameName(activeGame) })}
         </p>
       </section>
 
       {/* Tabs ------------------------------------------------------------ */}
       <nav className="flex items-center gap-4 border-b border-line mb-16">
-        {TABS.map((entry) => (
+        {TAB_IDS.map((id) => (
           <button
-            key={entry.id}
+            key={id}
             type="button"
-            onClick={() => setTab(entry.id)}
+            onClick={() => setTab(id)}
             className={cn(
               "h-36 px-12 -mb-1 border-b-2 cursor-pointer transition-colors duration-150",
               "text-body-md-medium",
-              tab === entry.id
+              tab === id
                 ? "border-line-accent text-fg"
                 : "border-transparent text-fg-muted hover:text-fg",
             )}
           >
-            {entry.label}
+            {t(`tabs.${id}`)}
           </button>
         ))}
       </nav>
@@ -382,7 +385,7 @@ export function LibraryPage() {
           clients={clientOptions.length}
           gameName={gameName(activeGame)}
           onCreateClient={() => void navigate(`/clients?${NEW_CLIENT_PARAM}=1`)}
-          clientName={client?.name ?? "This client"}
+          clientName={client?.name ?? t("fallback.thisClient")}
           hasClient={clientId != null}
           loading={items.isLoading}
           all={all}
@@ -401,7 +404,7 @@ export function LibraryPage() {
           onToggle={(item, enabled) =>
             setEnabled.mutate(
               { id: item.id, enabled },
-              { onError: (e) => setError(errorMessage(e)) },
+              { onError: (e) => setError(errorText(e)) },
             )
           }
           onRemove={setRemoving}
@@ -412,14 +415,14 @@ export function LibraryPage() {
         // --- slice: jkhub ---
         <JkhubBrowser
           clientId={clientId}
-          clientName={client?.name ?? "the client"}
+          clientName={client?.name ?? t("fallback.theClient")}
           installed={all}
         />
       ) : (
         <EmptyState
           icon={<ExternalLink size={24} />}
-          title="No updates yet"
-          text="Once files carry a JKHub version, the ones with a newer release show up here."
+          title={t("empty.updatesTitle")}
+          text={t("empty.updatesText")}
         />
       )}
 
@@ -432,21 +435,24 @@ export function LibraryPage() {
           <Info size={16} className="text-fg-warm shrink-0 mt-2" />
           <div className="flex-1 min-w-0 flex flex-col gap-4">
             <span className="text-body-sm-medium text-fg">
-              {skipped.length} file{skipped.length === 1 ? "" : "s"} were not added
+              {t("skipped.title", { count: skipped.length })}
             </span>
             <ul className="flex flex-col gap-2">
               {skipped.map((entry) => (
                 <li key={entry.path} className="text-body-sm text-fg-secondary">
                   <span className="text-mono-xs text-fg">{entry.fileName}</span>
                   {" — "}
+                  {/* The reason comes from the core as a rendered sentence. */}
                   {entry.reason}
-                  {entry.suggestedName ? ` Rename it to ${entry.suggestedName}.` : ""}
+                  {entry.suggestedName
+                    ? ` ${t("skipped.rename", { name: entry.suggestedName })}`
+                    : ""}
                 </li>
               ))}
             </ul>
           </div>
           <Button size="sm" variant="ghost" onClick={() => setSkipped([])}>
-            Dismiss
+            {tCommon("actions.dismiss")}
           </Button>
         </div>
       ) : null}
@@ -457,7 +463,9 @@ export function LibraryPage() {
           <div className="flex flex-col items-center gap-12 rounded-xl border border-dashed border-line-accent bg-surface px-48 py-32">
             <Upload size={28} className="text-fg-accent" />
             <span className="text-heading-sm text-fg">
-              Drop pk3 files to install them into {client?.name ?? "the client"}
+              {t("drop.title", {
+                client: client?.name ?? t("fallback.theClient"),
+              })}
             </span>
           </div>
         </div>
@@ -467,13 +475,13 @@ export function LibraryPage() {
         <ConflictsDialog
           report={conflictReport}
           items={all}
-          clientName={client?.name ?? "this client"}
+          clientName={client?.name ?? t("fallback.thisClient")}
           busy={busy}
           onClose={() => setConflictsOpen(false)}
           onDisable={(id) =>
             setEnabled.mutate(
               { id, enabled: false },
-              { onError: (e) => setError(errorMessage(e)) },
+              { onError: (e) => setError(errorText(e)) },
             )
           }
         />
@@ -482,14 +490,14 @@ export function LibraryPage() {
       {removing ? (
         <RemoveItemDialog
           item={removing}
-          clientName={client?.name ?? "this client"}
+          clientName={client?.name ?? t("fallback.thisClient")}
           busy={removeItem.isPending}
           onCancel={() => setRemoving(null)}
           onConfirm={() =>
             removeItem.mutate(removing.id, {
               onSuccess: () => setRemoving(null),
               onError: (e) => {
-                setError(errorMessage(e));
+                setError(errorText(e));
                 setRemoving(null);
               },
             })
@@ -555,17 +563,20 @@ function InstalledTab({
   onBrowse,
   onAdd,
 }: InstalledTabProps) {
+  const { t } = useTranslation("library");
+  const { t: tCommon } = useTranslation("common");
+
   if (clients === 0) {
     return (
       <EmptyState
         icon={<Library size={24} />}
         // --- slice: game switch --- the game is named, because a player with
         // clients on the other segment has not lost them.
-        title={`No ${gameName} clients yet`}
-        text="A library file is installed into a client. Create one and this list starts filling up."
+        title={t("empty.noClientsTitle", { game: gameName })}
+        text={t("empty.noClientsText")}
         action={
           <Button variant="primary" icon={<Plus size={16} />} onClick={onCreateClient}>
-            New client
+            {t("empty.newClient")}
           </Button>
         }
       />
@@ -573,22 +584,22 @@ function InstalledTab({
   }
 
   if (loading || !hasClient) {
-    return <p className="text-body-sm text-fg-muted">Loading…</p>;
+    return <p className="text-body-sm text-fg-muted">{tCommon("states.loading")}</p>;
   }
 
   if (all.length === 0) {
     return (
       <EmptyState
         icon={<Library size={24} />}
-        title={`${clientName} has no files yet`}
-        text="Find skins, hilts, maps and mods on JKHub, then add the pk3 files here. You can also drop them straight onto this window."
+        title={t("empty.noFilesTitle", { client: clientName })}
+        text={t("empty.noFilesText")}
         action={
           <div className="flex items-center gap-8">
             <Button icon={<ExternalLink size={16} />} onClick={onBrowse}>
-              Browse JKHub
+              {t("browseJkhub")}
             </Button>
             <Button variant="primary" icon={<Plus size={16} />} onClick={onAdd}>
-              Add files
+              {t("addFiles")}
             </Button>
           </div>
         }
@@ -605,11 +616,10 @@ function InstalledTab({
         >
           <AlertTriangle size={16} className="text-fg-warm shrink-0" />
           <span className="text-body-sm text-fg flex-1">
-            {conflictCount} files change the same content. The engine loads the
-            last one and ignores the rest.
+            {t("conflicts.notice", { count: conflictCount })}
           </span>
           <Button size="sm" onClick={onShowConflicts}>
-            See what wins
+            {t("conflicts.see")}
           </Button>
         </div>
       ) : null}
@@ -617,7 +627,7 @@ function InstalledTab({
       <div className="flex items-start gap-24">
         <aside className="w-200 shrink-0 flex flex-col gap-2">
           <CategoryButton
-            label="All"
+            label={t("categories.all")}
             count={[...counts.values()].reduce((sum, n) => sum + n, 0)}
             active={category === "all"}
             onClick={() => onCategory("all")}
@@ -625,7 +635,7 @@ function InstalledTab({
           {CATEGORIES.map((entry) => (
             <CategoryButton
               key={entry.id}
-              label={entry.label}
+              label={t(`categories.${entry.id}`)}
               count={counts.get(entry.id) ?? 0}
               active={category === entry.id}
               onClick={() => onCategory(entry.id)}
@@ -637,17 +647,19 @@ function InstalledTab({
           <div className="flex items-center gap-12 pb-12">
             <label className="flex items-center gap-8 cursor-pointer">
               <Toggle
-                label="Show only enabled files"
+                label={t("onlyEnabledSwitch")}
                 checked={onlyEnabled}
                 onChange={onOnlyEnabled}
               />
-              <span className="text-body-sm text-fg-secondary">Only enabled</span>
+              <span className="text-body-sm text-fg-secondary">
+                {t("onlyEnabled")}
+              </span>
             </label>
             <span className="flex-1" />
-            <span className="text-label-xs text-fg-muted">Sort by</span>
+            <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
             <Select
-              ariaLabel="Sort by"
-              options={SORTS}
+              ariaLabel={t("sort.label")}
+              options={SORT_IDS.map((id) => ({ value: id, label: t(`sort.${id}`) }))}
               value={sort}
               onChange={(value) => onSort(value as SortMode)}
               className="w-136"
@@ -657,8 +669,8 @@ function InstalledTab({
           {shown.length === 0 ? (
             <EmptyState
               icon={<Search size={24} />}
-              title="Nothing matches"
-              text="No file in this client matches the search and the filters. Clear them to see the whole library."
+              title={t("empty.filteredTitle")}
+              text={t("empty.filteredText")}
             />
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">

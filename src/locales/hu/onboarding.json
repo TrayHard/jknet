@@ -1,0 +1,80 @@
+{
+  "steps": {
+    "gameFiles": "Játékfájlok",
+    "client": "Kliens",
+    "account": "Fiók"
+  },
+  "panel": {
+    "position": "{{step}}. lépés, összesen {{total}}",
+    "stepDone": " (kész)",
+    "stepCurrent": " (jelenlegi lépés)",
+    "stepUpcoming": " (még nem kezdődött el)"
+  },
+  "brand": {
+    "tagline": "Egyetlen indítóprogram a Jedi Academy többjátékos módjához.",
+    "promiseLaunch": "Indítson bármelyik klienst egy kattintással, a Steam segítségével vagy anélkül.",
+    "promiseClients": "Tartson több klienst egymás mellett, mindegyiket saját modokkal.",
+    "promiseServers": "Keressen élő szervert, és csatlakozzon hozzá a JKNet ablakából.",
+    "footer": "A JKNet a már meglévő játékfájljait olvassa. A játék mappájába soha nem ír."
+  },
+  "resolving": {
+    "heading": "Hová van telepítve a játék?",
+    "text": "Arra a mappára van szükség, amely a base\\assets0.pk3 és az assets3.pk3 közötti fájlokat tartalmazza.",
+    "reading": "A beállítások beolvasása…",
+    "failed": "A hiba elhárítása után indítsa újra az alkalmazást."
+  },
+  "gameFiles": {
+    "heading": "Hová vannak telepítve a játékok?",
+    "text": "Arra a mappára van szükség, amelyben a base\\assets0.pk3 található. A JKNet ezeket az archívumokat olvassa, és semmit nem ír a mappába. Egy játék is elég a folytatáshoz; a másikat bármikor hozzáadhatja.",
+    "ready": "Kész",
+    "notFound": "Nem található",
+    "folderGroup": "A {{game}} mappája",
+    "assetsFound": "Az archívumok megvannak",
+    "assetsMissing": "Hiányzó archívumok",
+    "searching": "Keresés a Steam és a GOG könyvtárában…",
+    "noCopy": "A Steam és a GOG könyvtárában nem került elő a {{game}} egyetlen példánya sem. Adja meg a mappát maga, vagy hagyja ki ezt a játékot.",
+    "chooseAnother": "Másik mappa választása",
+    "chooseAnotherText": "Válassza ki bármelyik példány GameData mappáját. A JKNet a folytatás előtt ellenőrzi.",
+    "pickTitle": "Válassza ki a {{game}} GameData mappáját",
+    "invalid": "A {{game}} fájljai nem találhatók itt: {{path}}. {{detail}}",
+    "missing": "Hiányzik: {{files}}.",
+    "unreadable": "A mappa nem tartalmaz olvasható archívumot.",
+    "license": "A JKNet nem tartalmaz játékfájlokat. Szüksége van a Star Wars Jedi Knight: Jedi Academy vagy a Jedi Knight II: Jedi Outcast jogtiszta példányára a Steam vagy a GOG kínálatából, esetleg lemezről."
+  },
+  "client": {
+    "heading": "Hozza létre az első klienst",
+    "text": "A kliens a játékmotor egy változata saját fájlokkal és beállításokkal. A motort a JKNet letölti Önnek, további klienseket pedig később is létrehozhat.",
+    "group": "Kliens",
+    "useExisting": "A meglévő kliens használata: {{client}}",
+    "engineReady": "A motor kész",
+    "noEngine": "Még nincs motor",
+    "existingMeta": "{{engine}} · mappa: <0>clients\\{{folder}}</0>",
+    "latest": "legújabb",
+    "manualInstall": "Ezt a változatot kézzel kell telepíteni.",
+    "nameLabel": "A kliens neve",
+    "namePlaceholder": "Mindennapi",
+    "nameDefault": "Mindennapi",
+    "nameHint": "A fájljai a JKNet adatmappáján belül ide kerülnek: <0>clients\\{{folder}}</0>. A kliens későbbi átnevezése ezt a mappát megtartja.",
+    "skipDownload": "Letöltés kihagyása",
+    "askingGithub": "A legújabb változat lekérdezése a GitHub oldaláról…",
+    "cacheNote": "Az archívum a JKNet gyorsítótárába kerül, így az ugyanerre a motorra épülő második kliens újabb letöltés nélkül települ.",
+    "continueWithoutWaiting": "Tovább várakozás nélkül",
+    "failedTitle": "A kliens elkészült. A motorja még nincs telepítve.",
+    "failedText": "Mappa: <0>clients\\{{folder}}</0>. Próbálja újra a letöltést, vagy hagyja ki, és telepítse a motort később a Kliensek képernyőn."
+  },
+  "account": {
+    "offHeading": "A fiókok és a barátok később érkeznek",
+    "offText": "Minden, amit eddig beállított, fiók nélkül is működik. A játékfájljai, a beállításai és a mentései ezen a gépen maradnak.",
+    "signedInHeading": "Be van jelentkezve",
+    "signedInText": "A barátok listája és a meghívások mostantól ehhez a fiókhoz tartoznak.",
+    "heading": "Jelentkezzen be, vagy játsszon vendégként",
+    "text": "A fiók nem kötelező. Minden, amit eddig beállított, fiók nélkül is működik, és később a Beállítások képernyőn is bejelentkezhet.",
+    "skip": "Kihagyás, játék vendégként",
+    "providerFailed": "{{message}} Vendégként is játszhat, és később bejelentkezhet.",
+    "benefitsTitle": "Fiókkal",
+    "benefitFriends": "Barátlista, és olyan meghívó, amely portnyitás nélkül is működik.",
+    "benefitSync": "A könyvtára és a kedvenc szerverei minden gépen, ahonnan játszik.",
+    "benefitName": "Olyan név, amelyet a többi játékos felismer, nem pedig minden szerveren újra beírt név.",
+    "privacy": "A JKNet a fiókja nevét és azt tárolja, hogy kik a barátai. A játékfájljai, a beállításai és a mentései ezen a gépen maradnak."
+  }
+}

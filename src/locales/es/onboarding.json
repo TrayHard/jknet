@@ -1,0 +1,80 @@
+{
+  "steps": {
+    "gameFiles": "Archivos del juego",
+    "client": "Cliente",
+    "account": "Cuenta"
+  },
+  "panel": {
+    "position": "Paso {{step}} de {{total}}",
+    "stepDone": " (hecho)",
+    "stepCurrent": " (paso actual)",
+    "stepUpcoming": " (sin empezar)"
+  },
+  "brand": {
+    "tagline": "Un solo lanzador para el multijugador de Jedi Academy.",
+    "promiseLaunch": "Inicie cualquier cliente con un clic, con Steam o sin él.",
+    "promiseClients": "Tenga varios clientes uno al lado del otro, cada uno con sus propios mods.",
+    "promiseServers": "Encuentre un servidor activo y únase a él desde el lanzador.",
+    "footer": "JKNet lee los archivos del juego que ya posee. Nunca escribe en la carpeta del juego."
+  },
+  "resolving": {
+    "heading": "¿Dónde está instalado el juego?",
+    "text": "JKNet necesita la carpeta que contiene desde base\\assets0.pk3 hasta assets3.pk3.",
+    "reading": "Leyendo su configuración…",
+    "failed": "Reinicie el lanzador cuando el problema esté resuelto."
+  },
+  "gameFiles": {
+    "heading": "¿Dónde están instalados los juegos?",
+    "text": "JKNet necesita la carpeta que contiene base\\assets0.pk3. Lee esos archivos comprimidos y no escribe nada en la carpeta. Con un juego basta para seguir; agregue el otro cuando quiera.",
+    "ready": "Listo",
+    "notFound": "No encontrado",
+    "folderGroup": "Carpeta de {{game}}",
+    "assetsFound": "Recursos encontrados",
+    "assetsMissing": "Faltan recursos",
+    "searching": "Buscando en Steam y GOG…",
+    "noCopy": "No apareció ninguna copia de {{game}} en Steam ni en GOG. Indique usted mismo la carpeta a JKNet, u omita este juego.",
+    "chooseAnother": "Elegir otra carpeta",
+    "chooseAnotherText": "Elija la carpeta GameData de cualquier copia. JKNet la comprueba antes de que continúe.",
+    "pickTitle": "Seleccione la carpeta GameData de {{game}}",
+    "invalid": "{{path}} no tiene archivos de {{game}}. {{detail}}",
+    "missing": "Faltan: {{files}}.",
+    "unreadable": "La carpeta no contiene archivos comprimidos legibles.",
+    "license": "JKNet no incluye archivos del juego. Necesita una copia con licencia de Star Wars Jedi Knight: Jedi Academy o Jedi Knight II: Jedi Outcast de Steam, de GOG o en disco."
+  },
+  "client": {
+    "heading": "Cree su primer cliente",
+    "text": "Un cliente es una compilación del motor con sus propios archivos y ajustes. JKNet descarga el motor por usted, y más adelante puede agregar más clientes.",
+    "group": "Cliente",
+    "useExisting": "Usar el cliente existente {{client}}",
+    "engineReady": "Motor listo",
+    "noEngine": "Aún sin motor",
+    "existingMeta": "{{engine}} · carpeta <0>clients\\{{folder}}</0>",
+    "latest": "más reciente",
+    "manualInstall": "Esta compilación hay que instalarla a mano.",
+    "nameLabel": "Nombre del cliente",
+    "namePlaceholder": "Diario",
+    "nameDefault": "Diario",
+    "nameHint": "Sus archivos van a <0>clients\\{{folder}}</0>, dentro de la carpeta de datos de JKNet. Cambiar el nombre del cliente más adelante conserva esa carpeta.",
+    "skipDownload": "Omitir la descarga",
+    "askingGithub": "Preguntando a GitHub por la compilación más reciente…",
+    "cacheNote": "El archivo comprimido llega a la caché de JKNet, así que un segundo cliente con el mismo motor se instala sin descargar otra vez.",
+    "continueWithoutWaiting": "Continuar sin esperar",
+    "failedTitle": "El cliente está creado. Su motor todavía no está instalado.",
+    "failedText": "Carpeta <0>clients\\{{folder}}</0>. Reintente la descarga, u omítala e instale el motor más adelante desde la pantalla Clientes."
+  },
+  "account": {
+    "offHeading": "Las cuentas y los amigos llegan más adelante",
+    "offText": "Todo lo que ha configurado hasta ahora funciona sin cuenta. Sus archivos del juego, sus ajustes y sus partidas guardadas se quedan en este equipo.",
+    "signedInHeading": "Ha iniciado sesión",
+    "signedInText": "Su lista de amigos y sus invitaciones acompañan a esta cuenta a partir de ahora.",
+    "heading": "Inicie sesión, o juegue como invitado",
+    "text": "La cuenta es opcional. Todo lo que ha configurado hasta ahora funciona sin ella, y puede iniciar sesión más adelante desde Ajustes.",
+    "skip": "Omitir, jugar como invitado",
+    "providerFailed": "{{message}} Puede jugar como invitado e iniciar sesión más adelante.",
+    "benefitsTitle": "Con una cuenta",
+    "benefitFriends": "Una lista de amigos, con invitaciones que funcionan sin abrir puertos.",
+    "benefitSync": "Su biblioteca y sus servidores favoritos en todos los equipos donde juegue.",
+    "benefitName": "Un nombre que los demás jugadores reconocen, en vez de uno escrito en cada servidor.",
+    "privacy": "JKNet guarda el nombre de su cuenta y quiénes son sus amigos. Sus archivos del juego, sus ajustes y sus partidas guardadas se quedan en este equipo."
+  }
+}

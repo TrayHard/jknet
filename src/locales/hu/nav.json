@@ -1,0 +1,24 @@
+{
+  "groups": {
+    "play": "Játék",
+    "manage": "Kezelés",
+    "community": "Közösség"
+  },
+  "items": {
+    "home": "Kezdőlap",
+    "servers": "Szerverek",
+    "library": "Könyvtár",
+    "clients": "Kliensek",
+    "friends": "Barátok",
+    "settings": "Beállítások"
+  },
+  "user": {
+    "guest": "Vendég",
+    "noClient": "Még nincs kliens",
+    "openAccount": "Fiókbeállítások",
+    "signIn": "Bejelentkezés"
+  },
+  "gameSwitch": {
+    "label": "Játék"
+  }
+}

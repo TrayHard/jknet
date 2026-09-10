@@ -1,0 +1,66 @@
+{
+  "actions": {
+    "add": "Dodaj",
+    "back": "Wstecz",
+    "cancel": "Anuluj",
+    "close": "Zamknij",
+    "continue": "Dalej",
+    "delete": "Usuń",
+    "disable": "Wyłącz",
+    "dismiss": "Odrzuć",
+    "loadMore": "Wczytaj więcej",
+    "refresh": "Odśwież",
+    "remove": "Usuń",
+    "retry": "Ponów",
+    "save": "Zapisz",
+    "seeAll": "Zobacz wszystkie",
+    "tryAgain": "Spróbuj ponownie"
+  },
+  "states": {
+    "checking": "Sprawdzanie…",
+    "creating": "Tworzenie…",
+    "deleting": "Usuwanie…",
+    "finishing": "Kończenie…",
+    "installing": "Instalowanie…",
+    "loading": "Wczytywanie…",
+    "reading": "Odczytywanie…",
+    "removing": "Usuwanie…",
+    "saving": "Zapisywanie…",
+    "sending": "Wysyłanie…",
+    "starting": "Uruchamianie…"
+  },
+  "values": {
+    "empty": "—",
+    "notSet": "Nie ustawiono",
+    "unknown": "Nieznane"
+  },
+  "units": {
+    "bytes": {
+      "b": "{{value}} B",
+      "kb": "{{value}} kB",
+      "mb": "{{value}} MB",
+      "gb": "{{value}} GB"
+    },
+    "milliseconds": "{{value}} ms",
+    "seconds": "{{value}} s",
+    "minutes": "{{value}} min",
+    "hours": "{{value}} godz.",
+    "hoursMinutes": "{{hours}} godz. {{minutes}} min"
+  },
+  "window": {
+    "minimize": "Minimalizuj",
+    "maximize": "Maksymalizuj",
+    "restore": "Przywróć",
+    "close": "Zamknij"
+  },
+  "select": {
+    "any": "Dowolne",
+    "nothingToChoose": "Brak opcji do wyboru"
+  },
+  "search": {
+    "nothingMatches": "Brak wyników"
+  },
+  "runtime": {
+    "missing": "Środowisko Tauri jest niedostępne"
+  }
+}

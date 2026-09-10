@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 
@@ -45,6 +46,8 @@ export function Toast({
   onDismiss,
   className,
 }: ToastProps) {
+  const { t } = useTranslation("common");
+
   return (
     <div
       role="status"
@@ -66,7 +69,7 @@ export function Toast({
       {onDismiss ? (
         <button
           type="button"
-          aria-label="Dismiss"
+          aria-label={t("actions.dismiss")}
           onClick={onDismiss}
           className={cn(
             "shrink-0 flex items-center justify-center size-20 rounded-sm cursor-pointer",

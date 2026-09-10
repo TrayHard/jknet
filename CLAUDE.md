@@ -7,7 +7,7 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 - Отвечайте пользователю по-русски и применяйте скилл `dev-docs-style-ru`.
 - Документацию репозитория (`README.md`, `CLAUDE.md`, `docs/*.md`) пишите по-русски.
 - Код, идентификаторы и комментарии в коде пишите по-английски.
-- Тексты интерфейса пишите по-английски: сообщество игры международное.
+- Тексты интерфейса пишите по-английски и складывайте в `src/locales/en/`: английский — исходный язык лаунчера. Компонент со строкой внутри валит `npm run i18n:check`. Правила — в [документе о локализации](docs/i18n.md).
 
 ## Команды
 
@@ -19,6 +19,8 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 | Запустить приложение | `npm run tauri dev` |
 | Собрать фронтенд с проверкой типов | `npm run build` |
 | Проверить только типы | `npm run typecheck` |
+| Проверить переводы и экраны | `npm run i18n:check` |
+| Разложить новые ключи по языкам | `npm run i18n:seed` |
 | Скомпилировать ядро | `cargo check --all-targets` в `src-tauri` |
 | Проверить линтером | `cargo clippy --all-targets -- -D warnings` в `src-tauri` |
 | Прогнать тесты ядра | `cargo test` в `src-tauri` |
@@ -36,7 +38,14 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 src/
   index.css              подключение Tailwind, блок @theme, базовые стили
   styles/tokens.css      токены дизайна из Figma
-  styles/fonts.css       локальные шрифты @fontsource
+  styles/fonts.css       локальные шрифты @fontsource и дисплейный шрифт
+                         для кириллических языков
+  i18n/                  перевод: настройка i18next, список языков, типы
+                         ключей, перевод ошибок ядра, форматирование через
+                         Intl, синхронизация с настройкой языка
+  locales/<язык>/        каталоги строк: 14 пространств имён на язык.
+                         en — исходный язык, в нём же _notes.md для
+                         переводчиков
   components/            AppShell, TitleBar, Sidebar, GameSwitch, PageHeader,
                          NewClientDialog, ClientSettingsDialog,
                          GameFilesNotice, MissingClientToast,
@@ -61,7 +70,8 @@ src/
   lib/useGameEvents.ts   подписка на события установки движка и запуска игры
   lib/useAppUpdate.ts    проверка, загрузка и установка обновления лаунчера
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
-  lib/format.ts          cn, formatBytes, shortenPath
+  lib/format.ts          cn, shortenPath и чистые функции форматирования,
+                         которым передают локаль
   lib/devOnline.ts       подмена команд друзей вызовами к заглушке JKNet
                          Online вне Tauri
 src-tauri/
@@ -90,6 +100,9 @@ src-tauri/
   capabilities/          разрешения окна main
 scripts/
   mock-online.mjs        заглушка JKNet Online на Node без зависимостей
+  i18n-check.mjs         сверка каталогов и поиск строк в компонентах
+  i18n-seed.mjs          разложение новых ключей по папкам языков
+  i18n-allowlist.json    слова, которые компонент печатает без t()
   make-brand-assets.ps1  растровые копии знака из public/jknet_logo.png
   refresh-jkhub-categories.ps1
                          обход jkhub.org и перезапись снимка категорий

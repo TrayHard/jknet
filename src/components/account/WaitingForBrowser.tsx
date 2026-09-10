@@ -1,4 +1,5 @@
 import { ExternalLink, Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "../ui";
 import type { SignInFlow } from "../../lib/queries";
@@ -16,18 +17,19 @@ interface WaitingForBrowserProps {
  * and start again.
  */
 export function WaitingForBrowser({ flow }: WaitingForBrowserProps) {
+  const { t } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
+
   return (
     <div className="rounded-lg border border-line bg-surface p-16">
       <div className="flex items-center gap-12">
         <Loader2 size={20} className="text-fg-accent animate-spin shrink-0" />
         <div className="flex-1 min-w-0">
-          <p className="text-body-md-medium text-fg">Waiting for the browser…</p>
-          <p className="text-body-sm text-fg-secondary">
-            Finish signing in there, then come back to JKNet.
-          </p>
+          <p className="text-body-md-medium text-fg">{t("waiting.title")}</p>
+          <p className="text-body-sm text-fg-secondary">{t("waiting.text")}</p>
         </div>
         <Button variant="ghost" onClick={flow.cancel}>
-          Cancel
+          {tCommon("actions.cancel")}
         </Button>
       </div>
 

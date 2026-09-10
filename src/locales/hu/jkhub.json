@@ -1,0 +1,88 @@
+{
+  "sort": {
+    "label": "Rendezés",
+    "recentlyUpdated": "Legutóbb frissített",
+    "newest": "Legújabb",
+    "mostDownloaded": "Legtöbbet letöltött",
+    "topRated": "Legjobbra értékelt",
+    "name": "Név"
+  },
+  "filterPlaceholder": "Betöltött fájlok szűrése",
+  "refresh": "Frissítés",
+  "fromCache": "Gyorsítótárból",
+  "tree": {
+    "heading": "Kategóriák",
+    "update": "Kategóriák frissítése",
+    "updating": "Frissítés…",
+    "updateHint": "Végigjárja a JKHub kategóriafáját. Körülbelül húsz kérést jelent.",
+    "expand": "Kinyitás: {{category}}",
+    "collapse": "Összecsukás: {{category}}",
+    "empty": "Még nincsenek kategóriák."
+  },
+  "scope": {
+    "category": "{{category}} · telepítés ide: {{client}}",
+    "noCategory": "Válasszon kategóriát · telepítés ide: {{client}}"
+  },
+  "loading": {
+    "categories": "A JKHub kategóriáinak beolvasása…",
+    "files": "Fájlok betöltése…"
+  },
+  "empty": {
+    "browserTitle": "A JKHub böngészéséhez a JKNet ablaka szükséges",
+    "browserText": "Ez a fül a JKNet magján keresztül beszél a jkhub.org oldallal, és ez a böngészős előnézetben nincs meg.",
+    "unreachableTitle": "A JKHub nem válaszolt",
+    "categoryTitle": "Ez a kategória nem töltődött be",
+    "filteredTitle": "Nincs találat",
+    "filteredText": "Egyetlen betöltött fájl sem felel meg a szűrőnek. Törölje, töltsön be további oldalakat, vagy válasszon másik kategóriát."
+  },
+  "loaded": "{{total}} fájlból {{shown}} töltődött be. Szűkítse a kategóriát, vagy változtasson a sorrenden, hogy lássa a többit.",
+  "card": {
+    "open": "Megnyitás: {{title}}",
+    "installed": "Telepítve",
+    "install": "Telepítés",
+    "reinstall": "Újratelepítés",
+    "fallbackAuthor": "JKHub",
+    "updated": "Frissítve: {{date}}",
+    "submitted": "Beküldve: {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Betöltés…",
+    "fallbackTitle": "Fájl",
+    "openOnSite": "Megnyitás a JKHub oldalán",
+    "installTo": "Telepítés ide: {{client}}",
+    "replaceAndInstall": "Felülírás és telepítés",
+    "openScreenshot": "A képernyőkép megnyitása",
+    "screenshot": "Képernyőkép",
+    "screenshotMissing": "A JKHub nem adta vissza ezt a képernyőképet.",
+    "author": "Szerző",
+    "authorUnknown": "Ismeretlen",
+    "updated": "Frissítve",
+    "submitted": "Beküldve",
+    "rating": "Értékelés",
+    "ratingValue": "{{value}} / 5 · {{count}} értékelés",
+    "notRated": "Nincs értékelve",
+    "downloads": "{{count}} letöltés",
+    "views": "{{count}} megtekintés",
+    "comments": "{{count}} hozzászólás",
+    "versions": "Verziók",
+    "downloading": "Letöltés… {{received}}",
+    "downloadingOf": "Letöltés… {{received}} / {{total}}"
+  },
+  "install": {
+    "pickClient": "Előbb válasszon fent egy klienst: a fájl mindig egy kliensbe kerül.",
+    "toastTitle": "Telepítve ide: {{client}}",
+    "failedTitle": "A telepítés nem sikerült",
+    "categoriesTitle": "A kategóriák frissültek",
+    "categoriesText": "{{count}} kategória beolvasva a JKHub oldaláról."
+  },
+  "outcome": {
+    "installed": "{{files}} telepítve ide: {{folder}}.",
+    "conflicts_one": "{{files}} már megvan itt: {{folder}}. A felülíráshoz nyomja meg a Felülírás és telepítés gombot.",
+    "conflicts_other": "{{files}} már megvan itt: {{folder}}. A felülíráshoz nyomja meg a Felülírás és telepítés gombot.",
+    "external": "Ez a bejegyzés egy másik oldalra mutat, nem archívumra, így nincs mit telepíteni. Nyissa meg a JKHub oldalán, és kövesse a hivatkozást.",
+    "unsupportedDownloaded": "Az archívum .{{format}} formátumú, amelyet a JKNet még nem tud megnyitni. A letöltés már megvan: csomagolja ki kézzel a kliens mappájába.",
+    "unsupported": "Az archívum .{{format}} formátumú, amelyet a JKNet még nem tud megnyitni. Nyissa meg a fájlt a JKHub oldalán, és csomagolja ki kézzel.",
+    "noPk3": "Az archívum nem tartalmaz pk3-fájlt, így nincs mit telepíteni egy kliensbe. Ez van benne: {{entries}}",
+    "showArchive": "Az archívum megjelenítése"
+  }
+}

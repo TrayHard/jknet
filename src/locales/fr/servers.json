@@ -1,0 +1,115 @@
+{
+  "title": "Serveurs",
+  "searchPlaceholder": "Nom, carte ou adresse",
+  "refresh": "Actualiser",
+  "scanning": "Recherche",
+  "subtitle": {
+    "empty": "Aucun serveur {{game}}",
+    "all_one": "{{count}} serveur {{game}}",
+    "all_many": "{{count}} serveurs {{game}}",
+    "all_other": "{{count}} serveurs {{game}}",
+    "some_one": "{{count}} serveur {{game}} sur {{total}}",
+    "some_many": "{{count}} serveurs {{game}} sur {{total}}",
+    "some_other": "{{count}} serveurs {{game}} sur {{total}}",
+    "players_one": "{{count}} joueur en ligne",
+    "players_many": "{{count}} joueurs en ligne",
+    "players_other": "{{count}} joueurs en ligne",
+    "bots_one": "{{count}} bot exclu du décompte",
+    "bots_many": "{{count}} bots exclus du décompte",
+    "bots_other": "{{count}} bots exclus du décompte",
+    "asking": "interrogation des serveurs maîtres",
+    "refreshed": "actualisé il y a {{age}}",
+    "silent_one": "{{count}} n’a pas répondu",
+    "silent_many": "{{count}} n’ont pas répondu",
+    "silent_other": "{{count}} n’ont pas répondu"
+  },
+  "filters": {
+    "mode": "Mode",
+    "mod": "Mod",
+    "players": "Joueurs",
+    "version": "Version",
+    "bots": "Bots",
+    "hideBotOnly": "Masquer les bots seuls",
+    "hideBotOnlyHint": "Masquer les serveurs où tous les joueurs sont des bots",
+    "playersAny": "Tout",
+    "playersNotEmpty": "Non vide",
+    "playersNotFull": "Non plein",
+    "reset": "Réinitialiser"
+  },
+  "tabs": {
+    "all": "Tous",
+    "trusted": "De confiance",
+    "favorites": "Favoris",
+    "history": "Historique",
+    "lan": "LAN",
+    "lanHint": "La détection par diffusion arrive avec une prochaine version"
+  },
+  "columns": {
+    "server": "SERVEUR",
+    "map": "CARTE",
+    "mode": "MODE",
+    "players": "JOUEURS",
+    "ping": "PING",
+    "mod": "MOD"
+  },
+  "row": {
+    "addFavorite": "Ajouter aux favoris",
+    "removeFavorite": "Retirer des favoris",
+    "trusted": "De confiance",
+    "passwordRequired": "Mot de passe requis",
+    "countsTitle": "{{humans}} joueurs, {{bots}} bots, {{slots}} places",
+    "countsUnknownTitle": "{{clients}} connectés ; ce serveur n’indique pas combien sont des bots"
+  },
+  "scan": {
+    "label": "Recherche des serveurs…",
+    "found": "Recherche des serveurs… {{count}} trouvés",
+    "ofAbout": "Recherche des serveurs… {{count}} sur environ {{total}}"
+  },
+  "alerts": {
+    "masters": "Serveurs maîtres injoignables",
+    "cache": "Le cache des serveurs n’est pas disponible",
+    "connect": "Impossible de lancer le client"
+  },
+  "empty": {
+    "pickServer": "Choisissez un serveur pour voir ses joueurs et vous y connecter.",
+    "lanTitle": "La détection LAN n’existe pas encore",
+    "lanText": "La détection par diffusion sur le réseau local arrive plus tard.",
+    "favoritesTitle": "Aucun favori",
+    "favoritesText": "Appuyez sur l’étoile d’une ligne pour garder un serveur ici.",
+    "historyTitle": "Aucune connexion",
+    "historyText": "Les serveurs auxquels vous vous connectez apparaissent ici, du plus récent au plus ancien.",
+    "trustedTitle": "Aucun serveur de confiance dans cette liste",
+    "trustedText": "La liste de serveurs recommandés par la communauté est vide dans cette version.",
+    "noneTitle": "Aucun serveur",
+    "noneText": "Appuyez sur Actualiser pour demander aux serveurs maîtres qui est en ligne.",
+    "filteredTitle": "Aucun résultat pour ces filtres",
+    "filteredText": "Élargissez les filtres, ou videz le champ de recherche.",
+    "filteredBots_one": "Élargissez les filtres, ou videz le champ de recherche. {{count}} serveur n’a que des bots ; désactivez Masquer les bots seuls pour le voir.",
+    "filteredBots_many": "Élargissez les filtres, ou videz le champ de recherche. {{count}} serveurs n’ont que des bots ; désactivez Masquer les bots seuls pour les voir.",
+    "filteredBots_other": "Élargissez les filtres, ou videz le champ de recherche. {{count}} serveurs n’ont que des bots ; désactivez Masquer les bots seuls pour les voir."
+  },
+  "details": {
+    "trusted": "CONFIANCE",
+    "password": "MOT DE PASSE",
+    "copyAddress": "Copier l’adresse",
+    "bots_one": "+{{count}} bot",
+    "bots_many": "+{{count}} bots",
+    "bots_other": "+{{count}} bots",
+    "botsUnknown": "bots inconnus",
+    "botsUnknownTitle": "Ce serveur ne publie pas son nombre de bots et n’a pas répondu à getstatus",
+    "connect": "Se connecter",
+    "noPlayers": "Personne ne joue.",
+    "onlyBots_one": "Personne ne joue : {{count}} bot est seul ici.",
+    "onlyBots_many": "Personne ne joue : {{count}} bots sont seuls ici.",
+    "onlyBots_other": "Personne ne joue : {{count}} bots sont seuls ici.",
+    "botHeading_one": "{{count}} BOT",
+    "botHeading_many": "{{count}} BOTS",
+    "botHeading_other": "{{count}} BOTS",
+    "botBadge": "BOT",
+    "playersError": "Pas de liste des joueurs : {{message}}"
+  },
+  "ping": {
+    "noAnswer": "Sans réponse",
+    "value": "{{value}} ms"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "available": "JKNet {{version}} ist verfügbar",
+  "failedTitle": "Update auf JKNet {{version}} fehlgeschlagen",
+  "install": "Installieren und neu starten",
+  "downloading": "Herunterladen… {{received}}",
+  "downloadingOf": "Herunterladen… {{received}} von {{total}}",
+  "installing": "Das Installationsprogramm startet…",
+  "checking": "Suche nach Updates…",
+  "unsupported": "Updates laufen im installierten Launcher, nicht in einem Browser-Tab.",
+  "upToDate": "Dies ist die neueste Version."
+}

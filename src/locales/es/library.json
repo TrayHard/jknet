@@ -1,0 +1,93 @@
+{
+  "title": "Biblioteca",
+  "subtitle": "Skins, empuñaduras, mapas y mods, instalados en el cliente que elija.",
+  "subtitleClient": "{{client}} · {{engine}} · {{files}} archivos · {{enabled}} activados · {{size}}",
+  "noEngine": "sin motor",
+  "searchPlaceholder": "Buscar archivos",
+  "browseJkhub": "Explorar JKHub",
+  "addFiles": "Agregar archivos",
+  "pickTitle": "Agregar archivos pk3",
+  "pickFilter": "Archivos de Jedi Academy",
+  "clientBar": {
+    "label": "Cliente",
+    "hint": "Los archivos se instalan solo en este cliente. Otro cliente con el mismo motor mantiene su propio conjunto. Aquí se listan los clientes de {{game}}; cambie de juego en la barra lateral para ver los demás."
+  },
+  "tabs": {
+    "installed": "Instalados",
+    "jkhub": "Explorar JKHub",
+    "updates": "Actualizaciones"
+  },
+  "sort": {
+    "label": "Ordenar por",
+    "recent": "Recientes",
+    "name": "Nombre",
+    "size": "Tamaño"
+  },
+  "categories": {
+    "all": "Todos",
+    "skin": "Skins",
+    "hilt": "Empuñaduras",
+    "map": "Mapas",
+    "mod": "Mods",
+    "hud": "HUD e interfaz",
+    "sound": "Sonidos",
+    "other": "Otros"
+  },
+  "categoryOne": {
+    "skin": "Skin",
+    "hilt": "Empuñadura",
+    "map": "Mapa",
+    "mod": "Mod",
+    "hud": "HUD",
+    "sound": "Sonido",
+    "other": "Otro"
+  },
+  "onlyEnabled": "Solo activados",
+  "onlyEnabledSwitch": "Mostrar solo los archivos activados",
+  "card": {
+    "addedByHand": "Agregado a mano",
+    "sourceWithFolder": "{{source}} · {{folder}}",
+    "conflict": "Conflicto",
+    "enable": "Activar {{file}}",
+    "remove": "Quitar {{file}}",
+    "removeHint": "Quitar de este cliente"
+  },
+  "empty": {
+    "noClientsTitle": "Aún no hay clientes de {{game}}",
+    "noClientsText": "Un archivo de biblioteca se instala en un cliente. Cree uno y esta lista empezará a llenarse.",
+    "newClient": "Nuevo cliente",
+    "noFilesTitle": "{{client}} aún no tiene archivos",
+    "noFilesText": "Encuentre skins, empuñaduras, mapas y mods en JKHub y agregue aquí los archivos pk3. También puede soltarlos directamente sobre esta ventana.",
+    "filteredTitle": "Nada coincide",
+    "filteredText": "Ningún archivo de este cliente coincide con la búsqueda y los filtros. Bórrelos para ver toda la biblioteca.",
+    "updatesTitle": "Aún no hay actualizaciones",
+    "updatesText": "Cuando los archivos lleven una versión de JKHub, los que tengan una publicación más reciente aparecerán aquí."
+  },
+  "fallback": {
+    "thisClient": "este cliente",
+    "theClient": "el cliente"
+  },
+  "skipped": {
+    "title_one": "No se agregó {{count}} archivo",
+    "title_many": "No se agregaron {{count}} archivos",
+    "title_other": "No se agregaron {{count}} archivos",
+    "rename": "Cámbiele el nombre a {{name}}."
+  },
+  "drop": {
+    "title": "Suelte archivos pk3 para instalarlos en {{client}}"
+  },
+  "conflicts": {
+    "notice": "{{count}} archivos cambian el mismo contenido. El motor carga el último y omite el resto.",
+    "see": "Ver cuál gana",
+    "title": "Archivos que cambian el mismo contenido",
+    "body": "{{files}} archivos de {{client}} contienen {{paths}} rutas compartidas. El motor lee el último que carga y omite el resto.",
+    "wins": "Gana",
+    "hidden": "Oculto",
+    "truncated": "Solo se listan las primeras {{shown}} rutas de {{total}}. Desactive uno de los archivos para ver el resto."
+  },
+  "remove": {
+    "title": "¿Quitar {{file}} de {{client}}?",
+    "body": "{{fileName}}, {{size}}. El archivo se elimina de la carpeta {{folder}} del cliente. Los demás clientes conservan su propia copia.",
+    "confirm": "Quitar archivo"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "groups": {
+    "play": "Jouer",
+    "manage": "Gérer",
+    "community": "Communauté"
+  },
+  "items": {
+    "home": "Accueil",
+    "servers": "Serveurs",
+    "library": "Bibliothèque",
+    "clients": "Clients",
+    "friends": "Amis",
+    "settings": "Paramètres"
+  },
+  "user": {
+    "guest": "Invité",
+    "noClient": "Aucun client",
+    "openAccount": "Paramètres du compte",
+    "signIn": "Se connecter"
+  },
+  "gameSwitch": {
+    "label": "Jeu"
+  }
+}

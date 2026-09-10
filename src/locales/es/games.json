@@ -1,0 +1,63 @@
+{
+  "gametypes": {
+    "ja": {
+      "0": "Todos contra todos",
+      "1": "Holocrones",
+      "2": "Maestro Jedi",
+      "3": "Duelo",
+      "4": "Duelo de poder",
+      "5": "Un jugador",
+      "6": "Combate por equipos",
+      "7": "Asedio",
+      "8": "Captura la bandera",
+      "9": "Captura el ysalamiri"
+    },
+    "jo": {
+      "0": "Todos contra todos",
+      "1": "Holocrones",
+      "2": "Maestro Jedi",
+      "3": "Duelo",
+      "4": "Un jugador",
+      "5": "Combate por equipos",
+      "6": "Saga",
+      "7": "Captura la bandera",
+      "8": "Captura el ysalamiri"
+    }
+  },
+  "gametypesShort": {
+    "ja": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "MJ",
+      "3": "DUELO",
+      "4": "PODER",
+      "5": "SP",
+      "6": "TFFA",
+      "7": "ASEDIO",
+      "8": "CTF",
+      "9": "CTY"
+    },
+    "jo": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "MJ",
+      "3": "DUELO",
+      "4": "SP",
+      "5": "TFFA",
+      "6": "SAGA",
+      "7": "CTF",
+      "8": "CTY"
+    }
+  },
+  "unknownGametype": "Modo {{number}}",
+  "sources": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "manual": "Elegida a mano",
+    "configured": "Guardada",
+    "configuredEarlier": "Guardada antes"
+  },
+  "map": {
+    "unknown": "mapa desconocido"
+  }
+}

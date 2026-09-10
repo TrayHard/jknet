@@ -1,5 +1,8 @@
 import { Lock, ShieldCheck, Star } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+// --- slice: i18n ---
+import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo } from "../../lib/ipc";
 import { Badge, type BadgeTone } from "../ui";
@@ -33,20 +36,6 @@ const MODE_TONE: Record<number, BadgeTone> = {
   9: "accent", // CTY
 };
 
-/** The short label the 60 px mode column can hold. */
-const MODE_SHORT: Record<number, string> = {
-  0: "FFA",
-  1: "HOLO",
-  2: "JM",
-  3: "DUEL",
-  4: "PDUEL",
-  5: "SP",
-  6: "TFFA",
-  7: "SIEGE",
-  8: "CTF",
-  9: "CTY",
-};
-
 interface ServerRowProps {
   server: ServerInfo;
   selected: boolean;
@@ -61,6 +50,12 @@ export function ServerRow({
   onSelect,
   onToggleFavorite,
 }: ServerRowProps) {
+  const { t } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
+  // --- slice: i18n --- the short names live in the `games` catalog, one table
+  // per game: number 7 is SIEGE in Jedi Academy and CTF in Jedi Outcast.
+  const gametypes = useGametypeLabels();
+
   return (
     <div
       role="row"
@@ -84,7 +79,9 @@ export function ServerRow({
     >
       <button
         type="button"
-        aria-label={server.favorite ? "Remove from favorites" : "Add to favorites"}
+        aria-label={
+          server.favorite ? t("row.removeFavorite") : t("row.addFavorite")
+        }
         aria-pressed={server.favorite}
         onClick={(event) => {
           event.stopPropagation();
@@ -108,19 +105,21 @@ export function ServerRow({
 
       <span className="flex items-center gap-4 text-fg-muted">
         {server.trusted ? (
-          <ShieldCheck size={14} className="text-fg-warm" aria-label="Trusted" />
+          <ShieldCheck size={14} className="text-fg-warm" aria-label={t("row.trusted")} />
         ) : null}
         {server.needpass ? (
-          <Lock size={14} aria-label="Password required" />
+          <Lock size={14} aria-label={t("row.passwordRequired")} />
         ) : null}
       </span>
 
+      {/* A map name is what the operator put in `mapname`: data, never a
+          string to translate. */}
       <span className="text-mono-xs text-fg-muted truncate" title={server.map}>
-        {server.map || "—"}
+        {server.map || tCommon("values.empty")}
       </span>
 
       <Badge tone={MODE_TONE[server.gametype] ?? "neutral"}>
-        {MODE_SHORT[server.gametype] ?? String(server.gametype)}
+        {gametypes.short(server.game, server.gametype)}
       </Badge>
 
       <PlayerCount server={server} />
@@ -142,6 +141,7 @@ export function ServerRow({
  * +12b` says in one glance what `12/32` used to hide.
  */
 function PlayerCount({ server }: { server: ServerInfo }) {
+  const { t } = useTranslation("servers");
   const humans = realPlayers(server);
   const bots = botCount(server);
   const unknown = server.playersSource === "unknown";
@@ -151,8 +151,12 @@ function PlayerCount({ server }: { server: ServerInfo }) {
       className="text-mono-xs tabular-nums text-fg-secondary truncate"
       title={
         unknown
-          ? `${server.clients} clients; this server does not say how many are bots`
-          : `${humans} players, ${bots} bots, ${server.maxClients} slots`
+          ? t("row.countsUnknownTitle", { clients: server.clients })
+          : t("row.countsTitle", {
+              humans,
+              bots,
+              slots: server.maxClients,
+            })
       }
     >
       <span className={humans > 0 ? "text-fg" : undefined}>{humans}</span>

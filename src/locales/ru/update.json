@@ -1,0 +1,11 @@
+{
+  "available": "Доступна версия JKNet {{version}}",
+  "failedTitle": "Обновление до JKNet {{version}} не удалось",
+  "install": "Установить и перезапустить",
+  "downloading": "Загрузка… {{received}}",
+  "downloadingOf": "Загрузка… {{received}} из {{total}}",
+  "installing": "Запускаем установщик…",
+  "checking": "Проверяем обновления…",
+  "unsupported": "Обновления работают в установленном лаунчере, а не во вкладке браузера.",
+  "upToDate": "Это последняя версия."
+}

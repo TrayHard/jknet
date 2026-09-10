@@ -1,0 +1,33 @@
+{
+  "title": "Inicio",
+  "subtitle": "{{game}} · vuelva al juego o elija un servidor en el navegador de servidores.",
+  "launchError": "{{message}} <0>Abra la pantalla Clientes</0> para indicar la carpeta del juego o instalar el motor.",
+  "hero": {
+    "quickPlay": "Partida rápida",
+    "inGame": "En juego",
+    "running": "En ejecución: {{client}}",
+    "noClient": "Aún no hay clientes de {{game}}",
+    "runningText": "Iniciado hace <0>{{age}}</0>, proceso {{pid}}. El lanzador se aparta mientras usted juega.",
+    "readyText": "Inicie el cliente predeterminado y elija un servidor en el menú del juego.",
+    "noClientText": "Un cliente es una compilación del motor con sus propios archivos y ajustes. Cree uno y {{game}} quedará a un clic.",
+    "createClient": "Crear un cliente de {{game}}",
+    "play": "Jugar",
+    "playHint": "Marque un cliente como predeterminado",
+    "stop": "Detener",
+    "manageClients": "Gestionar clientes",
+    "aMoment": "un momento"
+  },
+  "gameFiles": {
+    "title": "JKNet no sabe dónde están sus archivos de {{game}}",
+    "text": "Indíquele la carpeta <0>GameData</0> de su copia y el juego estará listo para arrancar. El navegador de servidores funciona sin ella.",
+    "locate": "Localizar archivos"
+  },
+  "topServers": {
+    "trusted": "Servidores de confianza",
+    "busiest": "Servidores más concurridos",
+    "emptyTitle": "Todavía no hay servidores en la caché",
+    "emptyText": "Abra la pantalla Servidores una vez y los más concurridos aparecerán aquí.",
+    "openServers": "Abrir Servidores",
+    "seeAll": "Ver todo"
+  }
+}

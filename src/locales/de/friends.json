@@ -1,0 +1,81 @@
+{
+  "title": "Freunde",
+  "subtitle": "Sehen Sie, wer online ist, und treten Sie seinem Server mit einem Klick bei.",
+  "subtitleCounts": "{{friends}} Freunde · {{online}} online",
+  "loading": "Ihre Freunde werden geladen…",
+  "searchPlaceholder": "Suchen oder Namen eingeben",
+  "addFriend": "Freund hinzufügen",
+  "live": {
+    "on": "Live",
+    "off": "Verbindet neu",
+    "onText": "Änderungen kommen in dem Moment an, in dem sie passieren.",
+    "offText": "Der Dienst ist nicht erreichbar; die Liste wird alle 30 Sekunden aktualisiert."
+  },
+  "groups": {
+    "in_game": "Im Spiel",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "status": {
+    "playingOn": "Spielt auf {{server}} · {{address}}",
+    "playingOnAddress": "Spielt auf {{address}}",
+    "inGame": "Im Spiel",
+    "online": "Online",
+    "offline": "Offline",
+    "lastSeenJustNow": "Zuletzt gerade eben gesehen",
+    "lastSeenMinutes_one": "Zuletzt vor {{count}} Minute gesehen",
+    "lastSeenMinutes_other": "Zuletzt vor {{count}} Minuten gesehen",
+    "lastSeenHours_one": "Zuletzt vor {{count}} Stunde gesehen",
+    "lastSeenHours_other": "Zuletzt vor {{count}} Stunden gesehen",
+    "lastSeenDays_one": "Zuletzt vor {{count}} Tag gesehen",
+    "lastSeenDays_other": "Zuletzt vor {{count}} Tagen gesehen",
+    "lastSeenOn": "Zuletzt am {{date}} gesehen"
+  },
+  "empty": {
+    "offTitle": "Freunde sind noch nicht eingeschaltet",
+    "signInTitle": "Melden Sie sich an, um Ihre Freunde zu sehen",
+    "signInText": "JKNet hält Ihre Freundesliste im Dienst, damit sie Ihnen auf jeden Rechner folgt, an dem Sie sich anmelden.",
+    "signIn": "Anmelden",
+    "noneTitle": "Noch keine Freunde",
+    "noneText": "Geben Sie oben einen Anzeigenamen, einen jkhub:-Namen oder eine Benutzerkennung ein und drücken Sie Freund hinzufügen.",
+    "noMatchTitle": "Niemand passt zu „{{query}}“",
+    "noMatchText": "Drücken Sie Freund hinzufügen, um stattdessen eine Anfrage zu senden.",
+    "pickFriend": "Wählen Sie einen Freund, um seinem Spiel beizutreten oder ihn in Ihres einzuladen."
+  },
+  "requests": {
+    "incoming": "Freundschaftsanfragen",
+    "outgoing": "Gesendete Anfragen",
+    "heading": "{{title}} · {{count}}",
+    "accept": "Annehmen",
+    "decline": "Ablehnen",
+    "cancel": "Abbrechen",
+    "handle": "{{provider}}:{{name}}"
+  },
+  "notices": {
+    "nowFriends": "Sie und {{name}} sind jetzt Freunde.",
+    "requestSent": "Anfrage an {{name}} gesendet.",
+    "inviteSent": "Einladung an {{name}} gesendet."
+  },
+  "row": {
+    "join": "Beitreten",
+    "joining": "Startet…"
+  },
+  "panel": {
+    "status": "Status",
+    "join": "Spiel beitreten",
+    "joining": "Das Spiel startet…",
+    "invite": "In mein Spiel einladen",
+    "inviteHintNoServer": "Treten Sie erst einem Server bei, dann laden Sie Ihre Freunde dorthin ein",
+    "inviteHint": "Zu {{server}} einladen",
+    "noServer": "Treten Sie im Bereich Server einem Server bei, um jemanden dorthin einzuladen.",
+    "removeConfirm": "{{name}} entfernen? Sie müssen beide eine neue Anfrage senden, um wieder Freunde zu sein.",
+    "remove": "Freund entfernen"
+  },
+  "invite": {
+    "toast": "{{name}} lädt Sie zu {{server}} ein",
+    "join": "Beitreten",
+    "noClient": "Wählen Sie zuerst im Bereich Clients einen Standard-Client",
+    "gameRunning": "Es läuft bereits ein Spiel",
+    "connectTo": "Mit {{address}} verbinden"
+  }
+}

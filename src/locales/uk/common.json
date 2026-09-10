@@ -1,0 +1,66 @@
+{
+  "actions": {
+    "add": "Додати",
+    "back": "Назад",
+    "cancel": "Скасувати",
+    "close": "Закрити",
+    "continue": "Далі",
+    "delete": "Видалити",
+    "disable": "Вимкнути",
+    "dismiss": "Сховати",
+    "loadMore": "Показати ще",
+    "refresh": "Оновити",
+    "remove": "Видалити",
+    "retry": "Повторити",
+    "save": "Зберегти",
+    "seeAll": "Усі сервери",
+    "tryAgain": "Повторити"
+  },
+  "states": {
+    "checking": "Перевірка…",
+    "creating": "Створення…",
+    "deleting": "Видалення…",
+    "finishing": "Завершення…",
+    "installing": "Встановлення…",
+    "loading": "Завантаження…",
+    "reading": "Читання…",
+    "removing": "Видалення…",
+    "saving": "Збереження…",
+    "sending": "Надсилання…",
+    "starting": "Запуск…"
+  },
+  "values": {
+    "empty": "—",
+    "notSet": "Не задано",
+    "unknown": "Невідомо"
+  },
+  "units": {
+    "bytes": {
+      "b": "{{value}} Б",
+      "kb": "{{value}} КБ",
+      "mb": "{{value}} МБ",
+      "gb": "{{value}} ГБ"
+    },
+    "milliseconds": "{{value}} мс",
+    "seconds": "{{value}} с",
+    "minutes": "{{value}} хв",
+    "hours": "{{value}} год",
+    "hoursMinutes": "{{hours}} год {{minutes}} хв"
+  },
+  "window": {
+    "minimize": "Згорнути",
+    "maximize": "Розгорнути",
+    "restore": "Відновити",
+    "close": "Закрити"
+  },
+  "select": {
+    "any": "Усі",
+    "nothingToChoose": "Немає варіантів"
+  },
+  "search": {
+    "nothingMatches": "Нічого не знайдено"
+  },
+  "runtime": {
+    "missing": "Середовище Tauri недоступне"
+  }
+}

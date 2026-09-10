@@ -1,5 +1,6 @@
 import { AlertTriangle, Play, Plus, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
 import { GameFilesNotice } from "../components/GameFilesNotice";
@@ -8,7 +9,9 @@ import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 import { TopServers } from "../components/servers/TopServers";
 import { Badge, Button } from "../components/ui";
-import { errorMessage } from "../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import { useFormat } from "../i18n/useFormat";
 // --- slice: game switch ---
 import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
@@ -28,6 +31,9 @@ import {
  * game the player forgot about.
  */
 export function HomePage() {
+  const { t } = useTranslation("home");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const navigate = useNavigate();
   const settings = useSettings();
   const clients = useClients();
@@ -77,15 +83,15 @@ export function HomePage() {
     setError(null);
     launchClient.mutate(
       { clientId: defaultClient.id },
-      { onError: (e) => setError(errorMessage(e)) },
+      { onError: (e) => setError(errorText(e)) },
     );
   };
 
   return (
     <Page>
       <PageHeader
-        title="Home"
-        subtitle={`${gameName(activeGame)} · jump back in, or pick a server from the browser.`}
+        title={t("title")}
+        subtitle={t("subtitle", { game: gameName(activeGame) })}
       />
 
       {/* --- slice: game switch --- a game with no folder is a setup step, not
@@ -100,11 +106,14 @@ export function HomePage() {
         >
           <AlertTriangle size={16} className="text-fg-danger shrink-0 mt-2" />
           <span className="text-body-sm text-fg">
-            {error}{" "}
-            <Link to="/clients" className="text-fg-accent underline">
-              Open the Clients screen
-            </Link>{" "}
-            to set the game folder or install the engine.
+            <Trans
+              t={t}
+              i18nKey="launchError"
+              values={{ message: error }}
+              components={[
+                <Link to="/clients" className="text-fg-accent underline" />,
+              ]}
+            />
           </span>
         </div>
       ) : null}
@@ -118,30 +127,34 @@ export function HomePage() {
           <div className="flex flex-col gap-24 flex-1 min-w-0">
             <div className="flex flex-col gap-8">
               <span className="text-label-xs text-fg-muted">
-                {running ? "In game" : "Quick play"}
+                {running ? t("hero.inGame") : t("hero.quickPlay")}
               </span>
               <h2 className="text-display-xl text-fg">
                 {running
-                  ? `Running: ${runningClient?.name ?? running.clientId}`
-                  : (defaultClient?.name ?? `No ${gameName(activeGame)} client yet`)}
+                  ? t("hero.running", {
+                      client: runningClient?.name ?? running.clientId,
+                    })
+                  : (defaultClient?.name ??
+                    t("hero.noClient", { game: gameName(activeGame) }))}
               </h2>
               <p className="text-body-md text-fg-secondary max-w-[560px]">
                 {running ? (
-                  <>
-                    Started <Elapsed startedAt={running.startedAt} /> ago, process{" "}
-                    {running.pid}. The launcher steps aside while you play.
-                  </>
+                  <RunningLine startedAt={running.startedAt} pid={running.pid} />
                 ) : defaultClient ? (
-                  "Start the default client and pick a server from the in-game menu."
+                  t("hero.readyText")
                 ) : (
                   // --- slice: game switch --- the hero of a game with no
                   // client is the invitation to make one, not a dead button.
-                  `A client is an engine build with its own files and settings. Make one and ${gameName(activeGame)} is one press away.`
+                  t("hero.noClientText", { game: gameName(activeGame) })
                 )}
               </p>
             </div>
 
-            <div className="flex items-center gap-12">
+            {/* --- slice: i18n --- the row wraps: «Create a Jedi Outcast
+                client» beside «Manage clients» already fills the hero at the
+                1100 px minimum, and a language a third longer would be clipped
+                by the hero's own `overflow-hidden`. */}
+            <div className="flex flex-wrap items-center gap-12">
               {!running && defaultClient === undefined ? (
                 <Button
                   variant="primary"
@@ -149,7 +162,7 @@ export function HomePage() {
                   icon={<Plus size={20} />}
                   onClick={() => setNewClientOpen(true)}
                 >
-                  Create a {gameName(activeGame)} client
+                  {t("hero.createClient", { game: gameName(activeGame) })}
                 </Button>
               ) : running ? (
                 <Button
@@ -158,11 +171,11 @@ export function HomePage() {
                   icon={<Square size={20} />}
                   onClick={() =>
                     stopGame.mutate(undefined, {
-                      onError: (e) => setError(errorMessage(e)),
+                      onError: (e) => setError(errorText(e)),
                     })
                   }
                 >
-                  Stop
+                  {t("hero.stop")}
                 </Button>
               ) : (
                 <Button
@@ -171,9 +184,9 @@ export function HomePage() {
                   icon={<Play size={20} />}
                   disabled={!canPlay}
                   onClick={play}
-                  title={defaultClient ? undefined : "Mark a client as the default one"}
+                  title={defaultClient ? undefined : t("hero.playHint")}
                 >
-                  {launchClient.isPending ? "Starting…" : "Play"}
+                  {launchClient.isPending ? tCommon("states.starting") : t("hero.play")}
                 </Button>
               )}
               <Button
@@ -181,7 +194,7 @@ export function HomePage() {
                 icon={<Plus size={20} />}
                 onClick={() => void navigate("/clients")}
               >
-                Manage clients
+                {t("hero.manageClients")}
               </Button>
               {defaultClient ? (
                 <Badge tone="accent">{defaultClient.engineId}</Badge>
@@ -218,12 +231,16 @@ export function HomePage() {
 }
 
 /**
- * How long the game has been up, refreshed every second.
+ * The line under the hero while a game runs: how long, and which process.
  *
- * The core reports only the start time: a running clock belongs to the screen
- * that draws it, not to a command that would have to be polled for it.
+ * The core reports only the start time, so the clock belongs to the screen that
+ * draws it rather than to a command that would have to be polled. The whole
+ * sentence is one message with the clock in a slot: the words around a duration
+ * change with the language, and «Запущено 3 мин назад» puts them on both sides.
  */
-function Elapsed({ startedAt }: { startedAt: string }) {
+function RunningLine({ startedAt, pid }: { startedAt: string; pid: number }) {
+  const { t } = useTranslation("home");
+  const format = useFormat();
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -232,16 +249,16 @@ function Elapsed({ startedAt }: { startedAt: string }) {
   }, []);
 
   const started = Date.parse(startedAt);
-  if (Number.isNaN(started)) return <span>a moment</span>;
+  const age = Number.isNaN(started)
+    ? t("hero.aMoment")
+    : format.elapsed(Math.max(0, Math.floor((now - started) / 1000)));
 
-  const seconds = Math.max(0, Math.floor((now - started) / 1000));
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const text =
-    hours > 0
-      ? `${hours} h ${minutes % 60} min`
-      : minutes > 0
-        ? `${minutes} min`
-        : `${seconds} s`;
-  return <span className="text-mono-sm text-fg-accent">{text}</span>;
+  return (
+    <Trans
+      t={t}
+      i18nKey="hero.runningText"
+      values={{ age, pid }}
+      components={[<span className="text-mono-sm text-fg-accent" />]}
+    />
+  );
 }
