@@ -1,0 +1,288 @@
+/*
+ * JKNet design tokens.
+ *
+ * Source of truth: Figma file pdtKfCtuZMhlOlvz7ieT0j, export `jknet-tokens.json`.
+ * Naming rule from the export: a Figma variable `color/bg/app` becomes the CSS
+ * custom property `--color-bg-app` (slashes to hyphens, lowercase).
+ *
+ * This file holds primitives, semantic colors, the spacing scale, fixed sizes
+ * and the glow effects, plus the text-style classes.
+ *
+ * Radii, font families, shadows and the Tailwind spacing multiplier live in the
+ * `@theme` block of `src/index.css`: Tailwind v4 owns the `--radius-*`,
+ * `--font-*`, `--shadow-*` and `--spacing` namespaces, so declaring them twice
+ * would create circular variable references. See CLAUDE.md.
+ *
+ * The theme is dark only. A light mode can be added later as a second set of
+ * semantic values; primitives stay as they are.
+ */
+
+:root {
+  /* ---------------------------------------------------------------- */
+  /* Primitives. Do not use directly in components: use the semantic   */
+  /* tokens below or the Tailwind aliases from src/index.css.          */
+  /* ---------------------------------------------------------------- */
+
+  --gray-950: #07090d;
+  --gray-900: #0b0e14;
+  --gray-850: #10141c;
+  --gray-800: #151a24;
+  --gray-750: #1a2030;
+  --gray-700: #202839;
+  --gray-600: #2b3448;
+  --gray-500: #3d4760;
+  --gray-400: #5b667f;
+  --gray-300: #8b95ab;
+  --gray-200: #b9c1d1;
+  --gray-100: #e3e8f1;
+  --gray-50: #f5f7fb;
+
+  --white: #ffffff;
+  --black: #000000;
+
+  --cyan-200: #a8eeff;
+  --cyan-300: #7de3ff;
+  --cyan-400: #4cd2ff;
+  --cyan-500: #22b8f0;
+  --cyan-600: #1690c2;
+  --cyan-700: #116a90;
+  --cyan-900: #0c2a3a;
+
+  --amber-300: #ffd27a;
+  --amber-400: #f6b94a;
+  --amber-500: #e39d1e;
+  --amber-600: #b77b12;
+  --amber-900: #3a2a0c;
+
+  --green-300: #86efac;
+  --green-400: #4ade80;
+  --green-500: #22c55e;
+  --green-900: #0f2e1c;
+
+  --red-300: #fca5a5;
+  --red-400: #f87171;
+  --red-500: #ef4444;
+  --red-900: #3a1414;
+
+  --purple-300: #c4b5fd;
+  --purple-400: #a78bfa;
+  --purple-500: #8b5cf6;
+  --purple-900: #26193f;
+
+  --alpha-white-4: rgba(255, 255, 255, 0.04);
+  --alpha-white-8: rgba(255, 255, 255, 0.08);
+  --alpha-white-12: rgba(255, 255, 255, 0.12);
+  --alpha-black-40: rgba(0, 0, 0, 0.4);
+  --alpha-black-60: rgba(0, 0, 0, 0.6);
+  --alpha-cyan-16: rgba(34, 184, 240, 0.16);
+  --alpha-cyan-32: rgba(34, 184, 240, 0.32);
+
+  /* ---------------------------------------------------------------- */
+  /* Semantic colors                                                   */
+  /* ---------------------------------------------------------------- */
+
+  --color-bg-app: var(--gray-900);
+  --color-bg-sidebar: var(--gray-950);
+  --color-bg-titlebar: var(--gray-950);
+  --color-bg-surface: var(--gray-800);
+  --color-bg-surface-hover: var(--gray-750);
+  --color-bg-elevated: var(--gray-700);
+  --color-bg-input: var(--gray-850);
+  --color-bg-accent: var(--cyan-500);
+  --color-bg-accent-hover: var(--cyan-400);
+  --color-bg-accent-subtle: var(--cyan-900);
+  --color-bg-warm: var(--amber-500);
+  --color-bg-warm-subtle: var(--amber-900);
+  --color-bg-success: var(--green-500);
+  --color-bg-success-subtle: var(--green-900);
+  --color-bg-danger: var(--red-500);
+  --color-bg-danger-subtle: var(--red-900);
+  --color-bg-purple-subtle: var(--purple-900);
+  --color-bg-overlay: var(--alpha-black-60);
+  --color-bg-hover-overlay: var(--alpha-white-4);
+  --color-bg-selected-overlay: var(--alpha-white-8);
+  --color-bg-accent-glow: var(--alpha-cyan-16);
+
+  --color-text-primary: var(--gray-100);
+  --color-text-secondary: var(--gray-300);
+  --color-text-muted: var(--gray-400);
+  --color-text-disabled: var(--gray-500);
+  --color-text-on-accent: var(--gray-950);
+  --color-text-accent: var(--cyan-400);
+  --color-text-warm: var(--amber-400);
+  --color-text-success: var(--green-400);
+  --color-text-danger: var(--red-400);
+  --color-text-purple: var(--purple-300);
+  --color-text-inverse: var(--gray-950);
+
+  --color-border-default: var(--gray-700);
+  --color-border-strong: var(--gray-600);
+  --color-border-subtle: var(--gray-750);
+  --color-border-accent: var(--cyan-500);
+  --color-border-focus: var(--cyan-400);
+  --color-border-danger: var(--red-500);
+  --color-border-warm: var(--amber-500);
+
+  /* Icons are drawn with `currentColor`, so in markup they take a text
+     utility. These stay for parity with Figma and for raw CSS. */
+  --color-icon-default: var(--gray-300);
+  --color-icon-muted: var(--gray-400);
+  --color-icon-accent: var(--cyan-400);
+  --color-icon-on-accent: var(--gray-950);
+  --color-icon-warm: var(--amber-400);
+  --color-icon-success: var(--green-400);
+  --color-icon-danger: var(--red-400);
+  --color-icon-primary: var(--gray-100);
+
+  /* ---------------------------------------------------------------- */
+  /* Spacing scale. Tailwind utilities are in pixels (`--spacing: 1px` */
+  /* in src/index.css), so `space/16` is the utility `p-16`.           */
+  /* ---------------------------------------------------------------- */
+
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+
+  /* ---------------------------------------------------------------- */
+  /* Fixed sizes                                                       */
+  /* ---------------------------------------------------------------- */
+
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-control-sm: 28px;
+  --size-control-md: 36px;
+  --size-control-lg: 44px;
+  --size-control-xl: 56px;
+  --size-sidebar: 232px;
+  --size-titlebar: 40px;
+  --size-window-w: 1280px;
+  --size-window-h: 800px;
+
+  /* ---------------------------------------------------------------- */
+  /* Glows. Card and popover shadows are Tailwind `--shadow-*` tokens. */
+  /* ---------------------------------------------------------------- */
+
+  --glow-accent: 0 0 24px rgba(34, 184, 240, 0.35);
+  --glow-accent-strong: 0 0 40px rgba(34, 184, 240, 0.5);
+}
+
+/* -------------------------------------------------------------------- */
+/* Text styles. One class per Figma text style; the class sets family,   */
+/* weight, size, line height and tracking, but never color.              */
+/* -------------------------------------------------------------------- */
+
+@layer components {
+  .text-display-xl {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 40px;
+    line-height: 44px;
+    letter-spacing: -0.01em;
+  }
+
+  .text-display-lg {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 28px;
+    line-height: 32px;
+    letter-spacing: -0.005em;
+  }
+
+  .text-display-md {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 22px;
+    line-height: 28px;
+    letter-spacing: 0;
+  }
+
+  .text-display-nav {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: 0.02em;
+  }
+
+  .text-heading-md {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 18px;
+    line-height: 24px;
+    letter-spacing: -0.005em;
+  }
+
+  .text-heading-sm {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: 0;
+  }
+
+  .text-body-md {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: 0;
+  }
+
+  .text-body-md-medium {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: 0;
+  }
+
+  .text-body-sm {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 18px;
+    letter-spacing: 0;
+  }
+
+  .text-body-sm-medium {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 13px;
+    line-height: 18px;
+    letter-spacing: 0;
+  }
+
+  .text-label-xs {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: 11px;
+    line-height: 16px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .text-mono-sm {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 18px;
+    letter-spacing: 0;
+  }
+
+  .text-mono-xs {
+    font-family: var(--font-mono);
+    font-weight: 400;
+    font-size: 11px;
+    line-height: 16px;
+    letter-spacing: 0;
+  }
+}

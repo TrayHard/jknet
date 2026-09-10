@@ -1,0 +1,53 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HashRouter, Route, Routes } from "react-router";
+
+import { AppShell } from "./components/AppShell";
+import { ClientsPage } from "./pages/ClientsPage";
+import { FriendsPage } from "./pages/FriendsPage";
+import { HomePage } from "./pages/HomePage";
+import { LibraryPage } from "./pages/LibraryPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
+import { ServersPage } from "./pages/ServersPage";
+import { SettingsPage } from "./pages/SettingsPage";
+
+/**
+ * Commands talk to a local process, so a failed call is a real failure, not a
+ * flaky network hop: retry once and show the error instead of hiding it behind
+ * a spinner.
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+/**
+ * Routing uses `HashRouter` on purpose. The production build is served from
+ * the Tauri asset protocol, where a reload on `/servers` would ask for a file
+ * that does not exist; `#/servers` never leaves `index.html`.
+ */
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HashRouter>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/servers" element={<ServersPage />} />
+            <Route path="/library" element={<LibraryPage />} />
+            <Route path="/clients" element={<ClientsPage />} />
+            <Route path="/friends" element={<FriendsPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
+          <Route element={<AppShell withSidebar={false} />}>
+            <Route path="/onboarding" element={<OnboardingPage />} />
+          </Route>
+          <Route path="*" element={<HomePage />} />
+        </Routes>
+      </HashRouter>
+    </QueryClientProvider>
+  );
+}
