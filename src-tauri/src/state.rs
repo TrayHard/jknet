@@ -12,7 +12,7 @@ use crate::paths::{self, DataPaths};
 use crate::settings::Settings;
 
 pub struct AppState {
-    /// `%LOCALAPPDATA%\JKNet`: the folder that holds `settings.json`.
+    /// `%LOCALAPPDATA%\org.jknet.launcher`: the folder with `settings.json`.
     pub config_root: PathBuf,
     settings: Mutex<Settings>,
 }
@@ -21,14 +21,12 @@ impl AppState {
     /// Loads the state at startup. Never fails: a launcher that cannot read
     /// its settings must still open a window and say so.
     ///
+    /// The caller resolves `config_root`, because the answer comes from
+    /// `app.path().app_local_data_dir()` and this type has no `AppHandle`.
+    ///
     /// Both fallbacks are logged to stderr rather than to the log plugin,
     /// because the log target itself depends on the paths resolved here.
-    pub fn bootstrap() -> AppState {
-        let config_root = paths::config_root().unwrap_or_else(|e| {
-            eprintln!("jknet: {e}, falling back to the temp folder");
-            std::env::temp_dir().join("JKNet")
-        });
-
+    pub fn bootstrap(config_root: PathBuf) -> AppState {
         let state = AppState {
             config_root,
             settings: Mutex::new(Settings::default()),

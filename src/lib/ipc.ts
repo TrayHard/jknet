@@ -78,7 +78,7 @@ export interface ServerHistoryEntry {
 
 /** `src-tauri/src/paths.rs`: the folders JKNet writes into. */
 export interface DataPaths {
-  /** `%LOCALAPPDATA%\JKNet`, the folder with `settings.json`. */
+  /** `%LOCALAPPDATA%\org.jknet.launcher`, the folder with `settings.json`. */
   configRoot: string;
   /** Root of `clients\`, `library\`, `cache\` and `logs\`. */
   dataRoot: string;
