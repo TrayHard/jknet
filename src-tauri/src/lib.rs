@@ -18,12 +18,23 @@
 //! | `launch`         | starting a client and watching it run           |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
 //! | `levelshots`     | map pictures extracted from the player's pk3 files |
+//! | `hub`            | the JKNet hub: its wire types and its HTTP client |
+//! | `account`        | signing in to the hub and owning the account    |
 
+mod account;
 mod clients;
 mod engine_install;
 mod engines;
 mod error;
 mod game_files;
+// --- slice: account ---
+// The module implements the whole of hub API v1, and this slice calls the
+// sign-in and account half of it. The friends, presence and invite calls have
+// no caller until the Friends screen lands, and they are written now because
+// both halves are one contract: a second client would be a second place where
+// a token is attached to a request. Drop the attribute once they are called.
+#[allow(dead_code, unused_imports)]
+mod hub;
 mod launch;
 mod levelshots;
 mod library;
@@ -157,6 +168,12 @@ pub fn run() {
         // One rebuild of the levelshot index at a time, and the set of maps
         // nothing on this disk has a picture for.
         .manage(LevelshotState::default())
+        // --- slice: account ---
+        // One connection pool for every call to the hub. Where to call and
+        // who to call as come from the settings at the moment of the call, so
+        // nothing here goes stale when the player signs in or points the
+        // launcher at another hub.
+        .manage(hub::HubClient::new())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -194,6 +211,13 @@ pub fn run() {
             levelshots::get_levelshot,
             levelshots::rebuild_levelshots,
             levelshots::list_levelshots,
+            // --- slice: account ---
+            account::get_account_state,
+            account::begin_sign_in,
+            account::poll_sign_in,
+            account::sign_out,
+            account::update_display_name,
+            account::delete_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
