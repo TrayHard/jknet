@@ -1,12 +1,19 @@
 import { openPath } from "@tauri-apps/plugin-opener";
-import { AlertTriangle, FolderOpen, SlidersHorizontal } from "lucide-react";
+import {
+  AlertTriangle,
+  Compass,
+  FolderOpen,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
 import { useDataPaths, useSettings, useUpdateSettings } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
+import { ONBOARDING_ROUTE } from "./onboarding/OnboardingGate";
 
 /**
  * Settings: the data folder and the launch arguments.
@@ -143,6 +150,50 @@ function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
       {updateSettings.isPending ? (
         <p className="text-body-sm text-fg-muted pt-4">Saving…</p>
       ) : null}
+
+      <RerunOnboarding onError={onError} />
     </section>
+  );
+}
+
+/**
+ * Takes the player back through the three first-run steps.
+ *
+ * Clearing the flag is enough: the steps themselves are derived from what is
+ * configured, so a setup that is already done opens on the account step rather
+ * than asking again for a game folder that has not moved. Nothing is deleted.
+ */
+function RerunOnboarding({ onError }: { onError: (message: string) => void }) {
+  const navigate = useNavigate();
+  const updateSettings = useUpdateSettings();
+
+  const rerun = () => {
+    updateSettings.mutate(
+      { onboardingCompleted: false },
+      {
+        onSuccess: () => void navigate(ONBOARDING_ROUTE),
+        onError: (e) => onError(errorMessage(e)),
+      },
+    );
+  };
+
+  return (
+    <div className="flex items-start justify-between gap-16 border-t border-line-subtle mt-16 pt-16">
+      <span className="flex flex-col">
+        <span className="text-body-md-medium text-fg">First-time setup</span>
+        <span className="text-body-sm text-fg-muted">
+          Walks through game files, a client and an account again. Nothing you
+          have set up is removed.
+        </span>
+      </span>
+      <Button
+        variant="ghost"
+        icon={<Compass size={16} />}
+        disabled={updateSettings.isPending}
+        onClick={rerun}
+      >
+        Run first-time setup again
+      </Button>
+    </div>
   );
 }
