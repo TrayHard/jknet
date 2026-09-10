@@ -21,10 +21,17 @@ import { ConflictsDialog } from "../components/library/ConflictsDialog";
 import { JkhubBrowser } from "../components/library/JkhubBrowser";
 import { LibraryCard } from "../components/library/LibraryCard";
 import { RemoveItemDialog } from "../components/library/RemoveItemDialog";
-import { Select, type SelectOption } from "../components/library/Select";
 import { CATEGORIES } from "../components/library/categories";
 import { Page, PageHeader } from "../components/PageHeader";
-import { Badge, Button, EmptyState, Input, Toggle } from "../components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  Select,
+  Toggle,
+  type SelectOption,
+} from "../components/ui";
 import { cn, formatBytes } from "../lib/format";
 import {
   errorMessage,
@@ -331,8 +338,9 @@ export function LibraryPage() {
       <section className="flex items-center gap-12 rounded-lg border border-line bg-surface p-12 mb-16">
         <span className="text-label-xs text-fg-muted">Client</span>
         <Select
-          label="Client"
+          ariaLabel="Client"
           options={clientOptions}
+          placeholder="Nothing to choose"
           value={clientId ?? ""}
           onChange={setClientId}
           className="w-200"
@@ -638,7 +646,7 @@ function InstalledTab({
             <span className="flex-1" />
             <span className="text-label-xs text-fg-muted">Sort by</span>
             <Select
-              label="Sort by"
+              ariaLabel="Sort by"
               options={SORTS}
               value={sort}
               onChange={(value) => onSort(value as SortMode)}

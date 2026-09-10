@@ -3,11 +3,17 @@ import { AlertTriangle, ExternalLink, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { useToasts } from "../ToastsProvider";
-import { Badge, Button, EmptyState, Input } from "../ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  Input,
+  Select,
+  type SelectOption,
+} from "../ui";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
 import { JkhubTree } from "./JkhubTree";
-import { Select, type SelectOption } from "./Select";
 import { useActiveGame } from "../../lib/game";
 import { errorMessage, type JkhubCategory, type JkhubInstallResult, type JkhubSort, type LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
@@ -257,7 +263,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             ) : null}
             <span className="text-label-xs text-fg-muted">Sort by</span>
             <Select
-              label="Sort by"
+              ariaLabel="Sort by"
               options={SORTS}
               value={sort}
               onChange={(value) => setSort(value as JkhubSort)}

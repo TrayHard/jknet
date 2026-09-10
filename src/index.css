@@ -93,6 +93,26 @@
 }
 
 @layer base {
+  /*
+   * The launcher has one theme, and it is dark. Saying so lets Chromium paint
+   * everything the page does not paint itself — the caret, the scrollbars of a
+   * webview that has none of ours, the spinner of a number field, the popup of
+   * a `select` — in dark instead of white on white.
+   *
+   * The UI kit has a `Select` of its own precisely because no CSS reaches into
+   * that popup; this declaration is the net under whatever native control a
+   * later change brings in.
+   */
+  :root {
+    color-scheme: dark;
+  }
+
+  select,
+  option {
+    background-color: var(--color-bg-elevated);
+    color: var(--color-text-primary);
+  }
+
   html,
   body,
   #root {

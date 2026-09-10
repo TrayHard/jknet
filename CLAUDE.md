@@ -40,9 +40,9 @@ src/
                          GameEventsProvider, AppUpdateProvider, AboutCard,
                          MapPreview, MapPicturesCard, ToastsProvider,
                          FriendsProvider, AccountProvider
-  components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
-                         RadioCard, StepBadges, Toast, Avatar, Dialog
-  components/library/    экран Library: карточка, диалоги, категории, Select,
+  components/ui/         UI-кит: Button, Badge, Input, Select, Toggle, NavItem,
+                         EmptyState, RadioCard, StepBadges, Toast, Avatar, Dialog
+  components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
                          JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
@@ -132,6 +132,7 @@ public/
 - Вызов Tauri из фронтенда закрывайте проверкой `isTauri` из `lib/runtime.ts`. Команда `npm run dev` открывает тот же код в браузере, где `window.__TAURI_INTERNALS__` нет и любой вызов бросает `TypeError`.
 - Ошибки возвращайте вариантом `AppError` из `src-tauri/src/error.rs`. Строку в `Err` не пишите: вариант делает журнал доступным для поиска.
 - Разрешения в `src-tauri/capabilities/default.json` добавляйте по одному, только под то, что действительно вызываете.
+- Выпадающий список берите из UI-кита: `Select` в `src/components/ui/Select.tsx`. Нативный `<select>` не применяйте: его попап рисует система, а не страница, и WebView2 красит его белым поверх светлого текста. Правило `color-scheme: dark` в `src/index.css` — только страховка на случай нативного контрола, который всё-таки появится.
 - Маршрутизация работает на `HashRouter`. Ссылки вида `#/servers` переживают перезагрузку окна, обычные пути — нет.
 - Логи пишет `tauri-plugin-log` в `logs\` внутри папки данных. Туда же попадают `console.warn` и `console.error` фронтенда: их пересылает `src/main.tsx`.
 - Данные лаунчера лежат в `%LOCALAPPDATA%\org.jknet.launcher`, папке идентификатора пакета. Путь приходит из `app.path().app_local_data_dir()` в обработчике `setup`. Не пишите в `%LOCALAPPDATA%\JKNet`: туда установщик NSIS ставит саму программу, а деинсталлятор чистит папку идентификатора.
