@@ -51,7 +51,12 @@ import {
   type JkhubCategoriesUpdated,
   type JkhubDownloadProgress,
   type JkhubFile,
+  // --- slice: jkhub index ---
+  type JkhubIndexProgress,
+  type JkhubIndexStatus,
+  type JkhubIndexUpdate,
   type JkhubListing,
+  type JkhubSearchResult,
   type JkhubSort,
   type Levelshot,
   type LibraryItem,
@@ -1265,6 +1270,15 @@ export const jkhubKeys = {
   list: (game: Game, categoryId: number, sort: JkhubSort, page: number) =>
     ["jkhub", "list", game, categoryId, sort, page] as const,
   file: (id: number) => ["jkhub", "file", id] as const,
+  // --- slice: jkhub index ---
+  search: (
+    game: Game,
+    query: string,
+    categoryId: number | null,
+    sort: JkhubSort,
+    perPage: number,
+  ) => ["jkhub", "search", game, query, categoryId, sort, perPage] as const,
+  index: (game: Game) => ["jkhub", "index", game] as const,
 };
 
 /**
@@ -1314,7 +1328,15 @@ export function useJkhubCategories(
   });
 }
 
-/** One page of one category, 25 cards. Idle until a category is picked. */
+/**
+ * One page of one category as jkhub.org serves it, 25 cards.
+ *
+ * --- slice: jkhub index ---
+ * No screen calls this any more: the tab lists from the local catalogue index
+ * through [`useJkhubSearch`], which answers about every category at once. It
+ * stays because `jkhub_list` stays — it is the only path that reads a listing
+ * page live, and the only way to see a category the index has not crawled yet.
+ */
 export function useJkhubListing(
   game: Game,
   categoryId: number | null,
@@ -1449,6 +1471,158 @@ export function useJkhubInstall(clientId: string | null) {
  * One listener for the whole tab: a card and the details panel both need the
  * number, and a listener per card would mean twenty-five subscriptions.
  */
+// --- slice: jkhub index ---
+
+/**
+ * One page of the catalogue of one game, filtered by a query.
+ *
+ * Answered from the local index, so it costs no request and never waits for
+ * jkhub.org: `staleTime: Infinity` because the only thing that can change the
+ * answer is the index itself, and [`useJkhubIndexStatus`] drops the key when
+ * that happens.
+ *
+ * An empty `query` is the full listing of `categoryId`, or of the whole game
+ * when no category is picked. `perPage` grows with **Load more** rather than
+ * the page number: stitching pages by hand buys nothing when the whole answer
+ * is already in memory on the other side of the call.
+ */
+export function useJkhubSearch(
+  game: Game,
+  query: string,
+  categoryId: number | null,
+  sort: JkhubSort,
+  perPage: number,
+): UseQueryResult<JkhubSearchResult> {
+  return useQuery({
+    queryKey: jkhubKeys.search(game, query, categoryId, sort, perPage),
+    queryFn: () =>
+      jkhubIpc.search({ game, query, categoryId, sort, page: 1, perPage }),
+    enabled: isTauri(),
+    staleTime: Infinity,
+    // The previous answer stays on screen while a longer page or a narrower
+    // query is fetched, so typing does not blank the grid between keystrokes.
+    placeholderData: (previous) => previous,
+  });
+}
+
+/**
+ * What the index of one game holds, and whether a refresh is running.
+ *
+ * Asking is also what lets the core top the index up behind the answer, at
+ * most once a day per game — the same shape as the category tree. The result
+ * arrives as `jkhub:index-updated`, and this hook is what turns that event
+ * into a refetch of the searches and of the status itself.
+ */
+export function useJkhubIndexStatus(
+  game: Game,
+  enabled = true,
+): UseQueryResult<JkhubIndexStatus> {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<JkhubIndexUpdate>(jkhubEvents.indexUpdated, (event) => {
+      const changed = event.payload;
+      void queryClient.invalidateQueries({
+        queryKey: jkhubKeys.index(changed.game),
+      });
+      // Every search of that game, whatever its query and order: the catalogue
+      // under all of them just moved.
+      void queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "jkhub" &&
+          query.queryKey[1] === "search" &&
+          query.queryKey[2] === changed.game,
+      });
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [queryClient]);
+
+  return useQuery({
+    queryKey: jkhubKeys.index(game),
+    queryFn: () => jkhubIpc.indexStatus(game),
+    enabled: enabled && isTauri(),
+    staleTime: 15_000,
+    // `building` is the core's own claim on the game, released however the
+    // work ends, so it is the one thing worth polling: a crawl takes a minute
+    // and a half and the line under the results has to stop saying so when it
+    // is over, even if the run ended without changing anything.
+    refetchInterval: (query) => (query.state.data?.building ? 2_000 : false),
+  });
+}
+
+/**
+ * How far a crawl of the catalogue has got, per game.
+ *
+ * One listener for the tab, like the download progress next to it. The entry
+ * of a game stays behind after its crawl ends; the screen stops reading it the
+ * moment the status says the index is no longer building.
+ *
+ * The first event of a run — the one with `done: 0` — also drops the status
+ * key. A refresh the core started behind an answer is otherwise invisible
+ * until the next poll, and the line under the results would keep describing an
+ * index that is being rewritten under it.
+ */
+export function useJkhubIndexProgress(): Map<Game, JkhubIndexProgress> {
+  const queryClient = useQueryClient();
+  const [progress, setProgress] = useState<Map<Game, JkhubIndexProgress>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<JkhubIndexProgress>(jkhubEvents.indexProgress, (event) => {
+      setProgress((current) => {
+        const next = new Map(current);
+        next.set(event.payload.game, event.payload);
+        return next;
+      });
+      if (event.payload.done === 0) {
+        void queryClient.invalidateQueries({
+          queryKey: jkhubKeys.index(event.payload.game),
+        });
+      }
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [queryClient]);
+
+  return progress;
+}
+
+/**
+ * Brings the catalogue index of one game up to date, in the foreground.
+ *
+ * The **Refresh** action of the tab. `full` is the crawl of every listing
+ * page — about 150 requests for Jedi Academy — which the core also falls back
+ * to on its own when the cheap path cannot do the job.
+ *
+ * The core emits `jkhub:index-updated` when it changed something, and
+ * [`useJkhubIndexStatus`] drops the keys, so nothing is written into the cache
+ * here.
+ */
+export function useRefreshJkhubIndex() {
+  return useCallback(
+    (game: Game, full = false) => jkhubIpc.refreshIndex(game, full),
+    [],
+  );
+}
+
 export function useJkhubDownloadProgress(): Map<number, JkhubDownloadProgress> {
   const [progress, setProgress] = useState<Map<number, JkhubDownloadProgress>>(
     () => new Map(),

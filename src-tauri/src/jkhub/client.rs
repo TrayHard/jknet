@@ -137,6 +137,23 @@ impl JkhubClient {
     /// count is capped and the final address is returned with the body: a
     /// caller that ends up somewhere else can say so.
     pub async fn fetch_html(&self, url: &str) -> Result<Page> {
+        self.fetch(url, false)
+            .await?
+            .ok_or_else(|| AppError::JkhubUnavailable(format!("{url} answered 404")))
+    }
+
+    /// The same fetch, treating `404` as an answer rather than a failure.
+    ///
+    /// The catalogue index needs the difference: a file page that is gone
+    /// means the record was deleted and the entry has to go with it, while
+    /// every other refusal means the site is having a bad minute and the entry
+    /// stays.
+    pub async fn fetch_html_opt(&self, url: &str) -> Result<Option<Page>> {
+        self.fetch(url, true).await
+    }
+
+    /// The shared body of the two fetches.
+    async fn fetch(&self, url: &str, allow_missing: bool) -> Result<Option<Page>> {
         let mut address = url.to_string();
         for _ in 0..MAX_HOPS {
             let response = self.send(self.http.get(&address)).await?;
@@ -150,16 +167,20 @@ impl JkhubClient {
                 address = next;
                 continue;
             }
+            if allow_missing && status == StatusCode::NOT_FOUND {
+                log::debug!("jkhub: {address} is gone");
+                return Ok(None);
+            }
             if !status.is_success() {
                 return Err(status_error(&address, status));
             }
             let max_age = max_age(response.headers());
             let text = response.text().await.map_err(unreachable)?;
-            return Ok(Page {
+            return Ok(Some(Page {
                 url: address,
                 body: text,
                 max_age,
-            });
+            }));
         }
         Err(AppError::JkhubUnavailable(format!(
             "{url} keeps redirecting"
