@@ -42,7 +42,7 @@
     "favorites": "Favoris",
     "history": "Historique",
     "lan": "LAN",
-    "lanHint": "La détection par diffusion arrive avec une prochaine version"
+    "lanHint": "La détection sur le réseau local n’est pas encore disponible"
   },
   "columns": {
     "server": "SERVEUR",
@@ -89,7 +89,7 @@
     "filteredBots_other": "Élargissez les filtres, ou videz le champ de recherche. {{count}} serveurs n’ont que des bots ; désactivez Masquer les bots seuls pour les voir."
   },
   "details": {
-    "trusted": "CONFIANCE",
+    "trusted": "DE CONFIANCE",
     "password": "MOT DE PASSE",
     "copyAddress": "Copier l’adresse",
     "bots_one": "+{{count}} bot",

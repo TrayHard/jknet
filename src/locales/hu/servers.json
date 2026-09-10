@@ -37,7 +37,7 @@
     "favorites": "Kedvencek",
     "history": "Előzmények",
     "lan": "LAN",
-    "lanHint": "A helyi hálózat pásztázása egy későbbi fejlesztéssel érkezik"
+    "lanHint": "A helyi hálózat pásztázása még nem érhető el"
   },
   "columns": {
     "server": "SZERVER",
@@ -53,7 +53,7 @@
     "trusted": "Megbízható",
     "passwordRequired": "Jelszó szükséges",
     "countsTitle": "{{humans}} játékos, {{bots}} bot, {{slots}} hely",
-    "countsUnknownTitle": "Összesen {{clients}} van fenn; ez a szerver nem árulja el, hányan botok"
+    "countsUnknownTitle": "Összesen {{clients}} kliens van fenn; ez a szerver nem árulja el, hányan botok"
   },
   "scan": {
     "label": "Szerverek keresése…",

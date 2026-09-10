@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
+import { useEngineNote } from "../i18n/useEngineNote";
 import type { Game } from "../lib/ipc";
 // --- slice: game switch ---
 import {
@@ -18,7 +19,7 @@ import {
   useSettings,
   useUpdateSettings,
 } from "../lib/queries";
-import { Button, Input, RadioCard, Toggle } from "./ui";
+import { Badge, Button, Input, RadioCard, Toggle } from "./ui";
 
 interface NewClientDialogProps {
   /**
@@ -49,6 +50,7 @@ export function NewClientDialog({
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
+  const engineNote = useEngineNote();
   const settings = useSettings();
   // --- slice: game core ---
   // The game comes first: it decides which engines the list below offers.
@@ -80,7 +82,7 @@ export function NewClientDialog({
   useEffect(() => {
     if (engines.length === 0) return;
     if (engines.some((engine) => engine.id === engineId)) return;
-    const recommended = engines.find((engine) => engine.recommended);
+    const recommended = engines.find((engine) => engine.status.kind === "recommended");
     setEngineId((recommended ?? engines[0]).id);
   }, [engines, engineId]);
 
@@ -95,6 +97,12 @@ export function NewClientDialog({
       setMakeDefault(true);
     }
   }, [settings.data, game]);
+
+  // The warning of the build the player is looking at, if it carries one. The
+  // dialog offers no way out of it: the way out is picking another tile, which
+  // is one click away and already on screen.
+  const selected = engines.find((engine) => engine.id === engineId);
+  const selectedNote = selected ? engineNote(selected.status) : null;
 
   const canSubmit = name.trim().length > 0 && engineId.length > 0;
 
@@ -182,11 +190,28 @@ export function NewClientDialog({
                   : "border-line bg-input hover:bg-surface-hover",
               ].join(" ")}
             >
-              <span className="text-body-md-medium text-fg">{engine.name}</span>
+              <div className="flex items-center gap-8 flex-wrap">
+                <span className="text-body-md-medium text-fg">{engine.name}</span>
+                {/* One badge at most: a build is either the recommendation or
+                    the warning, never both. */}
+                {engine.status.kind === "recommended" ? (
+                  <Badge tone="accent">{t("engines.recommended")}</Badge>
+                ) : null}
+                {engine.status.kind === "legacy" ? (
+                  <Badge tone="warm">{t("engines.legacy")}</Badge>
+                ) : null}
+              </div>
               <span className="text-body-sm text-fg-muted">{engine.description}</span>
             </button>
           ))}
         </div>
+        {/* The note goes under the whole grid rather than inside one cell: it
+            is two or three lines, and a cell that grows drags its neighbour's
+            height with it. It follows the selection, so the player reads it
+            exactly when the choice is theirs to make. */}
+        {selectedNote !== null ? (
+          <p className="text-body-sm text-fg-muted pt-8">{selectedNote.text}</p>
+        ) : null}
 
         <label
           className="block text-label-xs text-fg-muted pt-24 pb-8"

@@ -206,6 +206,21 @@ export interface DetectedGameFiles {
 // Engines and clients
 // ---------------------------------------------------------------------------
 
+/**
+ * How much of a bet an engine is, and why.
+ *
+ * One build of each game is `recommended` and the New client dialog preselects
+ * it; the rest are `supported`. A `legacy` build is one nobody maintains any
+ * more: it stays in the list and stays installable, because a server may still
+ * ask for it, and it carries the catalog key of a sentence saying what the
+ * player is in for. The key is a key and not English text so that the warning
+ * arrives in the language of the interface.
+ */
+export type EngineStatus =
+  | { kind: "recommended" }
+  | { kind: "supported" }
+  | { kind: "legacy"; noteKey: string };
+
 /** A community build of the game client. */
 export interface Engine {
   id: string;
@@ -216,8 +231,8 @@ export interface Engine {
   description: string;
   executable: string;
   repo: string;
-  /** The build offered to a player of this game who has no preference. */
-  recommended: boolean;
+  /** Recommended, merely supported, or legacy with a note saying why. */
+  status: EngineStatus;
   /** False when the project publishes no archive JKNet can install. */
   installable: boolean;
   /** Why `installable` is false. */

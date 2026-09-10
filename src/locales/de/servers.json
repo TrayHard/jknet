@@ -37,7 +37,7 @@
     "favorites": "Favoriten",
     "history": "Verlauf",
     "lan": "LAN",
-    "lanHint": "Die Suche per Broadcast kommt mit dem Schritt zum Spielstart"
+    "lanHint": "Die Suche im lokalen Netzwerk ist noch nicht verfügbar"
   },
   "columns": {
     "server": "SERVER",

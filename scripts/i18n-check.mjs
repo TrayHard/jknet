@@ -5,12 +5,13 @@
  * Two checks, both of which fail the build:
  *
  *  1. Every language folder under `src/locales/` holds exactly the namespaces
- *     and keys English holds, with the same `{{placeholders}}`, the plural
- *     forms that language's CLDR rules ask for, and no empty value.
- *  2. No `.tsx` file under `src/` prints a sentence of its own: JSX text nodes
- *     and the `placeholder`, `title`, `aria-label` and `alt` attributes have to
- *     come from `t()`. Names and tokens are allowed, and the list of them is
- *     `scripts/i18n-allowlist.json`.
+ *     and keys English holds, with the same `{{placeholders}}`, the same
+ *     `<0>` markup tags, the plural forms that language's CLDR rules ask for,
+ *     and no empty value.
+ *  2. No `.tsx` file under `src/` prints a sentence of its own: JSX text nodes,
+ *     the `placeholder`, `title`, `aria-label` and `alt` attributes and the
+ *     text props of the UI kit all have to come from `t()`. Names and tokens
+ *     are allowed, and the list of them is `scripts/i18n-allowlist.json`.
  *
  * Node only, no dependencies: it runs from `prebuild`, so a missing package
  * would break every build rather than one check.
@@ -27,8 +28,33 @@ const LOCALES = join(ROOT, "src", "locales");
 const SOURCE = join(ROOT, "src");
 const SOURCE_LANGUAGE = "en";
 
-/** Attributes whose value the player reads. */
-const TEXT_ATTRIBUTES = ["placeholder", "title", "aria-label", "alt"];
+/**
+ * Props whose value the player reads.
+ *
+ * The first four are DOM attributes. The rest are the text props of the UI kit
+ * in `src/components/ui/` and of the kit's dialogs — `label` on `Toggle`,
+ * `NavItem`, `Select` and `StepBadges`, `text` on `EmptyState` and `Toast`,
+ * `body` on `Dialog`, `ariaLabel` on `Select`, and the `description`, `hint`
+ * and `caption` names the kit is likely to grow next. A prop reaches the
+ * screen exactly as an attribute does, so `<Toggle label="Show only enabled
+ * files" />` is the same defect as `placeholder="Search"` and is caught the
+ * same way. The scan is by name, not by component: nothing else in the project
+ * spells a prop this way, and a name that is not a text prop simply never
+ * carries a sentence.
+ */
+const TEXT_ATTRIBUTES = [
+  "placeholder",
+  "title",
+  "aria-label",
+  "alt",
+  "label",
+  "ariaLabel",
+  "text",
+  "body",
+  "description",
+  "hint",
+  "caption",
+];
 
 /** Two letters in a row, Latin or Cyrillic: what makes a string a sentence. */
 const LETTERS = /[A-Za-zЀ-ӿ]{2}/;
@@ -84,6 +110,30 @@ function placeholders(text) {
     found.add(match[1]);
   }
   return [...found].sort();
+}
+
+/**
+ * The `<0>` markup tags of one message, as a sorted list.
+ *
+ * A message rendered through `<Trans>` numbers its markup: `<0>` is the first
+ * element of the component's `components` array, `<1>` the second. The tag is
+ * not text, so it has to survive translation exactly. A lost tag leaves the
+ * screen without the link or the monospaced span it names; an invented one has
+ * no element behind it and renders as literal `<5>`. Counted per number, so a
+ * duplicated `<0>` is a mismatch too, and self-closing `<0/>` counts as the
+ * same tag.
+ */
+function markupTags(text) {
+  const found = [];
+  for (const match of String(text).matchAll(/<\/?(\d+)\s*\/?>/g)) {
+    found.push(match[1]);
+  }
+  return found.sort();
+}
+
+/** A tag list as a reader sees it in the file: `<0>, <0>, <1>` or `none`. */
+function describeTags(tags) {
+  return tags.length === 0 ? "none" : tags.map((tag) => `<${tag}>`).join(", ");
 }
 
 /** The plural categories this language's numbers actually need. */
@@ -239,7 +289,9 @@ function checkCatalogs() {
         }
         // Every form is measured against the English `other`, which is the
         // form every language has.
-        const wanted = placeholders(forms.get("other") ?? [...forms.values()][0]);
+        const model = forms.get("other") ?? [...forms.values()][0];
+        const wanted = placeholders(model);
+        const wantedTags = markupTags(model);
         for (const [category, value] of ours) {
           if (typeof value !== "string" || value.trim() === "") {
             fail(where, `${key}_${category} is empty`);
@@ -250,6 +302,13 @@ function checkCatalogs() {
             fail(
               where,
               `${key}_${category} has {{${mine.join("}}, {{")}}} where ${SOURCE_LANGUAGE} has {{${wanted.join("}}, {{")}}}`,
+            );
+          }
+          const myTags = markupTags(value);
+          if (myTags.join(",") !== wantedTags.join(",")) {
+            fail(
+              where,
+              `${key}_${category} has the markup tags ${describeTags(myTags)} where ${SOURCE_LANGUAGE} has ${describeTags(wantedTags)}`,
             );
           }
         }
@@ -269,6 +328,14 @@ function checkCatalogs() {
           fail(
             where,
             `${key} has {{${got.join("}}, {{")}}} where ${SOURCE_LANGUAGE} has {{${wanted.join("}}, {{")}}}`,
+          );
+        }
+        const wantedTags = markupTags(value);
+        const gotTags = markupTags(mine);
+        if (gotTags.join(",") !== wantedTags.join(",")) {
+          fail(
+            where,
+            `${key} has the markup tags ${describeTags(gotTags)} where ${SOURCE_LANGUAGE} has ${describeTags(wantedTags)}`,
           );
         }
       }
@@ -324,10 +391,17 @@ function checkLiterals() {
     const source = stripComments(readFileSync(file, "utf8"));
 
     for (const attribute of TEXT_ATTRIBUTES) {
-      const pattern = new RegExp(`\\b${attribute}\\s*=\\s*"([^"]*)"`, "g");
+      // Both spellings of a literal prop: `label="…"` and `label={"…"}`. The
+      // braces are what a hurried edit reaches for when the value used to be
+      // an expression, so leaving them out would leave the hole open.
+      const pattern = new RegExp(
+        `\\b${attribute}\\s*=\\s*(?:"([^"]*)"|\\{\\s*"([^"]*)"\\s*\\})`,
+        "g",
+      );
       for (const match of source.matchAll(pattern)) {
-        if (!isAllowed(match[1])) {
-          fail(shown, `${attribute}="${match[1]}" is not translated`);
+        const value = match[1] ?? match[2];
+        if (!isAllowed(value)) {
+          fail(shown, `${attribute}="${value}" is not translated`);
         }
       }
     }
