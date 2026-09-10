@@ -14,10 +14,14 @@ import {
 
 import {
   ipc,
+  launchIpc,
   type Client,
   type DataPaths,
   type Engine,
+  type EngineRelease,
+  type EngineUpdate,
   type GameFilesCandidate,
+  type RunningGame,
   type Settings,
 } from "./ipc";
 
@@ -94,6 +98,113 @@ export function useDeleteClient() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: launch ---
+//
+// Engine releases, engine installs and the running game. Keys live in their
+// own object for the same reason the wrappers do: no shared closing brace.
+// ---------------------------------------------------------------------------
+
+export const launchKeys = {
+  /** Releases of one engine. Invalidated by nothing: the core caches them. */
+  releases: (engineId: string) => ["engine-releases", engineId] as const,
+  /** Update check of one client. */
+  engineUpdate: (clientId: string) => ["engine-update", clientId] as const,
+  /** The one game JKNet started, or `null`. */
+  runningGame: ["running-game"] as const,
+};
+
+/**
+ * Releases of an engine, newest first.
+ *
+ * The core answers from a ten-minute cache, so a component may ask freely;
+ * `staleTime` mirrors that window to spare even the IPC hop.
+ */
+export function useEngineReleases(
+  engineId: string | null,
+): UseQueryResult<EngineRelease[]> {
+  return useQuery({
+    queryKey: launchKeys.releases(engineId ?? ""),
+    queryFn: () => launchIpc.listEngineReleases(engineId as string),
+    enabled: engineId !== null,
+    staleTime: 10 * 60_000,
+  });
+}
+
+/** Whether a newer build than the installed one exists. Asked on demand. */
+export function useEngineUpdate(
+  clientId: string | null,
+): UseQueryResult<EngineUpdate> {
+  return useQuery({
+    queryKey: launchKeys.engineUpdate(clientId ?? ""),
+    queryFn: () => launchIpc.checkEngineUpdate(clientId as string),
+    enabled: clientId !== null,
+    staleTime: 10 * 60_000,
+  });
+}
+
+/**
+ * The running game.
+ *
+ * Kept current by the `launch:*` events rather than by polling, so the query
+ * itself never refetches on its own.
+ */
+export function useRunningGame(): UseQueryResult<RunningGame | null> {
+  return useQuery({
+    queryKey: launchKeys.runningGame,
+    queryFn: launchIpc.getRunningGame,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Downloads and unpacks an engine into a client.
+ *
+ * The command answers only when the archive is on disk; the progress bar on
+ * the card is fed by `launch:engine-install-progress` in the meantime.
+ */
+export function useInstallEngine() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ clientId, tag }: { clientId: string; tag?: string }) =>
+      launchIpc.installEngine(clientId, tag),
+    onSuccess: (client) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+      queryClient.invalidateQueries({
+        queryKey: launchKeys.engineUpdate(client.id),
+      });
+    },
+  });
+}
+
+export function useLaunchClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      clientId,
+      connect,
+      extraArgs,
+    }: {
+      clientId: string;
+      connect?: string;
+      extraArgs?: string[];
+    }) => launchIpc.launchClient(clientId, connect, extraArgs),
+    onSuccess: (running) => {
+      queryClient.setQueryData(launchKeys.runningGame, running);
+    },
+  });
+}
+
+export function useStopGame() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => launchIpc.stopGame(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: launchKeys.runningGame });
     },
   });
 }
