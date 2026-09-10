@@ -438,24 +438,3 @@ export const serversIpc = {
   addServerHistory: (address: string) =>
     call<Settings>("add_server_history", { address }),
 };
-
-/**
- * TEMPORARY. Starts a client, optionally connecting it to a server.
- *
- * The launch slice owns `launch_client` and is being written in parallel, so
- * this branch has the signature but not the command: the call rejects at
- * runtime until the two branches are merged. Delete this wrapper then and
- * point the Connect button at the real one — the signature is already the
- * agreed shape, so nothing else has to change.
- */
-export function launchClient(args: {
-  clientId: string;
-  connect?: string;
-  extraArgs?: string[];
-}): Promise<void> {
-  return call<void>("launch_client", {
-    clientId: args.clientId,
-    connect: args.connect ?? null,
-    extraArgs: args.extraArgs ?? null,
-  });
-}

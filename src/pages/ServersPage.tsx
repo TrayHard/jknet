@@ -38,7 +38,6 @@ import { Button, EmptyState, Input } from "../components/ui";
 import { cn } from "../lib/format";
 import {
   errorMessage,
-  launchClient,
   type ServerInfo,
   type ServersDoneEvent,
 } from "../lib/ipc";
@@ -46,6 +45,7 @@ import {
   useAddServerHistory,
   useCachedServers,
   useClients,
+  useLaunchClient,
   useServerRefresh,
   useServerStatus,
   useSetServerFavorite,
@@ -78,6 +78,7 @@ export function ServersPage() {
   const refresh = useServerRefresh();
   const setFavorite = useSetServerFavorite();
   const addHistory = useAddServerHistory();
+  const launchClient = useLaunchClient();
 
   const [tab, setTab] = useState<ServerTab>("all");
   const [filters, setFilters] = useState<ServerFilters>(NO_FILTERS);
@@ -133,12 +134,19 @@ export function ServersPage() {
     setSortDirection(DEFAULT_DIRECTION[column]);
   };
 
+  /**
+   * Records the address and starts the default client on it.
+   *
+   * History is written first and on its own: the player pressed Connect, so
+   * the row belongs in History even when the launch fails on a missing engine.
+   */
   const connect = () => {
     if (selected === undefined || defaultClient === undefined) return;
     setConnectError(null);
     addHistory.mutate(selected.address);
-    launchClient({ clientId: defaultClient.id, connect: selected.address }).catch(
-      (e: unknown) => setConnectError(errorMessage(e)),
+    launchClient.mutate(
+      { clientId: defaultClient.id, connect: selected.address },
+      { onError: (e) => setConnectError(errorMessage(e)) },
     );
   };
 
