@@ -74,6 +74,7 @@ Everything else wraps.
 | `errors:basepathOccupied` | `{{path}}` is a full Windows path ending in `basepath\base`. Do not translate it; the sentence has to read well with a long path in the middle of it. |
 | `account:providers.dev` | Used inside a sentence («signed in with …»), so it is lowercase. `account:providers.devLabel` is the same thing as a badge and is capitalised. |
 | `settings:language.systemWith` | `{{language}}` is the native name of the language the system would pick — «Русский», «Deutsch». It is never translated. |
+| `settings:language.draft` | Shown under the **Language** card while `_status.json` names no reviewer. It describes the folder you are translating, so write it in that language even before the rest is checked. |
 
 ## How to check your work
 
@@ -87,3 +88,14 @@ npm run i18n:check
 The first writes any key you are missing with the English text in it; the second
 fails on a missing key, an empty value, a lost placeholder or a plural form your
 language does not use.
+
+## When you are done
+
+Six of the eight folders are machine drafts: every key is filled and nobody has
+read them. Their `_status.json` says so with `"reviewer": null`, and that is
+what puts the warning under the **Language** card.
+
+If you are a native speaker and you have read the whole folder, put your name in
+`reviewer` and set `date` to the day you finished. The warning goes away with
+it. Leave `reviewer` as `null` if you only fixed a few strings — a folder claims
+to be checked once, and it should be true.

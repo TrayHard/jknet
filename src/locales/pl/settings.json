@@ -12,7 +12,8 @@
     "label": "Język interfejsu",
     "system": "Język systemu",
     "systemWith": "Język systemu ({{language}})",
-    "needsTranslation": "Ten język nie jest jeszcze przetłumaczony i pokazuje angielski."
+    "needsTranslation": "Ten język nie jest jeszcze przetłumaczony i pokazuje angielski.",
+    "draft": "Ten język to szkic maszynowy i czeka na sprawdzenie przez rodzimego użytkownika języka."
   },
   "gameFiles": {
     "title": "Pliki gry",

@@ -26,8 +26,11 @@ import {
   FALLBACK_LANGUAGE,
   isLanguage,
   resolveLanguage,
+  translationState,
   type Language,
   type LanguageSetting,
+  type LanguageStatus,
+  type TranslationState,
 } from "./languages";
 
 export {
@@ -39,8 +42,11 @@ export {
   isLanguageSetting,
   languageOfLocale,
   resolveLanguage,
+  translationState,
   type Language,
   type LanguageSetting,
+  type LanguageStatus,
+  type TranslationState,
 } from "./languages";
 
 /**
@@ -98,9 +104,22 @@ const ENGLISH = import.meta.glob<Catalog>("../locales/en/*.json", {
  * missing string on screen.
  */
 const TRANSLATED = import.meta.glob<Catalog>(
-  ["../locales/*/*.json", "!../locales/en/*.json"],
+  ["../locales/*/*.json", "!../locales/en/*.json", "!../locales/*/_status.json"],
   { import: "default" },
 );
+
+/**
+ * The `_status.json` of every folder, inlined into the main bundle.
+ *
+ * Eager, and excluded from the lazy glob above, because these markers are read
+ * on the Settings screen for a language the player has not switched to yet: a
+ * chunk per marker would be seven round trips to draw one hint. Eight objects
+ * of four fields cost less than the code that would fetch them.
+ */
+const STATUSES = import.meta.glob<LanguageStatus>("../locales/*/_status.json", {
+  eager: true,
+  import: "default",
+});
 
 /** The catalog path of one namespace of one language. */
 function catalogPath(language: Language, namespace: Namespace): string {
@@ -167,6 +186,19 @@ export function applyDocumentLanguage(language: Language): void {
 /** Whether this language needs the Cyrillic display face. */
 export function needsCyrillicDisplayFont(language: Language): boolean {
   return CYRILLIC_LANGUAGES.includes(language);
+}
+
+/**
+ * How far the catalog of one language has come, out of its own `_status.json`.
+ *
+ * The Settings screen asks this to decide which sentence to put under the
+ * **Language** card. Reading the marker rather than a list in the component is
+ * the point: a folder that gets reviewed stops warning about itself in the
+ * same edit that records the reviewer, and no screen has to be found and
+ * changed for it.
+ */
+export function translationStateOf(language: Language): TranslationState {
+  return translationState(STATUSES[`../locales/${language}/_status.json`]);
 }
 
 /**

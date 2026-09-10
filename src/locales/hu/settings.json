@@ -12,7 +12,8 @@
     "label": "A felület nyelve",
     "system": "A rendszer nyelve",
     "systemWith": "A rendszer nyelve ({{language}})",
-    "needsTranslation": "Ez a nyelv még nincs lefordítva, ezért angolul jelenik meg."
+    "needsTranslation": "Ez a nyelv még nincs lefordítva, ezért angolul jelenik meg.",
+    "draft": "Ez a nyelv gépi vázlat, és anyanyelvi ellenőrzésre vár."
   },
   "gameFiles": {
     "title": "Játékfájlok",

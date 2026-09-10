@@ -19,7 +19,12 @@ import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input, Select } from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
-import { LANGUAGES, isLanguageSetting, resolveLanguage } from "../i18n";
+import {
+  LANGUAGES,
+  isLanguageSetting,
+  resolveLanguage,
+  translationStateOf,
+} from "../i18n";
 import { useSystemLocale } from "../i18n/useSystemLocale";
 import { ipc, type GameInfo } from "../lib/ipc";
 // --- slice: game switch ---
@@ -175,10 +180,17 @@ function LanguageCard({ onError }: { onError: (message: string) => void }) {
   ];
 
   const active = resolveLanguage(stored, systemLocale);
-  // Phase 1 ships English and Russian; the other six folders hold the English
-  // text until a translator fills them in. Saying so is better than letting a
-  // player wonder why Magyar looks like English.
-  const untranslated = active !== "en" && active !== "ru";
+  // The hint comes out of `src/locales/<language>/_status.json`, never out of a
+  // list of language ids here: a folder that names a reviewer stops warning
+  // about itself in the same edit that records them, and a folder somebody adds
+  // tomorrow gets the right sentence without this file being found and changed.
+  const state = translationStateOf(active);
+  const hint =
+    state === "draft"
+      ? t("language.draft")
+      : state === "untranslated"
+        ? t("language.needsTranslation")
+        : null;
 
   const save = (value: string) => {
     if (!isLanguageSetting(value) || value === stored) return;
@@ -196,11 +208,9 @@ function LanguageCard({ onError }: { onError: (message: string) => void }) {
       <div className="flex-1 min-w-0">
         <h2 className="text-heading-sm text-fg pb-4">{t("language.title")}</h2>
         <p className="text-body-sm text-fg-secondary">{t("language.text")}</p>
-        {untranslated ? (
-          <p className="text-body-sm text-fg-warm pt-8">
-            {t("language.needsTranslation")}
-          </p>
-        ) : null}
+        {hint === null ? null : (
+          <p className="text-body-sm text-fg-warm pt-8">{hint}</p>
+        )}
       </div>
       <Select
         ariaLabel={t("language.label")}

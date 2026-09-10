@@ -12,7 +12,8 @@
     "label": "Idioma de la interfaz",
     "system": "Idioma del sistema",
     "systemWith": "Idioma del sistema ({{language}})",
-    "needsTranslation": "Este idioma aún no está traducido y muestra el texto en inglés."
+    "needsTranslation": "Este idioma aún no está traducido y muestra el texto en inglés.",
+    "draft": "Este idioma es un borrador automático y espera la revisión de un hablante nativo."
   },
   "gameFiles": {
     "title": "Archivos del juego",
