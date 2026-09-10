@@ -531,3 +531,74 @@ export function useServerRefresh(): ServerRefresh {
 
   return { refresh, running: isRunning, error, progress, refreshedAt };
 }
+
+// ---------------------------------------------------------------------------
+// --- slice: onboarding ---
+// ---------------------------------------------------------------------------
+
+export const onboardingKeys = {
+  /** Newest tag of every engine, asked once on the second step. */
+  engineVersions: (engineIds: string[]) =>
+    ["onboarding", "engine-versions", engineIds.join(",")] as const,
+};
+
+/** What the second onboarding step prints on an engine card. */
+export interface EngineVersion {
+  /** Git tag of the newest release. */
+  tag: string;
+  /** Size of the Windows archive, for the "about 12 MB" line. */
+  assetSize: number;
+}
+
+/** How long the step waits for GitHub before it settles for "latest". */
+const VERSION_BUDGET_MS = 3_000;
+
+/**
+ * Newest tag and archive size of several engines at once.
+ *
+ * Four cards need four answers from GitHub, and a player on a bad connection
+ * must not watch four spinners before naming a client. The query resolves
+ * after `VERSION_BUDGET_MS` with whatever arrived; the cards that got nothing
+ * print "latest", which is the truth for three of the four projects anyway.
+ * Nothing here blocks the Continue button.
+ */
+export function useEngineVersions(
+  engineIds: string[],
+): UseQueryResult<Record<string, EngineVersion>> {
+  return useQuery({
+    queryKey: onboardingKeys.engineVersions(engineIds),
+    queryFn: () => collectEngineVersions(engineIds),
+    enabled: engineIds.length > 0,
+    // The core caches releases for ten minutes; mirror that instead of
+    // re-asking every time the player steps back and forth.
+    staleTime: 10 * 60_000,
+    // A retry would spend the budget twice over and still show "latest".
+    retry: false,
+  });
+}
+
+/** Asks every engine at once and gives up on the stragglers. */
+async function collectEngineVersions(
+  engineIds: string[],
+): Promise<Record<string, EngineVersion>> {
+  const found: Record<string, EngineVersion> = {};
+
+  const asked = Promise.allSettled(
+    engineIds.map(async (engineId) => {
+      const releases = await launchIpc.listEngineReleases(engineId);
+      const newest = releases[0];
+      if (newest) found[engineId] = { tag: newest.tag, assetSize: newest.assetSize };
+    }),
+  );
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, VERSION_BUDGET_MS);
+  });
+  await Promise.race([asked, budget]);
+  clearTimeout(timer);
+
+  // A copy, not the accumulator: a late answer must not edit the object React
+  // Query already handed to a component that will not re-render for it.
+  return { ...found };
+}

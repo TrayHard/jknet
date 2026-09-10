@@ -7,7 +7,8 @@ import { ClientsPage } from "./pages/ClientsPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { HomePage } from "./pages/HomePage";
 import { LibraryPage } from "./pages/LibraryPage";
-import { OnboardingPage } from "./pages/OnboardingPage";
+import { OnboardingGate } from "./pages/onboarding/OnboardingGate";
+import { OnboardingPage } from "./pages/onboarding/OnboardingPage";
 import { ServersPage } from "./pages/ServersPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -37,18 +38,22 @@ export default function App() {
       <GameEventsProvider>
         <HashRouter>
           <Routes>
-            <Route element={<AppShell />}>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/servers" element={<ServersPage />} />
-              <Route path="/library" element={<LibraryPage />} />
-              <Route path="/clients" element={<ClientsPage />} />
-              <Route path="/friends" element={<FriendsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
+            {/* Everything behind the first run. An unknown hash lands on Home
+                inside the shell, which is where the navigation is. */}
+            <Route element={<OnboardingGate />}>
+              <Route element={<AppShell />}>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/servers" element={<ServersPage />} />
+                <Route path="/library" element={<LibraryPage />} />
+                <Route path="/clients" element={<ClientsPage />} />
+                <Route path="/friends" element={<FriendsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+                <Route path="*" element={<HomePage />} />
+              </Route>
             </Route>
             <Route element={<AppShell withSidebar={false} />}>
               <Route path="/onboarding" element={<OnboardingPage />} />
             </Route>
-            <Route path="*" element={<HomePage />} />
           </Routes>
         </HashRouter>
       </GameEventsProvider>

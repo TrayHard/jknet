@@ -44,6 +44,14 @@ pub struct Settings {
     /// Servers the player connected to, newest first, capped at 50 entries by
     /// `add_server_history`.
     pub server_history: Vec<ServerHistoryEntry>,
+
+    // --- slice: onboarding ---
+    /// Whether the player has been through the three first-run steps. False by
+    /// default, which is also what a settings file written before this field
+    /// existed deserializes to: a launcher that cannot prove the player has
+    /// seen the guided setup shows it, and the steps are derived from what is
+    /// already configured, so nobody repeats work they have done.
+    pub onboarding_completed: bool,
 }
 
 /// One line of `server_history`.
@@ -115,6 +123,9 @@ pub struct SettingsPatch {
     pub extra_launch_args: Option<String>,
     pub favorite_servers: Option<Vec<String>>,
     pub server_history: Option<Vec<ServerHistoryEntry>>,
+
+    // --- slice: onboarding ---
+    pub onboarding_completed: Option<bool>,
 }
 
 /// Reads a field and remembers that it was there, `null` included.
@@ -157,6 +168,9 @@ impl SettingsPatch {
         }
         if let Some(value) = self.server_history {
             settings.server_history = value;
+        }
+        if let Some(value) = self.onboarding_completed {
+            settings.onboarding_completed = value;
         }
     }
 }
@@ -208,6 +222,7 @@ mod tests {
                 address: "203.0.113.10:29070".into(),
                 last_connected: "2026-09-10T10:00:00Z".into(),
             }],
+            onboarding_completed: true,
         }
     }
 
@@ -263,6 +278,34 @@ mod tests {
         assert!(settings.close_on_launch);
         assert!(settings.favorite_servers.is_empty());
         assert_eq!(settings.server_history.len(), 1);
+    }
+
+    #[test]
+    fn a_settings_file_without_the_onboarding_flag_reads_as_not_completed() {
+        // Every launcher installed before the guided setup existed has such a
+        // file. Reading it as "completed" would be the comfortable answer and
+        // the wrong one: the flag has to mean "the player saw the steps".
+        let older: Settings =
+            serde_json::from_str(r#"{"gameDataPath":"D:\\GameData","closeOnLaunch":true}"#)
+                .expect("an older document parses");
+        assert!(!older.onboarding_completed);
+        assert!(!Settings::default().onboarding_completed);
+    }
+
+    #[test]
+    fn the_onboarding_flag_follows_its_patch_and_nothing_else() {
+        let mut settings = Settings::default();
+        patch(r#"{"onboardingCompleted":true}"#).apply(&mut settings);
+        assert!(settings.onboarding_completed);
+        // The Settings screen offers a rerun, so the flag has to clear as well.
+        patch(r#"{"onboardingCompleted":false}"#).apply(&mut settings);
+        assert!(!settings.onboarding_completed);
+
+        // A patch about something else leaves the flag alone, which is what
+        // keeps the last step of the setup from sending the player round again.
+        let mut done = filled();
+        patch(r#"{"defaultClientId":"duel"}"#).apply(&mut done);
+        assert!(done.onboarding_completed);
     }
 
     #[test]
