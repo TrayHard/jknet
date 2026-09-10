@@ -6,8 +6,10 @@
 //! [`HubContext`] built from the settings at the moment of the call rather than
 //! being frozen into the client at startup.
 //!
-//! Four rules of the contract are implemented here and nowhere else:
+//! Five rules of the contract are implemented here and nowhere else:
 //!
+//! - a request needs a hub to go to: a build whose base URL is blank refuses
+//!   with [`AppError::HubNotConfigured`] instead of opening a socket;
 //! - a request takes at most 10 s;
 //! - a failed request is retried once, and only when the connection itself was
 //!   refused or reset, which is what a hub restarting under the player looks
@@ -36,9 +38,46 @@ use super::types::{
     SendRequestResult,
 };
 
-/// Where the hub runs while it is being developed. The production address is
-/// not decided yet, so the field stays editable on the Settings screen.
-pub const DEFAULT_HUB_URL: &str = "http://127.0.0.1:8787";
+/// Where the hub runs while it is being developed: `npm run tauri dev` and
+/// `scripts/mock-hub.mjs` on the same machine.
+pub const DEV_HUB_URL: &str = "http://127.0.0.1:8787";
+
+/// Where the hub runs for a player who installed the launcher.
+///
+/// Blank on purpose. The service is not deployed — no domain, no OAuth clients
+/// — and a released build that pointed at `127.0.0.1:8787` would offer every
+/// player a sign-in that answers with a connection error. An empty address
+/// means "this build has no hub", which [`hub_configured`] turns into a calm
+/// explanation on the Account card instead. Put the public origin here once
+/// the service is live: it is the one line that switches the feature on for
+/// everybody, and it needs no other change.
+pub const RELEASE_HUB_URL: &str = "";
+
+/// The hub this build talks to unless the player names another one.
+///
+/// The split follows the build profile rather than a cvar or an environment
+/// variable, because the two audiences are exactly the two profiles. A debug
+/// build is a developer with `scripts/mock-hub.mjs` or the real service on
+/// `localhost`; a release build is a player, and until [`RELEASE_HUB_URL`]
+/// names an origin there is nothing for that player to talk to. Either way the
+/// **Hub address** field on the Settings screen overrides it, which is what
+/// lets a tester or a self-hoster switch the feature on without a new build.
+pub fn default_hub_url() -> &'static str {
+    default_hub_url_for(cfg!(debug_assertions))
+}
+
+/// The half of [`default_hub_url`] that does not read the build profile.
+///
+/// Split out so one `cargo test` run covers both answers: the profile is fixed
+/// while the tests run, so a branch chosen by `cfg!` would never be tested in
+/// the profile it does not belong to.
+pub fn default_hub_url_for(debug: bool) -> &'static str {
+    if debug {
+        DEV_HUB_URL
+    } else {
+        RELEASE_HUB_URL
+    }
+}
 
 /// The whole budget of one request, connection included.
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -84,10 +123,20 @@ impl HubContext {
         }
     }
 
+    /// Whether this build has a hub to talk to at all.
+    pub fn configured(&self) -> bool {
+        hub_configured(&self.base_url)
+    }
+
     /// Whether a token is on file. Says nothing about whether the hub still
     /// accepts it.
+    ///
+    /// A launcher with no hub is never signed in, however old a token a
+    /// hand-edited `settings.json` carries: there is nowhere to send it, so
+    /// every screen that switches on this answer has to show the signed-out
+    /// half.
     pub fn signed_in(&self) -> bool {
-        self.token.is_some()
+        self.configured() && self.token.is_some()
     }
 
     /// The token, or the refusal an authenticated call owes the caller.
@@ -106,13 +155,17 @@ impl HubContext {
         format!("{}{path}", self.base_url)
     }
 
-    /// The full address of the live socket, or `None` while signed out.
+    /// The full address of the live socket, or `None` while signed out or
+    /// while this build has no hub.
     ///
     /// `GET /v1/ws` authenticates with a query parameter rather than a header,
     /// because a browser-style WebSocket handshake carries no `Authorization`.
     /// The token is not escaped: the contract makes it 64 hex characters, and
     /// [`HubContext::from_settings`] keeps whatever the sign-in stored.
     pub fn ws_url(&self) -> Option<String> {
+        if !self.configured() {
+            return None;
+        }
         let token = self.token.as_deref()?;
         Some(format!("{}/v1/ws?token={token}", ws_base(&self.base_url)))
     }
@@ -134,13 +187,32 @@ fn ws_base(base_url: &str) -> String {
 }
 
 /// Trims a hub URL and drops the trailing slash, so joining a path never
-/// produces `//v1/me`. A blank address falls back to the development hub.
+/// produces `//v1/me`.
+///
+/// A blank address falls back to [`default_hub_url`], which is itself blank in
+/// a release build — so the answer may be an empty string, and every caller
+/// asks [`hub_configured`] before it starts a request.
 pub fn normalize_hub_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
     if trimmed.is_empty() {
-        return DEFAULT_HUB_URL.to_string();
+        return default_hub_url().to_string();
     }
     trimmed.to_string()
+}
+
+/// Whether there is a hub to call at this address.
+///
+/// One question, asked wherever a hub call or a hub screen begins, so "the
+/// service is not open yet" is one answer rather than an empty-string check
+/// repeated in a dozen places.
+///
+/// The address handed in is the effective one, already through
+/// [`normalize_hub_url`]: `HubContext::base_url`, or the `hub_url` of a
+/// settings document, which the patch normalizes on the way in. Blank means
+/// this build ships without a hub and the player has named none — the state
+/// the Account card explains instead of offering sign-in buttons.
+pub fn hub_configured(url: &str) -> bool {
+    !url.trim().trim_end_matches('/').is_empty()
 }
 
 /// Whether a URL is one the launcher may hand to the system browser or call.
@@ -482,6 +554,13 @@ impl HubClient {
         body: Option<Value>,
         auth: bool,
     ) -> Result<HubResponse> {
+        // No hub in this build, and no address the player typed either. The
+        // refusal comes before the log line on purpose: a launcher with the
+        // feature switched off must not fill `jknet.log` with a failure a
+        // player can do nothing about.
+        if !ctx.configured() {
+            return Err(AppError::HubNotConfigured);
+        }
         if !is_http_url(&ctx.base_url) {
             return Err(AppError::InvalidInput(format!(
                 "the hub address {:?} is not an http:// or https:// URL",
@@ -720,7 +799,7 @@ mod tests {
     fn a_hub_url_loses_its_trailing_slash_and_a_blank_one_falls_back() {
         assert_eq!(normalize_hub_url("http://127.0.0.1:8787/"), "http://127.0.0.1:8787");
         assert_eq!(normalize_hub_url("  https://hub.jknet.gg  "), "https://hub.jknet.gg");
-        assert_eq!(normalize_hub_url("   "), DEFAULT_HUB_URL);
+        assert_eq!(normalize_hub_url("   "), default_hub_url());
         // Joining must never produce a double slash: the hub routes on the
         // exact path and `//v1/me` is a 404 on most frameworks.
         let ctx = HubContext {
@@ -728,6 +807,59 @@ mod tests {
             token: None,
         };
         assert_eq!(ctx.url("/v1/me"), "http://127.0.0.1:8787/v1/me");
+    }
+
+    #[test]
+    fn a_debug_build_talks_to_the_local_hub_and_a_release_build_to_none_yet() {
+        // Both branches in one run: `cfg!(debug_assertions)` is fixed while
+        // the tests execute, so the profile they are not built in would never
+        // be covered.
+        assert_eq!(default_hub_url_for(true), DEV_HUB_URL);
+        assert_eq!(default_hub_url_for(false), RELEASE_HUB_URL);
+        assert_eq!(default_hub_url(), default_hub_url_for(cfg!(debug_assertions)));
+
+        // The line to change when the service goes live. Until it does, a
+        // release build has no hub, and the Account card says so.
+        assert!(!hub_configured(RELEASE_HUB_URL));
+        assert!(hub_configured(DEV_HUB_URL));
+    }
+
+    #[test]
+    fn an_address_is_configured_when_something_is_left_after_trimming() {
+        assert!(hub_configured("https://hub.jknet.gg"));
+        assert!(hub_configured("  http://127.0.0.1:8787/  "));
+        assert!(!hub_configured(""));
+        assert!(!hub_configured("   "));
+        assert!(!hub_configured("/"));
+
+        // The question is asked about the effective address, not about the raw
+        // field: an empty field means "the default of this build", and the
+        // default is a hub in a debug build and nothing in a release one.
+        assert_eq!(
+            hub_configured(&normalize_hub_url("")),
+            hub_configured(default_hub_url())
+        );
+    }
+
+    #[tokio::test]
+    async fn a_build_without_a_hub_refuses_before_it_opens_a_socket() {
+        // The whole point of the release gate: no request, no log line, and a
+        // refusal the frontend can tell from a network failure.
+        let client = HubClient::new();
+        let ctx = HubContext {
+            base_url: String::new(),
+            token: Some("0123456789abcdef".into()),
+        };
+        assert!(!ctx.configured());
+        // A token in a hand-edited `settings.json` does not make a launcher
+        // with no hub signed in.
+        assert!(!ctx.signed_in());
+        assert_eq!(ctx.ws_url(), None);
+
+        match client.get_friends(&ctx).await {
+            Err(AppError::HubNotConfigured) => {}
+            other => panic!("expected a refusal, got {:?}", other.map(|_| "a list")),
+        }
     }
 
     #[test]
@@ -753,7 +885,7 @@ mod tests {
         // Signed out there is nothing to authenticate the socket with, and a
         // socket without a token is a 401 the moment it opens.
         let signed_out = HubContext {
-            base_url: DEFAULT_HUB_URL.into(),
+            base_url: DEV_HUB_URL.into(),
             token: None,
         };
         assert_eq!(signed_out.ws_url(), None);
@@ -875,7 +1007,7 @@ mod tests {
     #[test]
     fn an_authenticated_call_refuses_before_it_leaves_the_launcher() {
         let ctx = HubContext {
-            base_url: DEFAULT_HUB_URL.into(),
+            base_url: DEV_HUB_URL.into(),
             token: None,
         };
         assert!(!ctx.signed_in());

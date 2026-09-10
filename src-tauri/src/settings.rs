@@ -19,10 +19,12 @@ use crate::state::AppState;
 /// (that belongs to `tauri-plugin-window-state`).
 ///
 /// `Default` is written out rather than derived, because one field has a value
-/// that is not the zero of its type: `hub_url` has to name a hub, and the
-/// container-level `#[serde(default)]` fills a missing field from this
-/// implementation, so a `settings.json` written before the hub existed reads
-/// as "the development hub" instead of "no hub at all".
+/// that is not the zero of its type in a debug build: `hub_url` names the hub
+/// of the build profile, and the container-level `#[serde(default)]` fills a
+/// missing field from this implementation, so a `settings.json` written before
+/// the hub existed reads as the development hub rather than as nothing. A
+/// release build has no hub yet, so there the same default is blank on
+/// purpose; see `hub::default_hub_url`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -61,9 +63,12 @@ pub struct Settings {
     pub onboarding_completed: bool,
 
     // --- slice: account ---
-    /// The JKNet hub this launcher talks to, without a trailing slash. The
-    /// production address is not decided yet, so the field is editable on the
-    /// Settings screen and defaults to the development hub.
+    /// The JKNet hub this launcher talks to, without a trailing slash.
+    ///
+    /// Empty means there is no hub, which is what a release build defaults to
+    /// until the service is deployed. The field is editable on the Settings
+    /// screen, and typing an address there is what switches the account and
+    /// friends interface on for one machine.
     pub hub_url: String,
     /// The bearer token of the signed-in account, 64 hex characters.
     ///
@@ -87,7 +92,7 @@ impl Default for Settings {
             favorite_servers: Vec::new(),
             server_history: Vec::new(),
             onboarding_completed: false,
-            hub_url: hub::DEFAULT_HUB_URL.to_string(),
+            hub_url: hub::default_hub_url().to_string(),
             hub_token: None,
             hub_user: None,
         }
@@ -429,13 +434,13 @@ mod tests {
     // --- slice: account ---
 
     #[test]
-    fn a_settings_file_from_before_the_hub_still_names_one() {
+    fn a_settings_file_from_before_the_hub_takes_the_hub_of_this_build() {
         // The container-level `#[serde(default)]` fills a missing field from
         // `Settings::default()`, so this is the test that proves the manual
         // `Default` and not a derived one is in force.
         let older: Settings = serde_json::from_str(r#"{"closeOnLaunch":true}"#)
             .expect("an older document parses");
-        assert_eq!(older.hub_url, crate::hub::DEFAULT_HUB_URL);
+        assert_eq!(older.hub_url, crate::hub::default_hub_url());
         assert_eq!(older.hub_token, None);
         assert_eq!(older.hub_user, None);
     }
@@ -446,8 +451,27 @@ mod tests {
         patch(r#"{"hubUrl":"  http://127.0.0.1:9000/  "}"#).apply(&mut settings);
         assert_eq!(settings.hub_url, "http://127.0.0.1:9000");
 
+        // Clearing the field is the way back to the default of the build,
+        // which in a release build is no hub at all.
         patch(r#"{"hubUrl":""}"#).apply(&mut settings);
-        assert_eq!(settings.hub_url, crate::hub::DEFAULT_HUB_URL);
+        assert_eq!(settings.hub_url, crate::hub::default_hub_url());
+    }
+
+    // --- slice: hub gate ---
+
+    #[test]
+    fn an_address_typed_into_the_field_switches_the_hub_on() {
+        // The player's way past a build that ships with the hub switched off:
+        // the address lands in the document and `hub_configured` turns true.
+        let mut settings = Settings {
+            hub_url: String::new(),
+            ..Settings::default()
+        };
+        assert!(!crate::hub::hub_configured(&settings.hub_url));
+
+        patch(r#"{"hubUrl":"https://hub.jknet.gg/"}"#).apply(&mut settings);
+        assert_eq!(settings.hub_url, "https://hub.jknet.gg");
+        assert!(crate::hub::hub_configured(&settings.hub_url));
     }
 
     #[test]
