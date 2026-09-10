@@ -49,7 +49,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["resources/trusted_servers.json"],
+    "resources": ["resources/trusted_servers.json", "resources/jkhub/"],
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": {

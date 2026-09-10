@@ -1,4 +1,5 @@
 import { ArrowDownCircle, Check, Download, Star } from "lucide-react";
+import { useState } from "react";
 
 import { formatBytes } from "../../lib/format";
 import type { JkhubCardData } from "../../lib/ipc";
@@ -24,6 +25,12 @@ interface JkhubCardProps {
  * disk would be a second copy to keep fresh, and the site serves its images
  * with a month-long lifetime already. `loading="lazy"` keeps a grid of
  * twenty-five cards from asking for twenty-five pictures at once.
+ *
+ * `referrerPolicy="no-referrer"` is what makes the picture appear at all. The
+ * site refuses hotlinked images: the same address answers `200 image/jpeg`
+ * with no `Referer` and `403 text/plain` with the webview's own origin in one,
+ * so every card used to show an empty box. The rule is also in `index.html`;
+ * this attribute is the copy that holds inside a Tauri custom scheme.
  */
 export function JkhubCard({
   card,
@@ -34,6 +41,11 @@ export function JkhubCard({
   onOpen,
   onInstall,
 }: JkhubCardProps) {
+  // The address that failed rather than a flag: a card reused for another file
+  // gets its picture back without an effect to reset anything.
+  const [broken, setBroken] = useState<string | null>(null);
+  const thumbnail =
+    card.thumbnailUrl && card.thumbnailUrl !== broken ? card.thumbnailUrl : null;
   const downloading = progress != null;
 
   return (
@@ -44,11 +56,16 @@ export function JkhubCard({
         aria-label={`Open ${card.title}`}
         className="block h-120 bg-elevated cursor-pointer overflow-hidden"
       >
-        {card.thumbnailUrl ? (
+        {thumbnail ? (
           <img
-            src={card.thumbnailUrl}
+            src={thumbnail}
             alt=""
             loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            // A picture the site withdrew, renamed or refuses leaves the same
+            // placeholder a file without a screenshot gets, never a blank box.
+            onError={() => setBroken(thumbnail)}
             className="size-full object-cover"
           />
         ) : (
