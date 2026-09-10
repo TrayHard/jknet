@@ -112,7 +112,9 @@ pub struct ServerInfo {
     pub hostname_raw: String,
     /// The same name with `^1`-style colour codes removed.
     pub hostname_clean: String,
-    /// Map file without a path, for example `mp/ffa3`.
+    /// Map the server is running, lowercased: `mp/ffa3`. Operators type
+    /// `mapname` in any case they like and the game does not care, so the row
+    /// carries the canonical spelling — it is also the key of the map picture.
     pub map: String,
     /// `gametype` key of the info string.
     pub gametype: u8,
@@ -183,7 +185,10 @@ impl ServerInfo {
                 clean
             },
             hostname_raw,
-            map: info.get("mapname").cloned().unwrap_or_default(),
+            // --- slice: maps ---
+            // `MP/FFA1` and `mp/ffa1` are one map; the launcher keys the
+            // filter, the cache and the levelshot on the lowercase spelling.
+            map: crate::levelshots::map_key(info.get("mapname").map_or("", String::as_str)),
             gametype,
             gametype_label: gametype_label(gametype),
             clients,
@@ -887,6 +892,15 @@ mod tests {
         assert_eq!(server.protocol, 26);
         assert_eq!(server.max_clients, 0);
         assert!(!server.needpass);
+    }
+
+    // --- slice: maps ---
+    #[test]
+    fn a_map_name_arrives_lowercase_whatever_the_server_typed() {
+        assert_eq!(row("\\mapname\\MP/FFA1").map, "mp/ffa1");
+        assert_eq!(row("\\mapname\\ MP/FFA1 ").map, "mp/ffa1");
+        assert_eq!(row("\\mapname\\MB2_Smuggler").map, "mb2_smuggler");
+        assert_eq!(row("\\clients\\0").map, "");
     }
 
     #[test]

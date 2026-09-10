@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { AboutCard } from "../components/AboutCard";
+import { MapPicturesCard } from "../components/MapPicturesCard";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
@@ -84,6 +85,9 @@ export function SettingsPage() {
       </section>
 
       <ExtraLaunchArgs onError={setError} />
+
+      {/* --- slice: maps --- */}
+      <MapPicturesCard />
 
       <EmptyState
         icon={<SlidersHorizontal size={24} />}

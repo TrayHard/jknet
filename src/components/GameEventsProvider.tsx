@@ -1,6 +1,6 @@
 import { createContext, use, type ReactNode } from "react";
 
-import { useSettings } from "../lib/queries";
+import { useLevelshotEvents, useSettings } from "../lib/queries";
 import { useGameEvents, type GameEvents } from "../lib/useGameEvents";
 
 /**
@@ -19,6 +19,10 @@ const GameEventsContext = createContext<GameEvents>({
 export function GameEventsProvider({ children }: { children: ReactNode }) {
   const settings = useSettings();
   const events = useGameEvents(settings.data?.closeOnLaunch ?? false);
+  // --- slice: maps ---
+  // `levelshots:changed` belongs to the same one place above the screens: a
+  // rebuild may give a map a picture while another screen is showing it.
+  useLevelshotEvents();
   return <GameEventsContext value={events}>{children}</GameEventsContext>;
 }
 

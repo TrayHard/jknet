@@ -35,7 +35,8 @@ src/
   styles/fonts.css       локальные шрифты @fontsource
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
                          ClientSettingsDialog, GameEventsProvider,
-                         AppUpdateProvider, AboutCard
+                         AppUpdateProvider, AboutCard, MapPreview,
+                         MapPicturesCard
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
                          RadioCard, StepBadges, Toast
   components/library/    экран Library: карточка, диалоги, категории, Select
@@ -61,6 +62,7 @@ src-tauri/
   src/servers/           браузер серверов: мастер-серверы, ping, кеш
   src/launch.rs          запуск клиента, слежение за процессом, остановка
   src/library.rs         файлы pk3 одного клиента в его папке home\
+  src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
   capabilities/          разрешения окна main
 ```
 

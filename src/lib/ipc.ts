@@ -7,7 +7,7 @@
  * the only place the frontend is allowed to name a command.
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 import { isTauri, NO_RUNTIME_MESSAGE } from "./runtime";
 
@@ -492,3 +492,48 @@ export const serversIpc = {
   addServerHistory: (address: string) =>
     call<Settings>("add_server_history", { address }),
 };
+
+// ---------------------------------------------------------------------------
+// --- slice: maps ---
+// ---------------------------------------------------------------------------
+
+/** `src-tauri/src/levelshots.rs`: the picture of one map. */
+export interface Levelshot {
+  /** Absolute path inside `cache\levelshots\`. Turn it into a URL with
+   * `levelshotUrl` before putting it in an `<img>`. */
+  path: string;
+  width: number;
+  height: number;
+}
+
+/** `src-tauri/src/levelshots.rs`: what one rebuild of the index did. */
+export interface LevelshotStats {
+  /** Pictures in the index afterwards. */
+  maps: number;
+  /** pk3 files and loose pictures that were read. */
+  sources: number;
+  elapsedMs: number;
+}
+
+export const levelshotsIpc = {
+  /** `null` when nothing the player owns has a picture of this map. */
+  getLevelshot: (map: string) =>
+    call<Levelshot | null>("get_levelshot", { map }),
+  rebuildLevelshots: () => call<LevelshotStats>("rebuild_levelshots"),
+  listLevelshots: () => call<string[]>("list_levelshots"),
+};
+
+/**
+ * Turns a cached picture into a URL the webview may load.
+ *
+ * `convertFileSrc` answers `http://asset.localhost/<path>` on Windows and
+ * `asset://localhost/<path>` elsewhere. The protocol is enabled in
+ * `tauri.conf.json` and scoped to `cache\levelshots\` alone, so no other file
+ * on the disk can be addressed this way. Outside Tauri the function reaches
+ * into `window.__TAURI_INTERNALS__` and throws, hence the guard: the browser
+ * preview shows the placeholder instead of a broken image.
+ */
+export function levelshotUrl(path: string): string | null {
+  if (!isTauri()) return null;
+  return convertFileSrc(path);
+}
