@@ -8,10 +8,10 @@ import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
 import { JkhubTree } from "./JkhubTree";
 import { Select, type SelectOption } from "./Select";
+import { useActiveGame } from "../../lib/game";
 import { errorMessage, type JkhubCategory, type JkhubInstallResult, type JkhubSort, type LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
-  useActiveGame,
   useJkhubCategories,
   useJkhubDownloadProgress,
   useJkhubFile,
@@ -58,13 +58,26 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
 
   const toasts = useToasts();
   // JKHub keeps the two games in separate roots, so the tab browses the game
-  // the launcher is set to. `Both Games/Other` shows up under either.
+  // the launcher is set to. `Both Games/Other` shows up under either. The
+  // switcher in the sidebar writes it; every query below is keyed by it and
+  // fetches the new game's catalogue by itself.
   const game = useActiveGame();
   const categories = useJkhubCategories(game);
   const refresh = useRefreshJkhub();
   const progress = useJkhubDownloadProgress();
   const install = useJkhubInstall(clientId);
   const details = useJkhubFile(openFile);
+
+  // A switch of game is a switch of tree and of client: the picker above the
+  // tabs now offers the other game's clients. Dropping the selection here, and
+  // not waiting for the new tree to arrive, does two things. The listing query
+  // never asks the site for a category id of the old tree under the new game,
+  // and the details panel cannot keep an **Install** button that would write a
+  // Jedi Academy file into a Jedi Outcast client.
+  useEffect(() => {
+    setCategory(null);
+    setOpenFile(null);
+  }, [game]);
 
   // The first category with files of its own is the landing page of the tab:
   // the two roots hold nothing themselves, and neither does Maps. A change of
