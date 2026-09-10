@@ -14,7 +14,12 @@ import {
   useSettings,
   useUpdateSettings,
 } from "../../lib/queries";
-import { folderSlug, orderClients, type ClientChoice } from "./steps";
+import {
+  firstClientGame,
+  folderSlug,
+  orderClients,
+  type ClientChoice,
+} from "./steps";
 import { StepPanel } from "./StepPanel";
 
 interface StepClientProps {
@@ -48,7 +53,12 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
   /** True once the step has been left, so a late answer changes nothing. */
   const left = useRef(false);
 
-  const engineList = engines.data ?? [];
+  // --- slice: game core ---
+  // The first client belongs to the first game the player set up, which is
+  // Jedi Academy when both are configured. The switcher slice may let the
+  // player choose here; one game at a time is enough for a first run.
+  const game = firstClientGame(settings.data);
+  const engineList = (engines.data ?? []).filter((engine) => engine.game === game);
   const existing = orderClients(clients.data ?? [], settings.data?.defaultClientId);
   const versions = useEngineVersions(engineList.map((engine) => engine.id));
 
@@ -64,10 +74,9 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
       setChoice({ kind: "existing", clientId: first.id });
       return;
     }
-    const recommended =
-      engines.data.find((engine) => engine.recommended) ?? engines.data[0];
+    const recommended = engineList.find((engine) => engine.recommended) ?? engineList[0];
     if (recommended) setChoice({ kind: "engine", engineId: recommended.id });
-  }, [choice, clients.data, engines.data, settings.data]);
+  }, [choice, clients.data, engines.data, engineList, settings.data]);
 
   const progress: EngineInstallProgress | undefined = clientId
     ? installs[clientId]
@@ -111,13 +120,20 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
                 await createClient.mutateAsync({
                   name: name.trim(),
                   engineId: choice.engineId,
+                  game,
                 })
               ).id;
         setClientId(target);
       }
 
       // One field, one patch: the document on disk keeps everything else.
-      await updateSettings.mutateAsync({ defaultClientId: target });
+      // --- slice: game core ---
+      // Both fields: the Play button reads the single one, the map is what
+      // the switcher slice will read.
+      await updateSettings.mutateAsync({
+        defaultClientId: target,
+        defaultClientIds: { [game]: target },
+      });
 
       // A client created a moment ago is not in the list yet, and its engine
       // folder is certainly empty, so a lookup that misses means "install".

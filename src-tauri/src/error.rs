@@ -120,6 +120,23 @@ pub enum AppError {
     #[error("hub {code}: {message}")]
     Hub { code: String, message: String },
 
+    // --- slice: game core ---
+    /// Two entities of different games were put together: a Jedi Outcast
+    /// engine asked for a Jedi Academy client, a Jedi Academy server handed to
+    /// a Jedi Outcast client. Its own variant because the cure is picking the
+    /// other one, not fixing a path or a setting.
+    #[error("{0}")]
+    GameMismatch(String),
+
+    /// The folder of one game is not configured, or the archives it needs are
+    /// not in it. The message names the game, because a launcher that serves
+    /// two of them has two folders to be wrong about.
+    #[error("{game} game files: {reason}")]
+    GameDataMissing {
+        game: &'static str,
+        reason: String,
+    },
+
     // --- slice: hub gate ---
     /// This build has no hub address, so there is nothing to call.
     ///

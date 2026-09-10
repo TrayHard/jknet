@@ -37,7 +37,9 @@ import {
   type EngineRelease,
   type EngineUpdate,
   type FriendsView,
-  type GameFilesCandidate,
+  type DetectedGameFiles,
+  type Game,
+  type GameInfo,
   type HubProvider,
   type HubUser,
   type Invite,
@@ -63,10 +65,45 @@ export const queryKeys = {
   gameFiles: ["game-files"] as const,
   servers: ["servers"] as const,
   library: ["library"] as const,
+  // --- slice: game core ---
+  games: ["games"] as const,
 };
 
 export function useSettings(): UseQueryResult<Settings> {
   return useQuery({ queryKey: queryKeys.settings, queryFn: ipc.getSettings });
+}
+
+// --- slice: game core ---
+
+/**
+ * The game every screen works in, with Jedi Academy while the settings load.
+ *
+ * A plain value and not a query of its own: it comes out of the settings, and
+ * a second source for it would be a second thing to keep in step. The sidebar
+ * switcher of the next slice writes it with `useUpdateSettings`, which puts the
+ * new document straight into this cache, so every reader follows in one render.
+ */
+export function useActiveGame(): Game {
+  return useSettings().data?.activeGame ?? "ja";
+}
+
+/**
+ * Both games with the names the interface prints.
+ *
+ * The table lives in the core so that «Jedi Outcast» is spelled in one place.
+ * It never changes within a build, hence `staleTime: Infinity`.
+ */
+export function useGames(): UseQueryResult<GameInfo[]> {
+  return useQuery({
+    queryKey: queryKeys.games,
+    queryFn: ipc.listGames,
+    staleTime: Infinity,
+  });
+}
+
+/** The names of one game, or `undefined` until the table arrives. */
+export function useGameInfo(game: Game): GameInfo | undefined {
+  return useGames().data?.find((entry) => entry.id === game);
 }
 
 /** The resolved data folders. `dataDirOverride` moves them, so a settings write invalidates this key. */
@@ -74,21 +111,40 @@ export function useDataPaths(): UseQueryResult<DataPaths> {
   return useQuery({ queryKey: queryKeys.dataPaths, queryFn: ipc.getDataPaths });
 }
 
-/** The engine registry is static, so it never goes stale. */
+/**
+ * The engine registry is static, so it never goes stale.
+ *
+ * --- slice: game core ---
+ * Every engine, both games. A screen that wants one game's engines filters
+ * this list: refetching a constant every time a radio button moves would be a
+ * round trip for nothing.
+ */
 export function useEngines(): UseQueryResult<Engine[]> {
   return useQuery({
     queryKey: queryKeys.engines,
-    queryFn: ipc.listEngines,
+    queryFn: () => ipc.listEngines(),
     staleTime: Infinity,
   });
+}
+
+// --- slice: game core ---
+/** The engines of one game, out of the same static list. */
+export function useEnginesOfGame(game: Game): Engine[] {
+  return (useEngines().data ?? []).filter((engine) => engine.game === game);
 }
 
 export function useClients(): UseQueryResult<Client[]> {
   return useQuery({ queryKey: queryKeys.clients, queryFn: ipc.listClients });
 }
 
-/** Scanning Steam and GOG touches the disk, so the result is kept a while. */
-export function useGameFiles(): UseQueryResult<GameFilesCandidate[]> {
+/**
+ * Scanning Steam and GOG touches the disk, so the result is kept a while.
+ *
+ * --- slice: game core ---
+ * One scan finds both games, so the screens that show them side by side make
+ * one call rather than two.
+ */
+export function useGameFiles(): UseQueryResult<DetectedGameFiles> {
   return useQuery({
     queryKey: queryKeys.gameFiles,
     queryFn: ipc.detectGameFiles,
@@ -126,8 +182,16 @@ export function useUpdateSettings() {
 export function useCreateClient() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, engineId }: { name: string; engineId: string }) =>
-      ipc.createClient(name, engineId),
+    // --- slice: game core --- the game is required and must match the engine.
+    mutationFn: ({
+      name,
+      engineId,
+      game,
+    }: {
+      name: string;
+      engineId: string;
+      game: Game;
+    }) => ipc.createClient(name, engineId, game),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
     },
@@ -379,11 +443,20 @@ export function useStopGame() {
 // --- slice: servers ---
 // ---------------------------------------------------------------------------
 
+/**
+ * --- slice: game core ---
+ * Every key that names a list carries the game: the two games have separate
+ * master lists and separate cache documents, and one key for both would show
+ * Jedi Academy rows on a Jedi Outcast screen for a frame after every switch.
+ * The trusted list is bundled with the build and is not scoped.
+ */
 export const serverKeys = {
-  /** The list `cache\servers.json` holds, kept fresh by `useServerRefresh`. */
-  cached: ["servers", "cached"] as const,
+  /** The list `cache\servers-<game>.json` holds, kept fresh by
+   * `useServerRefresh`. */
+  cached: (game: Game) => ["servers", "cached", game] as const,
   trusted: ["servers", "trusted"] as const,
-  status: (address: string) => ["servers", "status", address] as const,
+  status: (game: Game, address: string) =>
+    ["servers", "status", game, address] as const,
 };
 
 /**
@@ -394,9 +467,10 @@ export const serverKeys = {
  * window focus would replace live rows with the ones on disk.
  */
 export function useCachedServers(): UseQueryResult<ServerInfo[]> {
+  const game = useActiveGame();
   return useQuery({
-    queryKey: serverKeys.cached,
-    queryFn: serversIpc.getCachedServers,
+    queryKey: serverKeys.cached(game),
+    queryFn: () => serversIpc.getCachedServers(game),
     staleTime: Infinity,
   });
 }
@@ -419,9 +493,10 @@ export function useTrustedServers(): UseQueryResult<TrustedServer[]> {
 export function useServerStatus(
   address: string | null,
 ): UseQueryResult<ServerStatus> {
+  const game = useActiveGame();
   return useQuery({
-    queryKey: serverKeys.status(address ?? ""),
-    queryFn: () => serversIpc.getServerStatus(address ?? ""),
+    queryKey: serverKeys.status(game, address ?? ""),
+    queryFn: () => serversIpc.getServerStatus(address ?? "", game),
     enabled: address !== null,
     staleTime: 15_000,
     retry: false,
@@ -430,13 +505,14 @@ export function useServerStatus(
 
 export function useSetServerFavorite() {
   const queryClient = useQueryClient();
+  const game = useActiveGame();
   return useMutation({
     mutationFn: ({ address, favorite }: { address: string; favorite: boolean }) =>
-      serversIpc.setServerFavorite(address, favorite),
+      serversIpc.setServerFavorite(address, favorite, game),
     onSuccess: (settings, variables) => {
       queryClient.setQueryData(queryKeys.settings, settings);
       // Repaint the one star instead of refetching a thousand rows.
-      queryClient.setQueryData<ServerInfo[]>(serverKeys.cached, (rows) =>
+      queryClient.setQueryData<ServerInfo[]>(serverKeys.cached(game), (rows) =>
         rows?.map((row) =>
           row.address === variables.address
             ? { ...row, favorite: variables.favorite }
@@ -450,8 +526,9 @@ export function useSetServerFavorite() {
 /** Records a connection. The History tab reads `serverHistory` from settings. */
 export function useAddServerHistory() {
   const queryClient = useQueryClient();
+  const game = useActiveGame();
   return useMutation({
-    mutationFn: (address: string) => serversIpc.addServerHistory(address),
+    mutationFn: (address: string) => serversIpc.addServerHistory(address, game),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings, settings);
     },
@@ -492,6 +569,10 @@ function mergeServers(
  */
 export function useServerRefresh(): ServerRefresh {
   const queryClient = useQueryClient();
+  // --- slice: game core ---
+  // One refresh belongs to one game. The events carry theirs, so a batch of
+  // the other game is dropped rather than merged into the list on screen.
+  const game = useActiveGame();
   const running = useRef(false);
   const [isRunning, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -507,14 +588,21 @@ export function useServerRefresh(): ServerRefresh {
       const stopBatch = await listen<ServersBatchEvent>(
         "servers:batch",
         (event) => {
-          queryClient.setQueryData<ServerInfo[]>(serverKeys.cached, (rows) =>
-            mergeServers(rows ?? [], event.payload.servers),
+          // The payload names its game, so the rows land in that game's list
+          // even when the player switched away while the scan ran.
+          const forGame = event.payload.game;
+          queryClient.setQueryData<ServerInfo[]>(
+            serverKeys.cached(forGame),
+            (rows) => mergeServers(rows ?? [], event.payload.servers),
           );
         },
       );
       const stopDone = await listen<ServersDoneEvent>(
         "servers:done",
-        (event) => setProgress(event.payload),
+        (event) => {
+          if (event.payload.game !== game) return;
+          setProgress(event.payload);
+        },
       );
       // The effect may have been torn down while the two promises resolved.
       if (disposed) {
@@ -529,7 +617,7 @@ export function useServerRefresh(): ServerRefresh {
       disposed = true;
       for (const stop of stops) stop();
     };
-  }, [queryClient]);
+  }, [queryClient, game]);
 
   const refresh = useCallback(() => {
     // A ref, not the state flag: two clicks in the same frame would both see
@@ -539,9 +627,9 @@ export function useServerRefresh(): ServerRefresh {
     setRunning(true);
     setError(null);
     serversIpc
-      .refreshServers()
+      .refreshServers(game)
       .then((servers) => {
-        queryClient.setQueryData(serverKeys.cached, servers);
+        queryClient.setQueryData(serverKeys.cached(game), servers);
         setRefreshedAt(Date.now());
       })
       .catch((e: unknown) => setError(errorMessage(e)))
@@ -549,7 +637,7 @@ export function useServerRefresh(): ServerRefresh {
         running.current = false;
         setRunning(false);
       });
-  }, [queryClient]);
+  }, [queryClient, game]);
 
   return { refresh, running: isRunning, error, progress, refreshedAt };
 }
@@ -630,9 +718,10 @@ async function collectEngineVersions(
 // ---------------------------------------------------------------------------
 
 export const levelshotKeys = {
-  /** One picture, keyed by the lowercase map name. */
-  shot: (map: string) => ["levelshots", "shot", map] as const,
-  /** Every map the launcher has a picture for. */
+  /** One picture, keyed by the game and the lowercase map name. `ffa_bespin`
+   * is a map in both games and a different picture in each. */
+  shot: (game: Game, map: string) => ["levelshots", "shot", game, map] as const,
+  /** Every map the launcher has a picture for, as `<game>/<map>`. */
   list: ["levelshots", "list"] as const,
 };
 
@@ -644,13 +733,22 @@ export const levelshotKeys = {
  * the window through `levelshots:changed`, which is what `useLevelshotEvents`
  * listens for. `null` is a valid answer and must not be retried.
  */
+/**
+ * --- slice: game core ---
+ * `game` names whose map it is. Left out it means the active game, which is
+ * right for a Home screen or a Settings card; a server row passes its own,
+ * because a list may outlive a switch.
+ */
 export function useLevelshot(
   map: string | null | undefined,
+  game?: Game,
 ): UseQueryResult<Levelshot | null> {
+  const active = useActiveGame();
+  const forGame = game ?? active;
   const key = (map ?? "").trim().toLowerCase();
   return useQuery({
-    queryKey: levelshotKeys.shot(key),
-    queryFn: () => levelshotsIpc.getLevelshot(key),
+    queryKey: levelshotKeys.shot(forGame, key),
+    queryFn: () => levelshotsIpc.getLevelshot(key, forGame),
     enabled: key.length > 0,
     staleTime: Infinity,
     retry: false,

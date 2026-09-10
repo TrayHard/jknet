@@ -4,7 +4,7 @@
 //! chain, and the game folder stays read only: JKNet reads
 //! `base\assets0.pk3`..`assets3.pk3` from it and writes nothing.
 //!
-//! ## The three search paths
+//! ## The three search paths of a Jedi Academy client
 //!
 //! An engine built from the Quake 3 tree looks for its files in three roots
 //! and prefers the last one that answers (`codemp/qcommon/files.cpp` of
@@ -24,6 +24,27 @@
 //! engine its own modules and the player's assets at once. `fs_copyfiles`
 //! stays at its default of 0, so nothing is ever written back to the game.
 //!
+//! ## The two search paths of a Jedi Outcast client
+//!
+//! --- slice: game core ---
+//! JK2MV has no `fs_cdpath` — the cvar appears in its `files.cpp` only inside
+//! a Quake 3 comment — so the three-root trick is not available and one root
+//! has to carry the retail archives:
+//!
+//! ```text
+//! fs_basepath <GameData>                 the player's retail archives
+//! fs_homepath <clients\<slug>\home>      configs, screenshots, and
+//!                                        base\assetsmv*.pk3 copied in by the
+//!                                        installer
+//! ```
+//!
+//! JK2MV's own `base\assetsmv.pk3` and `base\assetsmv2.pk3` would fall off the
+//! search path under that layout, so [`crate::engine_install`] copies them into
+//! `home\base\` after every install. The executable still lives in
+//! `clients\<slug>\engine\`, which is also the working directory of the
+//! process, so `jk2mvmenu_x64.dll` sits next to the binary that loads it.
+//! Nothing is written into the game folder here either.
+//!
 //! ## One game at a time
 //!
 //! [`LaunchState`] holds the child process. A second launch is refused while
@@ -41,6 +62,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::clients;
 use crate::engines;
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::game_files;
 use crate::state::AppState;
 use crate::timestamp;
@@ -116,6 +138,9 @@ impl LaunchState {
 /// Everything [`build_launch_args`] needs, resolved from disk beforehand.
 #[derive(Debug, Clone)]
 pub struct LaunchPlan<'a> {
+    // --- slice: game core ---
+    /// Which game is starting. Decides the layout of the roots below.
+    pub game: Game,
     /// The `GameData` folder that holds `base\assets0.pk3`.
     pub game_data: &'a Path,
     /// `clients\<slug>\engine`, where the executable lives.
@@ -138,10 +163,15 @@ pub struct LaunchPlan<'a> {
 /// quoting on Windows, and a hand-built string is how a path with a space
 /// turns into two arguments.
 ///
-/// Order is deliberate. The three roots come first because the engine reads
-/// them once at startup, then `fs_game`, then the player's own tokens (which
-/// may override anything above), then `+connect`, which must be the last
-/// command so the console runs it after everything is set.
+/// Order is deliberate. The roots come first because the engine reads them once
+/// at startup, then `fs_game`, then the player's own tokens (which may override
+/// anything above), then `+connect`, which must be the last command so the
+/// console runs it after everything is set.
+///
+/// --- slice: game core ---
+/// How many roots there are depends on the game: three for Jedi Academy, two
+/// for Jedi Outcast, whose engine has no `fs_cdpath`. The module docs explain
+/// why each layout is the one that works.
 pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     let mut args = Vec::new();
     let mut set = |name: &str, value: String| {
@@ -150,8 +180,14 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
         args.push(value);
     };
 
-    set("fs_cdpath", plan.game_data.display().to_string());
-    set("fs_basepath", plan.engine_dir.display().to_string());
+    if plan.game.spec().has_cdpath {
+        set("fs_cdpath", plan.game_data.display().to_string());
+        set("fs_basepath", plan.engine_dir.display().to_string());
+    } else {
+        // No `fs_cdpath` to put the retail archives in, so `fs_basepath` takes
+        // them and the engine's own pk3 files ride in `fs_homepath`.
+        set("fs_basepath", plan.game_data.display().to_string());
+    }
     set("fs_homepath", plan.home_dir.display().to_string());
     if let Some(fs_game) = plan.fs_game.map(str::trim).filter(|v| !v.is_empty()) {
         set("fs_game", fs_game.to_string());
@@ -268,15 +304,13 @@ pub(crate) fn start_client(
     let settings = state.settings()?;
     let paths = state.paths()?;
     let client = clients::read_record(&paths, client_id)?;
-    let engine = engines::require(&client.engine_id)?;
+    // --- slice: game core ---
+    // The engine of a record whose game was edited by hand is refused here
+    // rather than started against the wrong archives.
+    let engine = engines::require_for_game(&client.engine_id, client.game)?;
 
-    let game_data = settings.game_data_path.as_deref().ok_or_else(|| {
-        AppError::Launch(
-            "the game folder is not set. Pick it on the Clients screen first.".into(),
-        )
-    })?;
-    let game_data = PathBuf::from(game_data);
-    game_files::validate(&game_data)?;
+    let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
+    game_files::validate(client.game, &game_data)?;
 
     let client_dir = paths.client_dir(&client.id);
     let engine_dir = client_dir.join("engine");
@@ -302,6 +336,7 @@ pub(crate) fn start_client(
         .or(engine.default_fs_game);
 
     let args = build_launch_args(&LaunchPlan {
+        game: client.game,
         game_data: &game_data,
         engine_dir: &engine_dir,
         home_dir: &home_dir,
@@ -312,8 +347,9 @@ pub(crate) fn start_client(
     });
 
     log::info!(
-        "launching {}: {} {}",
+        "launching {} ({}): {} {}",
         client.id,
+        client.game.display_name(),
         executable.display(),
         args.join(" ")
     );
@@ -456,6 +492,7 @@ mod tests {
         home_dir: &'a Path,
     ) -> LaunchPlan<'a> {
         LaunchPlan {
+            game: Game::JediAcademy,
             game_data,
             engine_dir,
             home_dir,
@@ -463,6 +500,19 @@ mod tests {
             settings_args: &[],
             extra_args: &[],
             connect: None,
+        }
+    }
+
+    // --- slice: game core ---
+    /// The same plan for the other game, whose engine has no `fs_cdpath`.
+    fn jo_plan<'a>(
+        game_data: &'a Path,
+        engine_dir: &'a Path,
+        home_dir: &'a Path,
+    ) -> LaunchPlan<'a> {
+        LaunchPlan {
+            game: Game::JediOutcast,
+            ..plan(game_data, engine_dir, home_dir)
         }
     }
 
@@ -562,6 +612,66 @@ mod tests {
         let mut with = plan(game, engine, home);
         with.connect = Some("  ");
         assert!(!build_launch_args(&with).iter().any(|arg| arg == "+connect"));
+    }
+
+    // --- slice: game core ---
+
+    #[test]
+    fn a_jedi_outcast_client_spends_fs_basepath_on_the_game_folder() {
+        // JK2MV has no `fs_cdpath`, so the retail archives have to arrive
+        // through `fs_basepath` and the engine folder is not a root at all.
+        let args = build_launch_args(&jo_plan(
+            Path::new("D:\\SteamLibrary\\steamapps\\common\\Jedi Outcast\\GameData"),
+            Path::new("C:\\JKNet\\clients\\jk2\\engine"),
+            Path::new("C:\\JKNet\\clients\\jk2\\home"),
+        ));
+        assert_eq!(
+            args,
+            vec![
+                "+set",
+                "fs_basepath",
+                "D:\\SteamLibrary\\steamapps\\common\\Jedi Outcast\\GameData",
+                "+set",
+                "fs_homepath",
+                "C:\\JKNet\\clients\\jk2\\home",
+            ]
+        );
+        // Passing it anyway would be worse than useless: JK2MV would register
+        // an unknown cvar and the archives would still be missing.
+        assert!(!args.iter().any(|arg| arg == "fs_cdpath"));
+        // And the unpacked build is deliberately not a search root; its pk3
+        // files reach the engine through `home\base\` instead.
+        assert!(!args.iter().any(|arg| arg.contains("clients\\jk2\\engine")));
+    }
+
+    #[test]
+    fn the_tail_of_a_jedi_outcast_command_line_is_the_same_as_a_jedi_academy_one() {
+        // Only the roots differ. `fs_game`, the player's tokens and `+connect`
+        // are built once for both games, and this is what keeps them that way.
+        let game = Path::new("D:\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\jk2\\engine");
+        let home = Path::new("C:\\JKNet\\clients\\jk2\\home");
+        let settings_args = vec!["+set".to_string(), "r_mode".to_string(), "-1".to_string()];
+
+        let mut with = jo_plan(game, engine, home);
+        with.fs_game = Some("mv");
+        with.settings_args = &settings_args;
+        with.connect = Some("jk2.example.org:28070");
+
+        let args = build_launch_args(&with);
+        assert_eq!(
+            &args[6..],
+            [
+                "+set",
+                "fs_game",
+                "mv",
+                "+set",
+                "r_mode",
+                "-1",
+                "+connect",
+                "jk2.example.org:28070"
+            ]
+        );
     }
 
     #[test]

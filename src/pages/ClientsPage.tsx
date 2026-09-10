@@ -25,17 +25,22 @@ import {
   type Client,
   type Engine,
   type EngineInstallProgress,
+  type Game,
+  type GameInfo,
   type RunningGame,
   type SettingsPatch,
 } from "../lib/ipc";
 import { formatBytes, shortenPath } from "../lib/format";
 import {
+  useActiveGame,
   useClients,
   useDeleteClient,
   useEngineReleases,
   useEngines,
   useEngineUpdate,
   useGameFiles,
+  useGameInfo,
+  useGames,
   useInstallEngine,
   useLaunchClient,
   usePendingInstalls,
@@ -56,6 +61,10 @@ export function ClientsPage() {
   const clients = useClients();
   const engines = useEngines();
   const gameFiles = useGameFiles();
+  // --- slice: game core ---
+  const activeGame = useActiveGame();
+  const gameInfo = useGameInfo(activeGame);
+  const games = useGames();
   const updateSettings = useUpdateSettings();
   const deleteClient = useDeleteClient();
   const installEngine = useInstallEngine();
@@ -91,16 +100,17 @@ export function ClientsPage() {
         title: "Select the GameData folder",
       });
       if (typeof picked !== "string") return;
-      const candidate = await ipc.inspectGameFiles(picked);
+      // --- slice: game core --- checked against the game this card shows.
+      const candidate = await ipc.validateGameData(activeGame, picked);
       if (!candidate.valid) {
         const missing = candidate.assets
-          .filter((asset) => !asset.present)
+          .filter((asset) => asset.required && !asset.present)
           .map((asset) => asset.name)
           .join(", ");
         setError(`No game files in ${candidate.path}. Missing: ${missing}.`);
         return;
       }
-      patchSettings({ gameDataPath: candidate.path });
+      patchSettings({ gameDataPaths: { [activeGame]: candidate.path } });
     } catch (e) {
       setError(errorMessage(e));
     }
@@ -112,12 +122,24 @@ export function ClientsPage() {
     settings.error ?? clients.error ?? engines.error ?? gameFiles.error ?? null;
   const failure = error ?? (queryError ? errorMessage(queryError) : null);
 
-  const configuredPath = settings.data?.gameDataPath ?? null;
-  const detected = gameFiles.data ?? [];
+  // --- slice: game core ---
+  // The card shows the folder of the active game. Both games get a row of
+  // their own on the Settings screen; the sidebar switcher of the next slice
+  // is what makes this card follow the player.
+  const configuredPath = settings.data?.gameDataPaths[activeGame] ?? null;
+  const detected = gameFiles.data?.[activeGame] ?? [];
   const activeCandidate =
     detected.find((candidate) => candidate.path === configuredPath) ??
     detected.find((candidate) => candidate.valid) ??
     null;
+  const assetRange = gameInfo
+    ? `${gameInfo.requiredAssets[0]}–${gameInfo.requiredAssets[gameInfo.requiredAssets.length - 1]}`
+    : "assets0.pk3–assets3.pk3";
+  // --- slice: game core ---
+  // The badge appears once the player has clients of both games; before that
+  // it would label every card with the only answer there is.
+  const showGameBadges =
+    new Set((clients.data ?? []).map((client) => client.game)).size > 1;
 
   return (
     <Page>
@@ -153,7 +175,9 @@ export function ClientsPage() {
           </span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-8">
-              <h2 className="text-heading-sm text-fg">Game files</h2>
+              <h2 className="text-heading-sm text-fg">
+                {gameInfo ? `${gameInfo.displayName} files` : "Game files"}
+              </h2>
               {configuredPath ? (
                 <Badge tone="success" icon={<Check size={12} />}>
                   Ready
@@ -163,9 +187,8 @@ export function ClientsPage() {
               )}
             </div>
             <p className="text-body-sm text-fg-secondary pt-4">
-              JKNet reads <span className="text-mono-sm">assets0.pk3</span>–
-              <span className="text-mono-sm">assets3.pk3</span> from this folder
-              and never writes into it.
+              JKNet reads <span className="text-mono-sm">{assetRange}</span> from
+              this folder and never writes into it.
             </p>
             <p className="text-mono-sm text-fg-accent pt-8 break-all">
               {configuredPath ??
@@ -186,7 +209,11 @@ export function ClientsPage() {
             {activeCandidate && activeCandidate.path !== configuredPath ? (
               <Button
                 variant="primary"
-                onClick={() => patchSettings({ gameDataPath: activeCandidate.path })}
+                onClick={() =>
+                  patchSettings({
+                    gameDataPaths: { [activeGame]: activeCandidate.path },
+                  })
+                }
               >
                 Use this folder
               </Button>
@@ -227,6 +254,10 @@ export function ClientsPage() {
                 client={client}
                 engine={engines.data?.find((engine) => engine.id === client.engineId)}
                 isDefault={client.id === settings.data?.defaultClientId}
+                // --- slice: game core ---
+                // A badge only when there is something to tell apart: on a
+                // launcher with Jedi Academy clients alone it is noise.
+                gameBadge={showGameBadges ? shortGameName(games.data, client.game) : null}
                 install={installs[client.id]}
                 installPending={pendingInstalls.includes(client.id)}
                 running={runningGame.data ?? null}
@@ -285,6 +316,8 @@ export function ClientsPage() {
             >
               <div className="flex items-center gap-8">
                 <span className="text-heading-sm text-fg">{engine.name}</span>
+                {/* --- slice: game core --- five builds, two games. */}
+                <Badge>{shortGameName(games.data, engine.game)}</Badge>
                 {engine.recommended ? <Badge tone="accent">Recommended</Badge> : null}
               </div>
               <p className="text-body-sm text-fg-secondary">{engine.description}</p>
@@ -322,6 +355,9 @@ interface ClientCardProps {
   installPending: boolean;
   /** The game JKNet started, whichever client it belongs to. */
   running: RunningGame | null;
+  // --- slice: game core ---
+  /** `JA` or `JO`, or `null` while every client plays the same game. */
+  gameBadge: string | null;
   onMakeDefault: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -337,6 +373,7 @@ function ClientCard({
   install,
   installPending,
   running,
+  gameBadge,
   onMakeDefault,
   onEdit,
   onDelete,
@@ -363,6 +400,7 @@ function ClientCard({
         <div className="flex-1 min-w-0 flex flex-col gap-4">
           <div className="flex items-center gap-8">
             <span className="text-heading-sm text-fg truncate">{client.name}</span>
+            {gameBadge ? <Badge>{gameBadge}</Badge> : null}
             {isDefault ? <Badge tone="accent">Default</Badge> : null}
             {isRunning ? <Badge tone="success">Running</Badge> : null}
           </div>
@@ -605,4 +643,10 @@ function sourceName(source: string): string {
     default:
       return "Saved";
   }
+}
+
+// --- slice: game core ---
+/** `JA` or `JO`, or the raw id while the game table is still loading. */
+function shortGameName(games: GameInfo[] | undefined, game: Game): string {
+  return games?.find((entry) => entry.id === game)?.shortName ?? game.toUpperCase();
 }

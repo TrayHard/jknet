@@ -6,7 +6,7 @@
  * on the second step, and which folder a name will produce.
  */
 
-import type { Client, Settings } from "../../lib/ipc";
+import { GAMES, type Client, type Game, type Settings } from "../../lib/ipc";
 
 export type OnboardingStep = 1 | 2 | 3;
 
@@ -26,9 +26,33 @@ export function initialStep(
   settings: Settings | undefined,
   clients: Client[] | undefined,
 ): OnboardingStep {
-  if (!settings?.gameDataPath) return 1;
+  // --- slice: game core ---
+  // One game is enough to go on. A player who owns Jedi Outcast alone has a
+  // complete setup, and demanding both would stop them at the first step.
+  if (configuredGames(settings).length === 0) return 1;
   if (!playableClient(settings, clients)) return 2;
   return 3;
+}
+
+// --- slice: game core ---
+/**
+ * The games the player has pointed the launcher at, in the order of `GAMES`.
+ *
+ * Empty means the first step has not been finished. The first entry is the
+ * game the second step creates a client for, which puts Jedi Academy first
+ * when both are configured.
+ */
+export function configuredGames(settings: Settings | undefined): Game[] {
+  if (!settings) return [];
+  return GAMES.filter((game) => {
+    const path = settings.gameDataPaths[game];
+    return typeof path === "string" && path.trim() !== "";
+  });
+}
+
+/** The game the second step makes the first client for. */
+export function firstClientGame(settings: Settings | undefined): Game {
+  return configuredGames(settings)[0] ?? "ja";
 }
 
 /**

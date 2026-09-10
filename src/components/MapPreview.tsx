@@ -2,12 +2,16 @@ import { Map as MapIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../lib/format";
-import { levelshotUrl } from "../lib/ipc";
+import { levelshotUrl, type Game } from "../lib/ipc";
 import { useLevelshot } from "../lib/queries";
 
 interface MapPreviewProps {
   /** Map as a server reports it. The core lowercases it into the cache key. */
   map: string;
+  // --- slice: game core ---
+  /** Whose map it is. Left out it means the active game, which is right for
+   * a card that is not about one particular server. */
+  game?: Game;
   /** Printed above the map name, for a hero that names its server. */
   serverName?: string;
   /**
@@ -43,11 +47,12 @@ const CAPTION_SHADOW = "[text-shadow:0_1px_2px_rgba(0,0,0,0.9)]";
  */
 export function MapPreview({
   map,
+  game,
   serverName,
   compact = false,
   className,
 }: MapPreviewProps) {
-  const shot = useLevelshot(map);
+  const shot = useLevelshot(map, game);
   // A file that vanished between the index and the paint: the cache is
   // throwaway data and the placeholder is already the right answer.
   const [broken, setBroken] = useState<string | null>(null);
