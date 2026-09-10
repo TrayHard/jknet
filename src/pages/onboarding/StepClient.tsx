@@ -126,16 +126,27 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
         setClientId(target);
       }
 
+      // The game of the client that is about to become the default one, which
+      // is not always the game of this step. The engine cards offer one game,
+      // but the cards above them offer every client the player already has,
+      // and one of those may belong to the other game.
+      const clientGame =
+        choice.kind === "existing"
+          ? (clients.data?.find((one) => one.id === choice.clientId)?.game ?? game)
+          : game;
+
       // One field, one patch: the document on disk keeps everything else.
       // --- slice: game switch ---
       // The map is what every screen reads; the 0.2 field follows it only for
       // Jedi Academy, because that is the only game it ever named. The first
       // run also sets `activeGame`, so the launcher opens on the game the
-      // player has just set up rather than on Jedi Academy by default.
+      // player has just set up rather than on Jedi Academy by default: a
+      // player who owns Jedi Outcast alone would otherwise land on empty Jedi
+      // Academy screens.
       await updateSettings.mutateAsync({
-        activeGame: game,
-        defaultClientIds: { [game]: target },
-        ...(game === "ja" ? { defaultClientId: target } : {}),
+        activeGame: clientGame,
+        defaultClientIds: { [clientGame]: target },
+        ...(clientGame === "ja" ? { defaultClientId: target } : {}),
       });
 
       // A client created a moment ago is not in the list yet, and its engine

@@ -338,13 +338,16 @@ impl SettingsPatch {
         if let Some(value) = self.active_game {
             settings.active_game = value;
         }
-        if let Some(entries) = self.game_data_paths {
-            merge_per_game(&mut settings.game_data_paths, entries);
-        }
-        // The one-game field lands on the Jedi Academy entry, after the map,
-        // so a patch carrying both means what the map says.
+        // The one-game field lands on the Jedi Academy entry, before the map,
+        // so a patch carrying both means what the map says. The map is the
+        // form of 0.3 and the only one the launcher itself sends; the 0.2
+        // field is kept for a caller that still speaks the old shape, and a
+        // retired field does not get to overrule the current one.
         if let Some(value) = self.game_data_path {
             set_per_game(&mut settings.game_data_paths, Game::JediAcademy, value);
+        }
+        if let Some(entries) = self.game_data_paths {
+            merge_per_game(&mut settings.game_data_paths, entries);
         }
 
         if let Some(value) = self.default_client_id {
@@ -804,6 +807,23 @@ mod tests {
         patch(r#"{"gameDataPath":"D:\\GameData"}"#).apply(&mut settings);
         assert_eq!(settings.game_data_path(Game::JediAcademy), Some("D:\\GameData"));
         assert_eq!(settings.game_data_path(Game::JediOutcast), None);
+    }
+
+    #[test]
+    fn the_map_beats_the_one_game_field_in_a_patch_that_carries_both() {
+        // Nothing in the launcher sends both — the screens speak the map only
+        // — but the order the two are applied in decides the answer, and the
+        // retired field is not the one that should win.
+        let mut settings = Settings::default();
+        patch(r#"{"gameDataPath":"D:\\Old","gameDataPaths":{"ja":"D:\\New"}}"#)
+            .apply(&mut settings);
+        assert_eq!(settings.game_data_path(Game::JediAcademy), Some("D:\\New"));
+
+        // And the map clears the entry the old field just wrote, rather than
+        // the old field restoring it.
+        patch(r#"{"gameDataPath":"D:\\Old","gameDataPaths":{"ja":null}}"#)
+            .apply(&mut settings);
+        assert_eq!(settings.game_data_path(Game::JediAcademy), None);
     }
 
     #[test]
