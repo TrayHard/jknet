@@ -1161,9 +1161,20 @@ export interface JkhubInstalled {
   files: string[];
 }
 
+/**
+ * Payload of `jkhub:categories-updated`.
+ *
+ * Sent when the walk the core started behind an answer produced a newer tree.
+ * Carries the game and nothing else: the screen refetches that one tree.
+ */
+export interface JkhubCategoriesUpdated {
+  game: Game;
+}
+
 export const jkhubEvents = {
   downloadProgress: "jkhub:download-progress",
   installed: "jkhub:installed",
+  categoriesUpdated: "jkhub:categories-updated",
 } as const;
 
 /**
@@ -1175,7 +1186,14 @@ export const jkhubEvents = {
  * the core reads from the settings.
  */
 export const jkhubIpc = {
-  /** The category tree of one game. `refresh` skips a fresh cache entry. */
+  /**
+   * The category tree of one game.
+   *
+   * Answers from the disk cache or from the tree bundled with the build and
+   * walks the site behind the answer, which arrives as
+   * `jkhub:categories-updated`. `refresh` is **Update categories**: it walks
+   * before answering and takes about twenty requests.
+   */
   categories: (game?: Game, refresh = false) =>
     call<JkhubCategories>("jkhub_categories", { game: game ?? null, refresh }),
   /** `game` names the tree the category's slug is read from. */

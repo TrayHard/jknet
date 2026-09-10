@@ -11,6 +11,7 @@
 //! parsers. Nothing above it knows what a `csrfKey` is.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
 
 use crate::error::{AppError, Result};
 use crate::game::Game;
@@ -19,6 +20,7 @@ use crate::paths::DataPaths;
 use super::cache;
 use super::client::{JkhubClient, Page};
 use super::parse;
+use super::snapshot;
 use super::types::{
     JkhubCategories, JkhubCategory, JkhubFile, JkhubFileView, JkhubListing, JkhubSort,
 };
@@ -31,6 +33,14 @@ use super::types::{
 #[allow(async_fn_in_trait)]
 pub trait JkhubSource {
     /// The category tree of one game, roots first.
+    ///
+    /// Nothing calls it today: `jkhub_categories` wants the plan alongside the
+    /// tree and goes through [`HtmlSource::categories_with_plan`]. It stays in
+    /// the trait because it is the action the seam is about — a REST reader
+    /// answers it in one request and needs no plan at all — and because
+    /// deleting it would leave the trait describing three of the four things
+    /// a reader does.
+    #[allow(dead_code)]
     async fn categories(&self, game: Game) -> Result<JkhubCategories>;
 
     /// One page of one category.
@@ -50,13 +60,66 @@ pub trait JkhubSource {
     async fn file(&self, id: u32) -> Result<JkhubFileView>;
 }
 
+/// What a request for the category tree should cost.
+///
+/// The tree changes a few times a year and takes about twenty requests to
+/// walk, so the reader never makes the screen wait for one when it has
+/// anything else to show. Everything but [`TreeDecision::ServeFresh`] and a
+/// forced walk is followed by a refresh behind the answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TreeDecision {
+    /// The disk cache is inside its lifetime: answer from it and ask nothing.
+    ServeFresh,
+    /// The disk cache is past its lifetime: answer from it, walk behind it.
+    ServeStale,
+    /// Nothing on disk: answer from the bundled snapshot, walk behind it.
+    ServeSnapshot,
+    /// Nothing on disk and no snapshot, or the caller forced a walk: walk
+    /// before answering.
+    CrawlNow,
+}
+
+impl TreeDecision {
+    /// Whether the answer needs a walk behind it.
+    pub fn wants_refresh(self) -> bool {
+        matches!(self, TreeDecision::ServeStale | TreeDecision::ServeSnapshot)
+    }
+}
+
+/// Picks what to do about a request for the tree of one game.
+///
+/// Pure on purpose: the four ways a tree can arrive are the part of this
+/// module worth a test, and none of them needs a disk or a network.
+///
+/// `cached` is `Some(true)` for a cache entry inside its lifetime,
+/// `Some(false)` for one past it and `None` when there is no entry at all.
+pub fn decide(cached: Option<bool>, has_snapshot: bool, force: bool) -> TreeDecision {
+    if force {
+        return TreeDecision::CrawlNow;
+    }
+    match cached {
+        Some(true) => TreeDecision::ServeFresh,
+        Some(false) => TreeDecision::ServeStale,
+        None if has_snapshot => TreeDecision::ServeSnapshot,
+        None => TreeDecision::CrawlNow,
+    }
+}
+
+/// Writes a walked tree into the disk cache and answers when it was written.
+pub fn store_tree(data: &DataPaths, game: Game, tree: &[JkhubCategory]) -> String {
+    let name = cache::categories_name(game.id());
+    cache::write(data, &name, &tree, cache::CATEGORIES_TTL)
+}
+
 /// The reader that parses the public pages of jkhub.org.
 pub struct HtmlSource<'a> {
     pub client: &'a JkhubClient,
     pub data: &'a DataPaths,
-    /// True when the caller pressed **Refresh**: ask the site even if the
-    /// cached copy is still fresh.
+    /// True when the caller pressed **Update categories**: walk the tree even
+    /// if the cached copy is still fresh.
     pub force: bool,
+    /// Folder of the bundled category snapshots, when this build has one.
+    pub snapshots: Option<PathBuf>,
 }
 
 impl<'a> HtmlSource<'a> {
@@ -65,6 +128,7 @@ impl<'a> HtmlSource<'a> {
             client,
             data,
             force: false,
+            snapshots: None,
         }
     }
 
@@ -72,6 +136,102 @@ impl<'a> HtmlSource<'a> {
     pub fn forced(mut self, force: bool) -> Self {
         self.force = force;
         self
+    }
+
+    /// The same reader, told where the bundled snapshots live.
+    pub fn with_snapshots(mut self, dir: Option<PathBuf>) -> Self {
+        self.snapshots = dir;
+        self
+    }
+
+    /// The tree of one game, plus whether a walk should follow the answer.
+    ///
+    /// The flag is answered rather than acted on: starting a background task
+    /// needs an `AppHandle`, and this module has no business holding one. The
+    /// command in `mod.rs` owns that half.
+    pub async fn categories_with_plan(&self, game: Game) -> Result<(JkhubCategories, bool)> {
+        let name = cache::categories_name(game.id());
+        let cached = cache::read::<Vec<JkhubCategory>>(self.data, &name);
+        // Read only when it could be used: the common path has a cache entry,
+        // and opening a file the answer would throw away is wasted work.
+        let snapshot = match (&cached, self.force, &self.snapshots) {
+            (None, false, Some(dir)) => snapshot::read(dir, game),
+            _ => None,
+        };
+
+        let decision = decide(
+            cached.as_ref().map(|entry| entry.fresh),
+            snapshot.is_some(),
+            self.force,
+        );
+        match decision {
+            TreeDecision::ServeFresh | TreeDecision::ServeStale => {
+                if let Some(entry) = cached {
+                    let stale = decision == TreeDecision::ServeStale;
+                    return Ok((
+                        JkhubCategories {
+                            game,
+                            categories: entry.payload,
+                            fetched_at: entry.fetched_at,
+                            stale,
+                        },
+                        decision.wants_refresh(),
+                    ));
+                }
+            }
+            TreeDecision::ServeSnapshot => {
+                if let Some(snapshot) = snapshot {
+                    log::info!(
+                        "jkhub: serving the bundled {} tree of {}, walking behind it",
+                        game.id(),
+                        snapshot.generated_at
+                    );
+                    return Ok((
+                        JkhubCategories {
+                            game,
+                            categories: snapshot.categories,
+                            fetched_at: snapshot.generated_at,
+                            // Dated by definition: it is as old as the build.
+                            stale: true,
+                        },
+                        true,
+                    ));
+                }
+            }
+            TreeDecision::CrawlNow => {}
+        }
+
+        match crawl_tree(self.client, game).await {
+            Ok(tree) => {
+                let fetched_at = store_tree(self.data, game, &tree);
+                Ok((
+                    JkhubCategories {
+                        game,
+                        categories: tree,
+                        fetched_at,
+                        stale: false,
+                    },
+                    false,
+                ))
+            }
+            // The tree is expensive to rebuild and changes a few times a
+            // year: an old copy beats an empty screen.
+            Err(e) => match cache::read::<Vec<JkhubCategory>>(self.data, &name) {
+                Some(entry) => {
+                    log::warn!("jkhub: serving the stale category tree, {e}");
+                    Ok((
+                        JkhubCategories {
+                            game,
+                            categories: entry.payload,
+                            fetched_at: entry.fetched_at,
+                            stale: true,
+                        },
+                        false,
+                    ))
+                }
+                None => Err(e),
+            },
+        }
     }
 
     /// Address of one page of one category listing.
@@ -114,115 +274,114 @@ impl<'a> HtmlSource<'a> {
         String::new()
     }
 
-    /// Walks the tree of one game, one page per direct child of a root.
-    ///
-    /// The walk is what the report calls for: a container such as Maps (71)
-    /// answers with «No files in this category yet.» and a menu of children,
-    /// so an empty listing is not the end of the branch (report, section 2).
-    ///
-    /// The file count of a category is printed in exactly one place — the
-    /// **Subcategories** widget on the page of its **parent** — and the two
-    /// game roots have no such page: `/files/category/41-jedi-academy/`
-    /// redirects to a hand-written page of the site's CMS, which carries no
-    /// widget at all. So the counts come from three honest sources and are
-    /// left empty rather than guessed:
-    ///
-    /// * `/files/categories/` prints the count of each root;
-    /// * `/files/` carries a trimmed widget with the count of each root and
-    ///   of its first five children;
-    /// * the widget on a child's own page counts every grandchild, and when
-    ///   the child's listing fits on one page the cards on it are the count.
-    async fn crawl_tree(&self, game: Game) -> Result<Vec<JkhubCategory>> {
-        let index = self
-            .client
-            .fetch_html(&format!("{}/files/categories/", parse::SITE))
-            .await?;
-        let roots = parse::parse_category_index(&index.body)?;
+}
 
-        let home = self
-            .client
-            .fetch_html(&format!("{}/files/", parse::SITE))
-            .await?;
-        let counts: BTreeMap<u32, u32> = parse::parse_subcategories(&home.body)
-            .into_iter()
-            .filter_map(|entry| entry.file_count.map(|count| (entry.id, count)))
-            .collect();
+/// Walks the tree of one game, one page per direct child of a root.
+///
+/// The walk is what the report calls for: a container such as Maps (71)
+/// answers with «No files in this category yet.» and a menu of children, so an
+/// empty listing is not the end of the branch (report, section 2).
+///
+/// The file count of a category is printed in exactly one place — the
+/// **Subcategories** widget on the page of its **parent** — and the two game
+/// roots have no such page: `/files/category/41-jedi-academy/` redirects to a
+/// hand-written page of the site's CMS, which carries no widget at all. So the
+/// counts come from three honest sources and are left empty rather than
+/// guessed:
+///
+/// * `/files/categories/` prints the count of each root;
+/// * `/files/` carries a trimmed widget with the count of each root and of its
+///   first five children;
+/// * the widget on a child's own page counts every grandchild, and when the
+///   child's listing fits on one page the cards on it are the count.
+///
+/// A free function rather than a method: the walk needs no cache and no
+/// snapshot folder, and the background refresh in `mod.rs` runs it with
+/// nothing but the shared client.
+pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCategory>> {
+    let index = client
+        .fetch_html(&format!("{}/files/categories/", parse::SITE))
+        .await?;
+    let roots = parse::parse_category_index(&index.body)?;
 
-        let mut tree = Vec::new();
-        for root in roots {
-            let Some(root_game) = parse::game_of_root(root.id) else {
-                // Contest Entries (77) has no game and is usually empty; the
-                // screens hide it, so it is not walked either.
-                continue;
-            };
-            if !root_game.matches(game) {
-                continue;
-            }
+    let home = client.fetch_html(&format!("{}/files/", parse::SITE)).await?;
+    let counts: BTreeMap<u32, u32> = parse::parse_subcategories(&home.body)
+        .into_iter()
+        .filter_map(|entry| entry.file_count.map(|count| (entry.id, count)))
+        .collect();
+
+    let mut tree = Vec::new();
+    for root in roots {
+        let Some(root_game) = parse::game_of_root(root.id) else {
+            // Contest Entries (77) has no game and is usually empty; the
+            // screens hide it, so it is not walked either.
+            continue;
+        };
+        if !root_game.matches(game) {
+            continue;
+        }
+        tree.push(JkhubCategory {
+            id: root.id,
+            slug: root.slug.clone(),
+            name: root.name.clone(),
+            parent_id: None,
+            game: root_game,
+            file_count: root.file_count,
+            // The two game roots redirect to hand-written pages of the site's
+            // CMS and never list files themselves (report, section 2).
+            has_files: false,
+            url: parse::category_url(root.id, &root.slug),
+        });
+
+        for child in root.children {
+            let page = client
+                .fetch_html(&parse::category_url(child.id, &child.slug))
+                .await?;
+            let grandchildren = parse::parse_subcategories(&page.body);
+            let has_files = !parse::says_no_files(&page.body);
             tree.push(JkhubCategory {
-                id: root.id,
-                slug: root.slug.clone(),
-                name: root.name.clone(),
-                parent_id: None,
+                id: child.id,
+                slug: child.slug.clone(),
+                name: child.name.clone(),
+                parent_id: Some(root.id),
                 game: root_game,
-                file_count: root.file_count,
-                // The two game roots redirect to hand-written pages of the
-                // site's CMS and never list files themselves (report,
-                // section 2).
-                has_files: false,
-                url: parse::category_url(root.id, &root.slug),
+                file_count: counts
+                    .get(&child.id)
+                    .copied()
+                    .or_else(|| exact_count(&page.body, has_files)),
+                has_files,
+                url: parse::category_url(child.id, &child.slug),
             });
-
-            for child in root.children {
-                let page = self
-                    .client
-                    .fetch_html(&parse::category_url(child.id, &child.slug))
-                    .await?;
-                let grandchildren = parse::parse_subcategories(&page.body);
-                let has_files = !parse::says_no_files(&page.body);
-                tree.push(JkhubCategory {
-                    id: child.id,
-                    slug: child.slug.clone(),
-                    name: child.name.clone(),
-                    parent_id: Some(root.id),
-                    game: root_game,
-                    file_count: counts
-                        .get(&child.id)
-                        .copied()
-                        .or_else(|| exact_count(&page.body, has_files)),
-                    has_files,
-                    url: parse::category_url(child.id, &child.slug),
-                });
-                for grandchild in grandchildren {
-                    if grandchild.id == child.id {
-                        continue;
-                    }
-                    tree.push(JkhubCategory {
-                        id: grandchild.id,
-                        slug: grandchild.slug.clone(),
-                        name: grandchild.name.clone(),
-                        parent_id: Some(child.id),
-                        game: root_game,
-                        file_count: grandchild
-                            .file_count
-                            .or_else(|| counts.get(&grandchild.id).copied()),
-                        // Not visited: the site's tree is three deep, and a
-                        // page per grandchild would double the walk. A wrong
-                        // `true` costs one empty listing, which the screen
-                        // already renders.
-                        has_files: true,
-                        url: parse::category_url(grandchild.id, &grandchild.slug),
-                    });
+            for grandchild in grandchildren {
+                if grandchild.id == child.id {
+                    continue;
                 }
+                tree.push(JkhubCategory {
+                    id: grandchild.id,
+                    slug: grandchild.slug.clone(),
+                    name: grandchild.name.clone(),
+                    parent_id: Some(child.id),
+                    game: root_game,
+                    file_count: grandchild
+                        .file_count
+                        .or_else(|| counts.get(&grandchild.id).copied()),
+                    // Not visited: the site's tree is three deep, and a page
+                    // per grandchild would double the walk. A wrong `true`
+                    // costs one empty listing, which the screen already
+                    // renders.
+                    has_files: true,
+                    url: parse::category_url(grandchild.id, &grandchild.slug),
+                });
             }
         }
-
-        // The counts of the direct children are printed on the parent's page,
-        // and the two game roots have no page of their own — so a child of a
-        // root keeps whatever count the walk found, and the rest come from
-        // the grandchild entries above. Nothing is invented here.
-        dedup(&mut tree);
-        Ok(tree)
     }
+
+    // The counts of the direct children are printed on the parent's page, and
+    // the two game roots have no page of their own — so a child of a root
+    // keeps whatever count the walk found, and the rest come from the
+    // grandchild entries above. Nothing is invented here.
+    dedup(&mut tree);
+    Ok(tree)
 }
 
 /// The file count of a category whose whole listing fits on one page.
@@ -249,45 +408,11 @@ fn dedup(tree: &mut Vec<JkhubCategory>) {
 }
 
 impl JkhubSource for HtmlSource<'_> {
+    /// The tree, dropping the plan the command half of the module acts on.
     async fn categories(&self, game: Game) -> Result<JkhubCategories> {
-        let name = cache::categories_name(game.id());
-        let cached = cache::read::<Vec<JkhubCategory>>(self.data, &name);
-        if let Some(entry) = &cached {
-            if entry.fresh && !self.force {
-                return Ok(JkhubCategories {
-                    game,
-                    categories: entry.payload.clone(),
-                    fetched_at: entry.fetched_at.clone(),
-                    stale: false,
-                });
-            }
-        }
-
-        match self.crawl_tree(game).await {
-            Ok(tree) => {
-                let fetched_at = cache::write(self.data, &name, &tree, cache::CATEGORIES_TTL);
-                Ok(JkhubCategories {
-                    game,
-                    categories: tree,
-                    fetched_at,
-                    stale: false,
-                })
-            }
-            // The tree is expensive to rebuild and changes a few times a
-            // year: an old copy beats an empty screen.
-            Err(e) => match cached {
-                Some(entry) => {
-                    log::warn!("jkhub: serving the stale category tree, {e}");
-                    Ok(JkhubCategories {
-                        game,
-                        categories: entry.payload,
-                        fetched_at: entry.fetched_at,
-                        stale: true,
-                    })
-                }
-                None => Err(e),
-            },
-        }
+        self.categories_with_plan(game)
+            .await
+            .map(|(categories, _)| categories)
     }
 
     async fn list(
@@ -545,6 +670,129 @@ mod tests {
             None,
             "a container holds no files of its own"
         );
+    }
+
+    #[test]
+    fn the_tree_is_served_from_whatever_is_at_hand_and_walked_behind_it() {
+        // fresh cache, stale cache, no cache with a snapshot, nothing at all.
+        assert_eq!(decide(Some(true), false, false), TreeDecision::ServeFresh);
+        assert_eq!(decide(Some(false), false, false), TreeDecision::ServeStale);
+        assert_eq!(decide(None, true, false), TreeDecision::ServeSnapshot);
+        assert_eq!(decide(None, false, false), TreeDecision::CrawlNow);
+
+        // A snapshot never wins over the cache: the cache was read from the
+        // site, the snapshot is as old as the build.
+        assert_eq!(decide(Some(true), true, false), TreeDecision::ServeFresh);
+        assert_eq!(decide(Some(false), true, false), TreeDecision::ServeStale);
+
+        // **Update categories** walks whatever is on disk.
+        for cached in [Some(true), Some(false), None] {
+            for has_snapshot in [true, false] {
+                assert_eq!(
+                    decide(cached, has_snapshot, true),
+                    TreeDecision::CrawlNow,
+                    "cached {cached:?}, snapshot {has_snapshot}"
+                );
+            }
+        }
+
+        // Only the two answers that served something old ask for a walk.
+        assert!(!TreeDecision::ServeFresh.wants_refresh());
+        assert!(TreeDecision::ServeStale.wants_refresh());
+        assert!(TreeDecision::ServeSnapshot.wants_refresh());
+        assert!(!TreeDecision::CrawlNow.wants_refresh());
+    }
+
+    #[tokio::test]
+    async fn a_bundled_snapshot_answers_without_a_single_request() {
+        use super::super::snapshot::Snapshot;
+
+        let client = JkhubClient::new().expect("a client");
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let data = DataPaths::new(dir.path().to_path_buf());
+        data.ensure().expect("the layout is created");
+
+        let bundle = dir.path().join("resources").join("jkhub");
+        std::fs::create_dir_all(&bundle).expect("the folder exists");
+        let snapshot = Snapshot {
+            game: Game::JediAcademy,
+            generated_at: "2026-09-10T12:00:00Z".into(),
+            categories: vec![JkhubCategory {
+                id: 13,
+                slug: "free-for-all".into(),
+                name: "Free For All".into(),
+                parent_id: Some(71),
+                game: JkhubGame::Ja,
+                file_count: Some(367),
+                has_files: true,
+                url: parse::category_url(13, "free-for-all"),
+            }],
+        };
+        std::fs::write(
+            bundle.join(snapshot::file_name(Game::JediAcademy)),
+            serde_json::to_string(&snapshot).expect("it serializes"),
+        )
+        .expect("it writes");
+
+        // No cache entry and no network: the answer can only be the bundle.
+        // A walk would need jkhub.org, and this test never reaches it.
+        let source = HtmlSource::new(&client, &data).with_snapshots(Some(bundle));
+        let (answer, wants_refresh) = source
+            .categories_with_plan(Game::JediAcademy)
+            .await
+            .expect("the bundle answers");
+        assert_eq!(answer.categories.len(), 1);
+        assert_eq!(answer.categories[0].id, 13);
+        assert_eq!(answer.fetched_at, "2026-09-10T12:00:00Z");
+        assert!(answer.stale, "a bundled tree is as old as the build");
+        assert!(wants_refresh, "and is walked behind the answer");
+    }
+
+    #[tokio::test]
+    async fn a_fresh_cache_entry_answers_and_asks_for_nothing() {
+        let client = JkhubClient::new().expect("a client");
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let data = DataPaths::new(dir.path().to_path_buf());
+        data.ensure().expect("the layout is created");
+
+        let tree = vec![JkhubCategory {
+            id: 25,
+            slug: "server-side".into(),
+            name: "Server-Side".into(),
+            parent_id: Some(72),
+            game: JkhubGame::Ja,
+            file_count: Some(28),
+            has_files: true,
+            url: parse::category_url(25, "server-side"),
+        }];
+        let written = store_tree(&data, Game::JediAcademy, &tree);
+        assert!(!written.is_empty());
+
+        let source = HtmlSource::new(&client, &data);
+        let (answer, wants_refresh) = source
+            .categories_with_plan(Game::JediAcademy)
+            .await
+            .expect("the cache answers");
+        assert_eq!(answer.categories, tree);
+        assert!(!answer.stale);
+        assert!(!wants_refresh, "nothing to walk behind a current tree");
+
+        // The same entry past its lifetime still answers, and asks for a walk
+        // behind it. A lifetime of zero seconds is spent by the time it is
+        // read, so this needs no clock and no network either.
+        cache::write(
+            &data,
+            &cache::categories_name(Game::JediAcademy.id()),
+            &tree,
+            0,
+        );
+        let (answer, wants_refresh) = source
+            .categories_with_plan(Game::JediAcademy)
+            .await
+            .expect("the spent entry answers");
+        assert_eq!(answer.categories, tree);
+        assert!(answer.stale, "the screen says From cache");
+        assert!(wants_refresh, "and the tree is walked behind it");
     }
 
     #[test]

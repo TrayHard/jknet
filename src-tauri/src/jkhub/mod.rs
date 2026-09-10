@@ -14,6 +14,7 @@
 //! | `types.rs` | the wire types, mirrored in `src/lib/ipc.ts` |
 //! | `client.rs` | one HTTP client, one cookie jar, and the limiter in front |
 //! | `cache.rs` | `cache\jkhub\`: the tree, the listings, the file pages |
+//! | `snapshot.rs` | the category tree bundled with the build |
 //! | `parse.rs` | pure parsers, tested against saved pages |
 //! | `source.rs` | the trait, the HTML reader, the REST placeholder |
 //! | `download.rs` | the `csrfKey` flow and the streaming download |
@@ -30,10 +31,11 @@ pub mod client;
 pub mod download;
 pub mod install;
 pub mod parse;
+pub mod snapshot;
 pub mod source;
 pub mod types;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -50,12 +52,82 @@ use crate::timestamp;
 use client::JkhubClient;
 use source::{HtmlSource, JkhubSource};
 use types::{
-    InstalledEvent, JkhubCategories, JkhubDownload, JkhubFileView, JkhubInstallOutcome,
-    JkhubInstallResult, JkhubListing, JkhubSort, Provenance,
+    CategoriesUpdatedEvent, InstalledEvent, JkhubCategories, JkhubDownload, JkhubFileView,
+    JkhubInstallOutcome, JkhubInstallResult, JkhubListing, JkhubSort, Provenance,
 };
 
 /// Emitted once an install finished, so any open screen refetches.
 const INSTALLED_EVENT: &str = "jkhub:installed";
+
+/// Emitted once a walk behind an answer produced a newer tree.
+const CATEGORIES_UPDATED_EVENT: &str = "jkhub:categories-updated";
+
+/// Shortest gap between two walks of the same tree, in seconds.
+///
+/// The disk cache already keeps a walked tree for a week
+/// ([`cache::CATEGORIES_TTL`]); this is the separate promise that a launcher
+/// which cannot reach the site — or reaches it and gets an unparsable page —
+/// still walks at most once a day rather than on every open of the tab.
+/// **Update categories** ignores it: the player asked.
+pub const TREE_REFRESH_INTERVAL: u64 = 24 * 60 * 60;
+
+/// What the background walk of one game's tree is up to.
+#[derive(Debug, Clone, Copy, Default)]
+struct TreeRefresh {
+    /// A walk is in flight right now.
+    running: bool,
+    /// Unix seconds of the last walk that was started, whichever way it ended.
+    last_attempt: u64,
+}
+
+/// Keeps the walk behind an answer from running twice, or too often.
+///
+/// Two screens can ask for the same tree in the same second — the tab renders
+/// while a toast from the previous open is still up — and every one of those
+/// answers would otherwise start its own twenty-request walk.
+#[derive(Debug, Default)]
+pub struct TreeRefreshes(Mutex<HashMap<Game, TreeRefresh>>);
+
+impl TreeRefreshes {
+    /// Claims the walk of one game, or refuses and says nothing happened.
+    ///
+    /// A poisoned lock refuses: a launcher that skips a background walk shows
+    /// a tree up to a week old, and one that panics in a spawned task shows
+    /// nothing at all.
+    fn start(&self, game: Game, now: u64) -> bool {
+        let Ok(mut trees) = self.0.lock() else {
+            log::error!("jkhub: the tree refresh lock is poisoned, skipping the walk");
+            return false;
+        };
+        let entry = trees.entry(game).or_default();
+        if entry.running {
+            return false;
+        }
+        if entry.last_attempt > 0 && now.saturating_sub(entry.last_attempt) < TREE_REFRESH_INTERVAL {
+            return false;
+        }
+        entry.running = true;
+        entry.last_attempt = now;
+        true
+    }
+
+    /// Releases the claim, however the walk ended.
+    fn finish(&self, game: Game) {
+        match self.0.lock() {
+            Ok(mut trees) => trees.entry(game).or_default().running = false,
+            Err(e) => log::error!("cannot release the JKHub tree claim of {}: {e}", game.id()),
+        }
+    }
+
+    /// Records a walk that ran in the foreground, so the one behind the next
+    /// answer does not repeat it.
+    fn note(&self, game: Game, now: u64) {
+        match self.0.lock() {
+            Ok(mut trees) => trees.entry(game).or_default().last_attempt = now,
+            Err(e) => log::error!("cannot note the JKHub tree walk of {}: {e}", game.id()),
+        }
+    }
+}
 
 /// Everything the module keeps between calls.
 ///
@@ -67,6 +139,8 @@ pub struct JkhubState {
     /// Files with an install in flight. A second call for the same file is
     /// refused rather than queued, the way `InstallState` guards an engine.
     busy: Mutex<HashSet<u32>>,
+    /// Walks of the category tree, one entry per game.
+    trees: TreeRefreshes,
 }
 
 impl Default for JkhubState {
@@ -81,6 +155,7 @@ impl Default for JkhubState {
         JkhubState {
             client,
             busy: Mutex::new(HashSet::new()),
+            trees: TreeRefreshes::default(),
         }
     }
 }
@@ -135,9 +210,22 @@ impl Drop for InstallGuard<'_> {
 
 /// The category tree of one game, roots first.
 ///
-/// `refresh` skips a cache entry that is still fresh, which is what the
-/// **Refresh** action on the screen does. The walk costs one request per
-/// direct child of a root, so it is cached for a day.
+/// Answers from whatever is at hand and walks the site behind the answer, so
+/// the first open of the tab renders instead of waiting for twenty requests:
+///
+/// | On disk | Answer | Behind it |
+/// | --- | --- | --- |
+/// | a walked tree under a week old | it, `stale: false` | nothing |
+/// | a walked tree older than that | it, `stale: true` | a walk |
+/// | nothing, but the build ships a snapshot | the snapshot, `stale: true` | a walk |
+/// | nothing at all | a walk | — |
+///
+/// The walk behind the answer emits `jkhub:categories-updated` when it
+/// produced a tree, and runs at most once a day per game
+/// ([`TREE_REFRESH_INTERVAL`]).
+///
+/// `refresh` is the **Update categories** action of the screen: it walks
+/// before answering and ignores both the cache and that daily limit.
 ///
 /// --- slice: game core ---
 /// `game` picks the tree; leaving it out means the active game, the way every
@@ -145,6 +233,7 @@ impl Drop for InstallGuard<'_> {
 /// separate roots, and `Both Games/Other` shows up under either.
 #[tauri::command]
 pub async fn jkhub_categories(
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     jkhub: tauri::State<'_, JkhubState>,
     game: Option<Game>,
@@ -152,8 +241,61 @@ pub async fn jkhub_categories(
 ) -> Result<JkhubCategories> {
     let game = state.settings()?.game_or_active(game);
     let data = state.paths()?;
-    let source = HtmlSource::new(jkhub.client()?, &data).forced(refresh.unwrap_or(false));
-    source.categories(game).await
+    let force = refresh.unwrap_or(false);
+    let source = HtmlSource::new(jkhub.client()?, &data)
+        .forced(force)
+        .with_snapshots(snapshot::bundled_dir(&app));
+    let (categories, wants_refresh) = source.categories_with_plan(game).await?;
+    if force {
+        // The player just paid for a walk in the foreground; the one behind
+        // the next answer has nothing left to find.
+        jkhub.trees.note(game, timestamp::now_unix());
+    } else if wants_refresh {
+        refresh_tree_behind(&app, game);
+    }
+    Ok(categories)
+}
+
+/// Walks the tree of one game behind an answer that was already served.
+///
+/// Silent by design: the screen has a tree on it already, and a walk that
+/// fails leaves that tree where it is. The one thing it does say is
+/// `jkhub:categories-updated`, and only when it wrote a newer tree.
+fn refresh_tree_behind(app: &AppHandle, game: Game) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let jkhub = app.state::<JkhubState>();
+        if !jkhub.trees.start(game, timestamp::now_unix()) {
+            return;
+        }
+        let walked = match (app.state::<AppState>().paths(), jkhub.client()) {
+            (Ok(data), Ok(client)) => match source::crawl_tree(client, game).await {
+                Ok(tree) => {
+                    source::store_tree(&data, game, &tree);
+                    log::info!(
+                        "jkhub: the {} tree now holds {} categories",
+                        game.id(),
+                        tree.len()
+                    );
+                    true
+                }
+                Err(e) => {
+                    log::warn!("jkhub: the {} tree stays as it was, {e}", game.id());
+                    false
+                }
+            },
+            (Err(e), _) | (_, Err(e)) => {
+                log::warn!("jkhub: cannot walk the {} tree, {e}", game.id());
+                false
+            }
+        };
+        jkhub.trees.finish(game);
+        if walked {
+            if let Err(e) = app.emit(CATEGORIES_UPDATED_EVENT, CategoriesUpdatedEvent { game }) {
+                log::warn!("cannot emit {CATEGORIES_UPDATED_EVENT}: {e}");
+            }
+        }
+    });
 }
 
 /// One page of one category, 25 cards at a time.
@@ -468,6 +610,40 @@ mod tests {
             engine_published_at: None,
             fs_game: fs_game.map(str::to_string),
         }
+    }
+
+    #[test]
+    fn the_tree_is_walked_once_at_a_time_and_once_a_day() {
+        let trees = TreeRefreshes::default();
+        let day = TREE_REFRESH_INTERVAL;
+        let now = 1_800_000_000;
+
+        assert!(trees.start(Game::JediAcademy, now), "the first walk starts");
+        assert!(
+            !trees.start(Game::JediAcademy, now + 5),
+            "a second answer must not start a second walk"
+        );
+        assert!(
+            trees.start(Game::JediOutcast, now),
+            "the other game has its own walk"
+        );
+
+        trees.finish(Game::JediAcademy);
+        assert!(
+            !trees.start(Game::JediAcademy, now + day - 1),
+            "a walk that just ran is not repeated within the day"
+        );
+        assert!(
+            trees.start(Game::JediAcademy, now + day),
+            "a day later it walks again"
+        );
+        trees.finish(Game::JediAcademy);
+
+        // **Update categories** walks in the foreground and only writes down
+        // that it did, so the answer after it starts nothing.
+        trees.note(Game::JediAcademy, now + day + 10);
+        assert!(!trees.start(Game::JediAcademy, now + day + 11));
+        assert!(trees.start(Game::JediAcademy, now + 2 * day + 10));
     }
 
     #[test]

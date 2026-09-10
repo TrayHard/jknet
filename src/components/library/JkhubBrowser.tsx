@@ -23,7 +23,8 @@ import {
   useJkhubFile,
   useJkhubInstall,
   useJkhubListing,
-  useRefreshJkhub,
+  useRefreshJkhubCategories,
+  useRefreshJkhubListing,
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 
@@ -61,6 +62,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   const [result, setResult] = useState<JkhubInstallResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingTree, setUpdatingTree] = useState(false);
 
   const toasts = useToasts();
   // JKHub keeps the two games in separate roots, so the tab browses the game
@@ -69,7 +71,8 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   // fetches the new game's catalogue by itself.
   const game = useActiveGame();
   const categories = useJkhubCategories(game);
-  const refresh = useRefreshJkhub();
+  const refreshListing = useRefreshJkhubListing();
+  const refreshCategories = useRefreshJkhubCategories();
   const progress = useJkhubDownloadProgress();
   const install = useJkhubInstall(clientId);
   const details = useJkhubFile(openFile);
@@ -188,12 +191,37 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     void revealItemInDir(path).catch((e: unknown) => setFailure(errorMessage(e)));
   };
 
+  // **Refresh** reads what is on screen: the pages of the open listing and the
+  // open file page, past the core's own half-hour cache. It deliberately
+  // leaves the category tree alone — that walk is twenty requests and has its
+  // own action in the tree header.
   const runRefresh = () => {
     setRefreshing(true);
     setFailure(null);
-    void refresh(game)
+    void refreshListing({
+      game,
+      categoryId: category?.id ?? null,
+      sort,
+      pages,
+      fileId: openFile,
+    })
       .catch((e: unknown) => setFailure(errorMessage(e)))
       .finally(() => setRefreshing(false));
+  };
+
+  const runUpdateCategories = () => {
+    setUpdatingTree(true);
+    setFailure(null);
+    void refreshCategories(game)
+      .then((answer) => {
+        toasts.show("jkhub:categories", {
+          variant: "success",
+          title: "Categories updated",
+          text: `${answer.categories.length} categories read from JKHub.`,
+        });
+      })
+      .catch((e: unknown) => setFailure(errorMessage(e)))
+      .finally(() => setUpdatingTree(false));
   };
 
   if (!isTauri()) {
@@ -217,7 +245,12 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
         title="JKHub did not answer"
         text={errorMessage(categories.error)}
         action={
-          <Button icon={<RefreshCw size={16} />} onClick={runRefresh}>
+          // Nothing else on the tab works without a tree, so this one walks it.
+          <Button
+            icon={<RefreshCw size={16} />}
+            disabled={updatingTree}
+            onClick={runUpdateCategories}
+          >
             Try again
           </Button>
         }
@@ -243,6 +276,8 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             categories={tree}
             selected={category?.id ?? null}
             onSelect={setCategory}
+            onUpdate={runUpdateCategories}
+            updating={updatingTree}
           />
         </aside>
 

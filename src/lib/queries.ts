@@ -46,6 +46,7 @@ import {
   type OnlineUser,
   type Invite,
   type JkhubCategories,
+  type JkhubCategoriesUpdated,
   type JkhubDownloadProgress,
   type JkhubFile,
   type JkhubListing,
@@ -1263,18 +1264,50 @@ export const jkhubKeys = {
   file: (id: number) => ["jkhub", "file", id] as const,
 };
 
-/** The category tree of one game. Cached on disk by the core for a day. */
+/**
+ * The category tree of one game.
+ *
+ * Never refetched on its own. The core answers from its disk cache — a week
+ * long — or from the tree bundled with the build, and walks the site behind
+ * the answer; twenty requests are far too many to spend on a window regaining
+ * focus. What does refetch it: the `jkhub:categories-updated` this hook
+ * listens for, which the walk emits when it found something newer, and
+ * [`useRefreshJkhubCategories`] behind the **Update categories** action.
+ */
 export function useJkhubCategories(
   game: Game,
   enabled = true,
 ): UseQueryResult<JkhubCategories> {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<JkhubCategoriesUpdated>(
+      jkhubEvents.categoriesUpdated,
+      (event) => {
+        // Only the tree of that game: a walk of Jedi Outcast has no business
+        // dropping the listing pages the player is reading in Jedi Academy.
+        void queryClient.invalidateQueries({
+          queryKey: jkhubKeys.categories(event.payload.game),
+        });
+      },
+    ).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [queryClient]);
+
   return useQuery({
     queryKey: jkhubKeys.categories(game),
     queryFn: () => jkhubIpc.categories(game),
     enabled: enabled && isTauri(),
-    // The core answers from its own cache, so a refetch on every focus would
-    // be wasted work rather than a fresh tree.
-    staleTime: 60 * 60_000,
+    staleTime: Infinity,
   });
 }
 
@@ -1303,15 +1336,81 @@ export function useJkhubFile(id: number | null): UseQueryResult<JkhubFile> {
   });
 }
 
-/** Drops every cached JKHub answer, so the next render asks the site again. */
-export function useRefreshJkhub() {
+/** What **Refresh** on the tab reads again. */
+export interface JkhubRefreshTarget {
+  game: Game;
+  /** The open category, or `null` while none is picked. */
+  categoryId: number | null;
+  sort: JkhubSort;
+  /** How many pages of the listing are on screen. */
+  pages: number;
+  /** The file whose panel is open, or `null`. */
+  fileId: number | null;
+}
+
+/**
+ * Reads the listing on screen again, and the open file page with it.
+ *
+ * Deliberately not the category tree: that costs about twenty requests, it
+ * changes a few times a year, and the core refreshes it on its own. **Update
+ * categories** in the tree header is the action for it.
+ *
+ * The pages are fetched with `refresh: true` and written into the cache by
+ * hand rather than invalidated. Invalidating would refetch them through the
+ * ordinary query function, which lets the core answer out of its own
+ * thirty-minute cache — the one thing a player pressing **Refresh** is trying
+ * to get past.
+ */
+export function useRefreshJkhubListing() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    async ({ game, categoryId, sort, pages, fileId }: JkhubRefreshTarget) => {
+      const reads: Promise<unknown>[] = [];
+      if (categoryId != null) {
+        for (let page = 1; page <= pages; page += 1) {
+          reads.push(
+            jkhubIpc
+              .list(categoryId, sort, page, game, true)
+              .then((listing) =>
+                queryClient.setQueryData(
+                  jkhubKeys.list(game, categoryId, sort, page),
+                  listing,
+                ),
+              ),
+          );
+        }
+      }
+      if (fileId != null) {
+        reads.push(
+          jkhubIpc
+            .file(fileId, true)
+            .then((file) =>
+              queryClient.setQueryData(jkhubKeys.file(fileId), file),
+            ),
+        );
+      }
+      await Promise.all(reads);
+    },
+    [queryClient],
+  );
+}
+
+/**
+ * Walks the category tree of one game before answering.
+ *
+ * The **Update categories** action of the tree header. Costs about twenty
+ * requests to jkhub.org, which is why it is a separate, quiet action rather
+ * than part of **Refresh**.
+ */
+export function useRefreshJkhubCategories() {
   const queryClient = useQueryClient();
   return useCallback(
     async (game: Game) => {
-      // `refresh: true` is what makes the core ignore its own disk cache; the
-      // invalidation below is what makes React Query ask for it.
-      await jkhubIpc.categories(game, true);
-      await queryClient.invalidateQueries({ queryKey: jkhubKeys.all });
+      // `refresh: true` is what makes the core ignore its own disk cache and
+      // its once-a-day limit on walking the tree.
+      const categories = await jkhubIpc.categories(game, true);
+      queryClient.setQueryData(jkhubKeys.categories(game), categories);
+      return categories;
     },
     [queryClient],
   );

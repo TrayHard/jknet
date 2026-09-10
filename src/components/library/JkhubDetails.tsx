@@ -5,6 +5,7 @@ import {
   Download,
   ExternalLink,
   FolderOpen,
+  ImageOff,
   MessageSquare,
   Star,
 } from "lucide-react";
@@ -43,6 +44,10 @@ interface JkhubDetailsProps {
  * from the JSON-LD copy, which the site already stripped of HTML, and the
  * launcher carries no sanitizer: putting a remote string through
  * `dangerouslySetInnerHTML` would hand jkhub.org a script in this window.
+ *
+ * Every picture here carries `referrerPolicy="no-referrer"`: the site refuses
+ * a hotlinked image with `403`, and its own screenshots are the only thing
+ * this window loads from another host. See `JkhubCard` and `index.html`.
  */
 export function JkhubDetails({
   file,
@@ -59,6 +64,12 @@ export function JkhubDetails({
   onRevealArchive,
 }: JkhubDetailsProps) {
   const [zoomed, setZoomed] = useState<string | null>(null);
+  // Addresses that answered with an error. A picture the site withdrew shows
+  // its own placeholder instead of an empty frame, and the thumbnail failing
+  // says nothing about the full-size copy, so both are tracked by address.
+  const [broken, setBroken] = useState<ReadonlySet<string>>(() => new Set());
+  const fail = (url: string) =>
+    setBroken((current) => new Set(current).add(url));
 
   const title = file?.title ?? (loading ? "Loading…" : "File");
   const conflicts = result?.kind === "conflicts" ? result.files : null;
@@ -117,23 +128,35 @@ export function JkhubDetails({
 
             {file.screenshots.length > 0 ? (
               <ul className="flex gap-8 overflow-x-auto pb-4">
-                {file.screenshots.map((shot) => (
-                  <li key={shot.url} className="shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setZoomed(shot.url)}
-                      aria-label="Open the screenshot"
-                      className="block h-120 w-200 overflow-hidden rounded-md border border-line cursor-pointer"
-                    >
-                      <img
-                        src={shot.thumbnailUrl ?? shot.url}
-                        alt=""
-                        loading="lazy"
-                        className="size-full object-cover"
-                      />
-                    </button>
-                  </li>
-                ))}
+                {file.screenshots.map((shot) => {
+                  const preview = shot.thumbnailUrl ?? shot.url;
+                  return (
+                    <li key={shot.url} className="shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setZoomed(shot.url)}
+                        aria-label="Open the screenshot"
+                        className="block h-120 w-200 overflow-hidden rounded-md border border-line cursor-pointer"
+                      >
+                        {broken.has(preview) ? (
+                          <span className="flex size-full items-center justify-center bg-elevated text-fg-muted">
+                            <ImageOff size={20} />
+                          </span>
+                        ) : (
+                          <img
+                            src={preview}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            referrerPolicy="no-referrer"
+                            onError={() => fail(preview)}
+                            className="size-full object-cover"
+                          />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             ) : null}
 
@@ -217,11 +240,21 @@ export function JkhubDetails({
           aria-label="Screenshot"
           onClick={() => setZoomed(null)}
         >
-          <img
-            src={zoomed}
-            alt=""
-            className="max-h-full max-w-full rounded-md border border-line"
-          />
+          {broken.has(zoomed) ? (
+            <p className="flex items-center gap-8 rounded-md border border-line bg-surface p-24 text-body-sm text-fg-muted">
+              <ImageOff size={16} />
+              JKHub did not serve this screenshot.
+            </p>
+          ) : (
+            <img
+              src={zoomed}
+              alt=""
+              decoding="async"
+              referrerPolicy="no-referrer"
+              onError={() => fail(zoomed)}
+              className="max-h-full max-w-full rounded-md border border-line"
+            />
+          )}
         </div>
       ) : null}
     </>

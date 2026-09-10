@@ -5,6 +5,16 @@
     <link rel="icon" type="image/png" href="/brand/jknet-logo-64.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
+    <!-- The webview sends no Referer, ever. jkhub.org refuses its own
+         thumbnails to anyone who hotlinks them: the same image answers 200
+         image/jpeg with no Referer and 403 text/plain with
+         `Referer: tauri://localhost/` or `http://localhost:1420/`, so every
+         picture on the Browse JKHub tab came back as a broken box. Nothing
+         here loses anything by it — the core does all the HTTP, and the only
+         third party the webview itself talks to is that image host. Each
+         <img> repeats the rule with referrerPolicy, which is what actually
+         applies inside a Tauri custom scheme. -->
+    <meta name="referrer" content="no-referrer" />
     <title>JKNet</title>
   </head>
 
