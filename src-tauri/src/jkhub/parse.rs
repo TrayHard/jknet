@@ -188,14 +188,34 @@ pub fn game_of_root(id: u32) -> Option<JkhubGame> {
     }
 }
 
+/// Stands in for a slug the launcher does not know.
+///
+/// The slug is cosmetic — the site looks the entry up by id and redirects to
+/// its canonical address — but the segment may not be empty: checked on
+/// 2026-09-10, `/files/file/1486-/` and `/files/file/1486/` both answer 404,
+/// while `/files/file/1486-x/` answers `301` to
+/// `/files/file/1486-saber-changer/`. So a wrong slug is safe and a missing
+/// one is not, and the real one is read back out of the address the request
+/// landed on.
+const UNKNOWN_SLUG: &str = "jknet";
+
 /// Canonical address of a category page.
 pub fn category_url(id: u32, slug: &str) -> String {
-    format!("{SITE}/files/category/{id}-{slug}/")
+    format!("{SITE}/files/category/{id}-{}/", slug_or_placeholder(slug))
 }
 
 /// Canonical address of a file page.
 pub fn file_url(id: u32, slug: &str) -> String {
-    format!("{SITE}/files/file/{id}-{slug}/")
+    format!("{SITE}/files/file/{id}-{}/", slug_or_placeholder(slug))
+}
+
+fn slug_or_placeholder(slug: &str) -> &str {
+    let slug = slug.trim();
+    if slug.is_empty() {
+        UNKNOWN_SLUG
+    } else {
+        slug
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -860,6 +880,23 @@ mod tests {
     fn a_page_without_the_structured_block_is_refused_by_name() {
         let error = parse_file_page("<html></html>", 1, "x").expect_err("no JSON-LD");
         assert!(matches!(error, AppError::JkhubParse { .. }), "{error}");
+    }
+
+    #[test]
+    fn an_address_built_without_a_slug_still_has_a_segment() {
+        // `/files/file/1486-/` is a 404, so an unknown slug becomes a
+        // placeholder the site redirects away from, never an empty segment.
+        assert_eq!(file_url(1486, ""), "https://jkhub.org/files/file/1486-jknet/");
+        assert_eq!(file_url(1486, "   "), "https://jkhub.org/files/file/1486-jknet/");
+        assert_eq!(
+            category_url(13, ""),
+            "https://jkhub.org/files/category/13-jknet/"
+        );
+        assert_eq!(
+            file_url(1486, "saber-changer"),
+            "https://jkhub.org/files/file/1486-saber-changer/",
+            "a known slug is used as it is"
+        );
     }
 
     #[test]
