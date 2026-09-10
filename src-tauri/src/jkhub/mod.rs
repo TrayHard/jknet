@@ -15,6 +15,7 @@
 //! | `client.rs` | one HTTP client, one cookie jar, and the limiter in front |
 //! | `cache.rs` | `cache\jkhub\`: the tree, the listings, the file pages |
 //! | `snapshot.rs` | the category tree bundled with the build |
+//! | `index.rs` | the local catalogue index, and the search that runs on it |
 //! | `parse.rs` | pure parsers, tested against saved pages |
 //! | `source.rs` | the trait, the HTML reader, the REST placeholder |
 //! | `download.rs` | the `csrfKey` flow and the streaming download |
@@ -29,16 +30,18 @@
 pub mod cache;
 pub mod client;
 pub mod download;
+pub mod index;
 pub mod install;
 pub mod parse;
 pub mod snapshot;
 pub mod source;
 pub mod types;
 
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
-use std::sync::Mutex;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
@@ -46,14 +49,16 @@ use crate::clients;
 use crate::error::{AppError, Result};
 use crate::game::Game;
 use crate::library;
+use crate::paths::DataPaths;
 use crate::state::AppState;
 use crate::timestamp;
 
 use client::JkhubClient;
+use index::{IndexSource, IndexUpdate, LoadedIndex, RefreshContext, SearchRequest};
 use source::{HtmlSource, JkhubSource};
 use types::{
-    CategoriesUpdatedEvent, InstalledEvent, JkhubCategories, JkhubDownload, JkhubFileView,
-    JkhubInstallOutcome, JkhubInstallResult, JkhubListing, JkhubSort, Provenance,
+    CategoriesUpdatedEvent, InstalledEvent, JkhubCard, JkhubCategories, JkhubDownload,
+    JkhubFileView, JkhubInstallOutcome, JkhubInstallResult, JkhubListing, JkhubSort, Provenance,
 };
 
 /// Emitted once an install finished, so any open screen refetches.
@@ -71,39 +76,44 @@ const CATEGORIES_UPDATED_EVENT: &str = "jkhub:categories-updated";
 /// **Update categories** ignores it: the player asked.
 pub const TREE_REFRESH_INTERVAL: u64 = 24 * 60 * 60;
 
-/// What the background walk of one game's tree is up to.
+/// What the background work on one game is up to.
 #[derive(Debug, Clone, Copy, Default)]
-struct TreeRefresh {
-    /// A walk is in flight right now.
+struct Refresh {
+    /// A walk or a crawl is in flight right now.
     running: bool,
-    /// Unix seconds of the last walk that was started, whichever way it ended.
+    /// Unix seconds of the last one that was started, whichever way it ended.
     last_attempt: u64,
 }
 
-/// Keeps the walk behind an answer from running twice, or too often.
+/// Keeps work behind an answer from running twice, or too often.
 ///
 /// Two screens can ask for the same tree in the same second — the tab renders
 /// while a toast from the previous open is still up — and every one of those
-/// answers would otherwise start its own twenty-request walk.
+/// answers would otherwise start its own twenty-request walk. The catalogue
+/// index has the same problem and a bigger bill, so it keeps its own instance
+/// of this.
 #[derive(Debug, Default)]
-pub struct TreeRefreshes(Mutex<HashMap<Game, TreeRefresh>>);
+pub struct Refreshes(Mutex<HashMap<Game, Refresh>>);
 
-impl TreeRefreshes {
-    /// Claims the walk of one game, or refuses and says nothing happened.
+impl Refreshes {
+    /// Claims the work of one game, or refuses and says nothing happened.
+    ///
+    /// `interval` is the shortest gap between two attempts; zero means the
+    /// player asked and only a run already in flight can refuse.
     ///
     /// A poisoned lock refuses: a launcher that skips a background walk shows
     /// a tree up to a week old, and one that panics in a spawned task shows
     /// nothing at all.
-    fn start(&self, game: Game, now: u64) -> bool {
-        let Ok(mut trees) = self.0.lock() else {
-            log::error!("jkhub: the tree refresh lock is poisoned, skipping the walk");
+    fn start(&self, game: Game, now: u64, interval: u64) -> bool {
+        let Ok(mut entries) = self.0.lock() else {
+            log::error!("jkhub: the refresh lock is poisoned, skipping the work");
             return false;
         };
-        let entry = trees.entry(game).or_default();
+        let entry = entries.entry(game).or_default();
         if entry.running {
             return false;
         }
-        if entry.last_attempt > 0 && now.saturating_sub(entry.last_attempt) < TREE_REFRESH_INTERVAL {
+        if entry.last_attempt > 0 && now.saturating_sub(entry.last_attempt) < interval {
             return false;
         }
         entry.running = true;
@@ -111,20 +121,29 @@ impl TreeRefreshes {
         true
     }
 
-    /// Releases the claim, however the walk ended.
+    /// Releases the claim, however the work ended.
     fn finish(&self, game: Game) {
         match self.0.lock() {
-            Ok(mut trees) => trees.entry(game).or_default().running = false,
-            Err(e) => log::error!("cannot release the JKHub tree claim of {}: {e}", game.id()),
+            Ok(mut entries) => entries.entry(game).or_default().running = false,
+            Err(e) => log::error!("cannot release the JKHub claim of {}: {e}", game.id()),
         }
     }
 
-    /// Records a walk that ran in the foreground, so the one behind the next
+    /// Records work that ran in the foreground, so the run behind the next
     /// answer does not repeat it.
     fn note(&self, game: Game, now: u64) {
         match self.0.lock() {
-            Ok(mut trees) => trees.entry(game).or_default().last_attempt = now,
-            Err(e) => log::error!("cannot note the JKHub tree walk of {}: {e}", game.id()),
+            Ok(mut entries) => entries.entry(game).or_default().last_attempt = now,
+            Err(e) => log::error!("cannot note the JKHub work of {}: {e}", game.id()),
+        }
+    }
+
+    /// Whether a run of this game is in flight, for a screen that wants to say
+    /// so.
+    fn running(&self, game: Game) -> bool {
+        match self.0.lock() {
+            Ok(entries) => entries.get(&game).is_some_and(|entry| entry.running),
+            Err(_) => false,
         }
     }
 }
@@ -140,7 +159,15 @@ pub struct JkhubState {
     /// refused rather than queued, the way `InstallState` guards an engine.
     busy: Mutex<HashSet<u32>>,
     /// Walks of the category tree, one entry per game.
-    trees: TreeRefreshes,
+    trees: Refreshes,
+    /// Crawls and top-ups of the catalogue index, one entry per game.
+    catalogues: Refreshes,
+    /// The catalogue index of each game, once something has asked for it.
+    ///
+    /// Kept in memory because a search runs on it and a player types: reading
+    /// a megabyte of JSON and folding three thousand descriptions per
+    /// keystroke is the one way this feature could be slow.
+    indexes: Mutex<HashMap<Game, Arc<LoadedIndex>>>,
 }
 
 impl Default for JkhubState {
@@ -155,7 +182,9 @@ impl Default for JkhubState {
         JkhubState {
             client,
             busy: Mutex::new(HashSet::new()),
-            trees: TreeRefreshes::default(),
+            trees: Refreshes::default(),
+            catalogues: Refreshes::default(),
+            indexes: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -165,6 +194,39 @@ impl JkhubState {
         self.client.as_ref().ok_or_else(|| {
             AppError::JkhubUnavailable("the JKHub client could not be built at startup".into())
         })
+    }
+
+    /// The catalogue index of one game, read from disk or from the bundle the
+    /// first time it is asked for.
+    ///
+    /// `None` means neither exists, which is the state of a build that ships
+    /// no index and a machine that has never crawled.
+    fn index(
+        &self,
+        data: &DataPaths,
+        snapshots: Option<&PathBuf>,
+        game: Game,
+    ) -> Option<Arc<LoadedIndex>> {
+        let mut cached = self.indexes.lock().ok()?;
+        if let Some(loaded) = cached.get(&game) {
+            return Some(loaded.clone());
+        }
+        let loaded = Arc::new(index::load(data, snapshots, game)?);
+        cached.insert(game, loaded.clone());
+        Some(loaded)
+    }
+
+    /// Drops the copy in memory, so the next search reads the newer document.
+    fn forget_index(&self, game: Option<Game>) {
+        match self.indexes.lock() {
+            Ok(mut cached) => match game {
+                Some(game) => {
+                    cached.remove(&game);
+                }
+                None => cached.clear(),
+            },
+            Err(e) => log::error!("cannot drop the JKHub index held in memory: {e}"),
+        }
     }
 
     /// Claims a file for the caller, or refuses because someone holds it.
@@ -265,7 +327,7 @@ fn refresh_tree_behind(app: &AppHandle, game: Game) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let jkhub = app.state::<JkhubState>();
-        if !jkhub.trees.start(game, timestamp::now_unix()) {
+        if !jkhub.trees.start(game, timestamp::now_unix(), TREE_REFRESH_INTERVAL) {
             return;
         }
         let walked = match (app.state::<AppState>().paths(), jkhub.client()) {
@@ -486,11 +548,288 @@ pub async fn jkhub_open(
     Ok(())
 }
 
-/// Empties `cache\jkhub\`, downloaded archives included.
+/// Empties `cache\jkhub\`, downloaded archives and the catalogue index
+/// included.
+///
+/// The index goes with the rest because it is a cache too: the tab falls back
+/// to the copy inside the build and crawls again behind the next answer.
 #[tauri::command]
-pub fn jkhub_clear_cache(state: tauri::State<'_, AppState>) -> Result<()> {
+pub fn jkhub_clear_cache(
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+) -> Result<()> {
     let data = state.paths()?;
-    cache::clear(&data)
+    cache::clear(&data)?;
+    jkhub.forget_index(None);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// The catalogue index
+// ---------------------------------------------------------------------------
+
+/// What `jkhub_search` is asked for, as one argument.
+///
+/// A struct rather than six more parameters: the command already carries the
+/// three Tauri ones, and a search grows a field far more easily than a
+/// signature does. Mirrored by `JkhubSearchQuery` in `src/lib/ipc.ts`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JkhubSearchArgs {
+    /// Leaving it out means the active game, the way every other command that
+    /// takes a game behaves.
+    pub game: Option<Game>,
+    /// Empty is the full listing rather than an empty answer.
+    #[serde(default)]
+    pub query: String,
+    /// `None` searches the whole catalogue of the game.
+    pub category_id: Option<u32>,
+    #[serde(default)]
+    pub sort: JkhubSort,
+    /// One-based, the way the site numbers its pages.
+    pub page: Option<u32>,
+    pub per_page: Option<u32>,
+}
+
+/// The answer of `jkhub_search`: one page of results out of the local index.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JkhubSearchResult {
+    pub game: Game,
+    /// Files that match, across the whole catalogue of the game.
+    pub total: u32,
+    pub page: u32,
+    pub per_page: u32,
+    pub pages: u32,
+    pub cards: Vec<JkhubCard>,
+    /// Matches per category, rolled up the tree: a container carries what its
+    /// children hold. Keys are category ids as strings, the way JSON spells a
+    /// map.
+    pub category_counts: BTreeMap<u32, u32>,
+    /// RFC 3339 moment the index was last written. Empty when there is none.
+    pub indexed_at: String,
+    /// True when the answer came out of the copy inside the build, when the
+    /// index is past [`index::FULL_REBUILD_AFTER`], or when there is no index
+    /// at all.
+    pub stale: bool,
+}
+
+/// The answer of `jkhub_index_status`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JkhubIndexStatus {
+    pub game: Game,
+    pub indexed: bool,
+    pub built_at: String,
+    pub updated_at: String,
+    /// Seconds since the last write, so the screen needs no date parser.
+    pub age: u64,
+    pub files: u32,
+    pub source: Option<IndexSource>,
+    pub stale: bool,
+    /// True while a crawl or a top-up of this game is in flight.
+    pub building: bool,
+}
+
+/// Searches the whole catalogue of one game, without asking jkhub.org.
+///
+/// This is what the tab lists from, query or no query: an empty query is the
+/// full listing of the selected category, and no category is the full
+/// catalogue of the game. Nothing here touches the network — the index is
+/// either on disk, inside the build, or missing, and a missing one answers
+/// with nothing rather than crawling under a player who is typing.
+///
+/// `categoryCounts` covers every category the query has answers in, including
+/// the ones `categoryId` narrowed away: the tree needs them to show where else
+/// to look.
+#[tauri::command]
+pub async fn jkhub_search(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+    request: JkhubSearchArgs,
+) -> Result<JkhubSearchResult> {
+    let game = state.settings()?.game_or_active(request.game);
+    let data = state.paths()?;
+    let snapshots = snapshot::bundled_dir(&app);
+
+    let Some(loaded) = jkhub.index(&data, snapshots.as_ref(), game) else {
+        return Ok(JkhubSearchResult {
+            game,
+            total: 0,
+            page: 1,
+            per_page: index::RESULTS_PER_PAGE,
+            pages: 1,
+            cards: Vec::new(),
+            category_counts: BTreeMap::new(),
+            indexed_at: String::new(),
+            stale: true,
+        });
+    };
+
+    let answer = loaded.search(&SearchRequest {
+        query: request.query,
+        category_id: request.category_id,
+        sort: request.sort,
+        page: request.page.unwrap_or(1),
+        per_page: request.per_page.unwrap_or(index::RESULTS_PER_PAGE),
+    });
+    let tree = source::tree_at_hand(&data, snapshots.as_ref(), game);
+    Ok(JkhubSearchResult {
+        game,
+        total: answer.total,
+        page: answer.page,
+        per_page: answer.per_page,
+        pages: answer.pages,
+        cards: answer.cards,
+        category_counts: index::roll_up(&answer.category_counts, &tree),
+        indexed_at: loaded.index.updated_at.clone(),
+        stale: is_stale(&loaded),
+    })
+}
+
+/// What the launcher knows about the catalogue index of one game.
+///
+/// Answers from whatever is at hand and tops the index up behind the answer,
+/// exactly the way `jkhub_categories` treats the tree: opening the tab must
+/// not wait for the site. The work behind it runs at most once a day per game
+/// and says `jkhub:index-updated` only when it changed something.
+#[tauri::command]
+pub async fn jkhub_index_status(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+    game: Option<Game>,
+) -> Result<JkhubIndexStatus> {
+    let game = state.settings()?.game_or_active(game);
+    let data = state.paths()?;
+    let snapshots = snapshot::bundled_dir(&app);
+    let loaded = jkhub.index(&data, snapshots.as_ref(), game);
+
+    let status = match &loaded {
+        Some(loaded) => JkhubIndexStatus {
+            game,
+            indexed: true,
+            built_at: loaded.index.built_at.clone(),
+            updated_at: loaded.index.updated_at.clone(),
+            age: loaded.index.age(timestamp::now_unix()),
+            files: loaded.index.files.len() as u32,
+            source: Some(loaded.source),
+            stale: is_stale(loaded),
+            building: jkhub.catalogues.running(game),
+        },
+        None => JkhubIndexStatus {
+            game,
+            indexed: false,
+            built_at: String::new(),
+            updated_at: String::new(),
+            age: 0,
+            files: 0,
+            source: None,
+            stale: true,
+            building: jkhub.catalogues.running(game),
+        },
+    };
+    refresh_index_behind(&app, game);
+    Ok(status)
+}
+
+/// Reads jkhub.org and brings the catalogue index of one game up to date.
+///
+/// The **Refresh** action of the tab. It takes one request plus one per file
+/// the front page names and the index does not know; `full` is the crawl of
+/// every listing page, which the launcher also falls back to on its own when
+/// the cheap path cannot do the job ([`index::plan`]).
+///
+/// Runs in the foreground and answers with what changed, so the screen can say
+/// so. A second call for the same game while one is in flight is refused
+/// rather than queued.
+#[tauri::command]
+pub async fn jkhub_refresh_index(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+    game: Option<Game>,
+    full: Option<bool>,
+) -> Result<IndexUpdate> {
+    let game = state.settings()?.game_or_active(game);
+    let data = state.paths()?;
+    let client = jkhub.client()?;
+    // Zero interval: the player asked, and only a run already in flight
+    // refuses.
+    if !jkhub.catalogues.start(game, timestamp::now_unix(), 0) {
+        return Err(AppError::Busy(format!(
+            "the {} catalogue is already being indexed. Wait for it to finish.",
+            game.id()
+        )));
+    }
+    let context = RefreshContext {
+        app: &app,
+        client,
+        data: &data,
+        snapshots: snapshot::bundled_dir(&app),
+        game,
+    };
+    let answer = index::run(&context, true, full.unwrap_or(false)).await;
+    jkhub.catalogues.finish(game);
+    if answer.as_ref().is_ok_and(|update| update.touched()) {
+        jkhub.forget_index(Some(game));
+    }
+    answer
+}
+
+/// Tops the index of one game up behind an answer that was already served.
+///
+/// Silent by design, like the tree walk next to it: the tab has a catalogue on
+/// it already, and a refresh that fails leaves that catalogue where it is. The
+/// one thing it says is `jkhub:index-updated`, and only when something changed.
+fn refresh_index_behind(app: &AppHandle, game: Game) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let jkhub = app.state::<JkhubState>();
+        if !jkhub
+            .catalogues
+            .start(game, timestamp::now_unix(), index::AUTO_REFRESH_INTERVAL)
+        {
+            return;
+        }
+        let done = match (app.state::<AppState>().paths(), jkhub.client()) {
+            (Ok(data), Ok(client)) => {
+                let context = RefreshContext {
+                    app: &app,
+                    client,
+                    data: &data,
+                    snapshots: snapshot::bundled_dir(&app),
+                    game,
+                };
+                match index::run(&context, false, false).await {
+                    Ok(update) => update.touched(),
+                    Err(e) => {
+                        log::warn!("jkhub: the {} index stays as it was, {e}", game.id());
+                        false
+                    }
+                }
+            }
+            (Err(e), _) | (_, Err(e)) => {
+                log::warn!("jkhub: cannot refresh the {} index, {e}", game.id());
+                false
+            }
+        };
+        jkhub.catalogues.finish(game);
+        if done {
+            jkhub.forget_index(Some(game));
+        }
+    });
+}
+
+/// Whether an index is old enough that the screen should say so.
+///
+/// Two ways to be stale, and they mean the same thing to a player: the answer
+/// came from the copy that shipped with the build, or the crawl behind it is
+/// old enough that the launcher no longer trusts the cheap refresh path.
+fn is_stale(loaded: &LoadedIndex) -> bool {
+    loaded.source == IndexSource::Snapshot
+        || loaded.index.age(timestamp::now_unix()) >= index::FULL_REBUILD_AFTER
 }
 
 // ---------------------------------------------------------------------------
@@ -631,27 +970,27 @@ mod tests {
 
     #[test]
     fn the_tree_is_walked_once_at_a_time_and_once_a_day() {
-        let trees = TreeRefreshes::default();
+        let trees = Refreshes::default();
         let day = TREE_REFRESH_INTERVAL;
         let now = 1_800_000_000;
 
-        assert!(trees.start(Game::JediAcademy, now), "the first walk starts");
+        assert!(trees.start(Game::JediAcademy, now, TREE_REFRESH_INTERVAL), "the first walk starts");
         assert!(
-            !trees.start(Game::JediAcademy, now + 5),
+            !trees.start(Game::JediAcademy, now + 5, TREE_REFRESH_INTERVAL),
             "a second answer must not start a second walk"
         );
         assert!(
-            trees.start(Game::JediOutcast, now),
+            trees.start(Game::JediOutcast, now, TREE_REFRESH_INTERVAL),
             "the other game has its own walk"
         );
 
         trees.finish(Game::JediAcademy);
         assert!(
-            !trees.start(Game::JediAcademy, now + day - 1),
+            !trees.start(Game::JediAcademy, now + day - 1, TREE_REFRESH_INTERVAL),
             "a walk that just ran is not repeated within the day"
         );
         assert!(
-            trees.start(Game::JediAcademy, now + day),
+            trees.start(Game::JediAcademy, now + day, TREE_REFRESH_INTERVAL),
             "a day later it walks again"
         );
         trees.finish(Game::JediAcademy);
@@ -659,8 +998,41 @@ mod tests {
         // **Update categories** walks in the foreground and only writes down
         // that it did, so the answer after it starts nothing.
         trees.note(Game::JediAcademy, now + day + 10);
-        assert!(!trees.start(Game::JediAcademy, now + day + 11));
-        assert!(trees.start(Game::JediAcademy, now + 2 * day + 10));
+        assert!(!trees.start(Game::JediAcademy, now + day + 11, TREE_REFRESH_INTERVAL));
+        assert!(trees.start(Game::JediAcademy, now + 2 * day + 10, TREE_REFRESH_INTERVAL));
+    }
+
+    /// --- slice: jkhub index ---
+    #[test]
+    fn the_player_waits_for_nothing_but_a_run_already_going() {
+        let catalogues = Refreshes::default();
+        let now = 1_800_000_000;
+
+        assert!(!catalogues.running(Game::JediAcademy), "nothing has run yet");
+        // Interval zero is the **Refresh** action: it ignores how recently the
+        // last one ran.
+        assert!(catalogues.start(Game::JediAcademy, now, 0));
+        assert!(catalogues.running(Game::JediAcademy));
+        assert!(
+            !catalogues.start(Game::JediAcademy, now + 1, 0),
+            "a crawl already in flight is the one thing that refuses"
+        );
+        assert!(
+            !catalogues.running(Game::JediOutcast),
+            "the other game is idle and says so"
+        );
+
+        catalogues.finish(Game::JediAcademy);
+        assert!(!catalogues.running(Game::JediAcademy));
+        assert!(catalogues.start(Game::JediAcademy, now + 2, 0));
+        catalogues.finish(Game::JediAcademy);
+
+        // The automatic path passes the daily interval and is held to it.
+        assert!(!catalogues.start(
+            Game::JediAcademy,
+            now + 3,
+            index::AUTO_REFRESH_INTERVAL
+        ));
     }
 
     #[test]

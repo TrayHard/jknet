@@ -111,6 +111,46 @@ pub fn store_tree(data: &DataPaths, game: Game, tree: &[JkhubCategory]) -> Strin
     cache::write(data, &name, &tree, cache::CATEGORIES_TTL)
 }
 
+/// The tree of one game without asking the site for anything.
+///
+/// The disk cache first, the bundled snapshot after it, and an empty tree when
+/// neither is there. Used by the searches that only need to know which
+/// category an id belongs to, and by nothing that would rather wait for a
+/// current answer.
+pub fn tree_at_hand(
+    data: &DataPaths,
+    snapshots: Option<&PathBuf>,
+    game: Game,
+) -> Vec<JkhubCategory> {
+    let name = cache::categories_name(game.id());
+    if let Some(entry) = cache::read::<Vec<JkhubCategory>>(data, &name) {
+        return entry.payload;
+    }
+    snapshots
+        .and_then(|dir| snapshot::read(dir, game))
+        .map(|snapshot| snapshot.categories)
+        .unwrap_or_default()
+}
+
+/// Address of one page of one category listing.
+///
+/// The page number is part of the path and the sort is a query parameter: the
+/// site accepts no `perPage`, which is fixed at 25 by the theme (report,
+/// section 3).
+///
+/// A free function because the crawl behind the catalogue index builds the
+/// same addresses without going through the page cache a reader would.
+pub fn listing_url(category_id: u32, slug: &str, sort: JkhubSort, page: u32) -> String {
+    let (by, direction) = sort.query();
+    let base = parse::category_url(category_id, slug);
+    let path = if page > 1 {
+        format!("{base}page/{page}/")
+    } else {
+        base
+    };
+    format!("{path}?sortby={by}&sortdirection={direction}")
+}
+
 /// The reader that parses the public pages of jkhub.org.
 pub struct HtmlSource<'a> {
     pub client: &'a JkhubClient,
@@ -235,19 +275,63 @@ impl<'a> HtmlSource<'a> {
     }
 
     /// Address of one page of one category listing.
-    ///
-    /// The page number is part of the path and the sort is a query parameter:
-    /// the site accepts no `perPage`, which is fixed at 25 by the theme
-    /// (report, section 3).
     fn listing_url(&self, category_id: u32, slug: &str, sort: JkhubSort, page: u32) -> String {
-        let (by, direction) = sort.query();
-        let base = parse::category_url(category_id, slug);
-        let path = if page > 1 {
-            format!("{base}page/{page}/")
-        } else {
-            base
-        };
-        format!("{path}?sortby={by}&sortdirection={direction}")
+        listing_url(category_id, slug, sort, page)
+    }
+
+    /// One file page, answering `None` when the site says the record is gone.
+    ///
+    /// The whole of [`JkhubSource::file`] lives here, because the difference
+    /// between «no such file» and «the site is down» matters to exactly one
+    /// caller — the catalogue index, which drops an entry for the first and
+    /// keeps it for the second — and to nobody else.
+    ///
+    /// A `404` is never served from the cache and never cached itself: the
+    /// stale copy of a deleted file is what the index is about to throw away.
+    pub async fn file_opt(&self, id: u32) -> Result<Option<JkhubFileView>> {
+        let name = cache::file_name(id);
+        let cached = cache::read::<JkhubFile>(self.data, &name);
+        if let Some(entry) = &cached {
+            if entry.fresh && !self.force {
+                return Ok(Some(JkhubFileView {
+                    file: entry.payload.clone(),
+                    fetched_at: entry.fetched_at.clone(),
+                    stale: false,
+                }));
+            }
+        }
+
+        // The slug is cosmetic in the address: an id alone redirects to the
+        // canonical page, and the parser reads the real slug back out of the
+        // JSON-LD `url`.
+        let url = parse::file_url(id, "");
+        match self.client.fetch_html_opt(&url).await {
+            Ok(Some(page)) => {
+                let slug = parse::file_ref(&page.url)
+                    .map(|(_, slug)| slug)
+                    .unwrap_or_default();
+                let file = parse::parse_file_page(&page.body, id, &slug)?;
+                let ttl = cache::ttl_from(page.max_age, cache::PAGE_TTL);
+                let fetched_at = cache::write(self.data, &name, &file, ttl);
+                Ok(Some(JkhubFileView {
+                    file,
+                    fetched_at,
+                    stale: false,
+                }))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => match cached {
+                Some(entry) => {
+                    log::warn!("jkhub: serving a stale card for {id}, {e}");
+                    Ok(Some(JkhubFileView {
+                        file: entry.payload,
+                        fetched_at: entry.fetched_at,
+                        stale: true,
+                    }))
+                }
+                None => Err(e),
+            },
+        }
     }
 
     /// Slug of a category, taken from any cached tree that names it.
@@ -469,48 +553,9 @@ impl JkhubSource for HtmlSource<'_> {
     }
 
     async fn file(&self, id: u32) -> Result<JkhubFileView> {
-        let name = cache::file_name(id);
-        let cached = cache::read::<JkhubFile>(self.data, &name);
-        if let Some(entry) = &cached {
-            if entry.fresh && !self.force {
-                return Ok(JkhubFileView {
-                    file: entry.payload.clone(),
-                    fetched_at: entry.fetched_at.clone(),
-                    stale: false,
-                });
-            }
-        }
-
-        // The slug is cosmetic in the address: an id alone redirects to the
-        // canonical page, and the parser reads the real slug back out of the
-        // JSON-LD `url`.
-        let url = parse::file_url(id, "");
-        match self.client.fetch_html(&url).await {
-            Ok(page) => {
-                let slug = parse::file_ref(&page.url)
-                    .map(|(_, slug)| slug)
-                    .unwrap_or_default();
-                let file = parse::parse_file_page(&page.body, id, &slug)?;
-                let ttl = cache::ttl_from(page.max_age, cache::PAGE_TTL);
-                let fetched_at = cache::write(self.data, &name, &file, ttl);
-                Ok(JkhubFileView {
-                    file,
-                    fetched_at,
-                    stale: false,
-                })
-            }
-            Err(e) => match cached {
-                Some(entry) => {
-                    log::warn!("jkhub: serving a stale card for {id}, {e}");
-                    Ok(JkhubFileView {
-                        file: entry.payload,
-                        fetched_at: entry.fetched_at,
-                        stale: true,
-                    })
-                }
-                None => Err(e),
-            },
-        }
+        self.file_opt(id).await?.ok_or_else(|| {
+            AppError::JkhubUnavailable(format!("jkhub.org has no file {id} any more"))
+        })
     }
 }
 
