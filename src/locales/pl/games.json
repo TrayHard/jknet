@@ -2,23 +2,23 @@
   "gametypes": {
     "ja": {
       "0": "FFA",
-      "1": "Holocron",
-      "2": "Jedi Master",
-      "3": "Duel",
-      "4": "Power Duel",
-      "5": "Single Player",
-      "6": "Team FFA",
-      "7": "Siege",
+      "1": "Holokrony",
+      "2": "Mistrz Jedi",
+      "3": "Pojedynek",
+      "4": "Pojedynek Mocy",
+      "5": "Gra jednoosobowa",
+      "6": "Drużynowy FFA",
+      "7": "Oblężenie",
       "8": "CTF",
       "9": "CTY"
     },
     "jo": {
       "0": "FFA",
-      "1": "Holocron",
-      "2": "Jedi Master",
-      "3": "Duel",
-      "4": "Single Player",
-      "5": "Team FFA",
+      "1": "Holokrony",
+      "2": "Mistrz Jedi",
+      "3": "Pojedynek",
+      "4": "Gra jednoosobowa",
+      "5": "Drużynowy FFA",
       "6": "Saga",
       "7": "CTF",
       "8": "CTY"
@@ -49,15 +49,15 @@
       "8": "CTY"
     }
   },
-  "unknownGametype": "Mode {{number}}",
+  "unknownGametype": "Tryb {{number}}",
   "sources": {
     "steam": "Steam",
     "gog": "GOG",
-    "manual": "Chosen by hand",
-    "configured": "Saved",
-    "configuredEarlier": "Saved earlier"
+    "manual": "Wskazane ręcznie",
+    "configured": "Zapisane",
+    "configuredEarlier": "Zapisane wcześniej"
   },
   "map": {
-    "unknown": "unknown map"
+    "unknown": "nieznana mapa"
   }
 }
