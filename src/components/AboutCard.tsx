@@ -1,7 +1,12 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertTriangle, Check, Download, RefreshCw } from "lucide-react";
 
+import { isTauri } from "../lib/runtime";
 import { useAppUpdateContext } from "./AppUpdateProvider";
 import { Button } from "./ui";
+
+/** The license the launcher is released under, as GitHub renders it. */
+const LICENSE_URL = "https://github.com/TrayHard/jknet/blob/main/LICENSE";
 
 /**
  * The About card at the bottom of Settings: which build is running and
@@ -19,6 +24,13 @@ export function AboutCard() {
   const newVersion = update?.newVersion ?? null;
   const supported = update?.supported ?? false;
 
+  // A failed open is swallowed: the line is a pointer, and the card already
+  // owes the player an answer about updates, not about the browser.
+  const openLicense = () => {
+    if (!isTauri()) return;
+    void openUrl(LICENSE_URL).catch(() => undefined);
+  };
+
   return (
     <section className="rounded-lg border border-line bg-surface p-16 mb-24">
       <h2 className="text-heading-sm text-fg pb-4">About</h2>
@@ -32,6 +44,15 @@ export function AboutCard() {
             Version {version ?? (supported ? "…" : "unknown")}
           </p>
           <UpdateLine />
+          <p className="text-body-sm text-fg-muted pt-8">
+            <button
+              type="button"
+              onClick={openLicense}
+              className="cursor-pointer hover:text-fg-accent hover:underline"
+            >
+              GPL-3.0-or-later
+            </button>
+          </p>
         </div>
         {newVersion !== null ? (
           <Button
