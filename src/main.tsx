@@ -7,6 +7,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import App from "./App";
+// --- slice: i18n ---
+import { bootstrapI18n } from "./i18n";
+import { readSystemLocale } from "./i18n/useSystemLocale";
+import { errorMessage, ipc } from "./lib/ipc";
 import { isTauri } from "./lib/runtime";
 import "./index.css";
 
@@ -15,11 +19,46 @@ if (!root) throw new Error("index.html is missing the #root element");
 
 if (isTauri()) void startLogging().catch(() => undefined);
 
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+void start();
+
+/**
+ * Brings up the launcher, in the player's language from the first frame.
+ *
+ * --- slice: i18n ---
+ * The catalog is loaded before React mounts. Rendering English first and
+ * correcting it a moment later would be both a flash and a layout jump: a
+ * sidebar item is «Settings» in one language and «Настройки» in another, and
+ * the second is wider.
+ *
+ * Two reads stand between the window opening and the first paint, and neither
+ * may block it. `get_settings` reads one local file and `locale()` reads one
+ * registry value; both are swallowed on failure, which leaves the launcher on
+ * the system language and, failing that, on English.
+ */
+async function start(): Promise<void> {
+  const [setting, systemLocale] = await Promise.all([
+    readLanguageSetting(),
+    readSystemLocale(),
+  ]);
+  await bootstrapI18n(setting, systemLocale);
+
+  ReactDOM.createRoot(root!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+/** The stored language, or `system` when there is nothing to read it from. */
+async function readLanguageSetting(): Promise<string> {
+  if (!isTauri()) return "system";
+  try {
+    return (await ipc.getSettings()).language;
+  } catch (e) {
+    console.warn(`Reading the language setting failed: ${errorMessage(e)}`);
+    return "system";
+  }
+}
 
 /**
  * Puts the frontend console into the launcher log file.

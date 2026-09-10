@@ -9,6 +9,8 @@
 
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
+// --- slice: i18n ---
+import type { LanguageSetting } from "../i18n/languages";
 import { isTauri, NO_RUNTIME_MESSAGE } from "./runtime";
 
 /**
@@ -74,6 +76,9 @@ export interface Settings {
   gameDataPaths: Partial<Record<Game, string>>;
   /** The game every screen works in. The sidebar switcher writes it next. */
   activeGame: Game;
+  // --- slice: i18n ---
+  /** `system`, or one of the eight ids in `src/i18n/languages.ts`. */
+  language: LanguageSetting;
   /** Client the Play button starts. Not scoped by game yet. */
   defaultClientId: string | null;
   /** The default client of each game, what the switcher slice will read. */
@@ -121,6 +126,9 @@ export interface SettingsPatch {
    */
   gameDataPaths?: Partial<Record<Game, string | null>>;
   activeGame?: Game;
+  // --- slice: i18n ---
+  /** The core refuses a value that is not `system` or a shipped language. */
+  language?: LanguageSetting;
   /** The 0.2 field, still accepted: it writes the `ja` entry above. */
   gameDataPath?: string | null;
   defaultClientId?: string | null;
@@ -290,16 +298,64 @@ export const ipc = {
   // `serversIpc` below, for the same reason.
 };
 
+// --- slice: i18n ---
 /**
- * Turns whatever a rejected command threw into a line for the user.
+ * A refusal from the core, as `src-tauri/src/error.rs` serializes it.
  *
- * `AppError` reaches the frontend as a plain string, so the common case is the
- * first branch; the rest is defence against a panic or a transport failure.
+ * `message` is the rendered English sentence and is always safe to print.
+ * `code` names a key of the `errors` namespace and `details` fills its
+ * placeholders, which is what `translateError` in `src/i18n/errors.ts` needs.
+ */
+export interface AppErrorEnvelope {
+  /** The `AppError` variant, in camelCase. Empty when the throw was not one. */
+  code: string;
+  /** The rendered English sentence. Empty only for a throw with no message. */
+  message: string;
+  /** The values the message interpolates. Empty object when there are none. */
+  details: Record<string, unknown>;
+}
+
+/** Reads the envelope out of whatever a rejected promise threw. */
+export function errorEnvelope(error: unknown): AppErrorEnvelope {
+  if (error !== null && typeof error === "object") {
+    const shape = error as Partial<AppErrorEnvelope>;
+    if (typeof shape.code === "string" && typeof shape.message === "string") {
+      const details =
+        shape.details !== null && typeof shape.details === "object"
+          ? (shape.details as Record<string, unknown>)
+          : {};
+      return { code: shape.code, message: shape.message, details };
+    }
+    if (error instanceof Error) {
+      return { code: "", message: error.message, details: {} };
+    }
+  }
+  // A plain string is what the core answered before 0.4 and what a hand-written
+  // `reject` in the mock service still answers, so it stays readable.
+  if (typeof error === "string") {
+    const service = /^online ([a-z_]+): (.*)$/s.exec(error);
+    if (service) {
+      return {
+        code: "online",
+        message: error,
+        details: { code: service[1], message: service[2] },
+      };
+    }
+    return { code: "", message: error, details: {} };
+  }
+  return { code: "", message: "", details: {} };
+}
+
+/**
+ * Turns whatever a rejected command threw into an English line.
+ *
+ * This is the line for the console and the log file, and the fallback the
+ * translation layer prints when a code has no catalog key. A screen shows
+ * `useErrorText` from `src/i18n/errors.ts` instead.
  */
 export function errorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return "Unexpected error";
+  const { message } = errorEnvelope(error);
+  return message === "" ? "Unexpected error" : message;
 }
 
 // --- slice: library ---------------------------------------------------------
@@ -803,7 +859,14 @@ export const accountIpc = {
  * wording of a message the service wrote.
  */
 export function onlineErrorCode(error: unknown): string | null {
-  const match = /^online ([a-z_]+): /.exec(errorMessage(error));
+  // --- slice: i18n --- the envelope carries the contract code in `details`;
+  // the prefix of the rendered message is the fallback for a throw that never
+  // went through `AppError`.
+  const envelope = errorEnvelope(error);
+  if (envelope.code === "online" && typeof envelope.details.code === "string") {
+    return envelope.details.code;
+  }
+  const match = /^online ([a-z_]+): /.exec(envelope.message);
   return match ? match[1] : null;
 }
 
@@ -833,11 +896,10 @@ export function isOnlineNotConfigured(error: unknown): boolean {
   return onlineErrorCode(error) === ONLINE_NOT_CONFIGURED;
 }
 
-/** What every screen says while the service is switched off. One wording, one
- *  place: it appears on the Account card, the Friends screen and the third
- *  step of the first run. */
-export const ONLINE_NOT_CONFIGURED_TEXT =
-  "JKNet accounts and friends need JKNet Online. It is not open yet, so this version keeps the feature switched off. A later update turns it on by itself.";
+// --- slice: i18n ---
+// The sentence itself moved to `account.notConfigured` in the catalogs. It
+// appears on the Account card, the Friends screen and the third step of the
+// first run, and all three read that one key.
 
 // ---------------------------------------------------------------------------
 // --- slice: friends ---

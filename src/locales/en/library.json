@@ -1,0 +1,92 @@
+{
+  "title": "Library",
+  "subtitle": "Skins, hilts, maps and mods, installed into the client you choose.",
+  "subtitleClient": "{{client}} · {{engine}} · {{files}} files · {{enabled}} enabled · {{size}}",
+  "noEngine": "no engine",
+  "searchPlaceholder": "Search files",
+  "browseJkhub": "Browse JKHub",
+  "addFiles": "Add files",
+  "pickTitle": "Add pk3 files",
+  "pickFilter": "Jedi Academy archives",
+  "clientBar": {
+    "label": "Client",
+    "hint": "Files are installed into this client only. Another client with the same engine keeps its own set. {{game}} clients are listed here; switch game in the sidebar for the other ones."
+  },
+  "tabs": {
+    "installed": "Installed",
+    "jkhub": "Browse JKHub",
+    "updates": "Updates"
+  },
+  "sort": {
+    "label": "Sort by",
+    "recent": "Recent",
+    "name": "Name",
+    "size": "Size"
+  },
+  "categories": {
+    "all": "All",
+    "skin": "Skins",
+    "hilt": "Hilts",
+    "map": "Maps",
+    "mod": "Mods",
+    "hud": "HUD & UI",
+    "sound": "Sounds",
+    "other": "Other"
+  },
+  "categoryOne": {
+    "skin": "Skin",
+    "hilt": "Hilt",
+    "map": "Map",
+    "mod": "Mod",
+    "hud": "HUD",
+    "sound": "Sound",
+    "other": "Other"
+  },
+  "onlyEnabled": "Only enabled",
+  "onlyEnabledSwitch": "Show only enabled files",
+  "card": {
+    "addedByHand": "Added by hand",
+    "sourceWithFolder": "{{source}} · {{folder}}",
+    "conflict": "Conflict",
+    "enable": "Enable {{file}}",
+    "remove": "Remove {{file}}",
+    "removeHint": "Remove from this client"
+  },
+  "empty": {
+    "noClientsTitle": "No {{game}} clients yet",
+    "noClientsText": "A library file is installed into a client. Create one and this list starts filling up.",
+    "newClient": "New client",
+    "noFilesTitle": "{{client}} has no files yet",
+    "noFilesText": "Find skins, hilts, maps and mods on JKHub, then add the pk3 files here. You can also drop them straight onto this window.",
+    "filteredTitle": "Nothing matches",
+    "filteredText": "No file in this client matches the search and the filters. Clear them to see the whole library.",
+    "updatesTitle": "No updates yet",
+    "updatesText": "Once files carry a JKHub version, the ones with a newer release show up here."
+  },
+  "fallback": {
+    "thisClient": "this client",
+    "theClient": "the client"
+  },
+  "skipped": {
+    "title_one": "{{count}} file was not added",
+    "title_other": "{{count}} files were not added",
+    "rename": "Rename it to {{name}}."
+  },
+  "drop": {
+    "title": "Drop pk3 files to install them into {{client}}"
+  },
+  "conflicts": {
+    "notice": "{{count}} files change the same content. The engine loads the last one and ignores the rest.",
+    "see": "See what wins",
+    "title": "Files that change the same content",
+    "body": "{{files}} archives of {{client}} carry {{paths}} shared paths. The engine reads the last one it loads and ignores the rest.",
+    "wins": "Wins",
+    "hidden": "Hidden",
+    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the archives to see the rest."
+  },
+  "remove": {
+    "title": "Remove {{file}} from {{client}}?",
+    "body": "{{fileName}}, {{size}}. The file is deleted from the client's {{folder}} folder. Other clients keep their own copy.",
+    "confirm": "Remove file"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "title": "Friends",
+  "subtitle": "See who is online and join their server in one click.",
+  "subtitleCounts": "{{friends}} friends · {{online}} online",
+  "loading": "Loading your friends…",
+  "searchPlaceholder": "Search, or type a name to add",
+  "addFriend": "Add friend",
+  "live": {
+    "on": "Live",
+    "off": "Reconnecting",
+    "onText": "Changes arrive the moment they happen.",
+    "offText": "The service is out of reach; the list refreshes every 30 seconds."
+  },
+  "groups": {
+    "in_game": "In game",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "status": {
+    "playingOn": "Playing on {{server}} · {{address}}",
+    "playingOnAddress": "Playing on {{address}}",
+    "inGame": "In game",
+    "online": "Online",
+    "offline": "Offline",
+    "lastSeenJustNow": "Last seen just now",
+    "lastSeenMinutes_one": "Last seen {{count}} minute ago",
+    "lastSeenMinutes_other": "Last seen {{count}} minutes ago",
+    "lastSeenHours_one": "Last seen {{count}} hour ago",
+    "lastSeenHours_other": "Last seen {{count}} hours ago",
+    "lastSeenDays_one": "Last seen {{count}} day ago",
+    "lastSeenDays_other": "Last seen {{count}} days ago",
+    "lastSeenOn": "Last seen on {{date}}"
+  },
+  "empty": {
+    "offTitle": "Friends are not switched on yet",
+    "signInTitle": "Sign in to see your friends",
+    "signInText": "JKNet keeps your friends list on the service, so it follows you to any machine you sign in on.",
+    "signIn": "Sign in",
+    "noneTitle": "No friends yet",
+    "noneText": "Type a display name, a jkhub: name or a user id in the box above and press Add friend.",
+    "noMatchTitle": "Nobody matches “{{query}}”",
+    "noMatchText": "Press Add friend to send them a request instead.",
+    "pickFriend": "Select a friend to join their game or invite them to yours."
+  },
+  "requests": {
+    "incoming": "Friend requests",
+    "outgoing": "Sent requests",
+    "heading": "{{title}} · {{count}}",
+    "accept": "Accept",
+    "decline": "Decline",
+    "cancel": "Cancel",
+    "handle": "{{provider}}:{{name}}"
+  },
+  "notices": {
+    "nowFriends": "You and {{name}} are now friends.",
+    "requestSent": "Request sent to {{name}}.",
+    "inviteSent": "Invite sent to {{name}}."
+  },
+  "row": {
+    "join": "Join",
+    "joining": "Starting…"
+  },
+  "panel": {
+    "status": "Status",
+    "join": "Join game",
+    "joining": "Starting the game…",
+    "invite": "Invite to my game",
+    "inviteHintNoServer": "Join a server first, then invite your friends to it",
+    "inviteHint": "Invite to {{server}}",
+    "noServer": "Join a server from the Servers screen to invite anyone to it.",
+    "removeConfirm": "Remove {{name}}? You will both have to send a new request to be friends again.",
+    "remove": "Remove friend"
+  },
+  "invite": {
+    "toast": "{{name}} invites you to {{server}}",
+    "join": "Join",
+    "noClient": "Pick a default client on the Clients screen first",
+    "gameRunning": "A game is already running",
+    "connectTo": "Connect to {{address}}"
+  }
+}

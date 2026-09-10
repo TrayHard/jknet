@@ -89,6 +89,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // --- slice: i18n ---
+        // `locale()` alone: a launcher set to «System language» has to know
+        // which language Windows is in before the first screen paints.
+        .plugin(tauri_plugin_os::init())
         // --- slice: installer ---
         // `relaunch()` after the update installer hands control back.
         .plugin(tauri_plugin_process::init())
