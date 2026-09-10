@@ -1,7 +1,11 @@
 import { AlertTriangle, Check, LogOut, Server, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { hubErrorMessage, type HubUser } from "../../lib/ipc";
+import {
+  HUB_NOT_CONFIGURED_TEXT,
+  hubErrorMessage,
+  type HubUser,
+} from "../../lib/ipc";
 import {
   useAccountState,
   useDeleteAccount,
@@ -31,11 +35,16 @@ export const ACCOUNT_SECTION_ID = "settings-account";
  * The Hub URL field sits under them, marked advanced. It exists because the
  * production hub has no address yet: a tester points the launcher at a hub of
  * their own, and the field is what makes the Developer sign-in appear.
+ *
+ * With no hub at all — a release build until the service is deployed — the
+ * card is that sentence and the field, and nothing else. Sign-in buttons there
+ * would every one of them end in a connection error.
  */
 export function AccountCard() {
   const account = useAccountState();
   const flow = useSignIn();
 
+  const configured = account.data?.hubConfigured ?? true;
   const user = flow.user ?? account.data?.hubUser ?? null;
   const signedIn = flow.phase === "done" || (account.data?.hubSignedIn ?? false);
   const waiting = flow.phase === "starting" || flow.phase === "waiting";
@@ -47,25 +56,28 @@ export function AccountCard() {
     >
       <h2 className="text-heading-sm text-fg pb-4">Account</h2>
       <p className="text-body-sm text-fg-secondary">
-        A JKNet account carries your friends list and your invites. It is not
-        needed to play.
+        {configured
+          ? "A JKNet account carries your friends list and your invites. It is not needed to play."
+          : HUB_NOT_CONFIGURED_TEXT}
       </p>
 
-      <div className="pt-16">
-        {signedIn && user ? (
-          <SignedIn user={user} />
-        ) : waiting ? (
-          <WaitingForBrowser flow={flow} />
-        ) : (
-          <SignedOut
-            error={flow.error}
-            onPick={flow.start}
-            localHub={account.data?.localHub ?? false}
-          />
-        )}
-      </div>
+      {configured ? (
+        <div className="pt-16">
+          {signedIn && user ? (
+            <SignedIn user={user} />
+          ) : waiting ? (
+            <WaitingForBrowser flow={flow} />
+          ) : (
+            <SignedOut
+              error={flow.error}
+              onPick={flow.start}
+              localHub={account.data?.localHub ?? false}
+            />
+          )}
+        </div>
+      ) : null}
 
-      <HubUrlField />
+      <HubUrlField configured={configured} />
     </section>
   );
 }
@@ -313,8 +325,11 @@ function SignedOut({
  * pointing the launcher elsewhere while signed in would leave a token issued
  * by one hub on the requests of another. So the field refuses to save while an
  * account is signed in, and says why.
+ *
+ * It stays on the card while the hub is switched off, because it is the only
+ * way a developer or a self-hoster switches it back on without a new build.
  */
-function HubUrlField() {
+function HubUrlField({ configured }: { configured: boolean }) {
   const settings = useSettings();
   const account = useAccountState();
   const updateSettings = useUpdateSettings();
@@ -371,11 +386,17 @@ function HubUrlField() {
         ].join(" ")}
         role={error ? "alert" : undefined}
       >
-        {error ??
-          (signedIn
-            ? "Sign out before pointing JKNet at another hub."
-            : "An http:// or https:// address. Leave it empty to go back to the default.")}
+        {error ?? hint(signedIn, configured)}
       </p>
     </details>
   );
+}
+
+/** What the line under the Hub address field says, in its three states. */
+function hint(signedIn: boolean, configured: boolean): string {
+  if (signedIn) return "Sign out before pointing JKNet at another hub.";
+  if (!configured) {
+    return "For developers and self-hosted hubs: an http:// or https:// address switches accounts and friends on for this machine.";
+  }
+  return "An http:// or https:// address. Leave it empty to go back to the default.";
 }

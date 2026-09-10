@@ -171,6 +171,23 @@ pub fn run() {
             friends::start(app.handle());
 
             log::info!("JKNet {} started", app.package_info().version);
+            // --- slice: hub gate ---
+            // The first question a report about a missing Friends screen has
+            // to answer: this build has no hub, or it has one and cannot reach
+            // it. The address is not a secret; the token never appears here.
+            match app.state::<AppState>().settings() {
+                Ok(settings) => {
+                    let url = hub::normalize_hub_url(&settings.hub_url);
+                    if hub::hub_configured(&url) {
+                        log::info!("hub: {url}");
+                    } else {
+                        log::info!(
+                            "hub: not configured in this build, so the account and friends screens stay switched off"
+                        );
+                    }
+                }
+                Err(e) => log::warn!("cannot read the hub address: {e}"),
+            }
             Ok(())
         })
         // --- slice: launch ---

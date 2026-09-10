@@ -112,6 +112,13 @@ export function useUpdateSettings() {
       queryClient.invalidateQueries({ queryKey: queryKeys.dataPaths });
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
       queryClient.invalidateQueries({ queryKey: queryKeys.gameFiles });
+      // --- slice: hub gate ---
+      // `hubUrl` decides whether there is a hub at all, and the account state
+      // is derived from it. Without this an address typed into **Hub address**
+      // would leave the Account card, the sidebar and the Friends screen
+      // showing the switched-off state until the window was reloaded.
+      queryClient.invalidateQueries({ queryKey: accountKeys.state });
+      queryClient.invalidateQueries({ queryKey: friendsKeys.state });
     },
   });
 }
@@ -755,6 +762,19 @@ export function useAccountState(): UseQueryResult<AccountState> {
   });
 }
 
+// --- slice: hub gate ---
+/**
+ * Whether this build has a hub, or `undefined` before the core has answered.
+ *
+ * Three screens switch on it — the Account card, the Friends screen and the
+ * third step of the first run — and `useFriendsState` stops calling on it.
+ * `undefined` means "not known yet", never "no": outside Tauri the account
+ * query fails, and the Friends screen still has the mock hub to draw against.
+ */
+export function useHubConfigured(): boolean | undefined {
+  return useAccountState().data?.hubConfigured;
+}
+
 /** Where a sign-in has got to. */
 export type SignInPhase = "idle" | "starting" | "waiting" | "done" | "error";
 
@@ -956,16 +976,33 @@ export const friendsKeys = {
  * router for the events to arrive.
  */
 export function useFriendsState(): UseQueryResult<FriendsView> {
+  // --- slice: hub gate ---
+  // No hub, no query: the command would answer an empty document, and the
+  // sidebar and the Friends screen have their own state for this. The query
+  // starts by itself when the player names a hub, because `account:changed`
+  // and the settings write invalidate the account state this reads.
+  const configured = useHubConfigured();
   return useQuery({
     queryKey: friendsKeys.state,
     queryFn: friendsIpc.getFriendsState,
     staleTime: 15_000,
+    enabled: configured !== false,
   });
 }
 
-/** How many friends are online or in a game, for the sidebar badge. */
+/**
+ * How many friends are online or in a game, for the sidebar badge.
+ *
+ * `undefined` leaves the counter off the sidebar entirely, which is the answer
+ * while nobody is signed in and while the hub is switched off. The second case
+ * is checked here rather than left to the disabled query: React Query keeps
+ * what it fetched, so a player who clears the hub address would otherwise keep
+ * a counter from the session before.
+ */
 export function useOnlineFriendCount(): number | undefined {
+  const configured = useHubConfigured();
   const friends = useFriendsState();
+  if (configured === false) return undefined;
   if (friends.data === undefined || !friends.data.signedIn) return undefined;
   return friends.data.friends.filter(
     (friend) => friend.presence.status !== "offline",
@@ -1046,9 +1083,14 @@ export function useJoinFriend() {
  */
 export function useFriendsEvents(): void {
   const queryClient = useQueryClient();
+  // --- slice: hub gate ---
+  // Nothing emits these while the hub is switched off, and the window should
+  // not hold three subscriptions waiting for it. They attach by themselves
+  // when the player names a hub, because this value changes with the account.
+  const configured = useHubConfigured();
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || configured === false) return;
     let disposed = false;
     const stops: UnlistenFn[] = [];
 
@@ -1098,5 +1140,5 @@ export function useFriendsEvents(): void {
       disposed = true;
       for (const stop of stops) stop();
     };
-  }, [queryClient]);
+  }, [queryClient, configured]);
 }

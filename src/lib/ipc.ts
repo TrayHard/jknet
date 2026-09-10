@@ -583,12 +583,23 @@ export type HubProvider = "jkhub" | "discord" | "dev";
 /** `src-tauri/src/account.rs`: what the frontend knows about the account. */
 export interface AccountState {
   /**
+   * Whether this build has a hub to talk to at all.
+   *
+   * False in a release build until the JKNet Hub service is deployed and
+   * `RELEASE_HUB_URL` in `src-tauri/src/hub/client.rs` names its origin. While
+   * it is false the account and friends interface is one sentence saying so:
+   * no provider buttons, no counters, no calls. The **Hub address** field on
+   * the Settings screen turns it on for this machine.
+   */
+  hubConfigured: boolean;
+  /**
    * Whether a token is on file. It does not promise the hub still accepts it:
    * finding that out costs a request, and the sidebar paints before one could
-   * answer.
+   * answer. Always false while `hubConfigured` is false.
    */
   hubSignedIn: boolean;
   hubUser: HubUser | null;
+  /** The hub the launcher talks to, or an empty string when there is none. */
   hubUrl: string;
   /** Whether the hub runs on this machine, which is what shows the Developer
    *  sign-in button. */
@@ -668,6 +679,33 @@ export function hubErrorCode(error: unknown): string | null {
 export function hubErrorMessage(error: unknown): string {
   return errorMessage(error).replace(/^hub [a-z_]+: /, "");
 }
+
+// --- slice: hub gate ---
+
+/**
+ * The code `AppError::HubNotConfigured` carries.
+ *
+ * Not one of the contract's own codes: it never leaves the launcher. The core
+ * answers it instead of opening a socket when this build has no hub address.
+ */
+export const HUB_NOT_CONFIGURED = "hub_not_configured";
+
+/**
+ * Whether a refusal means "this build has no hub" rather than a failure.
+ *
+ * Read `hubConfigured` from `getAccountState` to decide what to draw; this is
+ * for the calls that were already in flight when the answer changed, so a
+ * screen prints the same sentence instead of a network error.
+ */
+export function isHubNotConfigured(error: unknown): boolean {
+  return hubErrorCode(error) === HUB_NOT_CONFIGURED;
+}
+
+/** What every screen says while the hub is switched off. One wording, one
+ *  place: it appears on the Account card, the Friends screen and the third
+ *  step of the first run. */
+export const HUB_NOT_CONFIGURED_TEXT =
+  "JKNet accounts and friends need the JKNet Hub service. It is not open yet, so this version keeps the feature switched off. A later update turns it on by itself.";
 
 // ---------------------------------------------------------------------------
 // --- slice: friends ---
