@@ -161,15 +161,26 @@ pub struct GameSpec {
     pub gametypes: &'static [&'static str],
 
     // --- launch ---
-    /// True when the engine of this game understands `fs_cdpath`.
+    /// Cvar naming the read-only root that holds the player's retail install:
+    /// the folder that *contains* `base`, the `GameData` equivalent.
     ///
-    /// Jedi Academy engines do, which is what lets JKNet keep the unpacked
-    /// build in `fs_basepath` and the player's retail archives in `fs_cdpath`
-    /// at once. JK2MV has no such cvar (`files.cpp` mentions it only in a
-    /// Quake 3 comment), so a Jedi Outcast client points `fs_basepath` at the
-    /// game folder and gets the engine's own pk3 files through `fs_homepath`
-    /// instead — see [`crate::launch`].
-    pub has_cdpath: bool,
+    /// Only the name differs between the games; the role is the same, which is
+    /// what lets both of them share one launch layout — see [`crate::launch`].
+    /// Jedi Academy engines inherit `fs_cdpath` from Quake 3. JK2MV dropped it
+    /// (`files.cpp` mentions a cd path only inside a Quake 3 comment) and put
+    /// its own cvar in that place, `mvdevs/jk2mv`, `src/qcommon/files.cpp`:
+    ///
+    /// ```text
+    /// fs_assetspath = Cvar_Get("fs_assetspath", Sys_DefaultAssetsPath() or "", CVAR_INIT | CVAR_VM_NOWRITE)
+    /// FS_AddAssetsDirectoryJK2(fs_assetspath->string, BASEGAME)
+    /// ```
+    ///
+    /// `FS_Startup` adds that assets directory first — and only when
+    /// `assets5.pk3` was not already found in `base` under basepath or
+    /// homepath — then `FS_AddGameDirectory(fs_basepath, game)`, then homepath,
+    /// then `fs_basegame`, `fs_game` and `fs_forcegame`. `CVAR_INIT` means the
+    /// command line is the only way to set it, which is what JKNet does.
+    pub game_data_cvar: &'static str,
 }
 
 /// Jedi Academy: the game JKNet was built for.
@@ -211,7 +222,7 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
         "CTY",
     ],
 
-    has_cdpath: true,
+    game_data_cvar: "fs_cdpath",
 };
 
 /// Jedi Outcast, played through JK2MV.
@@ -268,7 +279,7 @@ static JEDI_OUTCAST: GameSpec = GameSpec {
         "CTY",
     ],
 
-    has_cdpath: false,
+    game_data_cvar: "fs_assetspath",
 };
 
 impl GameSpec {
@@ -496,9 +507,11 @@ mod tests {
     }
 
     #[test]
-    fn only_jedi_academy_engines_understand_fs_cdpath() {
-        assert!(Game::JediAcademy.spec().has_cdpath);
-        assert!(!Game::JediOutcast.spec().has_cdpath);
+    fn each_game_names_the_cvar_of_its_own_game_data_root() {
+        // Same role, different name: Quake 3's `fs_cdpath` in a Jedi Academy
+        // engine, JK2MV's own `fs_assetspath` in Jedi Outcast.
+        assert_eq!(Game::JediAcademy.spec().game_data_cvar, "fs_cdpath");
+        assert_eq!(Game::JediOutcast.spec().game_data_cvar, "fs_assetspath");
     }
 
     #[test]

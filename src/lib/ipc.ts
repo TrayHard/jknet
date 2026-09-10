@@ -211,10 +211,6 @@ export interface Engine {
   notInstallableReason: string | null;
   /** Mod folder the build needs as `+set fs_game`. jaMME runs in `mme`. */
   defaultFsGame: string | null;
-  // --- slice: game core ---
-  /** Folder whose pk3 files the installer copies into the client's `home\`.
-   * Only JK2MV needs it. */
-  bundledPk3Dir: string | null;
 }
 
 /** A named instance of an engine with its own files and settings. */

@@ -64,17 +64,6 @@ pub struct Engine {
     /// `fs_game` the build needs to run at all. jaMME lives in `mme\` and
     /// starts into the main menu without it; the other three run from `base`.
     pub default_fs_game: Option<&'static str>,
-    // --- slice: game core ---
-    /// Folder inside the unpacked build whose pk3 files the engine ships and
-    /// needs on its search path, copied into the client's `home\<folder>\`
-    /// after every install. `None` for the four Jedi Academy builds: their
-    /// `base\` holds the game modules, and `fs_basepath` already points at the
-    /// unpacked build, so nothing has to be copied anywhere.
-    ///
-    /// JK2MV is the reason this exists. It has no `fs_cdpath`, so a Jedi
-    /// Outcast client spends `fs_basepath` on the player's `GameData` and its
-    /// own `base\assetsmv.pk3` would be off the search path otherwise.
-    pub bundled_pk3_dir: Option<&'static str>,
     /// Whether a release flagged as a pre-release may be installed. Only the
     /// projects that publish rolling builds need it.
     #[serde(skip)]
@@ -142,7 +131,6 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
-        bundled_pk3_dir: None,
         // OpenJK ships one rolling `latest` release and keeps an old tagged
         // one flagged as a pre-release; taking both leaves a fallback.
         allow_prerelease: true,
@@ -169,7 +157,6 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
-        bundled_pk3_dir: None,
         allow_prerelease: false,
         asset_rules: &[
             AssetRule {
@@ -195,7 +182,6 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
-        bundled_pk3_dir: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -223,7 +209,6 @@ const ENGINES: &[Engine] = &[
         // `start_jaMME.cmd` inside the archive runs
         // `jamme +set fs_game mme +set fs_extraGames "japlus japp"`.
         default_fs_game: Some("mme"),
-        bundled_pk3_dir: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -250,10 +235,10 @@ const ENGINES: &[Engine] = &[
         recommended: true,
         installable: true,
         not_installable_reason: None,
+        // No `fs_game`: JK2MV runs from `base`, and its own `assetsmv.pk3` and
+        // `assetsmv2.pk3` ride in the archive into `engine\base\`, which
+        // `fs_basepath` already covers.
         default_fs_game: None,
-        // `base\assetsmv.pk3` and `base\assetsmv2.pk3` ride in the archive and
-        // have to reach the search path through `fs_homepath`.
-        bundled_pk3_dir: Some("base"),
         // 1.4.1 of 2018-02-15 is the only tagged release; the project builds
         // every push but tags nothing, so there is no pre-release to fall back
         // on and nothing to allow.
@@ -637,19 +622,6 @@ mod tests {
             pick_with(engine.asset_rules_x64.unwrap(), &without_x64).as_deref(),
             Some("jk2mv-v1.4.1-win32-x86-portable.zip")
         );
-    }
-
-    #[test]
-    fn only_jk2mv_carries_pk3_files_into_the_client_home() {
-        for engine in ENGINES {
-            assert_eq!(
-                engine.bundled_pk3_dir.is_some(),
-                engine.id == "jk2mv",
-                "{} states the wrong bundled pk3 folder",
-                engine.id
-            );
-        }
-        assert_eq!(find("jk2mv").unwrap().bundled_pk3_dir, Some("base"));
     }
 
     #[test]

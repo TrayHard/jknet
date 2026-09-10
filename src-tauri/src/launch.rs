@@ -1,49 +1,45 @@
 //! Starting a client.
 //!
 //! The launcher runs the engine executable itself. Steam is never in the
-//! chain, and the game folder stays read only: JKNet reads
-//! `base\assets0.pk3`..`assets3.pk3` from it and writes nothing.
+//! chain, and the game folder stays read only: JKNet reads the retail
+//! archives out of its `base` and writes nothing.
 //!
-//! ## The three search paths of a Jedi Academy client
+//! ## The three search paths of a client
 //!
 //! An engine built from the Quake 3 tree looks for its files in three roots
 //! and prefers the last one that answers (`codemp/qcommon/files.cpp` of
 //! OpenJK, `FS_Startup`):
 //!
 //! ```text
-//! fs_cdpath   <GameData>                 the player's retail archives
-//! fs_basepath <clients\<slug>\engine>    the build JKNet unpacked
-//! fs_homepath <clients\<slug>\home>      configs, screenshots, downloads
+//! <game data cvar> <GameData>                 the player's retail archives
+//! fs_basepath      <clients\<slug>\engine>    the build JKNet unpacked
+//! fs_homepath      <clients\<slug>\home>      configs, screenshots, downloads
 //! ```
 //!
 //! The layout matters. Every engine ships its own `base\cgamex86.dll`,
 //! `uix86.dll` and `jampgamex86.dll` inside its archive, and those must win
 //! over the 1.01 modules that sit in the retail `base`; the retail folder is
 //! not writable by JKNet, so the engine cannot be copied into it. Pointing
-//! `fs_basepath` at the unpacked build and `fs_cdpath` at the game gives the
-//! engine its own modules and the player's assets at once. `fs_copyfiles`
-//! stays at its default of 0, so nothing is ever written back to the game.
-//!
-//! ## The two search paths of a Jedi Outcast client
+//! `fs_basepath` at the unpacked build and the game data root at the game
+//! gives the engine its own modules and the player's assets at once.
+//! `fs_copyfiles` stays at its default of 0, so nothing is ever written back
+//! to the game.
 //!
 //! --- slice: game core ---
-//! JK2MV has no `fs_cdpath` — the cvar appears in its `files.cpp` only inside
-//! a Quake 3 comment — so the three-root trick is not available and one root
-//! has to carry the retail archives:
+//! Only the name of the first cvar changes with the game, and it comes from
+//! [`crate::game::GameSpec::game_data_cvar`]: `fs_cdpath` for Jedi Academy,
+//! `fs_assetspath` for Jedi Outcast. JK2MV dropped `fs_cdpath` and put
+//! `fs_assetspath` in its place — `FS_Startup` calls
+//! `FS_AddAssetsDirectoryJK2(fs_assetspath->string, BASEGAME)` before it adds
+//! `fs_basepath`, and only when `assets5.pk3` was not already found in `base`
+//! under basepath or homepath. Both cvars name the folder that *contains*
+//! `base`, so a Jedi Outcast client is laid out exactly like a Jedi Academy
+//! one: its own `base\assetsmv.pk3` and `base\assetsmv2.pk3` stay in
+//! `clients\<slug>\engine\` where the archive put them, and nothing is copied
+//! anywhere.
 //!
-//! ```text
-//! fs_basepath <GameData>                 the player's retail archives
-//! fs_homepath <clients\<slug>\home>      configs, screenshots, and
-//!                                        base\assetsmv*.pk3 copied in by the
-//!                                        installer
-//! ```
-//!
-//! JK2MV's own `base\assetsmv.pk3` and `base\assetsmv2.pk3` would fall off the
-//! search path under that layout, so [`crate::engine_install`] copies them into
-//! `home\base\` after every install. The executable still lives in
-//! `clients\<slug>\engine\`, which is also the working directory of the
-//! process, so `jk2mvmenu_x64.dll` sits next to the binary that loads it.
-//! Nothing is written into the game folder here either.
+//! `clients\<slug>\engine\` is also the working directory of the process, so
+//! `jk2mvmenu_x64.dll` sits next to the binary that loads it.
 //!
 //! ## One game at a time
 //!
@@ -169,9 +165,10 @@ pub struct LaunchPlan<'a> {
 /// console runs it after everything is set.
 ///
 /// --- slice: game core ---
-/// How many roots there are depends on the game: three for Jedi Academy, two
-/// for Jedi Outcast, whose engine has no `fs_cdpath`. The module docs explain
-/// why each layout is the one that works.
+/// Both games get the same three roots. Only the cvar that names the game data
+/// root differs, and the name comes from the game's own spec: `fs_cdpath` for
+/// Jedi Academy, `fs_assetspath` for Jedi Outcast. The module docs explain why
+/// this layout is the one that works.
 pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     let mut args = Vec::new();
     let mut set = |name: &str, value: String| {
@@ -180,14 +177,11 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
         args.push(value);
     };
 
-    if plan.game.spec().has_cdpath {
-        set("fs_cdpath", plan.game_data.display().to_string());
-        set("fs_basepath", plan.engine_dir.display().to_string());
-    } else {
-        // No `fs_cdpath` to put the retail archives in, so `fs_basepath` takes
-        // them and the engine's own pk3 files ride in `fs_homepath`.
-        set("fs_basepath", plan.game_data.display().to_string());
-    }
+    set(
+        plan.game.spec().game_data_cvar,
+        plan.game_data.display().to_string(),
+    );
+    set("fs_basepath", plan.engine_dir.display().to_string());
     set("fs_homepath", plan.home_dir.display().to_string());
     if let Some(fs_game) = plan.fs_game.map(str::trim).filter(|v| !v.is_empty()) {
         set("fs_game", fs_game.to_string());
@@ -504,7 +498,8 @@ mod tests {
     }
 
     // --- slice: game core ---
-    /// The same plan for the other game, whose engine has no `fs_cdpath`.
+    /// The same plan for the other game, whose engine names the game data root
+    /// `fs_assetspath` instead of `fs_cdpath`.
     fn jo_plan<'a>(
         game_data: &'a Path,
         engine_dir: &'a Path,
@@ -617,9 +612,9 @@ mod tests {
     // --- slice: game core ---
 
     #[test]
-    fn a_jedi_outcast_client_spends_fs_basepath_on_the_game_folder() {
-        // JK2MV has no `fs_cdpath`, so the retail archives have to arrive
-        // through `fs_basepath` and the engine folder is not a root at all.
+    fn a_jedi_outcast_client_names_the_game_folder_with_fs_assetspath() {
+        // JK2MV replaced `fs_cdpath` with `fs_assetspath`, so Jedi Outcast
+        // gets the same three roots as Jedi Academy under a different name.
         let args = build_launch_args(&jo_plan(
             Path::new("D:\\SteamLibrary\\steamapps\\common\\Jedi Outcast\\GameData"),
             Path::new("C:\\JKNet\\clients\\jk2\\engine"),
@@ -629,8 +624,11 @@ mod tests {
             args,
             vec![
                 "+set",
-                "fs_basepath",
+                "fs_assetspath",
                 "D:\\SteamLibrary\\steamapps\\common\\Jedi Outcast\\GameData",
+                "+set",
+                "fs_basepath",
+                "C:\\JKNet\\clients\\jk2\\engine",
                 "+set",
                 "fs_homepath",
                 "C:\\JKNet\\clients\\jk2\\home",
@@ -639,9 +637,25 @@ mod tests {
         // Passing it anyway would be worse than useless: JK2MV would register
         // an unknown cvar and the archives would still be missing.
         assert!(!args.iter().any(|arg| arg == "fs_cdpath"));
-        // And the unpacked build is deliberately not a search root; its pk3
-        // files reach the engine through `home\base\` instead.
-        assert!(!args.iter().any(|arg| arg.contains("clients\\jk2\\engine")));
+    }
+
+    #[test]
+    fn the_unpacked_build_is_a_search_root_in_both_games() {
+        // This is what keeps JK2MV's own `base\assetsmv.pk3` on the search
+        // path without copying it anywhere.
+        let game = Path::new("D:\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\jk2\\engine");
+        let home = Path::new("C:\\JKNet\\clients\\jk2\\home");
+        for args in [
+            build_launch_args(&plan(game, engine, home)),
+            build_launch_args(&jo_plan(game, engine, home)),
+        ] {
+            let root = args
+                .iter()
+                .position(|arg| arg == "fs_basepath")
+                .expect("fs_basepath is always set");
+            assert_eq!(args[root + 1], engine.display().to_string());
+        }
     }
 
     #[test]
@@ -660,7 +674,7 @@ mod tests {
 
         let args = build_launch_args(&with);
         assert_eq!(
-            &args[6..],
+            &args[9..],
             [
                 "+set",
                 "fs_game",

@@ -488,19 +488,6 @@ async fn install_inner(
         )));
     }
 
-    // --- slice: game core ---
-    // JK2MV ships its own pk3 files and gets no `fs_cdpath`, so they have to
-    // live under `fs_homepath` to be on the search path at all.
-    if let Some(folder) = engine.bundled_pk3_dir {
-        let home_dir = paths.client_dir(client_id).join("home");
-        let copied = copy_bundled_pk3(&engine_dir, &home_dir, folder)?;
-        log::info!(
-            "copied {copied} bundled pk3 file(s) of {} into {}",
-            engine.name,
-            home_dir.join(folder).display()
-        );
-    }
-
     client.engine_version = Some(release.tag.clone());
     client.engine_installed_at = Some(timestamp::now_rfc3339());
     client.engine_published_at = Some(release.published_at.clone());
@@ -653,51 +640,6 @@ async fn download(
 /// from the newer build behind. Entries are checked one by one: an archive is
 /// data from the internet, and a `..` in an entry name is how a zip escapes
 /// the folder it is supposed to fill.
-// --- slice: game core ---
-/// Copies the pk3 files an engine ships into the client's home folder.
-///
-/// `<engine>\<folder>\*.pk3` becomes `<home>\<folder>\*.pk3`, overwriting what
-/// is there. Overwriting is the point: an engine update ships new assets under
-/// the same names, and a copy left from the previous version would win over
-/// them or, worse, disagree with the executable that reads it.
-///
-/// Idempotent, and deliberately not recursive: JK2MV puts two archives in one
-/// folder, and walking a tree the archive controls would be a way to write
-/// anywhere under `home\`. A file that is not a `.pk3` is left where it is —
-/// the player's own library lives in the same folder.
-///
-/// Returns how many files were copied.
-fn copy_bundled_pk3(engine_dir: &Path, home_dir: &Path, folder: &str) -> Result<usize> {
-    let from = engine_dir.join(folder);
-    let into = home_dir.join(folder);
-    let Ok(entries) = fs::read_dir(&from) else {
-        // The engine claims to ship pk3 files and its archive holds none. The
-        // launcher says so and lets the install stand: the executable is
-        // there, and a missing asset pack shows up as a broken menu rather
-        // than as a failed download the player cannot act on.
-        log::warn!("{} has no {folder} folder to copy pk3 files from", engine_dir.display());
-        return Ok(0);
-    };
-    paths::create_dir(&into)?;
-
-    let mut copied = 0usize;
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(text) = name.to_str() else { continue };
-        if !text.to_ascii_lowercase().ends_with(".pk3") {
-            continue;
-        }
-        if !entry.file_type().map(|kind| kind.is_file()).unwrap_or(false) {
-            continue;
-        }
-        let target = into.join(text);
-        fs::copy(entry.path(), &target)
-            .map_err(|e| AppError::io_path("cannot copy the engine pk3 into", &target, e))?;
-        copied += 1;
-    }
-    Ok(copied)
-}
-
 pub fn extract_archive(archive: &Path, target: &Path) -> Result<()> {
     let reader =
         File::open(archive).map_err(|e| AppError::io_path("cannot open", archive, e))?;
@@ -1000,64 +942,10 @@ mod tests {
         // And the menu module ends up next to the binary that loads it, which
         // is also the working directory of the process.
         assert!(engine_dir.join("jk2mvmenu_x64.dll").is_file());
+        // The engine's own archives stay here: `fs_basepath` points at this
+        // folder, so they are on the search path where the archive put them.
         assert!(engine_dir.join("base").join("assetsmv.pk3").is_file());
-    }
-
-    #[test]
-    fn the_engine_pk3_files_land_in_the_client_home() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let engine_dir = temp.path().join("engine");
-        let home_dir = temp.path().join("home");
-        let base = engine_dir.join("base");
-        fs::create_dir_all(&base).expect("the engine base folder");
-        fs::write(base.join("assetsmv.pk3"), b"one").expect("an archive");
-        fs::write(base.join("assetsmv2.pk3"), b"two").expect("another archive");
-        // Everything that is not a pk3 stays in the engine folder.
-        fs::write(base.join("jk2mvconfig.cfg"), b"cfg").expect("a config");
-
-        let copied = copy_bundled_pk3(&engine_dir, &home_dir, "base").expect("the copy runs");
-        assert_eq!(copied, 2);
-        assert_eq!(
-            fs::read(home_dir.join("base").join("assetsmv.pk3")).unwrap(),
-            b"one"
-        );
-        assert!(home_dir.join("base").join("assetsmv2.pk3").is_file());
-        assert!(!home_dir.join("base").join("jk2mvconfig.cfg").exists());
-    }
-
-    #[test]
-    fn a_second_install_overwrites_the_pk3_of_the_first_and_keeps_the_library() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let engine_dir = temp.path().join("engine");
-        let home_dir = temp.path().join("home");
-        fs::create_dir_all(engine_dir.join("base")).expect("the engine base folder");
-        fs::create_dir_all(home_dir.join("base")).expect("the home base folder");
-        // What the previous version left, and a file of the player's own.
-        fs::write(home_dir.join("base").join("assetsmv.pk3"), b"old").expect("an old archive");
-        fs::write(home_dir.join("base").join("kyle.pk3"), b"skin").expect("a library file");
-        fs::write(engine_dir.join("base").join("assetsmv.pk3"), b"new").expect("a new archive");
-
-        assert_eq!(copy_bundled_pk3(&engine_dir, &home_dir, "base").unwrap(), 1);
-        assert_eq!(
-            fs::read(home_dir.join("base").join("assetsmv.pk3")).unwrap(),
-            b"new"
-        );
-        // The library of the client is in the same folder and is not touched.
-        assert_eq!(fs::read(home_dir.join("base").join("kyle.pk3")).unwrap(), b"skin");
-
-        // And running it again changes nothing.
-        assert_eq!(copy_bundled_pk3(&engine_dir, &home_dir, "base").unwrap(), 1);
-    }
-
-    #[test]
-    fn an_archive_without_the_promised_folder_costs_a_warning_and_not_the_install() {
-        let temp = tempfile::tempdir().expect("temp dir");
-        let engine_dir = temp.path().join("engine");
-        fs::create_dir_all(&engine_dir).expect("the engine folder");
-        assert_eq!(
-            copy_bundled_pk3(&engine_dir, &temp.path().join("home"), "base").unwrap(),
-            0
-        );
+        assert!(engine_dir.join("base").join("assetsmv2.pk3").is_file());
     }
 
     #[test]
