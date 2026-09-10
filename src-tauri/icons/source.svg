@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <!--
+    Source of every generated icon: `npm run tauri icon src-tauri/icons/source.svg`.
+    Geometry only, no text: the rasterizer has no fonts.
+    Colours are the design tokens `color/accent/base` and `color/bg/deep`.
+  -->
+  <rect width="512" height="512" rx="112" fill="#22B8F0" />
+  <path
+    d="M256 96 L394 176 V336 L256 416 L118 336 V176 Z"
+    stroke="#07090D"
+    stroke-width="28"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M256 176 V336"
+    stroke="#07090D"
+    stroke-width="36"
+    stroke-linecap="round"
+  />
+</svg>
