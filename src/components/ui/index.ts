@@ -12,3 +12,5 @@ export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 export { NavItem } from "./NavItem";
 export { Toggle } from "./Toggle";
+// --- slice: installer ---
+export { Toast, type ToastVariant } from "./Toast";
