@@ -52,7 +52,7 @@ src/
 src-tauri/
   src/lib.rs             сборка приложения, плагины, список команд
   src/state.rs           общее состояние: config_root и настройки
-  src/paths.rs           раскладка папок данных
+  src/paths.rs           раскладка папок данных, перенос из старой папки
   src/settings.rs        settings.json
   src/game_files.rs      поиск GameData в Steam и GOG
   src/engines.rs         статический реестр движков
@@ -109,6 +109,7 @@ src-tauri/
 - Разрешения в `src-tauri/capabilities/default.json` добавляйте по одному, только под то, что действительно вызываете.
 - Маршрутизация работает на `HashRouter`. Ссылки вида `#/servers` переживают перезагрузку окна, обычные пути — нет.
 - Логи пишет `tauri-plugin-log` в `logs\` внутри папки данных. Туда же попадают `console.warn` и `console.error` фронтенда: их пересылает `src/main.tsx`.
+- Данные лаунчера лежат в `%LOCALAPPDATA%\org.jknet.launcher`, папке идентификатора пакета. Путь приходит из `app.path().app_local_data_dir()` в обработчике `setup`. Не пишите в `%LOCALAPPDATA%\JKNet`: туда установщик NSIS ставит саму программу, а деинсталлятор чистит папку идентификатора.
 
 ## Чего не делать
 

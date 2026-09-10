@@ -40,11 +40,13 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight: Jedi Ac
 | --- | --- |
 | Программа | `%LOCALAPPDATA%\JKNet` |
 | Ярлык | меню **Пуск**, группа **JKNet**; на рабочем столе — по флажку |
-| Данные игрока | `%LOCALAPPDATA%\JKNet`: `settings.json`, `clients\`, `library\`, `cache\`, `logs\` |
+| Данные игрока | `%LOCALAPPDATA%\org.jknet.launcher`: `settings.json`, `clients\`, `library\`, `cache\`, `logs\` |
 | Путь установки | `HKCU\Software\JKNet\JKNet` |
 | Запись в списке программ | `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\JKNet` |
 
-> **Внимание.** Программа и данные игрока лежат в одной папке: установщик NSIS в режиме `currentUser` берёт путь `%LOCALAPPDATA%\ИМЯ_ПРОДУКТА`, а лаунчер держит там же свои файлы. Деинсталлятор удаляет по списку только то, что записал сам, поэтому папка с непустым `clients\` остаётся на месте (не проверено: деинсталлятор не запускали). Подробности — в разделе [«Что собирает установщик»](docs/architecture.md#что-собирает-установщик).
+Программа и данные лежат в разных папках. Установщик NSIS в режиме `currentUser` занимает папку с именем продукта, `%LOCALAPPDATA%\JKNet`, поэтому лаунчер пишет свои файлы в папку идентификатора, `%LOCALAPPDATA%\org.jknet.launcher`. Деинсталлятор предлагает флажок **Delete app data**, и флажок чистит именно папку данных. Снимите флажок, чтобы клиенты, библиотека и настройки пережили удаление (не проверено: деинсталлятор не запускали). Подробности — в разделе [«Что собирает установщик»](docs/architecture.md#что-собирает-установщик).
+
+Ранние сборки лаунчера держали данные в `%LOCALAPPDATA%\JKNet`. При запуске лаунчер переносит оттуда `settings.json`, `clients\`, `library\`, `cache\` и `logs\` в папку идентификатора и пишет о каждом переносе в журнал. Остальное содержимое старой папки остаётся на месте: там лежит сама программа.
 
 Обновление приходит само:
 
@@ -159,7 +161,7 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight: Jedi Ac
 
 ## Где лежат данные
 
-Лаунчер создаёт `%LOCALAPPDATA%\JKNet`:
+Лаунчер создаёт `%LOCALAPPDATA%\org.jknet.launcher`:
 
 | Путь | Содержимое |
 | --- | --- |
@@ -169,7 +171,9 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight: Jedi Ac
 | `cache\` | список серверов `servers.json`, релизы движков, архивы сборок |
 | `logs\` | журналы работы |
 
-Настройка `dataDirOverride` переносит `clients`, `library`, `cache` и `logs` в другую папку. Файл `settings.json` остаётся в `%LOCALAPPDATA%\JKNet`.
+Имя папки повторяет поле `identifier` из `src-tauri/tauri.conf.json`. Путь возвращает `app.path().app_local_data_dir()`, и ту же папку чистит деинсталлятор по флажку **Delete app data**. Программа установлена в соседнюю `%LOCALAPPDATA%\JKNet` и с данными не пересекается.
+
+Настройка `dataDirOverride` переносит `clients`, `library`, `cache` и `logs` в другую папку. Файл `settings.json` остаётся в `%LOCALAPPDATA%\org.jknet.launcher`.
 
 Правьте `settings.json` вручную, когда лаунчер закрыт или когда поля не пересекаются: команда `update_settings` записывает только изменённые поля и перечитывает файл перед записью.
 
