@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 
 import { errorMessage, type Game } from "../lib/ipc";
+// --- slice: game switch ---
 import {
+  defaultClientPatch,
+  resolveDefaultClientId,
   useActiveGame,
+} from "../lib/game";
+import {
   useCreateClient,
   useEnginesOfGame,
   useGames,
@@ -56,10 +61,17 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
     setEngineId((recommended ?? engines[0]).id);
   }, [engines, engineId]);
 
-  // The first client is the default one whether the player asks or not.
+  // The first client of a game is that game's default one whether the player
+  // asks or not.
+  //
+  // --- slice: game switch --- per game, not per launcher: a first Jedi
+  // Outcast client on a machine full of Jedi Academy ones still has to become
+  // the one its own Play button starts.
   useEffect(() => {
-    if (settings.data && !settings.data.defaultClientId) setMakeDefault(true);
-  }, [settings.data]);
+    if (settings.data && resolveDefaultClientId(settings.data, game) === null) {
+      setMakeDefault(true);
+    }
+  }, [settings.data, game]);
 
   const canSubmit = name.trim().length > 0 && engineId.length > 0;
 
@@ -72,13 +84,11 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
           // One field, one patch: the rest of the document stays as it is on
           // disk, including anything edited outside the launcher.
           if (makeDefault) {
-            // --- slice: game core ---
-            // Both fields: the Play button still reads the single one, and
-            // the per-game map is what the switcher slice will read.
-            updateSettings.mutate({
-              defaultClientId: client.id,
-              defaultClientIds: { [client.game]: client.id },
-            });
+            // --- slice: game switch ---
+            // The map for both games, plus the 0.2 field for Jedi Academy so
+            // that anything still reading it keeps working. A Jedi Outcast id
+            // in that field would be started by whatever has not been scoped.
+            updateSettings.mutate(defaultClientPatch(client));
           }
           // The dialog closes first: the download takes a minute, and its
           // progress belongs on the card, not in a modal nobody can leave.
@@ -172,7 +182,8 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
           <span className="flex flex-col">
             <span className="text-body-md-medium text-fg">Make it the default</span>
             <span className="text-body-sm text-fg-muted">
-              The Play button on Home starts the default client.
+              The Play button on Home starts the default client of the game it
+              is on. Each game has its own.
             </span>
           </span>
           <Toggle

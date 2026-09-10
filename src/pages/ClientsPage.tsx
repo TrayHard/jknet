@@ -12,10 +12,13 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 
 import { ClientSettingsDialog } from "../components/ClientSettingsDialog";
 import { useGameEventsContext } from "../components/GameEventsProvider";
+// --- slice: game switch ---
+import { NEW_CLIENT_PARAM } from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState } from "../components/ui";
@@ -25,22 +28,27 @@ import {
   type Client,
   type Engine,
   type EngineInstallProgress,
-  type Game,
-  type GameInfo,
   type RunningGame,
   type SettingsPatch,
 } from "../lib/ipc";
 import { formatBytes, shortenPath } from "../lib/format";
+// --- slice: game switch ---
 import {
+  clientsOfGame,
+  defaultClientPatch,
+  otherGame,
+  resolveDefaultClientId,
   useActiveGame,
+  useGameNames,
+} from "../lib/game";
+import {
   useClients,
   useDeleteClient,
   useEngineReleases,
-  useEngines,
+  useEnginesOfGame,
   useEngineUpdate,
   useGameFiles,
   useGameInfo,
-  useGames,
   useInstallEngine,
   useLaunchClient,
   usePendingInstalls,
@@ -59,12 +67,16 @@ import {
 export function ClientsPage() {
   const settings = useSettings();
   const clients = useClients();
-  const engines = useEngines();
-  const gameFiles = useGameFiles();
   // --- slice: game core ---
   const activeGame = useActiveGame();
   const gameInfo = useGameInfo(activeGame);
-  const games = useGames();
+  // --- slice: game switch ---
+  // Everything on this screen is the active game: its folder, its clients, the
+  // builds that play it. The other game is one press of the switcher away, and
+  // the line under the list says how many clients are waiting there.
+  const engines = useEnginesOfGame(activeGame);
+  const { label: gameName } = useGameNames();
+  const gameFiles = useGameFiles();
   const updateSettings = useUpdateSettings();
   const deleteClient = useDeleteClient();
   const installEngine = useInstallEngine();
@@ -80,6 +92,24 @@ export function ClientsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // --- slice: game switch ---
+  // A toast elsewhere sent the player here to make a client. The parameter is
+  // dropped as the dialog opens, so closing it and reloading does not reopen.
+  const [search, setSearch] = useSearchParams();
+  const askedForNew = search.get(NEW_CLIENT_PARAM) !== null;
+  useEffect(() => {
+    if (!askedForNew) return;
+    setDialogOpen(true);
+    setSearch(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete(NEW_CLIENT_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [askedForNew, setSearch]);
 
   // Only the changed fields go to the core: the cached document would carry
   // back stale values for everything else and overwrite `settings.json`.
@@ -118,8 +148,7 @@ export function ClientsPage() {
 
   // A command that never answered is as much of a failure as one that said
   // no, and outside the Tauri runtime it is the only thing to report.
-  const queryError =
-    settings.error ?? clients.error ?? engines.error ?? gameFiles.error ?? null;
+  const queryError = settings.error ?? clients.error ?? gameFiles.error ?? null;
   const failure = error ?? (queryError ? errorMessage(queryError) : null);
 
   // --- slice: game core ---
@@ -135,11 +164,13 @@ export function ClientsPage() {
   const assetRange = gameInfo
     ? `${gameInfo.requiredAssets[0]}–${gameInfo.requiredAssets[gameInfo.requiredAssets.length - 1]}`
     : "assets0.pk3–assets3.pk3";
-  // --- slice: game core ---
-  // The badge appears once the player has clients of both games; before that
-  // it would label every card with the only answer there is.
-  const showGameBadges =
-    new Set((clients.data ?? []).map((client) => client.game)).size > 1;
+  // --- slice: game switch ---
+  // No game badge on a card any more: every card in the list below plays the
+  // game named in the switcher, so the badge would repeat the sidebar on every
+  // row. The count of the other game's clients carries that news instead.
+  const gameClients = clientsOfGame(clients.data, activeGame);
+  const otherCount = clientsOfGame(clients.data, otherGame(activeGame)).length;
+  const defaultClientId = resolveDefaultClientId(settings.data, activeGame);
 
   return (
     <Page>
@@ -246,22 +277,21 @@ export function ClientsPage() {
 
         {clients.isLoading ? (
           <p className="text-body-sm text-fg-muted">Loading…</p>
-        ) : clients.data && clients.data.length > 0 ? (
+        ) : gameClients.length > 0 ? (
           <ul className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-            {clients.data.map((client) => (
+            {gameClients.map((client) => (
               <ClientCard
                 key={client.id}
                 client={client}
-                engine={engines.data?.find((engine) => engine.id === client.engineId)}
-                isDefault={client.id === settings.data?.defaultClientId}
-                // --- slice: game core ---
-                // A badge only when there is something to tell apart: on a
-                // launcher with Jedi Academy clients alone it is noise.
-                gameBadge={showGameBadges ? shortGameName(games.data, client.game) : null}
+                engine={engines.find((engine) => engine.id === client.engineId)}
+                isDefault={client.id === defaultClientId}
                 install={installs[client.id]}
                 installPending={pendingInstalls.includes(client.id)}
                 running={runningGame.data ?? null}
-                onMakeDefault={() => patchSettings({ defaultClientId: client.id })}
+                // --- slice: game switch --- the default belongs to the game
+                // of the client, so Jedi Outcast cannot take the Play button
+                // away from a Jedi Academy one.
+                onMakeDefault={() => patchSettings(defaultClientPatch(client))}
                 onEdit={() => setEditing(client)}
                 onDelete={() =>
                   deleteClient.mutate(client.id, {
@@ -294,7 +324,7 @@ export function ClientsPage() {
         ) : (
           <EmptyState
             icon={<Plus size={24} />}
-            title="No clients yet"
+            title={`No ${gameName(activeGame)} clients yet`}
             text="A client is a named engine build with its own mods and settings. Create one and it shows up here."
             action={
               <Button variant="primary" onClick={() => setDialogOpen(true)}>
@@ -303,21 +333,35 @@ export function ClientsPage() {
             }
           />
         )}
+
+        {/* --- slice: game switch --- the other game is not empty, it is just
+            not on screen. Saying so is what stops a player from thinking the
+            launcher lost their clients. */}
+        {otherCount > 0 ? (
+          <p className="text-body-sm text-fg-muted">
+            {otherCount} {gameName(otherGame(activeGame))}{" "}
+            {otherCount === 1 ? "client" : "clients"} — switch game in the
+            sidebar to see {otherCount === 1 ? "it" : "them"}.
+          </p>
+        ) : null}
       </section>
 
       {/* Engines --------------------------------------------------------- */}
       <section className="flex flex-col gap-12 pt-24">
-        <h2 className="text-label-xs text-fg-muted">Engines</h2>
+        {/* --- slice: game switch --- the builds that play the active game.
+            An engine of the other game cannot be picked in the dialog below
+            anyway, so listing it here would only be a card to be puzzled by. */}
+        <h2 className="text-label-xs text-fg-muted">
+          {gameName(activeGame)} engines
+        </h2>
         <ul className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-          {(engines.data ?? []).map((engine) => (
+          {engines.map((engine) => (
             <li
               key={engine.id}
               className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-16"
             >
               <div className="flex items-center gap-8">
                 <span className="text-heading-sm text-fg">{engine.name}</span>
-                {/* --- slice: game core --- five builds, two games. */}
-                <Badge>{shortGameName(games.data, engine.game)}</Badge>
                 {engine.recommended ? <Badge tone="accent">Recommended</Badge> : null}
               </div>
               <p className="text-body-sm text-fg-secondary">{engine.description}</p>
@@ -337,7 +381,7 @@ export function ClientsPage() {
       {editing ? (
         <ClientSettingsDialog
           client={editing}
-          engine={engines.data?.find((engine) => engine.id === editing.engineId)}
+          engine={engines.find((engine) => engine.id === editing.engineId)}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -355,9 +399,6 @@ interface ClientCardProps {
   installPending: boolean;
   /** The game JKNet started, whichever client it belongs to. */
   running: RunningGame | null;
-  // --- slice: game core ---
-  /** `JA` or `JO`, or `null` while every client plays the same game. */
-  gameBadge: string | null;
   onMakeDefault: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -373,7 +414,6 @@ function ClientCard({
   install,
   installPending,
   running,
-  gameBadge,
   onMakeDefault,
   onEdit,
   onDelete,
@@ -400,7 +440,6 @@ function ClientCard({
         <div className="flex-1 min-w-0 flex flex-col gap-4">
           <div className="flex items-center gap-8">
             <span className="text-heading-sm text-fg truncate">{client.name}</span>
-            {gameBadge ? <Badge>{gameBadge}</Badge> : null}
             {isDefault ? <Badge tone="accent">Default</Badge> : null}
             {isRunning ? <Badge tone="success">Running</Badge> : null}
           </div>
@@ -643,10 +682,4 @@ function sourceName(source: string): string {
     default:
       return "Saved";
   }
-}
-
-// --- slice: game core ---
-/** `JA` or `JO`, or the raw id while the game table is still loading. */
-function shortGameName(games: GameInfo[] | undefined, game: Game): string {
-  return games?.find((entry) => entry.id === game)?.shortName ?? game.toUpperCase();
 }

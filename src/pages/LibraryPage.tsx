@@ -13,7 +13,10 @@ import {
   Upload,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
+// --- slice: game switch ---
+import { NEW_CLIENT_PARAM } from "../components/MissingClientToast";
 import { ConflictsDialog } from "../components/library/ConflictsDialog";
 import { LibraryCard } from "../components/library/LibraryCard";
 import { RemoveItemDialog } from "../components/library/RemoveItemDialog";
@@ -30,6 +33,13 @@ import {
   type LibraryItem,
   type SkippedFile,
 } from "../lib/ipc";
+// --- slice: game switch ---
+import {
+  clientsOfGame,
+  resolveDefaultClientId,
+  useActiveGame,
+  useGameNames,
+} from "../lib/game";
 import {
   libraryKeys,
   useAddLibraryFiles,
@@ -74,6 +84,14 @@ export function LibraryPage() {
   const settings = useSettings();
   const engines = useEngines();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  // --- slice: game switch ---
+  // The picker offers the clients of the active game. A file installed into a
+  // client is read by that client's engine, so a Jedi Academy client in this
+  // list while the launcher is on Jedi Outcast is an install that would never
+  // be loaded by the game on screen.
+  const activeGame = useActiveGame();
+  const { label: gameName } = useGameNames();
 
   const [clientId, setClientId] = useState<string | null>(null);
   const [tab, setTab] = useState<LibraryTab>("installed");
@@ -93,21 +111,27 @@ export function LibraryPage() {
   const setEnabled = useSetLibraryItemEnabled(clientId);
   const removeItem = useRemoveLibraryItem(clientId);
 
-  const clientList = useMemo(() => clients.data ?? [], [clients.data]);
+  const clientList = useMemo(
+    () => clientsOfGame(clients.data, activeGame),
+    [clients.data, activeGame],
+  );
   const client = clientList.find((entry) => entry.id === clientId) ?? null;
 
   // Follows the default client until the player picks another one, and
   // recovers when the selected client is deleted on the Clients screen.
+  //
+  // --- slice: game switch --- a switch empties this list of the other game's
+  // clients, so the selection is re-made from the new game's default one.
+  const preferred = resolveDefaultClientId(settings.data, activeGame);
   useEffect(() => {
     if (clientList.length === 0) {
       if (clientId !== null) setClientId(null);
       return;
     }
     if (clientId && clientList.some((entry) => entry.id === clientId)) return;
-    const preferred = settings.data?.defaultClientId ?? null;
     const fallback = clientList.find((entry) => entry.id === preferred) ?? clientList[0];
     setClientId(fallback.id);
-  }, [clientList, clientId, settings.data?.defaultClientId]);
+  }, [clientList, clientId, preferred]);
 
   const install = (paths: string[]) => {
     if (!clientId || paths.length === 0) return;
@@ -314,7 +338,8 @@ export function LibraryPage() {
         />
         <p className="text-body-sm text-fg-muted flex-1 min-w-0">
           Files are installed into this client only. Another client with the
-          same engine keeps its own set.
+          same engine keeps its own set. {gameName(activeGame)} clients are
+          listed here; switch game in the sidebar for the other ones.
         </p>
       </section>
 
@@ -338,9 +363,15 @@ export function LibraryPage() {
         ))}
       </nav>
 
+      {/* TODO(jkhub-game): the Browse JKHub tab of the JKHub slice takes the
+          active game — a Jedi Outcast file is not installable into a Jedi
+          Academy client — so pass `activeGame` into whatever prop that tab
+          exposes once the two branches are merged. */}
       {tab === "installed" ? (
         <InstalledTab
           clients={clientOptions.length}
+          gameName={gameName(activeGame)}
+          onCreateClient={() => void navigate(`/clients?${NEW_CLIENT_PARAM}=1`)}
           clientName={client?.name ?? "This client"}
           hasClient={clientId != null}
           loading={items.isLoading}
@@ -465,6 +496,11 @@ export function LibraryPage() {
 
 interface InstalledTabProps {
   clients: number;
+  // --- slice: game switch ---
+  /** Name of the active game, for the empty state that has no client to show. */
+  gameName: string;
+  /** Opens the New client dialog on the Clients screen. */
+  onCreateClient: () => void;
   clientName: string;
   hasClient: boolean;
   loading: boolean;
@@ -490,6 +526,8 @@ interface InstalledTabProps {
 /** The Installed tab: categories on the left, cards on the right. */
 function InstalledTab({
   clients,
+  gameName,
+  onCreateClient,
   clientName,
   hasClient,
   loading,
@@ -515,8 +553,15 @@ function InstalledTab({
     return (
       <EmptyState
         icon={<Library size={24} />}
-        title="No clients yet"
-        text="A library file is installed into a client. Create one on the Clients screen and this list starts filling up."
+        // --- slice: game switch --- the game is named, because a player with
+        // clients on the other segment has not lost them.
+        title={`No ${gameName} clients yet`}
+        text="A library file is installed into a client. Create one and this list starts filling up."
+        action={
+          <Button variant="primary" icon={<Plus size={16} />} onClick={onCreateClient}>
+            New client
+          </Button>
+        }
       />
     );
   }

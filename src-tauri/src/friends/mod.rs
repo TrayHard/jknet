@@ -59,6 +59,8 @@ use tokio::sync::watch;
 
 use crate::account::{AccountChanged, ACCOUNT_CHANGED_EVENT};
 use crate::error::{AppError, Result};
+// --- slice: game switch --- the port of a friend's server names their game.
+use crate::game::Game;
 use crate::hub::{
     Friend, FriendRequest, HubClient, HubContext, Invite, NewInvite, Presence, SendRequestResult,
 };
@@ -391,7 +393,11 @@ pub async fn join_friend(
     let ctx = require_account(&state)?;
     let list = hub.get_friends(&ctx).await?;
     let address = joinable_address(&list.friends, &user_id)?;
-    let client_id = default_client(&state)?;
+    // --- slice: game switch ---
+    // Presence carries no game, so the port answers for it: following a friend
+    // onto a Jedi Outcast server with a Jedi Academy client would start a game
+    // that cannot reach the address it was given.
+    let client_id = default_client(&state, Game::from_server_address(&address))?;
 
     // The whole launch path, arguments included, belongs to `launch.rs`. A
     // second copy of it here is how `+connect` ends up in the wrong place on
@@ -526,11 +532,30 @@ fn joinable_address(friends: &[Friend], user_id: &str) -> Result<String> {
         })
 }
 
-/// The client the Play button starts, which is the one a join uses.
-fn default_client(state: &AppState) -> Result<String> {
-    state.settings()?.default_client_id.ok_or_else(|| {
-        AppError::Launch("pick a default client on the Clients screen first".into())
-    })
+/// The client the Play button of one game starts, which is the one a join uses.
+///
+/// --- slice: game switch ---
+/// The per-game map is the answer; the single `default_client_id` of 0.2 still
+/// stands in for Jedi Academy, so a launcher that has not written the map yet
+/// joins a friend exactly as it did before. The refusal names the game, because
+/// «create a client» means a different client depending on which one it is.
+fn default_client(state: &AppState, game: Game) -> Result<String> {
+    let settings = state.settings()?;
+    settings
+        .default_client_ids
+        .get(&game)
+        .cloned()
+        .or_else(|| match game {
+            Game::JediAcademy => settings.default_client_id.clone(),
+            Game::JediOutcast => None,
+        })
+        .filter(|id| !id.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::Launch(format!(
+                "no default {} client yet: create one on the Clients screen first",
+                game.display_name()
+            ))
+        })
 }
 
 /// Turns a blank optional string into no string at all.

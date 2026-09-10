@@ -16,7 +16,10 @@ import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCa
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input } from "../components/ui";
 import { errorMessage, ipc, type GameInfo } from "../lib/ipc";
+// --- slice: game switch ---
+import { findDefaultClient } from "../lib/game";
 import {
+  useClients,
   useDataPaths,
   useGames,
   useSettings,
@@ -140,6 +143,11 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
   const settings = useSettings();
   const games = useGames();
   const updateSettings = useUpdateSettings();
+  // --- slice: game switch ---
+  // The row also answers «what starts when I press Play in this game», which
+  // is the second half of setting a game up and the question the Home screen
+  // of an unfamiliar game raises.
+  const clients = useClients();
 
   /** Asks for a folder, checks it against this game and saves it. */
   const locate = async (game: GameInfo) => {
@@ -184,6 +192,12 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
       <ul className="flex flex-col gap-8 pt-8">
         {(games.data ?? []).map((game) => {
           const path = settings.data?.gameDataPaths[game.id] ?? null;
+          // --- slice: game switch ---
+          const defaultClient = findDefaultClient(
+            clients.data,
+            settings.data,
+            game.id,
+          );
           return (
             <li
               key={game.id}
@@ -195,6 +209,11 @@ function GameFilesCard({ onError }: { onError: (message: string) => void }) {
                 </span>
                 <span className="text-mono-sm text-fg-accent break-all">
                   {path ?? "Not set"}
+                </span>
+                <span className="text-body-sm text-fg-muted pt-2">
+                  {defaultClient
+                    ? `Play starts ${defaultClient.name}`
+                    : "No default client yet"}
                 </span>
               </span>
               <Button

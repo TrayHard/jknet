@@ -127,12 +127,15 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
       }
 
       // One field, one patch: the document on disk keeps everything else.
-      // --- slice: game core ---
-      // Both fields: the Play button reads the single one, the map is what
-      // the switcher slice will read.
+      // --- slice: game switch ---
+      // The map is what every screen reads; the 0.2 field follows it only for
+      // Jedi Academy, because that is the only game it ever named. The first
+      // run also sets `activeGame`, so the launcher opens on the game the
+      // player has just set up rather than on Jedi Academy by default.
       await updateSettings.mutateAsync({
-        defaultClientId: target,
+        activeGame: game,
         defaultClientIds: { [game]: target },
+        ...(game === "ja" ? { defaultClientId: target } : {}),
       });
 
       // A client created a moment ago is not in the list yet, and its engine
