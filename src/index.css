@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@import "./styles/fonts.css";
+@import "./styles/tokens.css";
+
+/*
+ * Tailwind theme.
+ *
+ * The block does three things:
+ *   1. wipes the stock Tailwind color palette so `bg-slate-700` and friends
+ *      cannot creep in next to the design tokens;
+ *   2. aliases the semantic tokens from `tokens.css` under short utility
+ *      names: `bg-app`, `bg-surface`, `text-fg-muted`, `border-line`;
+ *   3. owns the namespaces Tailwind reserves for itself: `--spacing`,
+ *      `--radius-*`, `--font-*` and `--shadow-*`.
+ *
+ * `--spacing: 1px` makes every spacing utility a pixel value, so the Figma
+ * token `space/16` is written `p-16`, `gap-16`, `mt-16`. The naming table is
+ * in CLAUDE.md.
+ */
+@theme {
+  --color-*: initial;
+
+  --color-transparent: transparent;
+  --color-current: currentColor;
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  /* Surfaces: `bg-app`, `bg-surface`, `bg-accent-subtle`. */
+  --color-app: var(--color-bg-app);
+  --color-sidebar: var(--color-bg-sidebar);
+  --color-titlebar: var(--color-bg-titlebar);
+  --color-surface: var(--color-bg-surface);
+  --color-surface-hover: var(--color-bg-surface-hover);
+  --color-elevated: var(--color-bg-elevated);
+  --color-input: var(--color-bg-input);
+  --color-accent: var(--color-bg-accent);
+  --color-accent-hover: var(--color-bg-accent-hover);
+  --color-accent-subtle: var(--color-bg-accent-subtle);
+  --color-warm: var(--color-bg-warm);
+  --color-warm-subtle: var(--color-bg-warm-subtle);
+  --color-success: var(--color-bg-success);
+  --color-success-subtle: var(--color-bg-success-subtle);
+  --color-danger: var(--color-bg-danger);
+  --color-danger-subtle: var(--color-bg-danger-subtle);
+  --color-purple-subtle: var(--color-bg-purple-subtle);
+  --color-overlay: var(--color-bg-overlay);
+  --color-hover-overlay: var(--color-bg-hover-overlay);
+  --color-selected-overlay: var(--color-bg-selected-overlay);
+  --color-accent-glow: var(--color-bg-accent-glow);
+
+  /* Foreground: `text-fg`, `text-fg-muted`, `text-fg-accent`. */
+  --color-fg: var(--color-text-primary);
+  --color-fg-secondary: var(--color-text-secondary);
+  --color-fg-muted: var(--color-text-muted);
+  --color-fg-disabled: var(--color-text-disabled);
+  --color-fg-on-accent: var(--color-text-on-accent);
+  --color-fg-accent: var(--color-text-accent);
+  --color-fg-warm: var(--color-text-warm);
+  --color-fg-success: var(--color-text-success);
+  --color-fg-danger: var(--color-text-danger);
+  --color-fg-purple: var(--color-text-purple);
+  --color-fg-inverse: var(--color-text-inverse);
+
+  /* Borders: `border-line`, `border-line-focus`. */
+  --color-line: var(--color-border-default);
+  --color-line-strong: var(--color-border-strong);
+  --color-line-subtle: var(--color-border-subtle);
+  --color-line-accent: var(--color-border-accent);
+  --color-line-focus: var(--color-border-focus);
+  --color-line-danger: var(--color-border-danger);
+  --color-line-warm: var(--color-border-warm);
+
+  /* Spacing utilities are pixels: `p-16` is 16 px. */
+  --spacing: 1px;
+
+  /* Figma tokens radius/xs … radius/full. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* Font families used by the text-style classes in tokens.css. */
+  --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+  /* Figma effects shadow/card and shadow/popover. */
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-bg-app);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    /* The window has no decorations, so nothing should look selectable
+       except real text fields. */
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  /* The app draws its own title bar, so the webview must never bounce or
+     rubber-band the document itself. */
+  #root {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--gray-700);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-600);
+    background-clip: content-box;
+  }
+}

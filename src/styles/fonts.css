@@ -1,0 +1,18 @@
+/*
+ * Local font faces. The launcher never loads fonts from a CDN: it must start
+ * offline and must not reach the network before the user asks for it.
+ *
+ * Only the weights used by the text styles in `tokens.css` are imported.
+ */
+
+/* Chakra Petch: headings and navigation. */
+@import "@fontsource/chakra-petch/latin-500.css";
+@import "@fontsource/chakra-petch/latin-600.css";
+
+/* Inter: body text and controls. */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+
+/* JetBrains Mono: addresses, versions and file paths. */
+@import "@fontsource/jetbrains-mono/latin-400.css";
