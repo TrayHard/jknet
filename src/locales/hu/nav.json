@@ -1,24 +1,24 @@
 {
   "groups": {
-    "play": "Play",
-    "manage": "Manage",
-    "community": "Community"
+    "play": "Játék",
+    "manage": "Kezelés",
+    "community": "Közösség"
   },
   "items": {
-    "home": "Home",
-    "servers": "Servers",
-    "library": "Library",
-    "clients": "Clients",
-    "friends": "Friends",
-    "settings": "Settings"
+    "home": "Kezdőlap",
+    "servers": "Szerverek",
+    "library": "Könyvtár",
+    "clients": "Kliensek",
+    "friends": "Barátok",
+    "settings": "Beállítások"
   },
   "user": {
-    "guest": "Guest",
-    "noClient": "No client yet",
-    "openAccount": "Account settings",
-    "signIn": "Sign in"
+    "guest": "Vendég",
+    "noClient": "Még nincs kliens",
+    "openAccount": "Fiókbeállítások",
+    "signIn": "Bejelentkezés"
   },
   "gameSwitch": {
-    "label": "Game"
+    "label": "Játék"
   }
 }

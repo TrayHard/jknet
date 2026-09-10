@@ -1,56 +1,56 @@
 {
-  "notConfigured": "JKNet accounts and friends need JKNet Online. It is not open yet, so this version keeps the feature switched off. A later update turns it on by itself.",
+  "notConfigured": "A JKNet-fiókokhoz és a barátokhoz a JKNet Online szükséges. Ez még nem nyílt meg, ezért ebben a változatban a funkció ki van kapcsolva. Egy későbbi frissítés magától bekapcsolja.",
   "card": {
-    "title": "Account",
-    "text": "A JKNet account carries your friends list and your invites. It is not needed to play.",
-    "linked": "{{provider}} linked"
+    "title": "Fiók",
+    "text": "A JKNet-fiók viszi magával a barátok listáját és a meghívásokat. A játékhoz nem szükséges.",
+    "linked": "{{provider}} összekapcsolva"
   },
   "providers": {
     "jkhub": "JKHub",
     "discord": "Discord",
-    "dev": "the developer provider",
-    "devLabel": "Developer",
-    "signedInAs": "Signed in with {{provider}} as {{name}}",
-    "continueJkhub": "Continue with JKHub",
-    "continueJkhubNote": "The account most of the community already has.",
-    "continueDiscord": "Continue with Discord",
-    "continueDiscordNote": "Signs you in with the Discord you play with.",
-    "developer": "Developer sign-in",
-    "notAvailable": "{{provider}} sign-in is not available yet."
+    "dev": "a fejlesztői szolgáltató",
+    "devLabel": "Fejlesztői",
+    "signedInAs": "Bejelentkezve ezzel: {{provider}}. Név: {{name}}",
+    "continueJkhub": "Folytatás JKHub-fiókkal",
+    "continueJkhubNote": "A közösség többségének már van ilyen fiókja.",
+    "continueDiscord": "Folytatás Discord-fiókkal",
+    "continueDiscordNote": "Azzal a Discord-fiókkal lép be, amellyel játszani szokott.",
+    "developer": "Fejlesztői bejelentkezés",
+    "notAvailable": "Ez a bejelentkezés még nem érhető el: {{provider}}."
   },
   "waiting": {
-    "title": "Waiting for the browser…",
-    "text": "Finish signing in there, then come back to JKNet."
+    "title": "Várakozás a böngészőre…",
+    "text": "Fejezze be ott a bejelentkezést, majd térjen vissza a JKNet ablakába."
   },
   "displayName": {
-    "label": "Display name",
-    "saved": "Saved. Other players see this name.",
-    "rules": "3 to 24 characters: letters, digits, spaces, _ and -."
+    "label": "Megjelenített név",
+    "saved": "Mentve. A többi játékos ezt a nevet látja.",
+    "rules": "3–24 karakter: betűk, számjegyek, szóköz, _ és -."
   },
   "danger": {
-    "title": "Danger zone",
-    "signOut": "Sign out",
-    "signOutText": "Keeps the account. Your clients and library stay where they are.",
-    "signingOut": "Signing out…",
-    "delete": "Delete account data",
-    "deleteText": "Removes the account, your friends and your invites from the service.",
-    "confirmTitle": "Delete your JKNet account?",
-    "confirmBody": "Your account, your friends list and your invites are removed from the service. Your clients, your library files and your settings stay on this machine. This cannot be undone.",
-    "confirm": "Delete account"
+    "title": "Veszélyes műveletek",
+    "signOut": "Kijelentkezés",
+    "signOutText": "A fiók megmarad. A kliensek és a könyvtár a helyükön maradnak.",
+    "signingOut": "Kijelentkezés…",
+    "delete": "A fiók adatainak törlése",
+    "deleteText": "Törli a fiókot, a barátokat és a meghívásokat a szolgáltatásból.",
+    "confirmTitle": "Törli a JKNet-fiókját?",
+    "confirmBody": "A szolgáltatás törli a fiókot, a barátok listáját és a meghívásokat. A kliensek, a könyvtár fájljai és a beállítások ezen a gépen maradnak. A művelet nem vonható vissza.",
+    "confirm": "Fiók törlése"
   },
   "url": {
-    "summary": "JKNet Online address (advanced)",
-    "label": "JKNet Online address",
+    "summary": "JKNet Online cím (haladóknak)",
+    "label": "JKNet Online cím",
     "placeholder": "http://127.0.0.1:8787",
-    "signedIn": "Sign out before pointing JKNet at another service.",
-    "notConfigured": "For developers and self-hosted instances: an http:// or https:// address switches accounts and friends on for this machine.",
-    "hint": "An http:// or https:// address. Leave it empty to go back to the default."
+    "signedIn": "Jelentkezzen ki, mielőtt másik szolgáltatásra állítja a JKNet alkalmazást.",
+    "notConfigured": "Fejlesztőknek és saját üzemeltetésű példányokhoz: egy http:// vagy https:// cím bekapcsolja ezen a gépen a fiókokat és a barátokat.",
+    "hint": "Egy http:// vagy https:// cím. Hagyja üresen, ha vissza szeretne térni az alapértelmezetthez."
   },
   "session": {
-    "expiredTitle": "Signed out: the session expired",
-    "expiredText": "Sign in again on the Settings screen to see your friends.",
-    "timedOut": "The sign-in took too long. Try again.",
-    "expired": "The sign-in expired. Try again.",
-    "failed": "The sign-in did not finish."
+    "expiredTitle": "Kijelentkezés: lejárt a munkamenet",
+    "expiredText": "Jelentkezzen be újra a Beállítások képernyőn, hogy lássa a barátait.",
+    "timedOut": "A bejelentkezés túl sokáig tartott. Próbálja újra.",
+    "expired": "A bejelentkezés lejárt. Próbálja újra.",
+    "failed": "A bejelentkezés nem fejeződött be."
   }
 }

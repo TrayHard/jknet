@@ -1,38 +1,38 @@
 {
   "actions": {
-    "add": "Add",
-    "back": "Back",
-    "cancel": "Cancel",
-    "close": "Close",
-    "continue": "Continue",
-    "delete": "Delete",
-    "disable": "Disable",
-    "dismiss": "Dismiss",
-    "loadMore": "Load more",
-    "refresh": "Refresh",
-    "remove": "Remove",
-    "retry": "Retry",
-    "save": "Save",
-    "seeAll": "See all",
-    "tryAgain": "Try again"
+    "add": "Hozzáadás",
+    "back": "Vissza",
+    "cancel": "Mégse",
+    "close": "Bezárás",
+    "continue": "Tovább",
+    "delete": "Törlés",
+    "disable": "Kikapcsolás",
+    "dismiss": "Elvetés",
+    "loadMore": "Több betöltése",
+    "refresh": "Frissítés",
+    "remove": "Eltávolítás",
+    "retry": "Újra",
+    "save": "Mentés",
+    "seeAll": "Összes",
+    "tryAgain": "Próbálja újra"
   },
   "states": {
-    "checking": "Checking…",
-    "creating": "Creating…",
-    "deleting": "Deleting…",
-    "finishing": "Finishing…",
-    "installing": "Installing…",
-    "loading": "Loading…",
-    "reading": "Reading…",
-    "removing": "Removing…",
-    "saving": "Saving…",
-    "sending": "Sending…",
-    "starting": "Starting…"
+    "checking": "Ellenőrzés…",
+    "creating": "Létrehozás…",
+    "deleting": "Törlés…",
+    "finishing": "Befejezés…",
+    "installing": "Telepítés…",
+    "loading": "Betöltés…",
+    "reading": "Beolvasás…",
+    "removing": "Eltávolítás…",
+    "saving": "Mentés…",
+    "sending": "Küldés…",
+    "starting": "Indítás…"
   },
   "values": {
     "empty": "—",
-    "notSet": "Not set",
-    "unknown": "Unknown"
+    "notSet": "Nincs megadva",
+    "unknown": "Ismeretlen"
   },
   "units": {
     "bytes": {
@@ -42,25 +42,25 @@
       "gb": "{{value}} GB"
     },
     "milliseconds": "{{value}} ms",
-    "seconds": "{{value}} s",
-    "minutes": "{{value}} min",
-    "hours": "{{value}} h",
-    "hoursMinutes": "{{hours}} h {{minutes}} min"
+    "seconds": "{{value}} mp",
+    "minutes": "{{value}} perc",
+    "hours": "{{value}} óra",
+    "hoursMinutes": "{{hours}} óra {{minutes}} perc"
   },
   "window": {
-    "minimize": "Minimize",
-    "maximize": "Maximize",
-    "restore": "Restore",
-    "close": "Close"
+    "minimize": "Kis méret",
+    "maximize": "Teljes méret",
+    "restore": "Előző méret",
+    "close": "Bezárás"
   },
   "select": {
-    "any": "Any",
-    "nothingToChoose": "Nothing to choose"
+    "any": "Mindegy",
+    "nothingToChoose": "Nincs miből választani"
   },
   "search": {
-    "nothingMatches": "Nothing matches"
+    "nothingMatches": "Nincs találat"
   },
   "runtime": {
-    "missing": "Tauri runtime is not available"
+    "missing": "A Tauri futtatókörnyezet nem érhető el"
   }
 }
