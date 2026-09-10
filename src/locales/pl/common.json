@@ -1,66 +1,66 @@
 {
   "actions": {
-    "add": "Add",
-    "back": "Back",
-    "cancel": "Cancel",
-    "close": "Close",
-    "continue": "Continue",
-    "delete": "Delete",
-    "disable": "Disable",
-    "dismiss": "Dismiss",
-    "loadMore": "Load more",
-    "refresh": "Refresh",
-    "remove": "Remove",
-    "retry": "Retry",
-    "save": "Save",
-    "seeAll": "See all",
-    "tryAgain": "Try again"
+    "add": "Dodaj",
+    "back": "Wstecz",
+    "cancel": "Anuluj",
+    "close": "Zamknij",
+    "continue": "Dalej",
+    "delete": "Usuń",
+    "disable": "Wyłącz",
+    "dismiss": "Odrzuć",
+    "loadMore": "Wczytaj więcej",
+    "refresh": "Odśwież",
+    "remove": "Usuń",
+    "retry": "Ponów",
+    "save": "Zapisz",
+    "seeAll": "Zobacz wszystkie",
+    "tryAgain": "Spróbuj ponownie"
   },
   "states": {
-    "checking": "Checking…",
-    "creating": "Creating…",
-    "deleting": "Deleting…",
-    "finishing": "Finishing…",
-    "installing": "Installing…",
-    "loading": "Loading…",
-    "reading": "Reading…",
-    "removing": "Removing…",
-    "saving": "Saving…",
-    "sending": "Sending…",
-    "starting": "Starting…"
+    "checking": "Sprawdzanie…",
+    "creating": "Tworzenie…",
+    "deleting": "Usuwanie…",
+    "finishing": "Kończenie…",
+    "installing": "Instalowanie…",
+    "loading": "Wczytywanie…",
+    "reading": "Odczytywanie…",
+    "removing": "Usuwanie…",
+    "saving": "Zapisywanie…",
+    "sending": "Wysyłanie…",
+    "starting": "Uruchamianie…"
   },
   "values": {
     "empty": "—",
-    "notSet": "Not set",
-    "unknown": "Unknown"
+    "notSet": "Nie ustawiono",
+    "unknown": "Nieznane"
   },
   "units": {
     "bytes": {
       "b": "{{value}} B",
-      "kb": "{{value}} KB",
+      "kb": "{{value}} kB",
       "mb": "{{value}} MB",
       "gb": "{{value}} GB"
     },
     "milliseconds": "{{value}} ms",
     "seconds": "{{value}} s",
     "minutes": "{{value}} min",
-    "hours": "{{value}} h",
-    "hoursMinutes": "{{hours}} h {{minutes}} min"
+    "hours": "{{value}} godz.",
+    "hoursMinutes": "{{hours}} godz. {{minutes}} min"
   },
   "window": {
-    "minimize": "Minimize",
-    "maximize": "Maximize",
-    "restore": "Restore",
-    "close": "Close"
+    "minimize": "Minimalizuj",
+    "maximize": "Maksymalizuj",
+    "restore": "Przywróć",
+    "close": "Zamknij"
   },
   "select": {
-    "any": "Any",
-    "nothingToChoose": "Nothing to choose"
+    "any": "Dowolne",
+    "nothingToChoose": "Brak opcji do wyboru"
   },
   "search": {
-    "nothingMatches": "Nothing matches"
+    "nothingMatches": "Brak wyników"
   },
   "runtime": {
-    "missing": "Tauri runtime is not available"
+    "missing": "Środowisko Tauri jest niedostępne"
   }
 }
