@@ -390,6 +390,16 @@ export const launchIpc = {
 // --- slice: servers ---
 // ---------------------------------------------------------------------------
 
+/**
+ * Where the human and bot counts of a row came from.
+ *
+ * - `info` — `g_humanplayers` of the `getinfo`, or a server with no clients.
+ * - `status` — the extra `getstatus` of a refresh, where a bot has ping 0.
+ * - `unknown` — the server answered neither question; `clients` is all there
+ *   is, and it still contains the bots.
+ */
+export type PlayersSource = "info" | "status" | "unknown";
+
 /** `src-tauri/src/servers/mod.rs`: one row of the browser. */
 export interface ServerInfo {
   /** `ip:port`, the key of the row everywhere in the launcher. */
@@ -402,10 +412,17 @@ export interface ServerInfo {
   gametype: number;
   /** Label of `gametype`, or `Mode <n>` for a number a mod invented. */
   gametypeLabel: string;
-  /** Players the server counts, bots included. */
+  /** Players the server counts, bots included. Not what the browser shows. */
   clients: number;
-  /** `g_humanplayers`: the same count without bots, when the server sends it. */
+  /**
+   * Real players: what every count, filter and sort means by "players".
+   * `null` while `playersSource` is `unknown`.
+   */
   humans: number | null;
+  /** Bots among the `clients`. `null` alongside an unknown `humans`. */
+  bots: number | null;
+  /** How `humans` and `bots` were established. */
+  playersSource: PlayersSource;
   maxClients: number;
   needpass: boolean;
   /** `fs_game`, `base` when the server runs no mod. */
@@ -436,6 +453,8 @@ export interface ServerPlayer {
   score: number;
   /** Ping the server measures, which is the player's, not the launcher's. */
   ping: number;
+  /** Ping 0, which the engine writes for bots and for nothing else. */
+  isBot: boolean;
 }
 
 /** The answer of `get_server_status`. */

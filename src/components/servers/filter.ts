@@ -21,25 +21,68 @@ export interface ServerFilters {
   players: PlayersFilter;
   /** Network protocol as text, or `any`. */
   protocol: string;
+  /** Drops the servers where every client is a bot. On by default. */
+  hideBotOnly: boolean;
 }
 
-export const NO_FILTERS: ServerFilters = {
+/**
+ * The state the screen opens in and **Reset filters** returns to.
+ *
+ * `hideBotOnly` starts on: a list where two thirds of the "players" are bots
+ * is a list nobody can read, and the option is one click away in the filter
+ * row for anyone who wants those servers back.
+ */
+export const DEFAULT_FILTERS: ServerFilters = {
   search: "",
   gametype: "any",
   game: "any",
   players: "any",
   protocol: "any",
+  hideBotOnly: true,
 };
 
-/** True when nothing is filtered, which is what disables **Reset filters**. */
-export function filtersAreEmpty(filters: ServerFilters): boolean {
+/** True when every filter is where it started, which disables **Reset filters**. */
+export function filtersAreDefault(filters: ServerFilters): boolean {
   return (
     filters.search.trim() === "" &&
     filters.gametype === "any" &&
     filters.game === "any" &&
     filters.players === "any" &&
-    filters.protocol === "any"
+    filters.protocol === "any" &&
+    filters.hideBotOnly === DEFAULT_FILTERS.hideBotOnly
   );
+}
+
+/**
+ * Players the browser counts on one row: people, never bots.
+ *
+ * `humans` is `null` only while `playersSource` is `unknown` — a server that
+ * publishes no `g_humanplayers` and did not answer `getstatus` either. There
+ * the server's own total is the best guess there is, and the row shows it
+ * without a bot suffix rather than claiming an empty server.
+ */
+export function realPlayers(server: ServerInfo): number {
+  return server.humans ?? server.clients;
+}
+
+/** Bots on one row, and zero while the split is unknown. */
+export function botCount(server: ServerInfo): number {
+  return server.bots ?? 0;
+}
+
+/** True when the server has clients and every one of them is a bot. */
+export function isBotOnly(server: ServerInfo): boolean {
+  return server.clients > 0 && server.humans === 0;
+}
+
+/** Real players over a whole list, for the count in the header. */
+export function totalRealPlayers(servers: ServerInfo[]): number {
+  return servers.reduce((sum, server) => sum + realPlayers(server), 0);
+}
+
+/** Bots over a whole list, for the "K bots hidden from counts" tail. */
+export function totalBots(servers: ServerInfo[]): number {
+  return servers.reduce((sum, server) => sum + botCount(server), 0);
 }
 
 /**
@@ -61,20 +104,32 @@ export function matchesSearch(server: ServerInfo, query: string): boolean {
   );
 }
 
-/** True when the row survives the players dropdown. */
+/**
+ * True when the row survives the players dropdown.
+ *
+ * "Not empty" means a person is on the server, not a client of any kind: a
+ * lobby of eight bots is exactly what the player picking this option wants to
+ * skip. "Not full" counts every client, bots included, because a bot occupies
+ * a slot as firmly as a person does.
+ */
 export function matchesPlayers(
   server: ServerInfo,
   filter: PlayersFilter,
 ): boolean {
   switch (filter) {
     case "not-empty":
-      return server.clients > 0;
+      return realPlayers(server) > 0;
     case "not-full":
       // A server with no slot count published cannot be full.
       return server.maxClients === 0 || server.clients < server.maxClients;
     default:
       return true;
   }
+}
+
+/** True when the row survives the **Hide bot-only servers** switch. */
+export function matchesBotOnly(server: ServerInfo, hide: boolean): boolean {
+  return !hide || !isBotOnly(server);
 }
 
 /** Applies every dropdown and the search box. */
@@ -86,6 +141,7 @@ export function applyFilters(
     (server) =>
       matchesSearch(server, filters.search) &&
       matchesPlayers(server, filters.players) &&
+      matchesBotOnly(server, filters.hideBotOnly) &&
       (filters.gametype === "any" ||
         String(server.gametype) === filters.gametype) &&
       (filters.game === "any" || server.game === filters.game) &&
@@ -151,7 +207,11 @@ function compareBy(
     case "mode":
       return a.gametypeLabel.localeCompare(b.gametypeLabel);
     case "players":
-      return a.clients - b.clients;
+      // Real players first, bots only as a tiebreak: of two servers with one
+      // person on each, the busier lobby is the one with more bots in it.
+      return (
+        realPlayers(a) - realPlayers(b) || botCount(a) - botCount(b)
+      );
     case "ping":
       return a.pingMs - b.pingMs;
     case "mod":

@@ -1,9 +1,16 @@
 //! The server browser.
 //!
-//! One refresh is two stages. First both master servers are asked for their
+//! One refresh is three stages. First both master servers are asked for their
 //! address lists over UDP; the lists are merged and deduplicated. Then every
 //! address is sent a `getinfo` with a bounded number of requests in flight,
 //! and the round trip time of that request is the ping the browser shows.
+//! Last, the servers that did not publish `g_humanplayers` get a `getstatus`,
+//! because their player list is the only place a bot can be told from a
+//! person — see [`ServerInfo::apply_status`].
+//!
+//! Everything the launcher calls a player count is a count of people. Bots are
+//! carried alongside in [`ServerInfo::bots`] and shown as a suffix, never
+//! added in. [`PlayersSource`] says how sure a given row is.
 //!
 //! Results do not wait for the slowest server: they are pushed to the window
 //! in batches through the `servers:batch` event while the refresh runs, and
@@ -53,6 +60,16 @@ const INFO_ATTEMPTS: u32 = 2;
 /// router with a small NAT table drops the overflow instead of forwarding it.
 const MAX_IN_FLIGHT: usize = 64;
 
+/// How long one server has to answer a `getstatus`.
+const STATUS_TIMEOUT: Duration = Duration::from_millis(1_500);
+
+/// How many servers one refresh may ask for a player list.
+///
+/// The second pass exists only for servers that hide `g_humanplayers`, and the
+/// busiest of them go first. A cap keeps a refresh bounded even on the day
+/// every server on the master list turns out to be a vanilla 1.01 build.
+const MAX_STATUS_QUERIES: usize = 150;
+
 /// How often the collected rows are pushed to the window during a refresh.
 const BATCH_INTERVAL: Duration = Duration::from_millis(100);
 
@@ -65,6 +82,25 @@ const CACHE_FILE: &str = "servers.json";
 
 /// How many addresses `server_history` keeps.
 const HISTORY_LIMIT: usize = 50;
+
+/// Where the human and bot counts of a row came from.
+///
+/// The browser shows real players, so it has to say how sure it is. A row that
+/// never got past [`PlayersSource::Unknown`] is a server that hides
+/// `g_humanplayers` and did not answer `getstatus` either; its `clients` still
+/// includes bots and the screen keeps that number rather than inventing one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PlayersSource {
+    /// The `infoResponse`: either `g_humanplayers` was there, or the server
+    /// reported nobody at all, which needs no second question.
+    Info,
+    /// The extra `getstatus` of a refresh: a player with ping 0 is a bot.
+    Status,
+    /// Neither answered the question.
+    #[default]
+    Unknown,
+}
 
 /// One row of the browser.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,11 +118,19 @@ pub struct ServerInfo {
     pub gametype: u8,
     /// Label of `gametype`, or `Mode <n>` for a number a mod invented.
     pub gametype_label: String,
-    /// Players the server counts, bots included.
+    /// Players the server counts, bots included. This is the only number a
+    /// vanilla 1.01 server publishes, and it is not what the browser shows.
     pub clients: u16,
-    /// `g_humanplayers`: the same count without bots. `None` on a server that
-    /// does not publish the key, which is every non-OpenJK build before 1.01.
+    /// Real players: what every count, filter and sort in the launcher means
+    /// by "players". `None` while [`ServerInfo::players_source`] is
+    /// [`PlayersSource::Unknown`].
     pub humans: Option<u16>,
+    /// Bots among the `clients`. `None` alongside an unknown `humans`.
+    #[serde(default)]
+    pub bots: Option<u16>,
+    /// How `humans` and `bots` were established.
+    #[serde(default)]
+    pub players_source: PlayersSource,
     /// Slots offered to the public, private slots already subtracted.
     pub max_clients: u16,
     pub needpass: bool,
@@ -118,6 +162,9 @@ impl ServerInfo {
         last_seen: &str,
     ) -> ServerInfo {
         let info = parse_infostring(infostring);
+        let clients = number(&info, "clients").unwrap_or(0);
+        let (humans, bots, players_source) =
+            derive_players(clients, number(&info, "g_humanplayers"));
         let hostname_raw = info.get("hostname").cloned().unwrap_or_default();
         let clean = strip_colors(&hostname_raw).trim().to_string();
         let gametype = number(&info, "gametype").unwrap_or(0);
@@ -139,8 +186,10 @@ impl ServerInfo {
             map: info.get("mapname").cloned().unwrap_or_default(),
             gametype,
             gametype_label: gametype_label(gametype),
-            clients: number(&info, "clients").unwrap_or(0),
-            humans: number(&info, "g_humanplayers"),
+            clients,
+            humans,
+            bots,
+            players_source,
             max_clients: number(&info, "sv_maxclients").unwrap_or(0),
             needpass: number::<i32>(&info, "needpass").unwrap_or(0) != 0,
             game,
@@ -156,6 +205,85 @@ impl ServerInfo {
     pub fn decorate(&mut self, trusted: &HashSet<String>, favorites: &HashSet<String>) {
         self.trusted = trusted.contains(&self.address);
         self.favorite = favorites.contains(&self.address);
+    }
+
+    /// Records what a `getstatus` answer says about this server.
+    ///
+    /// `clients` is left as the `getinfo` reported it. The two numbers are
+    /// counted on different lists and may disagree: `SVC_Info` skips the
+    /// `sv_privateClients` slots and `SVC_Status` prints them, and a very long
+    /// player list is cut where the engine's 1 kB buffer ends
+    /// (`codemp/server/sv_main.cpp:432`). The status count is the better one
+    /// for both halves of the question, so it wins for `humans` and `bots`.
+    pub fn apply_status(&mut self, players: &[protocol::StatusPlayer]) {
+        let (humans, bots) = protocol::count_humans_and_bots(players);
+        self.humans = Some(humans);
+        self.bots = Some(bots);
+        self.players_source = PlayersSource::Status;
+    }
+
+    /// Players the browser counts on this row.
+    ///
+    /// Falls back to `clients` while the split is unknown: on a server that
+    /// answers neither question, "someone is playing" is still truer than a
+    /// zero, and the row shows the number without a bot suffix.
+    pub fn real_players(&self) -> u16 {
+        self.humans.unwrap_or(self.clients)
+    }
+
+    /// True when everybody on the server is a bot.
+    ///
+    /// Only a known split counts: a server that hides both numbers is not
+    /// accused of being empty.
+    pub fn is_bots_only(&self) -> bool {
+        self.clients > 0 && self.humans == Some(0)
+    }
+
+    /// True when this row is worth a `getstatus` during a refresh.
+    fn needs_status(&self) -> bool {
+        self.players_source == PlayersSource::Unknown && self.clients > 0
+    }
+
+    /// Recomputes the split of a row that came off disk.
+    ///
+    /// A cache written before this module knew about bots has `humans` and
+    /// nothing else, and serde fills the two new fields with their defaults.
+    /// Deriving them again turns such a row into a complete one instead of
+    /// showing an old list as if every server hid its numbers. A row whose
+    /// split came from a player list is left alone: `clients` cannot
+    /// reproduce it.
+    fn heal_derived(&mut self) {
+        if self.players_source == PlayersSource::Status {
+            return;
+        }
+        let (humans, bots, source) = derive_players(self.clients, self.humans);
+        self.humans = humans;
+        self.bots = bots;
+        self.players_source = source;
+    }
+}
+
+/// Splits `clients` into humans and bots using what the `getinfo` said.
+///
+/// `g_humanplayers` is written by `SVC_Info` (`codemp/server/sv_main.cpp:503`)
+/// and counts the connected clients whose address type is not `NA_BOT`. A
+/// server that does not send the key leaves the split open unless it also
+/// reports nobody, because zero players cannot hide a bot.
+///
+/// A mod that reports more humans than clients is clamped rather than trusted:
+/// the two keys come from one loop in the engine, so a disagreement means the
+/// mod rewrote one of them.
+fn derive_players(
+    clients: u16,
+    humans: Option<u16>,
+) -> (Option<u16>, Option<u16>, PlayersSource) {
+    match humans {
+        Some(humans) => {
+            let humans = humans.min(clients);
+            (Some(humans), Some(clients - humans), PlayersSource::Info)
+        }
+        None if clients == 0 => (Some(0), Some(0), PlayersSource::Info),
+        None => (None, None, PlayersSource::Unknown),
     }
 }
 
@@ -271,6 +399,9 @@ pub struct PlayerInfo {
     pub score: i32,
     /// Ping the server measures, which is the player's, not the launcher's.
     pub ping: i32,
+    /// Zero ping, which `SV_CalcPings` writes for `SVF_BOT` and for nothing
+    /// else. See [`protocol::StatusPlayer::is_bot`].
+    pub is_bot: bool,
 }
 
 /// Reads `ip:port`, or `ip` with the stock server port.
@@ -298,7 +429,13 @@ fn cache_file(state: &AppState) -> Result<PathBuf> {
 fn read_cache(file: &PathBuf) -> Vec<ServerInfo> {
     match fs::read_to_string(file) {
         Ok(text) => match serde_json::from_str::<ServerCache>(&text) {
-            Ok(cache) => cache.servers,
+            Ok(cache) => {
+                let mut servers = cache.servers;
+                for server in &mut servers {
+                    server.heal_derived();
+                }
+                servers
+            }
             Err(e) => {
                 log::warn!("cannot parse {}: {e}", file.display());
                 Vec::new()
@@ -336,10 +473,13 @@ fn write_cache(file: &PathBuf, servers: &[ServerInfo]) {
 
 /// Orders the list the way the screen shows it by default: busiest first, then
 /// by name so two equally busy servers keep a stable place between refreshes.
+///
+/// Busiest means real players. A server running twelve bots sorts below one
+/// with a single human on it, which is the whole point of the ranking.
 fn sort_rows(servers: &mut [ServerInfo]) {
     servers.sort_by(|a, b| {
-        b.clients
-            .cmp(&a.clients)
+        b.real_players()
+            .cmp(&a.real_players())
             .then_with(|| a.hostname_clean.to_lowercase().cmp(&b.hostname_clean.to_lowercase()))
             .then_with(|| a.address.cmp(&b.address))
     });
@@ -461,13 +601,24 @@ pub async fn refresh_servers(
         emit(&app, "servers:batch", BatchEvent { servers: batch });
     }
 
+    resolve_bots_by_status(&app, &mut collected).await;
+
     sort_rows(&mut collected);
     write_cache(&file, &collected);
 
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    let real_players: u32 = collected
+        .iter()
+        .map(|server| u32::from(server.real_players()))
+        .sum();
     log::info!(
-        "refresh: {} of {total} servers answered in {elapsed_ms} ms",
-        collected.len()
+        "refresh: {} of {total} servers answered in {elapsed_ms} ms, \
+         {real_players} real players, {} servers running bots only",
+        collected.len(),
+        collected
+            .iter()
+            .filter(|server| server.is_bots_only())
+            .count()
     );
     emit(
         &app,
@@ -479,6 +630,82 @@ pub async fn refresh_servers(
         },
     );
     Ok(collected)
+}
+
+/// Picks the rows a refresh asks for a player list, busiest first.
+///
+/// Only servers that hide `g_humanplayers` and claim at least one client take
+/// part; everything else already knows its split. The order matters because of
+/// the cap: if a refresh can only resolve part of the list, it must resolve the
+/// servers a player would actually join.
+fn status_candidates(servers: &[ServerInfo], cap: usize) -> Vec<usize> {
+    let mut candidates: Vec<usize> = servers
+        .iter()
+        .enumerate()
+        .filter(|(_, server)| server.needs_status())
+        .map(|(index, _)| index)
+        .collect();
+    // The address breaks the tie so the same cap keeps the same servers
+    // between two refreshes instead of rotating through them.
+    candidates.sort_by(|a, b| {
+        servers[*b]
+            .clients
+            .cmp(&servers[*a].clients)
+            .then_with(|| servers[*a].address.cmp(&servers[*b].address))
+    });
+    candidates.truncate(cap);
+    candidates
+}
+
+/// Second pass of a refresh: `getstatus` for the servers that hide their
+/// human count.
+///
+/// Vanilla 1.01 predates `g_humanplayers`, so on those servers the only way to
+/// tell a player from a bot is the player list, where a bot has ping 0. The
+/// pass reuses the concurrency limit of the first one and updates the rows in
+/// place; the answers also go out as one more `servers:batch`, which is what
+/// repaints the counts on a screen that is already showing the list.
+///
+/// Returns how many servers answered.
+async fn resolve_bots_by_status(app: &tauri::AppHandle, servers: &mut [ServerInfo]) -> usize {
+    let candidates = status_candidates(servers, MAX_STATUS_QUERIES);
+    if candidates.is_empty() {
+        return 0;
+    }
+
+    let semaphore = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
+    let mut probes = JoinSet::new();
+    for index in candidates.iter().copied() {
+        let Ok(peer) = parse_address(&servers[index].address) else {
+            continue;
+        };
+        let gate = Arc::clone(&semaphore);
+        probes.spawn(async move {
+            let _permit = gate.acquire_owned().await.ok()?;
+            let reply = net::query_status(peer, STATUS_TIMEOUT).await.ok()?;
+            Some((index, protocol::parse_status_players(&reply.players)))
+        });
+    }
+
+    let mut updated: Vec<ServerInfo> = Vec::new();
+    while let Some(joined) = probes.join_next().await {
+        let Ok(Some((index, players))) = joined else {
+            continue;
+        };
+        servers[index].apply_status(&players);
+        updated.push(servers[index].clone());
+    }
+
+    log::info!(
+        "bot scan: {} of {} servers without g_humanplayers answered getstatus",
+        updated.len(),
+        candidates.len()
+    );
+    let answered = updated.len();
+    if answered > 0 {
+        emit(app, "servers:batch", BatchEvent { servers: updated });
+    }
+    answered
 }
 
 /// Asks every master at once and merges the answers.
@@ -526,11 +753,12 @@ async fn collect_addresses(masters: &[String]) -> Result<Vec<SocketAddrV4>> {
 #[tauri::command]
 pub async fn get_server_status(address: String) -> Result<ServerStatus> {
     let peer = parse_address(&address)?;
-    let reply = net::query_status(peer, MASTER_TIMEOUT).await?;
+    let reply = net::query_status(peer, STATUS_TIMEOUT).await?;
     let players = protocol::parse_status_players(&reply.players)
         .into_iter()
         .map(|player| PlayerInfo {
             name_clean: strip_colors(&player.name_raw).trim().to_string(),
+            is_bot: player.is_bot(),
             name_raw: player.name_raw,
             score: player.score,
             ping: player.ping,
@@ -653,7 +881,9 @@ mod tests {
         assert_eq!(server.hostname_clean, "81.19.210.136:29070");
         assert_eq!(server.game, "base");
         assert_eq!(server.gametype_label, "FFA");
-        assert_eq!(server.humans, None);
+        // An empty server has no bots either, so the split is known even
+        // without `g_humanplayers`.
+        assert_eq!(server.humans, Some(0));
         assert_eq!(server.protocol, 26);
         assert_eq!(server.max_clients, 0);
         assert!(!server.needpass);
@@ -690,15 +920,185 @@ mod tests {
     #[test]
     fn sorts_by_players_then_name() {
         let mut rows = vec![row(FULL_INFO), row(FULL_INFO), row(FULL_INFO)];
-        rows[0].clients = 2;
+        rows[0].humans = Some(2);
         rows[0].hostname_clean = "Zulu".into();
-        rows[1].clients = 9;
+        rows[1].humans = Some(9);
         rows[1].hostname_clean = "Bravo".into();
-        rows[2].clients = 2;
+        rows[2].humans = Some(2);
         rows[2].hostname_clean = "alpha".into();
         sort_rows(&mut rows);
         let names: Vec<&str> = rows.iter().map(|r| r.hostname_clean.as_str()).collect();
         assert_eq!(names, vec!["Bravo", "alpha", "Zulu"]);
+    }
+
+    #[test]
+    fn sorts_a_full_house_of_bots_below_one_real_player() {
+        let mut rows = vec![
+            row("\\hostname\\Bots\\clients\\16\\g_humanplayers\\0"),
+            row("\\hostname\\One human\\clients\\1\\g_humanplayers\\1"),
+        ];
+        sort_rows(&mut rows);
+        assert_eq!(rows[0].hostname_clean, "One human");
+    }
+
+    #[test]
+    fn an_unresolved_row_sorts_on_the_number_it_has() {
+        // No `g_humanplayers` and no answer to `getstatus`: `clients` is all
+        // there is, and the row must not sink to the bottom as a zero.
+        let mut rows = vec![
+            row("\\hostname\\Known\\clients\\3\\g_humanplayers\\3"),
+            row("\\hostname\\Silent\\clients\\8"),
+        ];
+        assert_eq!(rows[1].players_source, PlayersSource::Unknown);
+        sort_rows(&mut rows);
+        assert_eq!(rows[0].hostname_clean, "Silent");
+        assert_eq!(rows[0].real_players(), 8);
+    }
+
+    #[test]
+    fn splits_players_when_the_server_publishes_the_count() {
+        let server = row(FULL_INFO);
+        assert_eq!(server.clients, 7);
+        assert_eq!(server.humans, Some(5));
+        assert_eq!(server.bots, Some(2));
+        assert_eq!(server.players_source, PlayersSource::Info);
+        assert_eq!(server.real_players(), 5);
+        assert!(!server.is_bots_only());
+        assert!(!server.needs_status());
+    }
+
+    #[test]
+    fn an_empty_server_needs_no_second_question() {
+        // No `g_humanplayers`, but nobody to hide: the split is certain.
+        let server = row("\\hostname\\Quiet\\clients\\0");
+        assert_eq!(server.humans, Some(0));
+        assert_eq!(server.bots, Some(0));
+        assert_eq!(server.players_source, PlayersSource::Info);
+        assert!(!server.is_bots_only());
+        assert!(!server.needs_status());
+    }
+
+    #[test]
+    fn a_populated_server_without_the_key_stays_unknown() {
+        let server = row("\\hostname\\Vanilla\\clients\\4");
+        assert_eq!(server.humans, None);
+        assert_eq!(server.bots, None);
+        assert_eq!(server.players_source, PlayersSource::Unknown);
+        assert!(!server.is_bots_only());
+        assert!(server.needs_status());
+    }
+
+    #[test]
+    fn a_server_of_bots_only_is_recognised() {
+        let server = row("\\hostname\\Bot farm\\clients\\12\\g_humanplayers\\0");
+        assert!(server.is_bots_only());
+        assert_eq!(server.bots, Some(12));
+        assert_eq!(server.real_players(), 0);
+    }
+
+    #[test]
+    fn more_humans_than_clients_is_clamped_instead_of_underflowing() {
+        let server = row("\\clients\\2\\g_humanplayers\\9");
+        assert_eq!(server.humans, Some(2));
+        assert_eq!(server.bots, Some(0));
+    }
+
+    #[test]
+    fn a_player_list_settles_an_unknown_split() {
+        let mut server = row("\\hostname\\Vanilla\\clients\\4");
+        let players =
+            protocol::parse_status_players("3 60 \"Kyle\"\n1 0 \"Reborn\"\n0 0 \"Jedi\"\n");
+        server.apply_status(&players);
+        assert_eq!(server.humans, Some(1));
+        assert_eq!(server.bots, Some(2));
+        assert_eq!(server.players_source, PlayersSource::Status);
+        assert_eq!(server.real_players(), 1);
+        assert!(!server.needs_status());
+    }
+
+    #[test]
+    fn a_player_list_of_bots_only_settles_it_too() {
+        let mut server = row("\\hostname\\Vanilla\\clients\\3");
+        server.apply_status(&protocol::parse_status_players(
+            "0 0 \"b1\"\n0 0 \"b2\"\n0 0 \"b3\"\n",
+        ));
+        assert_eq!(server.humans, Some(0));
+        assert_eq!(server.bots, Some(3));
+        assert!(server.is_bots_only());
+    }
+
+    #[test]
+    fn an_empty_player_list_means_nobody_is_there() {
+        // The server said four clients and then listed none. The list is the
+        // one that can be counted, so the row shows nobody rather than four.
+        let mut server = row("\\hostname\\Vanilla\\clients\\4");
+        server.apply_status(&[]);
+        assert_eq!(server.humans, Some(0));
+        assert_eq!(server.bots, Some(0));
+        assert_eq!(server.real_players(), 0);
+    }
+
+    #[test]
+    fn asks_the_busiest_unresolved_servers_first() {
+        let mut rows = vec![
+            row("\\hostname\\A\\clients\\2"),                     // unknown, 2
+            row("\\hostname\\B\\clients\\9\\g_humanplayers\\9"),  // resolved
+            row("\\hostname\\C\\clients\\11"),                    // unknown, 11
+            row("\\hostname\\D\\clients\\0"),                     // empty
+            row("\\hostname\\E\\clients\\5"),                     // unknown, 5
+        ];
+        for (index, server) in rows.iter_mut().enumerate() {
+            server.address = format!("10.0.0.{index}:29070");
+        }
+        assert_eq!(status_candidates(&rows, 10), vec![2, 4, 0]);
+        assert_eq!(status_candidates(&rows, 2), vec![2, 4]);
+        assert!(status_candidates(&rows, 0).is_empty());
+    }
+
+    #[test]
+    fn a_list_that_hides_nothing_asks_nobody() {
+        let rows = vec![
+            row(FULL_INFO),
+            row("\\clients\\0"),
+            row("\\clients\\3\\g_humanplayers\\0"),
+        ];
+        assert!(status_candidates(&rows, MAX_STATUS_QUERIES).is_empty());
+    }
+
+    #[test]
+    fn an_older_cache_row_gets_its_split_back() {
+        // What version 0.1.1 wrote: `humans`, no `bots`, no `playersSource`.
+        let old = "{\"updatedAt\":\"2026-09-10T00:00:00Z\",\"servers\":[{\
+            \"address\":\"81.19.210.136:29070\",\"hostnameRaw\":\"Blue\",\
+            \"hostnameClean\":\"Blue\",\"map\":\"mp/ffa3\",\"gametype\":0,\
+            \"gametypeLabel\":\"FFA\",\"clients\":6,\"humans\":4,\
+            \"maxClients\":32,\"needpass\":false,\"game\":\"base\",\
+            \"protocol\":26,\"pingMs\":40,\"trusted\":false,\"favorite\":false,\
+            \"lastSeen\":\"2026-09-10T00:00:00Z\"}]}";
+        let file = std::env::temp_dir().join("jknet-test-old-cache.json");
+        fs::write(&file, old).unwrap();
+        let read = read_cache(&file);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].humans, Some(4));
+        assert_eq!(read[0].bots, Some(2));
+        assert_eq!(read[0].players_source, PlayersSource::Info);
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_split_from_a_player_list_survives_the_cache() {
+        let file = std::env::temp_dir()
+            .join("jknet-test-cache-status")
+            .join("servers.json");
+        let _ = fs::remove_file(&file);
+        let mut server = row("\\hostname\\Vanilla\\clients\\5");
+        server.apply_status(&protocol::parse_status_players("1 70 \"Kyle\"\n0 0 \"Bot\"\n"));
+        write_cache(&file, &[server]);
+        let read = read_cache(&file);
+        assert_eq!(read[0].players_source, PlayersSource::Status);
+        assert_eq!(read[0].humans, Some(1));
+        assert_eq!(read[0].bots, Some(1));
+        let _ = fs::remove_file(&file);
     }
 
     #[test]
@@ -859,5 +1259,107 @@ mod tests {
             );
         }
         assert!(!players.is_empty());
+    }
+
+    /// Measures the cost and the yield of the bot scan on the live network.
+    ///
+    /// Prints how many servers hide `g_humanplayers`, how many of those the
+    /// second pass resolves, how many turn out to be bots only, and what each
+    /// pass costs. Ignored for the same reason as the two checks above.
+    ///
+    /// `cargo test --lib -- --ignored --nocapture measures_the_bot_scan`
+    #[tokio::test]
+    #[ignore = "queries the live master servers"]
+    async fn measures_the_bot_scan() {
+        let masters: Vec<String> = protocol::DEFAULT_MASTERS
+            .iter()
+            .map(|master| (*master).to_string())
+            .collect();
+        let addresses = collect_addresses(&masters)
+            .await
+            .expect("at least one master must answer");
+
+        let info_started = Instant::now();
+        let last_seen = timestamp::now_rfc3339();
+        let gate = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
+        let mut probes = JoinSet::new();
+        for address in addresses.iter().copied() {
+            let permit_source = Arc::clone(&gate);
+            probes.spawn(async move {
+                let _permit = permit_source.acquire_owned().await.ok()?;
+                net::query_info(address, INFO_TIMEOUT, INFO_ATTEMPTS)
+                    .await
+                    .map(|reply| (address, reply))
+            });
+        }
+        let mut answered = Vec::new();
+        let mut no_key = 0usize;
+        while let Some(joined) = probes.join_next().await {
+            if let Ok(Some((address, reply))) = joined {
+                if !parse_infostring(&reply.infostring).contains_key("g_humanplayers") {
+                    no_key += 1;
+                }
+                answered.push(ServerInfo::from_infostring(
+                    address,
+                    &reply.infostring,
+                    reply.ping_ms,
+                    &last_seen,
+                ));
+            }
+        }
+        let info_ms = info_started.elapsed().as_millis();
+
+        let populated = answered.iter().filter(|server| server.clients > 0).count();
+        let unresolved = status_candidates(&answered, usize::MAX).len();
+        let capped = status_candidates(&answered, MAX_STATUS_QUERIES).len();
+
+        println!("--- pass 1: getinfo ---");
+        println!("{} of {} answered in {info_ms} ms", answered.len(), addresses.len());
+        println!("{populated} of them have at least one client");
+        println!("{no_key} sent no g_humanplayers at all");
+        println!("{unresolved} need getstatus, {capped} fit under the cap of {MAX_STATUS_QUERIES}");
+
+        // The real second pass, through the function a refresh calls, minus
+        // the event: an `AppHandle` needs a running window.
+        let status_started = Instant::now();
+        let mut resolved = 0usize;
+        let candidates = status_candidates(&answered, MAX_STATUS_QUERIES);
+        let gate = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
+        let mut probes = JoinSet::new();
+        for index in candidates {
+            let peer = parse_address(&answered[index].address).unwrap();
+            let permit_source = Arc::clone(&gate);
+            probes.spawn(async move {
+                let _permit = permit_source.acquire_owned().await.ok()?;
+                let reply = net::query_status(peer, STATUS_TIMEOUT).await.ok()?;
+                Some((index, protocol::parse_status_players(&reply.players)))
+            });
+        }
+        while let Some(joined) = probes.join_next().await {
+            if let Ok(Some((index, players))) = joined {
+                answered[index].apply_status(&players);
+                resolved += 1;
+            }
+        }
+        let status_ms = status_started.elapsed().as_millis();
+
+        let still_unknown = answered
+            .iter()
+            .filter(|server| server.players_source == PlayersSource::Unknown)
+            .count();
+        let bots_only = answered.iter().filter(|server| server.is_bots_only()).count();
+        let with_bots = answered
+            .iter()
+            .filter(|server| server.bots.unwrap_or(0) > 0)
+            .count();
+        let humans: u32 = answered.iter().map(|s| u32::from(s.real_players())).sum();
+        let clients: u32 = answered.iter().map(|s| u32::from(s.clients)).sum();
+        let bots: u32 = answered.iter().map(|s| u32::from(s.bots.unwrap_or(0))).sum();
+
+        println!("--- pass 2: getstatus ---");
+        println!("{resolved} answered in {status_ms} ms, {still_unknown} still unknown");
+        println!("{bots_only} servers are bots only, {with_bots} have at least one bot");
+        println!("players: {clients} clients = {humans} humans + {bots} bots");
+        println!("--- total: {} ms ---", info_ms + status_ms);
     }
 }
