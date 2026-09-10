@@ -1,27 +1,27 @@
 {
   "gametypes": {
     "ja": {
-      "0": "FFA",
+      "0": "Jeder gegen jeden",
       "1": "Holocron",
-      "2": "Jedi Master",
-      "3": "Duel",
-      "4": "Power Duel",
-      "5": "Single Player",
-      "6": "Team FFA",
+      "2": "Jedi-Meister",
+      "3": "Duell",
+      "4": "Power-Duell",
+      "5": "Einzelspieler",
+      "6": "Team gegen Team",
       "7": "Siege",
-      "8": "CTF",
-      "9": "CTY"
+      "8": "Capture the Flag",
+      "9": "Capture the Ysalamiri"
     },
     "jo": {
-      "0": "FFA",
+      "0": "Jeder gegen jeden",
       "1": "Holocron",
-      "2": "Jedi Master",
-      "3": "Duel",
-      "4": "Single Player",
-      "5": "Team FFA",
+      "2": "Jedi-Meister",
+      "3": "Duell",
+      "4": "Einzelspieler",
+      "5": "Team gegen Team",
       "6": "Saga",
-      "7": "CTF",
-      "8": "CTY"
+      "7": "Capture the Flag",
+      "8": "Capture the Ysalamiri"
     }
   },
   "gametypesShort": {
@@ -29,7 +29,7 @@
       "0": "FFA",
       "1": "HOLO",
       "2": "JM",
-      "3": "DUEL",
+      "3": "DUELL",
       "4": "PDUEL",
       "5": "SP",
       "6": "TFFA",
@@ -41,7 +41,7 @@
       "0": "FFA",
       "1": "HOLO",
       "2": "JM",
-      "3": "DUEL",
+      "3": "DUELL",
       "4": "SP",
       "5": "TFFA",
       "6": "SAGA",
@@ -49,15 +49,15 @@
       "8": "CTY"
     }
   },
-  "unknownGametype": "Mode {{number}}",
+  "unknownGametype": "Modus {{number}}",
   "sources": {
     "steam": "Steam",
     "gog": "GOG",
-    "manual": "Chosen by hand",
-    "configured": "Saved",
-    "configuredEarlier": "Saved earlier"
+    "manual": "Von Hand gewählt",
+    "configured": "Gespeichert",
+    "configuredEarlier": "Früher gespeichert"
   },
   "map": {
-    "unknown": "unknown map"
+    "unknown": "unbekannte Map"
   }
 }
