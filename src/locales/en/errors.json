@@ -16,6 +16,7 @@
   "signedOut": "Sign in to JKNet to see your friends",
   "gameMismatch": "{{reason}}",
   "gameDataMissing": "{{game}} game files: {{reason}}",
+  "engineFile": "{{file}} belongs to the engine build, not to the library, so JKNet cannot switch it off or remove it.",
   "jkhubUnavailable": "JKHub is unreachable: {{reason}}",
   "jkhubParse": "A JKHub page could not be read: {{what}}. The site has probably changed.",
   "jkhubDownload": "The download from JKHub failed: {{reason}}",
