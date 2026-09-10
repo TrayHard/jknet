@@ -41,7 +41,7 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight для W
 
 Установите лаунчер:
 
-1. Скачайте файл `JKNet_0.2.0_x64-setup.exe` со [страницы релизов](https://github.com/TrayHard/jknet/releases/latest).
+1. Скачайте файл `JKNet_0.3.0_x64-setup.exe` со [страницы релизов](https://github.com/TrayHard/jknet/releases/latest).
 2. Запустите файл. Установщик не запрашивает права администратора: он пишет в папку текущего пользователя.
 3. Необязательно: на последней странице установщика установите флажок **Create desktop shortcut**.
 4. Откройте JKNet из меню **Пуск**, группа **JKNet**.
@@ -106,7 +106,7 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight для W
    ```bash
    npm run tauri build
    ```
-   Результат — `src-tauri/target/release/bundle/nsis/JKNet_0.2.0_x64-setup.exe`. На холодном кеше сборка занимает около десяти минут.
+   Результат — `src-tauri/target/release/bundle/nsis/JKNet_0.3.0_x64-setup.exe`. На холодном кеше сборка занимает около десяти минут.
 
    Чтобы получить рядом файл подписи `.sig`, задайте ключ подписи обновлений перед сборкой:
 
@@ -156,12 +156,12 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight для W
 3. Обновите `package-lock.json`: выполните `npm install --package-lock-only`.
 4. Зафиксируйте изменения и поставьте тег:
    ```bash
-   git commit -am "Версия 0.2.0"
-   git tag v0.2.0
+   git commit -am "Версия 0.3.0"
+   git tag v0.3.0
    git push origin main --tags
    ```
 5. Дождитесь окончания процесса **Release** во вкладке **Actions**. Он собирает установщик, подписывает его и создаёт черновик релиза.
-6. Проверьте вложения черновика: `JKNet_0.2.0_x64-setup.exe`, `JKNet_0.2.0_x64-setup.exe.sig` и `latest.json`.
+6. Проверьте вложения черновика: `JKNet_0.3.0_x64-setup.exe`, `JKNet_0.3.0_x64-setup.exe.sig` и `latest.json`.
 7. Опубликуйте черновик кнопкой **Publish release**.
 
 Установленные лаунчеры увидят версию после публикации: адрес `releases/latest/download/latest.json` черновики не отдаёт.
