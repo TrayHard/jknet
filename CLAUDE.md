@@ -50,7 +50,7 @@ src-tauri/
   src/clients.rs         клиенты на диске
   src/servers.rs         браузер серверов (заглушка)
   src/launch.rs          запуск клиента (заглушка)
-  src/library.rs         библиотека pk3 (заглушка)
+  src/library.rs         файлы pk3 одного клиента в его папке home\
   capabilities/          разрешения окна main
 ```
 
