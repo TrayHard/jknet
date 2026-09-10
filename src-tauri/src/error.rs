@@ -272,6 +272,7 @@ impl AppError {
             AppError::Online { .. } | AppError::OnlineNotConfigured => "online",
             AppError::GameMismatch(_) => "gameMismatch",
             AppError::GameDataMissing { .. } => "gameDataMissing",
+            AppError::EngineFile(_) => "engineFile",
             AppError::JkhubUnavailable(_) => "jkhubUnavailable",
             AppError::JkhubParse { .. } => "jkhubParse",
             AppError::JkhubDownload(_) => "jkhubDownload",
@@ -318,6 +319,7 @@ impl AppError {
             AppError::GameDataMissing { game, reason } => {
                 json!({ "game": game, "reason": reason })
             }
+            AppError::EngineFile(file) => json!({ "file": file }),
             AppError::JkhubUnavailable(reason) => json!({ "reason": reason }),
             AppError::JkhubParse { what } => json!({ "what": what }),
             AppError::JkhubDownload(reason) => json!({ "reason": reason }),
@@ -427,6 +429,7 @@ mod tests {
             AppError::OnlineNotConfigured,
             AppError::GameMismatch("x".into()),
             AppError::GameDataMissing { game: "Jedi Academy", reason: "x".into() },
+            AppError::EngineFile("base/assetsmv.pk3".into()),
             AppError::JkhubUnavailable("x".into()),
             AppError::JkhubParse { what: "x".into() },
             AppError::JkhubDownload("x".into()),

@@ -70,6 +70,7 @@ Everything else wraps.
 | `onboarding:gameFiles.text` | Contains `base\assets0.pk3`, a path. Keep the backslash. |
 | `errors:*` | Printed when a command fails. `{{reason}}` and `{{context}}` hold text written by the operating system or by a library and stay in English; the sentence around them is yours. |
 | `errors:io`, `errors:json` | Two placeholders and no words: the core already writes a whole sentence there. Leave the shape alone. |
+| `errors:engineFile` | `{{file}}` is a path inside the client, `base/assetsmv.pk3`. Do not translate it and keep the slash. |
 | `account:providers.dev` | Used inside a sentence («signed in with …»), so it is lowercase. `account:providers.devLabel` is the same thing as a badge and is capitalised. |
 | `settings:language.systemWith` | `{{language}}` is the native name of the language the system would pick — «Русский», «Deutsch». It is never translated. |
 
