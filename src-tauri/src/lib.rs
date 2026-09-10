@@ -301,6 +301,10 @@ pub fn run() {
             jkhub::jkhub_install,
             jkhub::jkhub_open,
             jkhub::jkhub_clear_cache,
+            // --- slice: jkhub index ---
+            jkhub::jkhub_search,
+            jkhub::jkhub_index_status,
+            jkhub::jkhub_refresh_index,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

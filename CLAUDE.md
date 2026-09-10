@@ -27,10 +27,18 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 | Собрать установщик | `npm run tauri build` |
 | Поднять заглушку JKNet Online | `node scripts/mock-online.mjs` |
 | Переписать снимок категорий JKHub | `powershell -ExecutionPolicy Bypass -File scripts/refresh-jkhub-categories.ps1` |
+| Переписать снимок каталога JKHub | `powershell -ExecutionPolicy Bypass -File scripts/refresh-jkhub-index.ps1` |
 
 Не запускайте `npm run tauri dev` из агента без прямой просьбы: команда открывает окно и не завершается.
 
-Скрипт `refresh-jkhub-categories.ps1` обходит jkhub.org и переписывает `src-tauri/resources/jkhub/categories-*.json` — дерево категорий, вшитое в сборку. Запускайте его перед выпуском и коммитьте оба файла. Обход стоит около сорока запросов к чужому сайту, поэтому в цикле его не запускают. Ключ `-DryRun` печатает команду и пути, ничего не меняя. Подробности — в разделе [«JKHub» документа об архитектуре](docs/architecture.md#jkhub).
+Оба скрипта `refresh-jkhub-*.ps1` обходят jkhub.org и переписывают файлы в `src-tauri/resources/jkhub/`, вшитые в сборку. Запускайте их перед выпуском, в таком порядке, и коммитьте результат. Ключ `-DryRun` печатает команду и пути, ничего не меняя. Подробности — в разделе [«JKHub» документа об архитектуре](docs/architecture.md#jkhub).
+
+| Скрипт | Что переписывает | Чего стоит |
+| --- | --- | --- |
+| `refresh-jkhub-categories.ps1` | `categories-ja.json` и `categories-jo.json`: дерево категорий | около 40 запросов, 20 с |
+| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 193 запроса, 100 с |
+
+Второй скрипт читает вшитое дерево, поэтому идёт после первого. В цикле их не запускают: jkhub.org — чужой сервер.
 
 ## Структура
 
@@ -92,9 +100,10 @@ src-tauri/
   src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
                          снимок дерева категорий в сборке, разборщики страниц,
-                         скачивание и установка в клиента
-  resources/jkhub/       categories-ja.json и categories-jo.json: дерево
-                         категорий, с которого вкладка рисуется до обхода
+                         индекс каталога и поиск по нему, скачивание и
+                         установка в клиента
+  resources/jkhub/       categories-*.json — дерево категорий, index-*.json —
+                         каталог файлов; с них вкладка рисуется до обхода
   src/account.rs         вход через браузер и команды учётной записи
   src/friends/           друзья, присутствие, приглашения и живой сокет
   capabilities/          разрешения окна main
@@ -106,6 +115,8 @@ scripts/
   make-brand-assets.ps1  растровые копии знака из public/jknet_logo.png
   refresh-jkhub-categories.ps1
                          обход jkhub.org и перезапись снимка категорий
+  refresh-jkhub-index.ps1
+                         обход jkhub.org и перезапись снимка каталога
 public/
   jknet_logo.png         мастер-файл знака, 846 px
   brand/                 копии знака 64, 128, 256 и 512 px для интерфейса

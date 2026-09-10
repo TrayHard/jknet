@@ -1112,6 +1112,12 @@ export interface JkhubCardData {
   slug: string;
   title: string;
   url: string;
+  /**
+   * The category the card came out of. `null` from a listing page, which
+   * prints no category on its cards; the catalogue index fills it in, because
+   * a search there crosses categories.
+   */
+  categoryId: number | null;
   author: JkhubAuthor | null;
   thumbnailUrl: string | null;
   description: string;
@@ -1233,10 +1239,96 @@ export interface JkhubCategoriesUpdated {
   game: Game;
 }
 
+// --- slice: jkhub index ---
+//
+// The local catalogue index: one document per game, holding the listing card
+// of every file of every leaf category. It is what the tab lists and searches
+// from, so a file in a category nobody opened is still findable.
+
+/** Where the index that answered came from. */
+export type JkhubIndexSource = "cache" | "snapshot";
+
+/** The answer of `jkhub_search`: one page of results out of the index. */
+export interface JkhubSearchResult {
+  game: Game;
+  /** Files that match, across the whole catalogue of the game. */
+  total: number;
+  page: number;
+  perPage: number;
+  pages: number;
+  cards: JkhubCardData[];
+  /**
+   * Matches per category, rolled up the tree: a container carries what its
+   * children hold. Covers the categories `categoryId` narrowed away, which is
+   * what lets the tree show where else the query has answers.
+   */
+  categoryCounts: Record<string, number>;
+  /** RFC 3339 moment the index was last written. Empty when there is none. */
+  indexedAt: string;
+  /** True for a copy from the build, one older than a week, or none at all. */
+  stale: boolean;
+}
+
+/** What the launcher knows about the catalogue index of one game. */
+export interface JkhubIndexStatus {
+  game: Game;
+  indexed: boolean;
+  builtAt: string;
+  updatedAt: string;
+  /** Seconds since the last write, so the screen needs no date parser. */
+  age: number;
+  files: number;
+  source: JkhubIndexSource | null;
+  stale: boolean;
+  /** True while a crawl or a top-up of this game is in flight. */
+  building: boolean;
+}
+
+/** Payload of `jkhub:index-updated`, and the answer of `jkhub_refresh_index`. */
+export interface JkhubIndexUpdate {
+  game: Game;
+  added: number;
+  updated: number;
+  removed: number;
+  files: number;
+  /** Requests this refresh made to jkhub.org. */
+  requests: number;
+  /** True when the whole catalogue was crawled rather than topped up. */
+  full: boolean;
+  /** True when the index was current and nobody asked, so nothing was spent. */
+  skipped: boolean;
+}
+
+/** Which half of the work a refresh is doing. */
+export type JkhubIndexPhase = "categories" | "files" | "details";
+
+/** Payload of `jkhub:index-progress`. */
+export interface JkhubIndexProgress {
+  game: Game;
+  done: number;
+  /** An estimate: a category of unknown size counts as one page until asked. */
+  total: number;
+  phase: JkhubIndexPhase;
+}
+
+/** What `jkhub_search` is asked for. */
+export interface JkhubSearchQuery {
+  game?: Game;
+  /** Empty means the full listing of the category, or of the whole game. */
+  query: string;
+  categoryId: number | null;
+  sort: JkhubSort;
+  page: number;
+  perPage: number;
+}
+
 export const jkhubEvents = {
   downloadProgress: "jkhub:download-progress",
   installed: "jkhub:installed",
   categoriesUpdated: "jkhub:categories-updated",
+  // --- slice: jkhub index ---
+  indexProgress: "jkhub:index-progress",
+  indexUpdated: "jkhub:index-updated",
 } as const;
 
 /**
@@ -1284,4 +1376,33 @@ export const jkhubIpc = {
   /** Opens the file page in the system browser. */
   open: (id: number) => call<void>("jkhub_open", { id }),
   clearCache: () => call<void>("jkhub_clear_cache"),
+
+  // --- slice: jkhub index ---
+  /**
+   * One page of the catalogue of one game, filtered by a query.
+   *
+   * Answered from the local index and never from the site, so it costs
+   * nothing and can run on every keystroke behind a short debounce.
+   */
+  search: ({ game, query, categoryId, sort, page, perPage }: JkhubSearchQuery) =>
+    call<JkhubSearchResult>("jkhub_search", {
+      request: { game: game ?? null, query, categoryId, sort, page, perPage },
+    }),
+  /**
+   * What the index of one game holds.
+   *
+   * Answering also lets the core top the index up behind the answer, at most
+   * once a day per game; the result of that arrives as `jkhub:index-updated`.
+   */
+  indexStatus: (game?: Game) =>
+    call<JkhubIndexStatus>("jkhub_index_status", { game: game ?? null }),
+  /**
+   * Reads jkhub.org and brings the index up to date.
+   *
+   * One request plus one per file the front page names and the index does not
+   * know. `full` crawls every listing page instead — about 150 requests for
+   * Jedi Academy — which the core also falls back to on its own.
+   */
+  refreshIndex: (game?: Game, full = false) =>
+    call<JkhubIndexUpdate>("jkhub_refresh_index", { game: game ?? null, full }),
 };

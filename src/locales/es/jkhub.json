@@ -7,7 +7,13 @@
     "topRated": "Mejor valorados",
     "name": "Nombre"
   },
-  "filterPlaceholder": "Filtrar archivos cargados",
+  "search": {
+    "placeholder": "Search the whole catalog",
+    "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "results_one": "{{count}} result in {{game}}",
+    "results_many": "{{count}} results in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
+  },
   "refresh": "Actualizar",
   "fromCache": "De la caché",
   "tree": {
@@ -17,11 +23,33 @@
     "updateHint": "Recorre otra vez el árbol de categorías de JKHub. Cuesta unas veinte solicitudes.",
     "expand": "Desplegar {{category}}",
     "collapse": "Plegar {{category}}",
-    "empty": "Aún no hay categorías."
+    "empty": "Aún no hay categorías.",
+    "noMatches": "No category holds a match."
   },
   "scope": {
     "category": "{{category}} · se instala en {{client}}",
     "noCategory": "Elija una categoría · se instala en {{client}}"
+  },
+  "index": {
+    "missing": "Catalog not indexed yet.",
+    "startingUp": "Indexing the JKHub catalog…",
+    "building": "Indexing the JKHub catalog {{done}} / {{total}}",
+    "rebuild": "Rebuild",
+    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
+    "updatedTitle": "Catalog updated",
+    "currentTitle": "Catalog is current",
+    "line_one": "Catalog indexed {{time}} ago · {{count}} file",
+    "line_many": "Catalog indexed {{time}} ago · {{count}} files",
+    "line_other": "Catalog indexed {{time}} ago · {{count}} files",
+    "lineDate_one": "Catalog indexed {{date}} · {{count}} file",
+    "lineDate_many": "Catalog indexed {{date}} · {{count}} files",
+    "lineDate_other": "Catalog indexed {{date}} · {{count}} files",
+    "updatedText_one": "{{added}} added, {{updated}} updated · {{count}} file indexed",
+    "updatedText_many": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "updatedText_other": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "currentText_one": "{{count}} file indexed. JKHub has nothing newer.",
+    "currentText_many": "{{count}} files indexed. JKHub has nothing newer.",
+    "currentText_other": "{{count}} files indexed. JKHub has nothing newer."
   },
   "loading": {
     "categories": "Leyendo las categorías de JKHub…",
@@ -33,9 +61,11 @@
     "unreachableTitle": "JKHub no respondió",
     "categoryTitle": "Esta categoría no se cargó",
     "filteredTitle": "Nada coincide",
-    "filteredText": "Ningún archivo cargado coincide con el filtro. Bórrelo, cargue más páginas o elija otra categoría."
+    "filteredText": "Ningún archivo cargado coincide con el filtro. Bórrelo, cargue más páginas o elija otra categoría.",
+    "elsewhereTitle": "Nothing here, but there is elsewhere",
+    "elsewhereText": "{{category}} holds no match. The tree shows the categories that do.",
+    "showAllCategories": "Show all categories"
   },
-  "loaded": "{{shown}} de {{total}} archivos cargados. Acote la categoría o cambie el orden para ver el resto.",
   "card": {
     "open": "Abrir {{title}}",
     "installed": "Instalado",
@@ -77,13 +107,13 @@
   },
   "outcome": {
     "installed": "Instalado en {{folder}}: {{files}}.",
-    "conflicts_one": "{{files}} ya está en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlo.",
-    "conflicts_many": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
-    "conflicts_other": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
     "external": "Esta entrada enlaza a otro sitio en vez de a un archivo comprimido, así que no hay nada que instalar. Ábrala en JKHub para seguir el enlace.",
     "unsupportedDownloaded": "El archivo comprimido es un .{{format}}, que JKNet aún no sabe abrir. Ya está descargado: descomprímalo a mano en la carpeta del cliente.",
     "unsupported": "El archivo comprimido es un .{{format}}, que JKNet aún no sabe abrir. Abra el archivo en JKHub y descomprímalo a mano.",
     "noPk3": "El archivo comprimido no contiene ningún archivo pk3, así que no hay nada que instalar en un cliente. Dentro tiene: {{entries}}",
-    "showArchive": "Mostrar el archivo comprimido"
+    "showArchive": "Mostrar el archivo comprimido",
+    "conflicts_one": "{{files}} ya está en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlo.",
+    "conflicts_many": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
+    "conflicts_other": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos."
   }
 }

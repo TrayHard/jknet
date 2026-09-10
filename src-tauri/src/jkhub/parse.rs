@@ -325,6 +325,10 @@ fn card(element: ElementRef<'_>, id: u32, slug: String, title: String) -> JkhubC
         slug: slug.clone(),
         title,
         url: file_url(id, &slug),
+        // A listing page prints no category on its cards: the caller asked for
+        // one, so it knows. The catalogue index is the one place that fills
+        // this in, because a search there crosses categories.
+        category_id: None,
         author,
         thumbnail_url,
         description,

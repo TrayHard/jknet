@@ -7,7 +7,14 @@
     "topRated": "Najwyżej oceniane",
     "name": "Nazwa"
   },
-  "filterPlaceholder": "Filtruj wczytane pliki",
+  "search": {
+    "placeholder": "Search the whole catalog",
+    "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "results_one": "{{count}} result in {{game}}",
+    "results_few": "{{count}} results in {{game}}",
+    "results_many": "{{count}} results in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
+  },
   "refresh": "Odśwież",
   "fromCache": "Z pamięci podręcznej",
   "tree": {
@@ -17,11 +24,37 @@
     "updateHint": "Ponownie przechodzi drzewo kategorii JKHub. Wymaga około dwudziestu zapytań.",
     "expand": "Rozwiń {{category}}",
     "collapse": "Zwiń {{category}}",
-    "empty": "Brak kategorii."
+    "empty": "Brak kategorii.",
+    "noMatches": "No category holds a match."
   },
   "scope": {
     "category": "{{category}} · instalacja do: {{client}}",
     "noCategory": "Wybierz kategorię · instalacja do: {{client}}"
+  },
+  "index": {
+    "missing": "Catalog not indexed yet.",
+    "startingUp": "Indexing the JKHub catalog…",
+    "building": "Indexing the JKHub catalog {{done}} / {{total}}",
+    "rebuild": "Rebuild",
+    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
+    "updatedTitle": "Catalog updated",
+    "currentTitle": "Catalog is current",
+    "line_one": "Catalog indexed {{time}} ago · {{count}} file",
+    "line_few": "Catalog indexed {{time}} ago · {{count}} files",
+    "line_many": "Catalog indexed {{time}} ago · {{count}} files",
+    "line_other": "Catalog indexed {{time}} ago · {{count}} files",
+    "lineDate_one": "Catalog indexed {{date}} · {{count}} file",
+    "lineDate_few": "Catalog indexed {{date}} · {{count}} files",
+    "lineDate_many": "Catalog indexed {{date}} · {{count}} files",
+    "lineDate_other": "Catalog indexed {{date}} · {{count}} files",
+    "updatedText_one": "{{added}} added, {{updated}} updated · {{count}} file indexed",
+    "updatedText_few": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "updatedText_many": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "updatedText_other": "{{added}} added, {{updated}} updated · {{count}} files indexed",
+    "currentText_one": "{{count}} file indexed. JKHub has nothing newer.",
+    "currentText_few": "{{count}} files indexed. JKHub has nothing newer.",
+    "currentText_many": "{{count}} files indexed. JKHub has nothing newer.",
+    "currentText_other": "{{count}} files indexed. JKHub has nothing newer."
   },
   "loading": {
     "categories": "Odczytywanie kategorii JKHub…",
@@ -33,9 +66,11 @@
     "unreachableTitle": "JKHub nie odpowiedział",
     "categoryTitle": "Ta kategoria się nie wczytała",
     "filteredTitle": "Brak wyników",
-    "filteredText": "Żaden wczytany plik nie pasuje do filtra. Wyczyść go, wczytaj kolejne strony albo wybierz inną kategorię."
+    "filteredText": "Żaden wczytany plik nie pasuje do filtra. Wyczyść go, wczytaj kolejne strony albo wybierz inną kategorię.",
+    "elsewhereTitle": "Nothing here, but there is elsewhere",
+    "elsewhereText": "{{category}} holds no match. The tree shows the categories that do.",
+    "showAllCategories": "Show all categories"
   },
-  "loaded": "Wczytano {{shown}} z {{total}} plików. Zawęź kategorię albo zmień kolejność, aby zobaczyć resztę.",
   "card": {
     "open": "Otwórz {{title}}",
     "installed": "Zainstalowane",
@@ -77,14 +112,14 @@
   },
   "outcome": {
     "installed": "Zainstalowano {{files}} w folderze {{folder}}.",
-    "conflicts_one": "{{files}} już jest w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
-    "conflicts_few": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
-    "conflicts_many": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
-    "conflicts_other": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
     "external": "Ten wpis prowadzi do innej strony, a nie do archiwum, więc nie ma czego instalować. Otwórz go na JKHub, aby przejść dalej za odnośnikiem.",
     "unsupportedDownloaded": "Archiwum ma format .{{format}}, którego JKNet jeszcze nie otwiera. Jest już pobrane: rozpakuj je ręcznie do folderu klienta.",
     "unsupported": "Archiwum ma format .{{format}}, którego JKNet jeszcze nie otwiera. Otwórz plik na JKHub i rozpakuj go ręcznie.",
     "noPk3": "Archiwum nie zawiera pliku pk3, więc nie ma czego zainstalować do klienta. W środku: {{entries}}",
-    "showArchive": "Pokaż archiwum"
+    "showArchive": "Pokaż archiwum",
+    "conflicts_one": "{{files}} już jest w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "conflicts_few": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "conflicts_many": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
+    "conflicts_other": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać."
   }
 }

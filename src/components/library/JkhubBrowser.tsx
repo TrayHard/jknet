@@ -17,28 +17,40 @@ import { JkhubDetails } from "./JkhubDetails";
 import { JkhubTree } from "./JkhubTree";
 // --- slice: i18n ---
 import { useErrorText } from "../../i18n/errors";
-import { useActiveGame } from "../../lib/game";
+import { useFormat } from "../../i18n/useFormat";
+import { useActiveGame, useGameNames } from "../../lib/game";
 import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
   useJkhubCategories,
   useJkhubDownloadProgress,
   useJkhubFile,
+  useJkhubIndexProgress,
+  useJkhubIndexStatus,
   useJkhubInstall,
-  useJkhubListing,
+  useJkhubSearch,
   useRefreshJkhubCategories,
+  useRefreshJkhubIndex,
   useRefreshJkhubListing,
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 
 // --- slice: i18n --- the ids go to the site, the labels come from the catalog.
-const SORT_IDS: JkhubSort[] = [
-  "recentlyUpdated",
-  "newest",
-  "mostDownloaded",
-  "topRated",
-  "name",
-];
+//
+// --- slice: jkhub index ---
+// `topRated` is missing on purpose: the tab lists from the local index, and a
+// listing card of this theme prints no stars, so no crawl ever saw a rating.
+const SORT_IDS: JkhubSort[] = ["recentlyUpdated", "newest", "mostDownloaded", "name"];
+
+/** Cards added by one press of **Load more**, and the most the grid holds. */
+const PAGE = 25;
+const MAX_SHOWN = 100;
+
+/** How long the search waits after a keystroke before it asks the core. */
+const DEBOUNCE_MS = 150;
+
+/** An index older than this is described by its date rather than its age. */
+const A_DAY = 24 * 60 * 60;
 
 interface JkhubBrowserProps {
   /** Client Install writes into. Null while none is selected. */
@@ -56,15 +68,25 @@ interface JkhubBrowserProps {
  * controls, and a grid of cards. The client this installs into is the one
  * picked in the bar above the tabs — the same choice the Installed tab uses,
  * rather than a second picker that could disagree with it.
+ *
+ * --- slice: jkhub index ---
+ * Both the listing and the search come from the local catalogue index rather
+ * than from a page of the site, which is what makes a query find a file in a
+ * category nobody opened. The core keeps that index current on its own; the
+ * only thing this screen does about it is say how old it is and offer to read
+ * jkhub.org again.
  */
 export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
+  const format = useFormat();
+  const gameNames = useGameNames();
   const [category, setCategory] = useState<JkhubCategory | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
-  const [pages, setPages] = useState(1);
-  const [filter, setFilter] = useState("");
+  const [shown, setShown] = useState(PAGE);
+  const [typed, setTyped] = useState("");
+  const [query, setQuery] = useState("");
   const [openFile, setOpenFile] = useState<number | null>(null);
   const [result, setResult] = useState<JkhubInstallResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -78,18 +100,29 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   // fetches the new game's catalogue by itself.
   const game = useActiveGame();
   const categories = useJkhubCategories(game);
+  const status = useJkhubIndexStatus(game);
+  const indexing = useJkhubIndexProgress();
   const refreshListing = useRefreshJkhubListing();
   const refreshCategories = useRefreshJkhubCategories();
+  const refreshIndex = useRefreshJkhubIndex();
   const progress = useJkhubDownloadProgress();
   const install = useJkhubInstall(clientId);
   const details = useJkhubFile(openFile);
 
+  // The search waits out a burst of typing. Anything shorter than this and the
+  // core folds three thousand descriptions per keystroke for nothing; anything
+  // longer and the grid feels late.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(typed.trim()), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [typed]);
+
   // A switch of game is a switch of tree and of client: the picker above the
   // tabs now offers the other game's clients. Dropping the selection here, and
   // not waiting for the new tree to arrive, does two things. The listing query
-  // never asks the site for a category id of the old tree under the new game,
-  // and the details panel cannot keep an **Install** button that would write a
-  // Jedi Academy file into a Jedi Outcast client.
+  // never asks for a category id of the old tree under the new game, and the
+  // details panel cannot keep an **Install** button that would write a Jedi
+  // Academy file into a Jedi Outcast client.
   useEffect(() => {
     setCategory(null);
     setOpenFile(null);
@@ -107,24 +140,18 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     setCategory(first ?? null);
   }, [tree, category]);
 
-  // A change of category or order starts the paging over.
+  // A change of category, order or query starts the grid over at one page.
   useEffect(() => {
-    setPages(1);
-  }, [category?.id, sort]);
+    setShown(PAGE);
+  }, [category?.id, sort, query]);
 
-  const page1 = useJkhubListing(game, category?.id ?? null, sort, 1);
-  const page2 = useJkhubListing(game, pages >= 2 ? (category?.id ?? null) : null, sort, 2);
-  const page3 = useJkhubListing(game, pages >= 3 ? (category?.id ?? null) : null, sort, 3);
-  const page4 = useJkhubListing(game, pages >= 4 ? (category?.id ?? null) : null, sort, 4);
-
-  // Four pages of twenty-five is a hundred cards, which is as far as **Load
-  // more** goes before the sort or the filter is the better tool. A hook
-  // cannot be called in a loop, so the pages are named rather than mapped.
-  const loaded = [page1, page2, page3, page4].slice(0, pages);
-  const cards = loaded.flatMap((query) => query.data?.cards ?? []);
-  const totalPages = page1.data?.pages ?? 1;
-  const canLoadMore = pages < Math.min(totalPages, 4) && !loaded.some((q) => q.isFetching);
-  const stale = loaded.some((query) => query.data?.stale) || categories.data?.stale;
+  const search = useJkhubSearch(game, query, category?.id ?? null, sort, shown);
+  const cards = search.data?.cards ?? [];
+  const total = search.data?.total ?? 0;
+  const counts = query ? (search.data?.categoryCounts ?? {}) : null;
+  const stale = search.data?.stale || categories.data?.stale;
+  const canLoadMore =
+    shown < Math.min(total, MAX_SHOWN) && !search.isFetching;
 
   const names = useMemo(() => {
     const map = new Map<number, JkhubCategory>();
@@ -140,16 +167,25 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     return ids;
   }, [installed]);
 
-  const shown = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    if (!needle) return cards;
-    return cards.filter(
-      (card) =>
-        card.title.toLowerCase().includes(needle) ||
-        card.author?.name.toLowerCase().includes(needle) ||
-        card.tags.some((tag) => tag.toLowerCase().includes(needle)),
-    );
-  }, [cards, filter]);
+  // A crawl of the other game must not put a progress line on this one.
+  const building = status.data?.building === true;
+  const step = indexing.get(game);
+
+  const indexLine = () => {
+    if (building && step) {
+      return t("index.building", { done: step.done, total: step.total });
+    }
+    if (building) return t("index.startingUp");
+    const state = status.data;
+    if (!state?.indexed) return t("index.missing");
+    if (state.age < A_DAY) {
+      return t("index.line", { time: format.age(state.age), count: state.files });
+    }
+    return t("index.lineDate", {
+      date: format.date(state.updatedAt),
+      count: state.files,
+    });
+  };
 
   const runInstall = (id: number, replace: boolean) => {
     if (!clientId) {
@@ -198,20 +234,38 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     void revealItemInDir(path).catch((e: unknown) => setFailure(errorText(e)));
   };
 
-  // **Refresh** reads what is on screen: the pages of the open listing and the
-  // open file page, past the core's own half-hour cache. It deliberately
-  // leaves the category tree alone — that walk is twenty requests and has its
-  // own action in the tree header.
-  const runRefresh = () => {
+  // **Refresh** reads jkhub.org for what the catalogue index does not know
+  // yet, and re-reads the open file page with it. It deliberately leaves the
+  // category tree alone — that walk is twenty requests and has its own action
+  // in the tree header.
+  //
+  // `full` is the crawl of every listing page. The core reaches for it on its
+  // own when the cheap path cannot do the job, and **Rebuild** is the way a
+  // player asks for it outright.
+  const runRefresh = (full: boolean) => {
     setRefreshing(true);
     setFailure(null);
-    void refreshListing({
-      game,
-      categoryId: category?.id ?? null,
-      sort,
-      pages,
-      fileId: openFile,
-    })
+    void Promise.all([
+      refreshIndex(game, full),
+      // Only the open card: the grid comes from the index, which the refresh
+      // is already rewriting.
+      refreshListing({ game, categoryId: null, sort, pages: 0, fileId: openFile }),
+    ])
+      .then(([update]) => {
+        const changed = update.added + update.updated + update.removed;
+        toasts.show("jkhub:index", {
+          variant: "success",
+          title: changed > 0 ? t("index.updatedTitle") : t("index.currentTitle"),
+          text:
+            changed > 0
+              ? t("index.updatedText", {
+                  added: update.added,
+                  updated: update.updated,
+                  count: update.files,
+                })
+              : t("index.currentText", { count: update.files }),
+        });
+      })
       .catch((e: unknown) => setFailure(errorText(e)))
       .finally(() => setRefreshing(false));
   };
@@ -265,6 +319,10 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     );
   }
 
+  // A query with answers elsewhere and none here is not an empty catalogue:
+  // it is the wrong category, and the way out is one button.
+  const elsewhere = query !== "" && total === 0 && category != null;
+
   return (
     <>
       {failure ? (
@@ -285,6 +343,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             onSelect={setCategory}
             onUpdate={runUpdateCategories}
             updating={updatingTree}
+            counts={counts}
           />
         </aside>
 
@@ -292,10 +351,10 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
           <div className="flex items-center gap-12 pb-12">
             <Input
               icon={<Search size={16} />}
-              placeholder={t("filterPlaceholder")}
-              value={filter}
+              placeholder={t("search.placeholder")}
+              value={typed}
               className="w-232"
-              onChange={(event) => setFilter(event.target.value)}
+              onChange={(event) => setTyped(event.target.value)}
             />
             <span className="flex-1" />
             {stale ? (
@@ -316,43 +375,78 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             />
             <Button
               icon={<RefreshCw size={16} />}
-              disabled={refreshing}
-              onClick={runRefresh}
+              disabled={refreshing || building}
+              onClick={() => runRefresh(false)}
             >
               {t("refresh")}
             </Button>
           </div>
 
-          <p className="text-body-sm text-fg-muted pb-12">
+          <p className="text-body-sm text-fg-muted">
             {/* The category name comes from jkhub.org: data, not copy. */}
-            {category
-              ? t("scope.category", { category: category.name, client: clientName })
-              : t("scope.noCategory", { client: clientName })}
+            {query
+              ? t("search.results", {
+                  count: total,
+                  game: gameNames.label(game),
+                })
+              : category
+                ? t("scope.category", { category: category.name, client: clientName })
+                : t("scope.noCategory", { client: clientName })}
           </p>
 
-          {page1.isLoading ? (
+          <p className="flex items-center gap-8 text-label-xs text-fg-muted pb-12 pt-4">
+            <span>{indexLine()}</span>
+            <button
+              type="button"
+              onClick={() => runRefresh(true)}
+              disabled={refreshing || building}
+              title={t("index.rebuildHint")}
+              className={
+                refreshing || building
+                  ? "text-fg-muted cursor-default"
+                  : "text-fg-muted hover:text-fg cursor-pointer"
+              }
+            >
+              {t("index.rebuild")}
+            </button>
+          </p>
+
+          {search.isLoading ? (
             <p className="text-body-sm text-fg-muted">{t("loading.files")}</p>
-          ) : page1.error ? (
+          ) : search.error ? (
             <EmptyState
               icon={<AlertTriangle size={24} />}
               title={t("empty.categoryTitle")}
-              text={errorText(page1.error)}
+              text={errorText(search.error)}
             />
-          ) : shown.length === 0 ? (
+          ) : cards.length === 0 ? (
             <EmptyState
               icon={<Search size={24} />}
-              title={t("empty.filteredTitle")}
-              text={t("empty.filteredText")}
+              title={
+                elsewhere ? t("empty.elsewhereTitle") : t("empty.filteredTitle")
+              }
+              text={
+                elsewhere
+                  ? t("empty.elsewhereText", { category: category.name })
+                  : t("empty.filteredText")
+              }
+              action={
+                elsewhere ? (
+                  <Button onClick={() => setCategory(null)}>
+                    {t("empty.showAllCategories")}
+                  </Button>
+                ) : undefined
+              }
             />
           ) : (
             <>
               <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">
-                {shown.map((card) => (
+                {cards.map((card) => (
                   <JkhubCard
                     key={card.id}
                     card={card}
                     categoryName={
-                      category ? names.get(category.id)?.name : undefined
+                      names.get(card.categoryId ?? category?.id ?? 0)?.name
                     }
                     installed={installedIds.has(card.id)}
                     progress={progress.get(card.id) ?? null}
@@ -368,15 +462,12 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
 
               <div className="flex justify-center pt-16">
                 {canLoadMore ? (
-                  <Button onClick={() => setPages((count) => count + 1)}>
+                  <Button onClick={() => setShown((count) => count + PAGE)}>
                     {tCommon("actions.loadMore")}
                   </Button>
                 ) : (
                   <span className="text-body-sm text-fg-muted">
-                    {t("loaded", {
-                      shown: cards.length,
-                      total: totalPages * (page1.data?.perPage ?? 25),
-                    })}
+                    {t("search.loaded", { shown: cards.length, total })}
                   </span>
                 )}
               </div>
