@@ -1,7 +1,6 @@
 import type { LibraryItem } from "../../lib/ipc";
 import { formatBytes } from "../../lib/format";
-import { Button } from "../ui";
-import { LibraryDialog } from "./LibraryDialog";
+import { Button, Dialog } from "../ui";
 
 interface RemoveItemDialogProps {
   item: LibraryItem;
@@ -26,7 +25,8 @@ export function RemoveItemDialog({
   busy = false,
 }: RemoveItemDialogProps) {
   return (
-    <LibraryDialog
+    <Dialog
+      variant="danger"
       title={`Remove ${item.displayName} from ${clientName}?`}
       body={`${item.fileName}, ${formatBytes(item.size)}. The file is deleted from the client's ${item.folder} folder. Other clients keep their own copy.`}
       onClose={onCancel}

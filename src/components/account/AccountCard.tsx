@@ -11,8 +11,7 @@ import {
   useUpdateDisplayName,
   useUpdateSettings,
 } from "../../lib/queries";
-import { Avatar, Badge, Button, Input } from "../ui";
-import { AccountDialog } from "./AccountDialog";
+import { Avatar, Badge, Button, Dialog, Input } from "../ui";
 import { providerLabel, providerLine } from "./provider";
 import { ProviderButtons } from "./ProviderButtons";
 import { WaitingForBrowser } from "./WaitingForBrowser";
@@ -238,7 +237,8 @@ function DangerZone() {
       </div>
 
       {confirming ? (
-        <AccountDialog
+        <Dialog
+          variant="danger"
           title="Delete your JKNet account?"
           body="Your account, your friends list and your invites are removed from the hub. Your clients, your library files and your settings stay on this machine. This cannot be undone."
           onClose={() => setConfirming(false)}
