@@ -15,7 +15,7 @@
 //! | `clients`     | named engine instances on disk                      |
 //! | `servers`     | server browser (stub)                               |
 //! | `launch`      | starting a client (stub)                            |
-//! | `library`     | pk3 library (stub)                                  |
+//! | `library`     | pk3 files of one client, in its `home\` folder      |
 
 mod clients;
 mod engines;
@@ -82,9 +82,14 @@ pub fn run() {
             servers::list_servers,
             servers::refresh_servers,
             launch::launch_client,
-            library::list_library_files,
-            library::install_library_file,
-            library::remove_library_file,
+            // --- slice: library ---
+            library::list_library,
+            library::inspect_pk3,
+            library::add_library_files,
+            library::set_library_item_enabled,
+            library::remove_library_item,
+            library::rename_library_item,
+            library::find_library_conflicts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
