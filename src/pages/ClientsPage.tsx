@@ -2,24 +2,43 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   Check,
+  Download,
   FolderOpen,
   HardDrive,
+  Play,
   Plus,
+  RefreshCw,
+  Square,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
 
+import { useGameEventsContext } from "../components/GameEventsProvider";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState } from "../components/ui";
-import { errorMessage, ipc, type Client, type Settings } from "../lib/ipc";
-import { shortenPath } from "../lib/format";
+import {
+  errorMessage,
+  ipc,
+  type Client,
+  type Engine,
+  type EngineInstallProgress,
+  type RunningGame,
+  type Settings,
+} from "../lib/ipc";
+import { formatBytes, shortenPath } from "../lib/format";
 import {
   useClients,
   useDeleteClient,
+  useEngineReleases,
   useEngines,
+  useEngineUpdate,
   useGameFiles,
+  useInstallEngine,
+  useLaunchClient,
+  useRunningGame,
   useSettings,
+  useStopGame,
   useUpdateSettings,
 } from "../lib/queries";
 
@@ -36,6 +55,11 @@ export function ClientsPage() {
   const gameFiles = useGameFiles();
   const updateSettings = useUpdateSettings();
   const deleteClient = useDeleteClient();
+  const installEngine = useInstallEngine();
+  const launchClient = useLaunchClient();
+  const stopGame = useStopGame();
+  const runningGame = useRunningGame();
+  const { installs, clearInstall } = useGameEventsContext();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,14 +216,33 @@ export function ClientsPage() {
               <ClientCard
                 key={client.id}
                 client={client}
-                engineName={
-                  engines.data?.find((engine) => engine.id === client.engineId)?.name ??
-                  client.engineId
-                }
+                engine={engines.data?.find((engine) => engine.id === client.engineId)}
                 isDefault={client.id === settings.data?.defaultClientId}
+                install={installs[client.id]}
+                running={runningGame.data ?? null}
                 onMakeDefault={() => patchSettings({ defaultClientId: client.id })}
                 onDelete={() =>
                   deleteClient.mutate(client.id, {
+                    onError: (e) => setError(errorMessage(e)),
+                  })
+                }
+                onInstall={() => {
+                  setError(null);
+                  clearInstall(client.id);
+                  installEngine.mutate(
+                    { clientId: client.id },
+                    { onError: (e) => setError(errorMessage(e)) },
+                  );
+                }}
+                onLaunch={() => {
+                  setError(null);
+                  launchClient.mutate(
+                    { clientId: client.id },
+                    { onError: (e) => setError(errorMessage(e)) },
+                  );
+                }}
+                onStop={() =>
+                  stopGame.mutate(undefined, {
                     onError: (e) => setError(errorMessage(e)),
                   })
                 }
@@ -252,51 +295,263 @@ export function ClientsPage() {
 
 interface ClientCardProps {
   client: Client;
-  engineName: string;
+  engine: Engine | undefined;
   isDefault: boolean;
+  /** Progress of the install of this client, when one is running. */
+  install: EngineInstallProgress | undefined;
+  /** The game JKNet started, whichever client it belongs to. */
+  running: RunningGame | null;
   onMakeDefault: () => void;
   onDelete: () => void;
+  onInstall: () => void;
+  onLaunch: () => void;
+  onStop: () => void;
 }
 
 function ClientCard({
   client,
-  engineName,
+  engine,
   isDefault,
+  install,
+  running,
   onMakeDefault,
   onDelete,
+  onInstall,
+  onLaunch,
+  onStop,
 }: ClientCardProps) {
+  const engineName = engine?.name ?? client.engineId;
+  const installing =
+    install !== undefined && (install.phase === "download" || install.phase === "extract");
+  const installed = client.engineVersion !== null;
+  const isRunning = running?.clientId === client.id;
+  const otherIsRunning = running !== null && !isRunning;
+
   return (
-    <li className="flex items-start gap-12 rounded-lg border border-line bg-surface p-16">
-      <span className="flex items-center justify-center size-44 rounded-md bg-elevated text-fg-accent text-display-md shrink-0">
-        {engineName.slice(0, 2).toUpperCase()}
-      </span>
-      <div className="flex-1 min-w-0 flex flex-col gap-4">
-        <div className="flex items-center gap-8">
-          <span className="text-heading-sm text-fg truncate">{client.name}</span>
-          {isDefault ? <Badge tone="accent">Default</Badge> : null}
+    <li className="flex flex-col gap-12 rounded-lg border border-line bg-surface p-16">
+      <div className="flex items-start gap-12">
+        <span className="flex items-center justify-center size-44 rounded-md bg-elevated text-fg-accent text-display-md shrink-0">
+          {engineName.slice(0, 2).toUpperCase()}
+        </span>
+        <div className="flex-1 min-w-0 flex flex-col gap-4">
+          <div className="flex items-center gap-8">
+            <span className="text-heading-sm text-fg truncate">{client.name}</span>
+            {isDefault ? <Badge tone="accent">Default</Badge> : null}
+            {isRunning ? <Badge tone="success">Running</Badge> : null}
+          </div>
+          <div className="flex items-center gap-8 flex-wrap">
+            <Badge tone={installed ? "neutral" : "warm"}>
+              {engineName}
+              {client.engineVersion ? ` ${client.engineVersion}` : ""}
+            </Badge>
+            {installed ? null : (
+              <span className="text-body-sm text-fg-muted">Engine not installed</span>
+            )}
+          </div>
+          <span className="text-mono-xs text-fg-muted">
+            {client.id} · created {client.createdAt.slice(0, 10)}
+          </span>
         </div>
-        <div className="flex items-center gap-8">
-          <Badge tone="neutral">
-            {engineName}
-            {client.engineVersion ? ` ${client.engineVersion}` : ""}
-          </Badge>
-          {client.engineVersion ? null : (
-            <span className="text-body-sm text-fg-muted">Engine not installed</span>
-          )}
+        <div className="flex flex-col gap-8 shrink-0">
+          <Button size="sm" onClick={onMakeDefault} disabled={isDefault}>
+            {isDefault ? "Default" : "Make default"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Trash2 size={14} />}
+            onClick={onDelete}
+            disabled={isRunning || installing}
+          >
+            Delete
+          </Button>
         </div>
+      </div>
+
+      {/* Engine state: install, progress, or launch ---------------------- */}
+      {installing && install ? (
+        <InstallProgressBar progress={install} />
+      ) : install?.phase === "error" ? (
+        <p className="text-body-sm text-fg-danger break-words">{install.message}</p>
+      ) : null}
+
+      {engine && !engine.installable ? (
+        <p className="text-body-sm text-fg-muted">
+          {engine.notInstallableReason ?? "This build has to be installed by hand."}
+        </p>
+      ) : (
+        <EngineControls
+          client={client}
+          installed={installed}
+          installing={installing}
+          isRunning={isRunning}
+          otherIsRunning={otherIsRunning}
+          onInstall={onInstall}
+          onLaunch={onLaunch}
+          onStop={onStop}
+        />
+      )}
+    </li>
+  );
+}
+
+interface EngineControlsProps {
+  client: Client;
+  installed: boolean;
+  installing: boolean;
+  isRunning: boolean;
+  otherIsRunning: boolean;
+  onInstall: () => void;
+  onLaunch: () => void;
+  onStop: () => void;
+}
+
+/**
+ * The row of buttons that turns an engine into a running game.
+ *
+ * The update check is a button, not a page load: it costs a request to GitHub,
+ * and a player who opens the screen to rename a client has not asked for one.
+ * The release list behind **Install engine** is different — without it the
+ * button cannot say which version it is about to fetch.
+ */
+function EngineControls({
+  client,
+  installed,
+  installing,
+  isRunning,
+  otherIsRunning,
+  onInstall,
+  onLaunch,
+  onStop,
+}: EngineControlsProps) {
+  const releases = useEngineReleases(installed ? null : client.engineId);
+  const [checkRequested, setCheckRequested] = useState(false);
+  const update = useEngineUpdate(checkRequested ? client.id : null);
+
+  const check = () => {
+    if (checkRequested) void update.refetch();
+    else setCheckRequested(true);
+  };
+
+  const latestTag = releases.data?.[0]?.tag;
+  const updateAvailable = update.data?.updateAvailable === true;
+
+  return (
+    <div className="flex items-center gap-8 flex-wrap">
+      {isRunning ? (
+        <Button size="sm" variant="danger" icon={<Square size={14} />} onClick={onStop}>
+          Stop
+        </Button>
+      ) : (
+        <Button
+          size="sm"
+          variant="primary"
+          icon={<Play size={14} />}
+          onClick={onLaunch}
+          disabled={!installed || installing || otherIsRunning}
+          title={
+            otherIsRunning
+              ? "Another client is already running"
+              : installed
+                ? undefined
+                : "Install the engine first"
+          }
+        >
+          Launch
+        </Button>
+      )}
+
+      {installed ? (
+        <>
+          <Button
+            size="sm"
+            icon={<RefreshCw size={14} />}
+            onClick={check}
+            disabled={installing || isRunning || update.isFetching}
+          >
+            {update.isFetching ? "Checking…" : "Check updates"}
+          </Button>
+          {updateAvailable ? (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Download size={14} />}
+              onClick={onInstall}
+              disabled={installing || isRunning}
+            >
+              Update to {update.data?.latest ?? "the newest build"}
+            </Button>
+          ) : update.data ? (
+            <Badge tone="success" icon={<Check size={12} />}>
+              Up to date
+            </Badge>
+          ) : null}
+          {update.error ? (
+            <span className="text-body-sm text-fg-danger">
+              {errorMessage(update.error)}
+            </span>
+          ) : null}
+        </>
+      ) : (
+        <Button
+          size="sm"
+          icon={<Download size={14} />}
+          onClick={onInstall}
+          disabled={installing}
+        >
+          {installing
+            ? "Installing…"
+            : latestTag
+              ? `Install engine ${latestTag}`
+              : "Install engine"}
+        </Button>
+      )}
+
+      {installed && client.engineInstalledAt ? (
         <span className="text-mono-xs text-fg-muted">
-          {client.id} · created {client.createdAt.slice(0, 10)}
+          installed {client.engineInstalledAt.slice(0, 10)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The bar under a card while an engine downloads and unpacks.
+ *
+ * A download without a content length gets an indeterminate bar rather than a
+ * fake percentage: GitHub always sends one, mirrors do not always.
+ */
+function InstallProgressBar({ progress }: { progress: EngineInstallProgress }) {
+  const ratio =
+    progress.total > 0 ? Math.min(1, progress.downloaded / progress.total) : null;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-8">
+        <span className="text-body-sm text-fg-secondary truncate">
+          {progress.message}
+        </span>
+        <span className="text-mono-xs text-fg-muted shrink-0">
+          {ratio === null
+            ? formatBytes(progress.downloaded)
+            : `${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)}`}
         </span>
       </div>
-      <div className="flex flex-col gap-8 shrink-0">
-        <Button size="sm" onClick={onMakeDefault} disabled={isDefault}>
-          {isDefault ? "Default" : "Make default"}
-        </Button>
-        <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} onClick={onDelete}>
-          Delete
-        </Button>
+      <div
+        className="h-6 rounded-full bg-elevated overflow-hidden"
+        role="progressbar"
+        aria-label={progress.message}
+        aria-valuenow={ratio === null ? undefined : Math.round(ratio * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className="h-full bg-accent transition-[width] duration-200"
+          style={{ width: ratio === null ? "100%" : `${ratio * 100}%` }}
+        />
       </div>
-    </li>
+    </div>
   );
 }
 

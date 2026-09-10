@@ -58,6 +58,39 @@ pub enum AppError {
     /// The feature is planned but the skeleton does not implement it yet.
     #[error("not implemented: {0}")]
     NotImplemented(&'static str),
+
+    // --- slice: launch ---
+    /// An HTTP request failed, or the answer was not the one expected. Covers
+    /// the GitHub API and the engine download.
+    #[error("network error: {0}")]
+    Network(String),
+
+    /// GitHub refused an anonymous request because the hourly quota is spent.
+    /// Separate from `Network` because the cure is waiting, not retrying.
+    #[error("{0}")]
+    RateLimited(String),
+
+    /// A downloaded archive is unreadable, or an entry inside it points
+    /// outside the folder it is being extracted into.
+    #[error("archive error: {0}")]
+    Archive(String),
+
+    /// The game cannot be started: files missing, engine missing, or another
+    /// game already running.
+    #[error("cannot launch: {0}")]
+    Launch(String),
+}
+
+impl From<reqwest::Error> for AppError {
+    fn from(source: reqwest::Error) -> Self {
+        AppError::Network(source.to_string())
+    }
+}
+
+impl From<zip::result::ZipError> for AppError {
+    fn from(source: zip::result::ZipError) -> Self {
+        AppError::Archive(source.to_string())
+    }
 }
 
 impl AppError {

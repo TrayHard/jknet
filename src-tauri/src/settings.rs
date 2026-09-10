@@ -27,6 +27,12 @@ pub struct Settings {
     /// Absolute path that replaces the config root for `clients`, `library`,
     /// `cache` and `logs`. Ignored when it is relative or blank.
     pub data_dir_override: Option<String>,
+
+    // --- slice: launch ---
+    /// Extra tokens appended to every command line, exactly as a player would
+    /// type them in a shortcut: `+set r_mode -1 +set cl_renderer rd-rend2`.
+    /// Split on whitespace with double-quoted groups kept whole.
+    pub extra_launch_args: String,
 }
 
 impl Settings {
