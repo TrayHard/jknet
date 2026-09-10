@@ -48,7 +48,7 @@ export function ServerDetails({
   return (
     <aside className="flex flex-col gap-16 w-320 shrink-0 rounded-lg border border-line bg-surface p-16">
       {/* --- slice: maps --- */}
-      <MapPreview map={server.map} className="h-96" />
+      <MapPreview map={server.map} compact className="h-96" />
 
       <div className="flex flex-col gap-8">
         <ServerName
