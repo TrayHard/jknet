@@ -27,8 +27,19 @@
 //! cannot tell — the name the player gave a file and where it came from — and
 //! a missing entry is rebuilt by inspecting the pk3, so deleting the sidecar
 //! costs nothing but the display names.
+//!
+//! --- slice: game core ---
+//! One class of file in `home\base\` is not the player's. A Jedi Outcast
+//! client runs with the game folder on `fs_basepath`, which leaves the
+//! unpacked build off the search path, so
+//! [`crate::engine_install::sync_engine_archives`] mirrors JK2MV's own
+//! `assetsmv.pk3` and `assetsmv2.pk3` into `home\base\` before every launch.
+//! Those copies are part of the engine: this module hides them from the list,
+//! keeps them out of the conflict report and refuses to disable or delete
+//! them. Disabling `assetsmv.pk3` would stop the client from starting, and the
+//! next launch would put it back anyway.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -348,7 +359,7 @@ pub fn find_library_conflicts(
 /// Scans the client's home folder and merges the result with the sidecar.
 fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
     let dir = client_dir(data, client_id)?;
-    let files = scan(&dir.join("home"));
+    let files = scan_player_files(&dir);
     let mut sidecar = read_sidecar(&dir);
     // --- slice: jkhub ---
     let provenance = read_provenance(&dir);
@@ -452,6 +463,44 @@ fn scan(home: &Path) -> Vec<ScannedFile> {
         a.folder == b.folder && a.file_name.eq_ignore_ascii_case(&b.file_name)
     });
     files
+}
+
+// --- slice: game core ---
+
+/// The same scan with the engine's own archives taken out.
+///
+/// Everything a player can act on goes through this rather than through
+/// [`scan`]: the listing, the conflict report and the duplicate check of an
+/// add all have to agree about which files exist, or a card would appear that
+/// no command will touch.
+fn scan_player_files(client_dir: &Path) -> Vec<ScannedFile> {
+    let bundled = engine_archives(client_dir);
+    let mut files = scan(&client_dir.join("home"));
+    files.retain(|file| !is_engine_file(&bundled, &file.folder, &file.file_name));
+    files
+}
+
+/// Lowercase names of the pk3 files the client's unpacked build ships.
+fn engine_archives(client_dir: &Path) -> HashSet<String> {
+    crate::engine_install::bundled_archive_names(&client_dir.join("engine"))
+}
+
+/// Whether this file in this folder is a copy of one of the engine's archives.
+///
+/// The folder matters. The mirror only ever writes into `home\base\`, so a
+/// file of the same name inside a mod folder is the player's own and stays
+/// theirs.
+fn is_engine_file(bundled: &HashSet<String>, folder: &str, file_name: &str) -> bool {
+    folder.eq_ignore_ascii_case(DEFAULT_FOLDER)
+        && bundled.contains(&file_name.to_ascii_lowercase())
+}
+
+/// Refuses a command that would change one of the engine's own archives.
+fn refuse_engine_file(client_dir: &Path, folder: &str, file_name: &str) -> Result<()> {
+    if is_engine_file(&engine_archives(client_dir), folder, file_name) {
+        return Err(AppError::EngineFile(item_id(folder, file_name)));
+    }
+    Ok(())
 }
 
 /// The raw listing, duplicates and all.
@@ -693,6 +742,11 @@ fn add_files(
     // Refreshes the sidecar first, so a duplicate check sees files that were
     // copied in behind the launcher's back.
     let existing = read_library(data, client_id)?;
+    // --- slice: game core ---
+    // The engine's own archives are not in `existing`, so without this a file
+    // named `assetsmv.pk3` would overwrite the mirrored copy and then vanish
+    // from the list it was just added to.
+    let bundled = engine_archives(&dir);
     let mut sidecar = read_sidecar(&dir);
     let mut taken: BTreeSet<String> = existing
         .iter()
@@ -721,6 +775,16 @@ fn add_files(
         }
         if !path.is_file() {
             skipped.push(skip(source, &file_name, "the file is not there any more"));
+            continue;
+        }
+        if is_engine_file(&bundled, &folder, &file_name) {
+            let mut entry = skip(
+                source,
+                &file_name,
+                "the engine build already ships an archive with this name",
+            );
+            entry.suggested_name = Some(free_name(&file_name, &taken));
+            skipped.push(entry);
             continue;
         }
         let report = match inspect(&path) {
@@ -821,6 +885,10 @@ fn set_enabled(
 ) -> Result<LibraryItem> {
     let dir = client_dir(data, client_id)?;
     let (folder, file_name) = parse_item_id(id)?;
+    // --- slice: game core ---
+    // Renaming `assetsmv.pk3` to `.pk3.disabled` would leave a Jedi Outcast
+    // client that cannot start, and the next launch would restore it anyway.
+    refuse_engine_file(&dir, &folder, &file_name)?;
     let folder_path = dir.join("home").join(&folder);
     let on = folder_path.join(&file_name);
     let off = folder_path.join(format!("{file_name}{DISABLED_SUFFIX}"));
@@ -847,6 +915,7 @@ fn set_enabled(
 fn remove_item(data: &DataPaths, client_id: &str, id: &str) -> Result<()> {
     let dir = client_dir(data, client_id)?;
     let (folder, file_name) = parse_item_id(id)?;
+    refuse_engine_file(&dir, &folder, &file_name)?;
     let folder_path = dir.join("home").join(&folder);
     let candidates = [
         folder_path.join(&file_name),
@@ -920,7 +989,10 @@ static CONFLICT_CACHE: LazyLock<Mutex<HashMap<String, (String, ConflictReport)>>
 /// Finds internal paths that more than one enabled archive of a folder holds.
 fn conflicts(data: &DataPaths, client_id: &str) -> Result<ConflictReport> {
     let dir = client_dir(data, client_id)?;
-    let mut files = scan(&dir.join("home"));
+    // --- slice: game core ---
+    // The engine's own archives are left out: the report exists so a player
+    // can disable the losing file, and those two are not theirs to disable.
+    let mut files = scan_player_files(&dir);
     files.retain(|file| file.enabled);
     files.sort_by(|a, b| {
         a.folder
@@ -1165,6 +1237,21 @@ mod tests {
             fs::create_dir_all(&home).expect("client home");
             (data, home)
         }
+
+        // --- slice: game core ---
+        /// The same client with a JK2MV build unpacked into `engine\`: two
+        /// archives in `engine\base\` and the copies the launch path mirrors
+        /// into `home\base\`.
+        fn jedi_outcast_client(&self, id: &str) -> (DataPaths, PathBuf) {
+            let (data, home) = self.client(id);
+            let engine_base = data.client_dir(id).join("engine").join("base");
+            fs::create_dir_all(&engine_base).expect("engine base");
+            for name in ["assetsmv.pk3", "assetsmv2.pk3"] {
+                write_pk3(&engine_base.join(name), &["ext_data/mv.txt"]);
+                fs::copy(engine_base.join(name), home.join(name)).expect("mirror");
+            }
+            (data, home)
+        }
     }
 
     impl Drop for TempRoot {
@@ -1401,6 +1488,97 @@ mod tests {
         let items = read_library(&data, "everyday").expect("list");
         assert_eq!(items.len(), 1);
         assert!(items[0].enabled, "the engine loads the enabled spelling");
+    }
+
+    // --- slice: game core ---
+
+    #[test]
+    fn the_archives_of_the_engine_are_not_library_files() {
+        let root = TempRoot::new("engine-files");
+        let (data, home) = root.jedi_outcast_client("jk2");
+        write_pk3(&home.join("skin.pk3"), &["models/players/jaden/model.glm"]);
+
+        // Three pk3 files in `home\base\`, one of them the player's.
+        let items = read_library(&data, "jk2").expect("list");
+        assert_eq!(
+            items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["base/skin.pk3"]
+        );
+
+        // And the sidecar does not grow entries for files nobody can see.
+        let sidecar = read_sidecar(&data.client_dir("jk2"));
+        assert_eq!(sidecar.items.len(), 1);
+        assert!(sidecar.items.contains_key("base/skin.pk3"));
+    }
+
+    #[test]
+    fn an_archive_of_the_engine_cannot_be_disabled_or_deleted() {
+        let root = TempRoot::new("engine-files-locked");
+        let (data, home) = root.jedi_outcast_client("jk2");
+
+        let refusal = set_enabled(&data, "jk2", "base/assetsmv.pk3", false)
+            .expect_err("the engine's own archive is not the player's to disable");
+        assert!(matches!(refusal, AppError::EngineFile(_)), "{refusal}");
+        assert!(refusal.to_string().contains("base/assetsmv.pk3"), "{refusal}");
+        assert!(home.join("assetsmv.pk3").is_file(), "the file is left alone");
+        assert!(!home.join("assetsmv.pk3.disabled").exists());
+
+        let refusal = remove_item(&data, "jk2", "base/assetsmv2.pk3")
+            .expect_err("deleting it would only last until the next launch");
+        assert!(matches!(refusal, AppError::EngineFile(_)), "{refusal}");
+        assert!(home.join("assetsmv2.pk3").is_file());
+    }
+
+    #[test]
+    fn a_file_named_after_an_engine_archive_is_not_installed_over_it() {
+        let root = TempRoot::new("engine-files-add");
+        let (data, home) = root.jedi_outcast_client("jk2");
+        let source = root.0.join("mine").join("assetsmv.pk3");
+        fs::create_dir_all(source.parent().unwrap()).expect("source folder");
+        write_pk3(&source, &["models/players/jaden/model.glm"]);
+
+        let result = add_files(&data, "jk2", &[source.display().to_string()], None).expect("add");
+        assert!(result.added.is_empty());
+        assert_eq!(result.skipped.len(), 1);
+        assert!(result.skipped[0].reason.contains("engine build"), "{:?}", result.skipped[0]);
+        assert_eq!(result.skipped[0].suggested_name.as_deref(), Some("assetsmv_2.pk3"));
+        // The mirrored archive keeps its own bytes.
+        assert_eq!(
+            inspect(&home.join("assetsmv.pk3")).expect("inspect").notable_entries,
+            vec!["ext_data/mv.txt".to_string()]
+        );
+    }
+
+    #[test]
+    fn the_engine_takes_no_part_in_a_conflict_report() {
+        let root = TempRoot::new("engine-files-conflicts");
+        let (data, home) = root.jedi_outcast_client("jk2");
+        // A skin pack that overrides a path of `assetsmv.pk3`. The engine does
+        // read both, but the report exists so a player can disable the loser,
+        // and one of these two is not theirs to disable.
+        write_pk3(&home.join("skin.pk3"), &["ext_data/mv.txt"]);
+
+        let report = conflicts(&data, "jk2").expect("conflicts");
+        assert_eq!(report.total, 0);
+        assert!(report.files.is_empty());
+    }
+
+    #[test]
+    fn a_mod_folder_file_is_the_players_whatever_it_is_called() {
+        // The mirror only ever writes into `home\base\`, so a name that means
+        // "the engine's own" there means nothing in a mod folder.
+        let root = TempRoot::new("engine-files-mod");
+        let (data, _home) = root.jedi_outcast_client("jk2");
+        let mod_dir = data.client_dir("jk2").join("home").join("mv");
+        fs::create_dir_all(&mod_dir).expect("mod folder");
+        write_pk3(&mod_dir.join("assetsmv.pk3"), &["ext_data/mine.txt"]);
+
+        let items = read_library(&data, "jk2").expect("list");
+        assert_eq!(
+            items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["mv/assetsmv.pk3"]
+        );
+        assert!(set_enabled(&data, "jk2", "mv/assetsmv.pk3", false).is_ok());
     }
 
     #[test]
