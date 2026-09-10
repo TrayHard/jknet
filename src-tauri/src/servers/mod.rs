@@ -40,11 +40,12 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::error::{AppError, Result};
+use crate::game::Game;
 use crate::settings::{ServerHistoryEntry, Settings};
 use crate::state::AppState;
 use crate::timestamp;
 
-use protocol::{gametype_label, parse_infostring, strip_colors, PROTOCOL_VERSION};
+use protocol::{parse_infostring, strip_colors, PROTOCOL_VERSION};
 
 /// How long one master server has to deliver its whole address list.
 const MASTER_TIMEOUT: Duration = Duration::from_millis(1_500);
@@ -73,15 +74,13 @@ const MAX_STATUS_QUERIES: usize = 150;
 /// How often the collected rows are pushed to the window during a refresh.
 const BATCH_INTERVAL: Duration = Duration::from_millis(100);
 
-/// Port a Jedi Academy server listens on when the address gives no port,
-/// `PORT_SERVER` in `codemp/qcommon/qcommon.h:224`.
-const DEFAULT_SERVER_PORT: u16 = 29070;
-
-/// Name of the cache document inside `cache\`.
-const CACHE_FILE: &str = "servers.json";
-
 /// How many addresses `server_history` keeps.
 const HISTORY_LIMIT: usize = 50;
+
+// --- slice: game core ---
+/// The cache document of the one-game era, migrated to `servers-ja.json` the
+/// first time the Jedi Academy list is read or written.
+const LEGACY_CACHE_FILE: &str = "servers.json";
 
 /// Where the human and bot counts of a row came from.
 ///
@@ -106,6 +105,13 @@ pub enum PlayersSource {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerInfo {
+    // --- slice: game core ---
+    /// Which game this server runs. A row comes from the master list of one
+    /// game, so it is never in doubt — and it decides which gametype table
+    /// named [`ServerInfo::gametype_label`] and which map picture the row gets.
+    /// A cached row written before the field existed reads as Jedi Academy.
+    #[serde(default, deserialize_with = "game_of_cached_row")]
+    pub game: Game,
     /// `ip:port`, the key of the row everywhere in the launcher.
     pub address: String,
     /// Host name exactly as the server sent it, colour codes included.
@@ -136,9 +142,17 @@ pub struct ServerInfo {
     /// Slots offered to the public, private slots already subtracted.
     pub max_clients: u16,
     pub needpass: bool,
+    // --- slice: game core ---
     /// `fs_game` of the server, `base` when the key is absent or empty.
-    pub game: String,
-    /// Network protocol; 26 is Jedi Academy 1.01.
+    ///
+    /// Called `game` on the wire until 0.3, when [`ServerInfo::game`] took the
+    /// name for the thing it actually describes. This one is the mod folder.
+    /// A row from a 0.2 cache has no `modName` and reads as `base` until the
+    /// next refresh answers with the real one.
+    #[serde(default = "base_mod")]
+    pub mod_name: String,
+    /// Network protocol: 26 is Jedi Academy 1.01, 15 is Jedi Outcast 1.02 and
+    /// 1.03, 16 is Jedi Outcast 1.04.
     pub protocol: u16,
     /// Round trip time of the `getinfo` that was answered.
     pub ping_ms: u32,
@@ -158,6 +172,7 @@ impl ServerInfo {
     /// `favorite` are left off here and set by [`ServerInfo::decorate`], which
     /// is what lets a cached row pick up a star the player added since.
     pub fn from_infostring(
+        game: Game,
         address: SocketAddrV4,
         infostring: &str,
         ping_ms: u32,
@@ -170,7 +185,7 @@ impl ServerInfo {
         let hostname_raw = info.get("hostname").cloned().unwrap_or_default();
         let clean = strip_colors(&hostname_raw).trim().to_string();
         let gametype = number(&info, "gametype").unwrap_or(0);
-        let game = info
+        let mod_name = info
             .get("game")
             .map(|value| value.trim())
             .filter(|value| !value.is_empty())
@@ -178,6 +193,7 @@ impl ServerInfo {
             .to_string();
 
         ServerInfo {
+            game,
             address: address.to_string(),
             hostname_clean: if clean.is_empty() {
                 address.to_string()
@@ -190,15 +206,19 @@ impl ServerInfo {
             // filter, the cache and the levelshot on the lowercase spelling.
             map: crate::levelshots::map_key(info.get("mapname").map_or("", String::as_str)),
             gametype,
-            gametype_label: gametype_label(gametype),
+            // --- slice: game core ---
+            // From the table of this game: number 7 is Siege in Jedi Academy
+            // and CTF in Jedi Outcast.
+            gametype_label: game.spec().gametype_label(gametype),
             clients,
             humans,
             bots,
             players_source,
             max_clients: number(&info, "sv_maxclients").unwrap_or(0),
             needpass: number::<i32>(&info, "needpass").unwrap_or(0) != 0,
-            game,
-            protocol: number(&info, "protocol").unwrap_or(PROTOCOL_VERSION),
+            mod_name,
+            protocol: number(&info, "protocol")
+                .unwrap_or_else(|| default_protocol(game)),
             ping_ms,
             trusted: false,
             favorite: false,
@@ -292,6 +312,43 @@ fn derive_players(
     }
 }
 
+// --- slice: game core ---
+/// The mod folder a row falls back to, here and in `from_infostring`.
+fn base_mod() -> String {
+    "base".to_string()
+}
+
+/// Reads the game of a cached row, tolerating what 0.2 put in that key.
+///
+/// Until 0.3 the key `game` held the mod folder — `base`, `japlus`, `mb2` — so
+/// a strict read of a 0.2 cache would fail on the first row and throw away a
+/// list of two hundred servers the player is about to look at. Anything that is
+/// not a game id reads as Jedi Academy, which is the only game a 0.2 cache can
+/// hold; `get_cached_servers` then overwrites the field with the game of the
+/// document it came out of.
+fn game_of_cached_row<'de, D>(deserializer: D) -> std::result::Result<Game, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Through `Value` rather than through `String`: any JSON value lands here
+    // without failing, and a failed read would leave the parser mid-row.
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(value.as_str().and_then(Game::from_id).unwrap_or_default())
+}
+
+/// What a row's protocol reads as when the server did not send the key.
+///
+/// The newest protocol of the game, because that is what the servers on the
+/// list run: 26 for Jedi Academy 1.01, 16 for Jedi Outcast 1.04.
+fn default_protocol(game: Game) -> u16 {
+    game.spec()
+        .master_protocols
+        .iter()
+        .copied()
+        .max()
+        .unwrap_or(PROTOCOL_VERSION)
+}
+
 /// Reads one key of an info string as a number, or `None` when it is missing
 /// or is not a number at all.
 fn number<T: std::str::FromStr>(info: &BTreeMap<String, String>, key: &str) -> Option<T> {
@@ -371,6 +428,10 @@ struct ServerCache {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BatchEvent {
+    // --- slice: game core ---
+    /// The game being refreshed. The event names keep their names, so a screen
+    /// showing one game reads this to know whether the batch is for it.
+    game: Game,
     servers: Vec<ServerInfo>,
 }
 
@@ -378,6 +439,8 @@ struct BatchEvent {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DoneEvent {
+    // --- slice: game core ---
+    game: Game,
     /// Addresses the masters returned.
     total: usize,
     /// How many of them answered `getinfo`.
@@ -409,22 +472,42 @@ pub struct PlayerInfo {
     pub is_bot: bool,
 }
 
-/// Reads `ip:port`, or `ip` with the stock server port.
-fn parse_address(address: &str) -> Result<SocketAddrV4> {
+/// Reads `ip:port`, or `ip` with the stock server port of this game.
+///
+/// --- slice: game core ---
+/// The two games listen on different ports — 29070 and 28070 — so an address a
+/// player typed without one cannot be completed without knowing the game.
+fn parse_address(game: Game, address: &str) -> Result<SocketAddrV4> {
     let address = address.trim();
     let with_port = if address.contains(':') {
         address.to_string()
     } else {
-        format!("{address}:{DEFAULT_SERVER_PORT}")
+        format!("{address}:{}", game.spec().server_port)
     };
     with_port
         .parse()
         .map_err(|_| AppError::InvalidInput(format!("`{address}` is not an IPv4 address and port")))
 }
 
-/// Path of the cache document for the settings in force right now.
-fn cache_file(state: &AppState) -> Result<PathBuf> {
-    Ok(state.paths()?.cache.join(CACHE_FILE))
+/// Path of the cache document of one game, for the settings in force right now.
+///
+/// --- slice: game core ---
+/// A Jedi Academy path also carries the one-game document over: `servers.json`
+/// is renamed to `servers-ja.json` the first time it is wanted, so the player
+/// opens 0.3 on the list 0.2 left rather than on an empty screen.
+fn cache_file(state: &AppState, game: Game) -> Result<PathBuf> {
+    let cache = state.paths()?.cache;
+    let file = cache.join(game.spec().server_cache_file);
+    if game == Game::JediAcademy && !file.exists() {
+        let legacy = cache.join(LEGACY_CACHE_FILE);
+        if legacy.is_file() {
+            match fs::rename(&legacy, &file) {
+                Ok(()) => log::info!("moved {} to {}", legacy.display(), file.display()),
+                Err(e) => log::warn!("cannot move {}: {e}", legacy.display()),
+            }
+        }
+    }
+    Ok(file)
 }
 
 /// Reads the cached list, or an empty one when there is no cache yet.
@@ -461,12 +544,17 @@ fn read_cache(file: &PathBuf) -> Vec<ServerInfo> {
 /// cache or an address nobody has scanned yet costs a friend the server name
 /// in their status line and nothing more.
 pub(crate) fn cached_name_for(state: &AppState, address: &str) -> Option<String> {
-    let file = cache_file(state).ok()?;
-    read_cache(&file)
-        .into_iter()
-        .find(|server| server.address == address)
-        .map(|server| server.hostname_clean)
-        .filter(|name| !name.trim().is_empty())
+    // --- slice: game core ---
+    // Both lists are searched: presence says where a friend is, and a friend
+    // playing the other game is still a friend on a server with a name.
+    Game::ALL.into_iter().find_map(|game| {
+        let file = cache_file(state, game).ok()?;
+        read_cache(&file)
+            .into_iter()
+            .find(|server| server.address == address)
+            .map(|server| server.hostname_clean)
+            .filter(|name| !name.trim().is_empty())
+    })
 }
 
 /// Writes the cache. A failure is logged, not returned: the player already has
@@ -521,17 +609,32 @@ fn emit<T: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: T) {
 /// This is what the Servers screen renders on its first frame, before the
 /// network answers anything. Declared `async` so the read of a list a thousand
 /// rows long happens off the main thread, where it would stall the window.
+/// --- slice: game core ---
+/// `game` picks the list; leaving it out means the active game. Each game has
+/// its own cache document, so the two never overwrite each other.
 #[tauri::command(async)]
 pub fn get_cached_servers(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
+    game: Option<Game>,
 ) -> Result<Vec<ServerInfo>> {
-    let file = cache_file(&state)?;
+    let settings = state.settings()?;
+    let game = settings.game_or_active(game);
+    let file = cache_file(&state, game)?;
     let trusted = trusted_index(&app);
-    let favorites: HashSet<String> = state.settings()?.favorite_servers.into_iter().collect();
+    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
 
     let mut servers = read_cache(&file);
     for server in &mut servers {
+        // A document written by 0.2 has no game on its rows, and serde fills
+        // the field with the default. Since it is the Jedi Academy document,
+        // the default is also the truth — but a row of the wrong game in the
+        // wrong file would label its gametypes from the wrong table, so the
+        // file decides rather than the row.
+        server.game = game;
+        // And the label is read from that game's table, so a 0.2 row keeps
+        // saying Siege rather than being relabelled by whatever it decoded to.
+        server.gametype_label = game.spec().gametype_label(server.gametype);
         server.decorate(&trusted, &favorites);
     }
     sort_rows(&mut servers);
@@ -540,24 +643,33 @@ pub fn get_cached_servers(
 
 /// Queries the master servers, pings every address and refreshes the cache.
 ///
-/// `masters` overrides the two stock master servers, which is what a test or a
-/// player behind a blocked DNS needs. An empty list falls back to the stock
-/// pair.
+/// `masters` overrides the stock master servers of the game, which is what a
+/// test or a player behind a blocked DNS needs. An empty list falls back to the
+/// stock ones.
 ///
 /// Fails only when no master answered at all: one dead master out of two is a
 /// normal day, and the list from the other one is worth showing.
+///
+/// --- slice: game core ---
+/// `game` picks whose masters are asked, whose protocols they are asked for and
+/// which cache document the answer lands in. Leaving it out means the active
+/// game.
 #[tauri::command]
 pub async fn refresh_servers(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
+    game: Option<Game>,
     masters: Option<Vec<String>>,
 ) -> Result<Vec<ServerInfo>> {
     let started = Instant::now();
     // Everything the shared state owns is copied out before the first await,
     // so a long refresh never holds a lock a settings write may be waiting on.
-    let file = cache_file(&state)?;
+    let settings = state.settings()?;
+    let game = settings.game_or_active(game);
+    let spec = game.spec();
+    let file = cache_file(&state, game)?;
     let trusted = trusted_index(&app);
-    let favorites: HashSet<String> = state.settings()?.favorite_servers.into_iter().collect();
+    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
 
     let masters: Vec<String> = masters
         .map(|list| {
@@ -567,16 +679,15 @@ pub async fn refresh_servers(
                 .collect::<Vec<_>>()
         })
         .filter(|list| !list.is_empty())
-        .unwrap_or_else(|| {
-            protocol::DEFAULT_MASTERS
-                .iter()
-                .map(|master| (*master).to_string())
-                .collect()
-        });
+        .unwrap_or_else(|| spec.masters.iter().map(|master| (*master).to_string()).collect());
 
-    let addresses = collect_addresses(&masters).await?;
+    let addresses = collect_addresses(&masters, spec.master_protocols).await?;
     let total = addresses.len();
-    log::info!("{total} addresses from {} master(s)", masters.len());
+    log::info!(
+        "{total} addresses from {} {} master(s)",
+        masters.len(),
+        game.display_name()
+    );
 
     let last_seen = timestamp::now_rfc3339();
     let semaphore = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
@@ -600,8 +711,13 @@ pub async fn refresh_servers(
         let Ok(Some((address, reply))) = joined else {
             continue;
         };
-        let mut server =
-            ServerInfo::from_infostring(address, &reply.infostring, reply.ping_ms, &last_seen);
+        let mut server = ServerInfo::from_infostring(
+            game,
+            address,
+            &reply.infostring,
+            reply.ping_ms,
+            &last_seen,
+        );
         server.decorate(&trusted, &favorites);
         batch.push(server.clone());
         collected.push(server);
@@ -611,6 +727,7 @@ pub async fn refresh_servers(
                 &app,
                 "servers:batch",
                 BatchEvent {
+                    game,
                     servers: std::mem::take(&mut batch),
                 },
             );
@@ -618,10 +735,10 @@ pub async fn refresh_servers(
         }
     }
     if !batch.is_empty() {
-        emit(&app, "servers:batch", BatchEvent { servers: batch });
+        emit(&app, "servers:batch", BatchEvent { game, servers: batch });
     }
 
-    resolve_bots_by_status(&app, &mut collected).await;
+    resolve_bots_by_status(&app, game, &mut collected).await;
 
     sort_rows(&mut collected);
     write_cache(&file, &collected);
@@ -632,8 +749,9 @@ pub async fn refresh_servers(
         .map(|server| u32::from(server.real_players()))
         .sum();
     log::info!(
-        "refresh: {} of {total} servers answered in {elapsed_ms} ms, \
+        "refresh ({}): {} of {total} servers answered in {elapsed_ms} ms, \
          {real_players} real players, {} servers running bots only",
+        game.display_name(),
         collected.len(),
         collected
             .iter()
@@ -644,6 +762,7 @@ pub async fn refresh_servers(
         &app,
         "servers:done",
         DoneEvent {
+            game,
             total,
             responded: collected.len(),
             elapsed_ms,
@@ -687,7 +806,15 @@ fn status_candidates(servers: &[ServerInfo], cap: usize) -> Vec<usize> {
 /// repaints the counts on a screen that is already showing the list.
 ///
 /// Returns how many servers answered.
-async fn resolve_bots_by_status(app: &tauri::AppHandle, servers: &mut [ServerInfo]) -> usize {
+/// --- slice: game core ---
+/// Jedi Outcast needs this pass more than Jedi Academy does: its `SVC_Info`
+/// has no `g_humanplayers` key at all, so every populated Jedi Outcast server
+/// arrives here.
+async fn resolve_bots_by_status(
+    app: &tauri::AppHandle,
+    game: Game,
+    servers: &mut [ServerInfo],
+) -> usize {
     let candidates = status_candidates(servers, MAX_STATUS_QUERIES);
     if candidates.is_empty() {
         return 0;
@@ -696,7 +823,7 @@ async fn resolve_bots_by_status(app: &tauri::AppHandle, servers: &mut [ServerInf
     let semaphore = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut probes = JoinSet::new();
     for index in candidates.iter().copied() {
-        let Ok(peer) = parse_address(&servers[index].address) else {
+        let Ok(peer) = parse_address(game, &servers[index].address) else {
             continue;
         };
         let gate = Arc::clone(&semaphore);
@@ -723,23 +850,46 @@ async fn resolve_bots_by_status(app: &tauri::AppHandle, servers: &mut [ServerInf
     );
     let answered = updated.len();
     if answered > 0 {
-        emit(app, "servers:batch", BatchEvent { servers: updated });
+        emit(
+            app,
+            "servers:batch",
+            BatchEvent {
+                game,
+                servers: updated,
+            },
+        );
     }
     answered
 }
 
-/// Asks every master at once and merges the answers.
+/// Asks every master for every protocol at once and merges the answers.
 ///
-/// The set deduplicates: the two masters share most of their entries, and a
-/// single master may repeat an address across datagrams.
-async fn collect_addresses(masters: &[String]) -> Result<Vec<SocketAddrV4>> {
+/// The set deduplicates: the masters of one game share most of their entries, a
+/// single master may repeat an address across datagrams, and — this is what the
+/// second protocol adds — a Jedi Outcast master answers `getservers 15` and
+/// `getservers 16` with two lists that overlap wherever a server runs a build
+/// both numbers describe.
+///
+/// --- slice: game core ---
+/// Jedi Academy asks for protocol 26 alone; Jedi Outcast asks for 15 (1.02 and
+/// 1.03) and 16 (1.04), because a master answers with the servers of the
+/// protocol it was asked about and neither list is the whole picture.
+///
+/// One protocol that fails on a master the other protocol answered is not a
+/// failure: the master is alive and the query counts.
+async fn collect_addresses(
+    masters: &[String],
+    protocols: &[u16],
+) -> Result<Vec<SocketAddrV4>> {
     let mut queries = JoinSet::new();
     for master in masters {
-        let master = master.clone();
-        queries.spawn(async move {
-            let found = net::query_master(&master, PROTOCOL_VERSION, MASTER_TIMEOUT).await;
-            (master, found)
-        });
+        for protocol in protocols.iter().copied() {
+            let master = master.clone();
+            queries.spawn(async move {
+                let found = net::query_master(&master, protocol, MASTER_TIMEOUT).await;
+                (master, protocol, found)
+            });
+        }
     }
 
     let mut merged: BTreeSet<SocketAddrV4> = BTreeSet::new();
@@ -747,12 +897,17 @@ async fn collect_addresses(masters: &[String]) -> Result<Vec<SocketAddrV4>> {
     let mut failures: Vec<String> = Vec::new();
     while let Some(joined) = queries.join_next().await {
         match joined {
-            Ok((master, Ok(found))) => {
-                log::info!("master {master} returned {} addresses", found.len());
+            Ok((master, protocol, Ok(found))) => {
+                log::info!(
+                    "master {master} returned {} addresses for protocol {protocol}",
+                    found.len()
+                );
                 answered += 1;
                 merged.extend(found);
             }
-            Ok((master, Err(e))) => failures.push(format!("{master} ({e})")),
+            Ok((master, protocol, Err(e))) => {
+                failures.push(format!("{master} protocol {protocol} ({e})"))
+            }
             Err(e) => failures.push(e.to_string()),
         }
     }
@@ -770,9 +925,18 @@ async fn collect_addresses(masters: &[String]) -> Result<Vec<SocketAddrV4>> {
 ///
 /// The Servers screen calls this when a row is selected, so it must stay a
 /// single short exchange: one datagram out, one back, no retry.
+///
+/// --- slice: game core ---
+/// `game` only completes an address the caller sent without a port; the
+/// exchange itself is the same on both games.
 #[tauri::command]
-pub async fn get_server_status(address: String) -> Result<ServerStatus> {
-    let peer = parse_address(&address)?;
+pub async fn get_server_status(
+    state: tauri::State<'_, AppState>,
+    address: String,
+    game: Option<Game>,
+) -> Result<ServerStatus> {
+    let game = state.settings()?.game_or_active(game);
+    let peer = parse_address(game, &address)?;
     let reply = net::query_status(peer, STATUS_TIMEOUT).await?;
     let players = protocol::parse_status_players(&reply.players)
         .into_iter()
@@ -816,13 +980,22 @@ fn edit_settings(
 
 /// Stars or unstars a server. Returns the settings so the frontend can update
 /// its cache without a second round trip.
+///
+/// --- slice: game core ---
+/// The starred list is one list for both games: an address carries its port,
+/// and the two games listen on different ones, so `1.2.3.4:28070` and
+/// `1.2.3.4:29070` are already two entries. `game` is here to complete an
+/// address typed without a port. Scoping the list itself is a question for the
+/// switcher slice, which is where a per-game History tab would be decided.
 #[tauri::command]
 pub fn set_server_favorite(
     state: tauri::State<'_, AppState>,
     address: String,
     favorite: bool,
+    game: Option<Game>,
 ) -> Result<Settings> {
-    let address = parse_address(&address)?.to_string();
+    let game = state.settings()?.game_or_active(game);
+    let address = parse_address(game, &address)?.to_string();
     edit_settings(&state, |settings| {
         settings.favorite_servers.retain(|kept| kept != &address);
         if favorite {
@@ -839,8 +1012,11 @@ pub fn set_server_favorite(
 pub fn add_server_history(
     state: tauri::State<'_, AppState>,
     address: String,
+    // --- slice: game core --- completes an address typed without a port.
+    game: Option<Game>,
 ) -> Result<Settings> {
-    let address = parse_address(&address)?.to_string();
+    let game = state.settings()?.game_or_active(game);
+    let address = parse_address(game, &address)?.to_string();
     let now = timestamp::now_rfc3339();
     edit_settings(&state, |settings| {
         settings
@@ -866,8 +1042,14 @@ mod tests {
         \\needpass\\1\\truejedi\\0\\wdisable\\0\\fdisable\\0\\game\\japlus";
 
     fn row(infostring: &str) -> ServerInfo {
+        game_row(Game::JediAcademy, "81.19.210.136:29070", infostring)
+    }
+
+    /// --- slice: game core --- one row of a named game and address.
+    fn game_row(game: Game, address: &str, infostring: &str) -> ServerInfo {
         ServerInfo::from_infostring(
-            "81.19.210.136:29070".parse().unwrap(),
+            game,
+            address.parse().unwrap(),
             infostring,
             42,
             "2026-09-10T00:00:00Z",
@@ -887,7 +1069,8 @@ mod tests {
         assert_eq!(server.humans, Some(5));
         assert_eq!(server.max_clients, 24);
         assert!(server.needpass);
-        assert_eq!(server.game, "japlus");
+        assert_eq!(server.mod_name, "japlus");
+        assert_eq!(server.game, Game::JediAcademy);
         assert_eq!(server.protocol, 26);
         assert_eq!(server.ping_ms, 42);
         assert!(!server.trusted);
@@ -900,7 +1083,7 @@ mod tests {
         assert_eq!(server.hostname_raw, "");
         // A nameless server is still identifiable by its address.
         assert_eq!(server.hostname_clean, "81.19.210.136:29070");
-        assert_eq!(server.game, "base");
+        assert_eq!(server.mod_name, "base");
         assert_eq!(server.gametype_label, "FFA");
         // An empty server has no bots either, so the split is known even
         // without `g_humanplayers`.
@@ -928,7 +1111,7 @@ mod tests {
         assert_eq!(server.gametype_label, "Team FFA");
         // `needpass` is a number in the protocol, so a word means "not set".
         assert!(!server.needpass);
-        assert_eq!(server.game, "base");
+        assert_eq!(server.mod_name, "base");
     }
 
     #[test]
@@ -1134,17 +1317,237 @@ mod tests {
     #[test]
     fn reads_an_address_with_and_without_a_port() {
         assert_eq!(
-            parse_address("81.19.210.136").unwrap().to_string(),
+            parse_address(Game::JediAcademy, "81.19.210.136").unwrap().to_string(),
             "81.19.210.136:29070"
         );
         assert_eq!(
-            parse_address("  81.19.210.136:29071 ").unwrap().to_string(),
+            parse_address(Game::JediAcademy, "  81.19.210.136:29071 ").unwrap().to_string(),
             "81.19.210.136:29071"
         );
-        assert!(parse_address("not-an-address").is_err());
-        assert!(parse_address("").is_err());
+        assert!(parse_address(Game::JediAcademy, "not-an-address").is_err());
+        assert!(parse_address(Game::JediAcademy, "").is_err());
         // IPv6 is out of scope: the master's record format cannot carry it.
-        assert!(parse_address("[::1]:29070").is_err());
+        assert!(parse_address(Game::JediAcademy, "[::1]:29070").is_err());
+    }
+
+    // --- slice: game core ---
+
+    #[test]
+    fn a_jedi_outcast_row_is_labelled_from_its_own_table() {
+        // Number 7 is Siege in Jedi Academy and CTF in Jedi Outcast, and the
+        // same row would be wrong in one of the two games either way.
+        let jo = game_row(
+            Game::JediOutcast,
+            "81.19.210.136:28070",
+            "\\hostname\\JK2 CTF\\mapname\\ctf_yavin\\gametype\\7\\clients\\4\\game\\base",
+        );
+        assert_eq!(jo.game, Game::JediOutcast);
+        assert_eq!(jo.gametype_label, "CTF");
+        // Jedi Outcast map names carry no `mp/` prefix.
+        assert_eq!(jo.map, "ctf_yavin");
+        assert_eq!(jo.mod_name, "base");
+        // No `protocol` key means 1.04, the build the servers run.
+        assert_eq!(jo.protocol, 16);
+
+        let ja = row("\\hostname\\Siege\\gametype\\7\\clients\\4");
+        assert_eq!(ja.gametype_label, "Siege");
+        assert_eq!(ja.protocol, 26);
+
+        // Saga is Jedi Outcast's own, and Jedi Academy has nothing at 6.
+        assert_eq!(
+            game_row(Game::JediOutcast, "1.2.3.4:28070", "\\gametype\\6").gametype_label,
+            "Saga"
+        );
+        assert_eq!(row("\\gametype\\6").gametype_label, "Team FFA");
+    }
+
+    #[test]
+    fn a_populated_jedi_outcast_server_always_needs_a_player_list() {
+        // Jedi Outcast's `SVC_Info` has no `g_humanplayers` key at all, so
+        // every Jedi Outcast server with somebody on it goes through the
+        // second pass. The rule is the one Jedi Academy already uses; this
+        // pins that it still holds for a game that can never send the key.
+        let busy = game_row(Game::JediOutcast, "1.2.3.4:28070", "\\clients\\6");
+        assert!(busy.needs_status());
+        assert_eq!(busy.players_source, PlayersSource::Unknown);
+
+        // An empty one still needs nothing: no clients, no bots.
+        let quiet = game_row(Game::JediOutcast, "1.2.3.4:28070", "\\clients\\0");
+        assert!(!quiet.needs_status());
+        assert_eq!(quiet.humans, Some(0));
+    }
+
+    #[test]
+    fn each_game_has_its_own_cache_document() {
+        assert_eq!(Game::JediAcademy.spec().server_cache_file, "servers-ja.json");
+        assert_eq!(Game::JediOutcast.spec().server_cache_file, "servers-jo.json");
+
+        // And a round trip through one of them keeps the game of its rows.
+        let file = std::env::temp_dir()
+            .join("jknet-test-cache-jo")
+            .join("servers-jo.json");
+        let _ = fs::remove_file(&file);
+        write_cache(
+            &file,
+            &[game_row(Game::JediOutcast, "1.2.3.4:28070", "\\clients\\0")],
+        );
+        let read = read_cache(&file);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].game, Game::JediOutcast);
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_row_written_by_0_2_survives_the_key_that_changed_meaning() {
+        // Until 0.3 the key `game` held the mod folder. A strict read would
+        // fail on the first row and throw a list of two hundred servers away,
+        // so anything that is not a game id has to read as Jedi Academy.
+        let old = "{\"updatedAt\":\"2026-09-10T00:00:00Z\",\"servers\":[{\
+            \"address\":\"81.19.210.136:29070\",\"hostnameRaw\":\"Blue\",\
+            \"hostnameClean\":\"Blue\",\"map\":\"mp/ffa3\",\"gametype\":0,\
+            \"gametypeLabel\":\"FFA\",\"clients\":6,\"humans\":4,\
+            \"maxClients\":32,\"needpass\":false,\"game\":\"japlus\",\
+            \"protocol\":26,\"pingMs\":40,\"trusted\":false,\"favorite\":false,\
+            \"lastSeen\":\"2026-09-10T00:00:00Z\"}]}";
+        let file = std::env::temp_dir().join("jknet-test-0-2-cache.json");
+        fs::write(&file, old).unwrap();
+
+        let read = read_cache(&file);
+        assert_eq!(read.len(), 1, "the whole list must survive");
+        assert_eq!(read[0].game, Game::JediAcademy);
+        // The mod folder is lost until the next refresh, which is a second of
+        // a wrong badge rather than an empty screen.
+        assert_eq!(read[0].mod_name, "base");
+        assert_eq!(read[0].hostname_clean, "Blue");
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn an_address_without_a_port_gets_the_port_of_its_game() {
+        assert_eq!(
+            parse_address(Game::JediAcademy, "81.19.210.136").unwrap().to_string(),
+            "81.19.210.136:29070"
+        );
+        assert_eq!(
+            parse_address(Game::JediOutcast, "81.19.210.136").unwrap().to_string(),
+            "81.19.210.136:28070"
+        );
+        // A port the player typed always wins over the default of the game.
+        assert_eq!(
+            parse_address(Game::JediOutcast, "81.19.210.136:29070").unwrap().to_string(),
+            "81.19.210.136:29070"
+        );
+    }
+
+    /// Builds a `getserversResponse` datagram the way a master server does.
+    fn master_datagram(servers: &[&str]) -> Vec<u8> {
+        let mut packet = Vec::new();
+        packet.extend_from_slice(&[0xff, 0xff, 0xff, 0xff]);
+        packet.extend_from_slice(b"getserversResponse");
+        for entry in servers {
+            let peer: SocketAddrV4 = entry.parse().expect("an address");
+            packet.push(b'\\');
+            packet.extend_from_slice(&peer.ip().octets());
+            packet.extend_from_slice(&peer.port().to_be_bytes());
+        }
+        packet.extend_from_slice(b"\\EOT\0\0\0");
+        packet
+    }
+
+    /// A master server on localhost that answers one address list per protocol.
+    ///
+    /// Local only, so this runs without the internet. It exists because the
+    /// two-protocol fan-out is the one thing about the Jedi Outcast list that
+    /// cannot be checked by reading a struct: the merge happens across two
+    /// answers to two different questions.
+    async fn stub_master(answers: &'static [(u16, &'static [&'static str])]) -> String {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+            .await
+            .expect("a socket");
+        let address = socket.local_addr().expect("an address").to_string();
+        tokio::spawn(async move {
+            let mut buffer = vec![0u8; 2048];
+            // Answers requests until the caller's budget runs out and the test
+            // that owns the runtime goes away with it.
+            while let Ok(Ok((read, from))) = tokio::time::timeout(
+                Duration::from_millis(1_200),
+                socket.recv_from(&mut buffer),
+            )
+            .await
+            {
+                let request = String::from_utf8_lossy(&buffer[4..read]).to_string();
+                let Some(protocol) = request
+                    .strip_prefix("getservers ")
+                    .and_then(|number| number.trim().parse::<u16>().ok())
+                else {
+                    continue;
+                };
+                let Some((_, servers)) =
+                    answers.iter().find(|(number, _)| *number == protocol)
+                else {
+                    continue;
+                };
+                let _ = socket.send_to(&master_datagram(servers), from).await;
+            }
+        });
+        address
+    }
+
+    #[tokio::test]
+    async fn a_jedi_outcast_refresh_merges_the_lists_of_both_protocols() {
+        // 15 is 1.02 and 1.03, 16 is 1.04. A master answers with the servers
+        // of the protocol it was asked about, so neither list is the whole
+        // picture — and the server that runs a build both numbers describe
+        // appears in both and must be listed once.
+        static ANSWERS: &[(u16, &[&str])] = &[
+            (15, &["10.0.0.1:28070", "10.0.0.2:28070"]),
+            (16, &["10.0.0.2:28070", "10.0.0.3:28070"]),
+        ];
+        let master = stub_master(ANSWERS).await;
+
+        let found = collect_addresses(std::slice::from_ref(&master), &[15, 16])
+            .await
+            .expect("the stub answers");
+        let listed: Vec<String> = found.iter().map(|peer| peer.to_string()).collect();
+        assert_eq!(
+            listed,
+            vec!["10.0.0.1:28070", "10.0.0.2:28070", "10.0.0.3:28070"],
+            "the union, sorted and without the duplicate"
+        );
+
+        // Asking for one protocol gets one list, which is what proves the
+        // merge above came from the second question and not from the stub.
+        let only_15 = collect_addresses(&[master], &[15])
+            .await
+            .expect("the stub answers");
+        assert_eq!(only_15.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_master_that_answers_one_protocol_is_not_a_failed_refresh() {
+        // A master that knows nothing about protocol 15 simply says nothing
+        // about it. The refresh has an answer and must not report an outage.
+        static ANSWERS: &[(u16, &[&str])] = &[(16, &["10.0.0.9:28070"])];
+        let master = stub_master(ANSWERS).await;
+
+        let found = collect_addresses(&[master], &[15, 16])
+            .await
+            .expect("one protocol answering is enough");
+        assert_eq!(found.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_refresh_with_nothing_to_ask_fails_rather_than_reporting_an_empty_world() {
+        // Port 1 on localhost answers nothing, and "no server is online" is a
+        // different sentence from "the masters are unreachable".
+        let failure = collect_addresses(&["127.0.0.1:1".to_string()], &[15, 16])
+            .await
+            .expect_err("nothing answered");
+        let text = failure.to_string();
+        assert!(text.contains("no master server answered"), "{text}");
+        // Both questions are named, so a log line says which one went where.
+        assert!(text.contains("protocol 15"), "{text}");
+        assert!(text.contains("protocol 16"), "{text}");
     }
 
     #[test]
@@ -1182,16 +1585,21 @@ mod tests {
     #[tokio::test]
     #[ignore = "queries the live master servers"]
     async fn each_master_answers_on_its_own() {
-        for master in protocol::DEFAULT_MASTERS {
-            let started = Instant::now();
-            let found = net::query_master(master, PROTOCOL_VERSION, MASTER_TIMEOUT).await;
-            match found {
-                Ok(addresses) => println!(
-                    "{master}: {} addresses in {} ms",
-                    addresses.len(),
-                    started.elapsed().as_millis()
-                ),
-                Err(e) => println!("{master}: {e}"),
+        for game in Game::ALL {
+            let spec = game.spec();
+            for master in spec.masters {
+                for protocol in spec.master_protocols.iter().copied() {
+                    let started = Instant::now();
+                    let found = net::query_master(master, protocol, MASTER_TIMEOUT).await;
+                    match found {
+                        Ok(addresses) => println!(
+                            "{master} protocol {protocol}: {} addresses in {} ms",
+                            addresses.len(),
+                            started.elapsed().as_millis()
+                        ),
+                        Err(e) => println!("{master} protocol {protocol}: {e}"),
+                    }
+                }
             }
         }
     }
@@ -1206,11 +1614,9 @@ mod tests {
     #[ignore = "queries the live master servers"]
     async fn talks_to_the_real_masters() {
         let started = Instant::now();
-        let masters: Vec<String> = protocol::DEFAULT_MASTERS
-            .iter()
-            .map(|master| (*master).to_string())
-            .collect();
-        let addresses = collect_addresses(&masters)
+        let spec = Game::JediAcademy.spec();
+        let masters: Vec<String> = spec.masters.iter().map(|m| (*m).to_string()).collect();
+        let addresses = collect_addresses(&masters, spec.master_protocols)
             .await
             .expect("at least one master must answer");
         println!("masters returned {} unique addresses", addresses.len());
@@ -1232,6 +1638,7 @@ mod tests {
         while let Some(joined) = probes.join_next().await {
             if let Ok(Some((address, reply))) = joined {
                 answered.push(ServerInfo::from_infostring(
+                    Game::JediAcademy,
                     address,
                     &reply.infostring,
                     reply.ping_ms,
@@ -1268,7 +1675,7 @@ mod tests {
             .find(|server| server.clients > 0)
             .expect("at least one server must have a player on it");
         let status = net::query_status(
-            parse_address(&busiest.address).unwrap(),
+            parse_address(Game::JediAcademy, &busiest.address).unwrap(),
             MASTER_TIMEOUT,
         )
         .await
@@ -1301,11 +1708,9 @@ mod tests {
     #[tokio::test]
     #[ignore = "queries the live master servers"]
     async fn measures_the_bot_scan() {
-        let masters: Vec<String> = protocol::DEFAULT_MASTERS
-            .iter()
-            .map(|master| (*master).to_string())
-            .collect();
-        let addresses = collect_addresses(&masters)
+        let spec = Game::JediAcademy.spec();
+        let masters: Vec<String> = spec.masters.iter().map(|m| (*m).to_string()).collect();
+        let addresses = collect_addresses(&masters, spec.master_protocols)
             .await
             .expect("at least one master must answer");
 
@@ -1330,6 +1735,7 @@ mod tests {
                     no_key += 1;
                 }
                 answered.push(ServerInfo::from_infostring(
+                    Game::JediAcademy,
                     address,
                     &reply.infostring,
                     reply.ping_ms,
@@ -1357,7 +1763,7 @@ mod tests {
         let gate = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
         let mut probes = JoinSet::new();
         for index in candidates {
-            let peer = parse_address(&answered[index].address).unwrap();
+            let peer = parse_address(Game::JediAcademy, &answered[index].address).unwrap();
             let permit_source = Arc::clone(&gate);
             probes.spawn(async move {
                 let _permit = permit_source.acquire_owned().await.ok()?;

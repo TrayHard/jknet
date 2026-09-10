@@ -25,15 +25,54 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// --- slice: game core ---
+// The `game` dimension. JKNet launches two games, and every entity that
+// differs between them carries this attribute. The entity model is unchanged:
+// engine, client, library file.
+// ---------------------------------------------------------------------------
+
+/** `src-tauri/src/game.rs`: `ja` is Jedi Academy, `jo` is Jedi Outcast. */
+export type Game = "ja" | "jo";
+
+/** Both games, in the order the interface lists them. */
+export const GAMES: readonly Game[] = ["ja", "jo"];
+
+/** `src-tauri/src/game.rs`: one game with the names the interface prints. */
+export interface GameInfo {
+  id: Game;
+  /** «Jedi Academy», for a heading or a settings row. */
+  displayName: string;
+  /** `JA`, for a badge. */
+  shortName: string;
+  /** The archives `<GameData>\base` must hold. */
+  requiredAssets: string[];
+  /** The patch the servers run, `null` when every install is equally good. */
+  wantedVersion: string | null;
+  steamAppId: number;
+  serverPort: number;
+}
+
+// ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
 
 /** `src-tauri/src/settings.rs`. */
 export interface Settings {
-  /** Folder with `base\assets0.pk3`..`assets3.pk3`, confirmed by the user. */
-  gameDataPath: string | null;
-  /** Client the Play button starts. */
+  // --- slice: game core ---
+  /**
+   * The `GameData` folder of each game, confirmed by the user. A game with no
+   * entry has not been set up.
+   *
+   * Replaces the single `gameDataPath` of 0.2, whose value the core files
+   * under `ja` the first time it reads an older document.
+   */
+  gameDataPaths: Partial<Record<Game, string>>;
+  /** The game every screen works in. The sidebar switcher writes it next. */
+  activeGame: Game;
+  /** Client the Play button starts. Not scoped by game yet. */
   defaultClientId: string | null;
+  /** The default client of each game, what the switcher slice will read. */
+  defaultClientIds: Partial<Record<Game, string>>;
   /** Hide the launcher while the game runs. */
   closeOnLaunch: boolean;
   /** Absolute path that replaces the default data folder. */
@@ -69,8 +108,19 @@ export interface Settings {
  * of the three nullable fields.
  */
 export interface SettingsPatch {
+  // --- slice: game core ---
+  /**
+   * Per-game folders, merged one game at a time. A game the object does not
+   * mention keeps its folder; a game mapped to `null` loses it. Send the row
+   * that changed, never the whole object.
+   */
+  gameDataPaths?: Partial<Record<Game, string | null>>;
+  activeGame?: Game;
+  /** The 0.2 field, still accepted: it writes the `ja` entry above. */
   gameDataPath?: string | null;
   defaultClientId?: string | null;
+  /** Per-game default clients, merged the same way as the folders. */
+  defaultClientIds?: Partial<Record<Game, string | null>>;
   closeOnLaunch?: boolean;
   dataDirOverride?: string | null;
   extraLaunchArgs?: string;
@@ -108,14 +158,35 @@ export interface AssetFile {
   name: string;
   present: boolean;
   size: number | null;
+  // --- slice: game core ---
+  /** False for an archive a patch adds; its absence costs a version, not
+   * validity. */
+  required: boolean;
 }
 
 export interface GameFilesCandidate {
+  // --- slice: game core ---
+  /** The game this folder was checked against. */
+  game: Game;
   path: string;
   source: GameFilesSource;
   assets: AssetFile[];
-  /** True when all four asset archives are in place. */
+  /** True when every required archive is in place. */
   valid: boolean;
+  // --- slice: game core ---
+  /** Patch level read off the archives: `1.04`. `null` for Jedi Academy,
+   * whose builds carry the same four files. */
+  version: string | null;
+  /** One sentence about a copy that works but is not what the servers run —
+   * a Jedi Outcast install without the 1.04 patch. */
+  warning: string | null;
+}
+
+// --- slice: game core ---
+/** What `detect_game_files` answers with: the candidates of both games. */
+export interface DetectedGameFiles {
+  ja: GameFilesCandidate[];
+  jo: GameFilesCandidate[];
 }
 
 // ---------------------------------------------------------------------------
@@ -125,10 +196,14 @@ export interface GameFilesCandidate {
 /** A community build of the game client. */
 export interface Engine {
   id: string;
+  // --- slice: game core ---
+  /** The game this build plays. An engine belongs to exactly one. */
+  game: Game;
   name: string;
   description: string;
   executable: string;
   repo: string;
+  /** The build offered to a player of this game who has no preference. */
   recommended: boolean;
   /** False when the project publishes no archive JKNet can install. */
   installable: boolean;
@@ -136,6 +211,10 @@ export interface Engine {
   notInstallableReason: string | null;
   /** Mod folder the build needs as `+set fs_game`. jaMME runs in `mme`. */
   defaultFsGame: string | null;
+  // --- slice: game core ---
+  /** Folder whose pk3 files the installer copies into the client's `home\`.
+   * Only JK2MV needs it. */
+  bundledPk3Dir: string | null;
 }
 
 /** A named instance of an engine with its own files and settings. */
@@ -143,6 +222,9 @@ export interface Client {
   id: string;
   name: string;
   engineId: string;
+  // --- slice: game core ---
+  /** The game this client plays, always the game of its engine. */
+  game: Game;
   engineVersion: string | null;
   createdAt: string;
   /** RFC 3339 time the engine was unpacked. */
@@ -164,15 +246,29 @@ export const ipc = {
     call<Settings>("update_settings", { patch }),
   getDataPaths: () => call<DataPaths>("get_data_paths"),
 
-  detectGameFiles: () => call<GameFilesCandidate[]>("detect_game_files"),
-  inspectGameFiles: (path: string) =>
-    call<GameFilesCandidate>("inspect_game_files", { path }),
+  // --- slice: game core ---
+  /** Both games with the names the interface prints. Static, ask once. */
+  listGames: () => call<GameInfo[]>("list_games"),
 
-  listEngines: () => call<Engine[]>("list_engines"),
+  /** Candidates of both games at once, best first within each. */
+  detectGameFiles: () => call<DetectedGameFiles>("detect_game_files"),
+  /**
+   * Checks one folder against one game.
+   *
+   * Called `inspect_game_files` until 0.3, when it gained the game: a Jedi
+   * Outcast folder and a Jedi Academy folder look alike from the outside, and
+   * a check that guessed would call the wrong copy broken.
+   */
+  validateGameData: (game: Game, path: string) =>
+    call<GameFilesCandidate>("validate_game_data", { game, path }),
+
+  /** Every engine, or the engines of one game. The registry is static, so the
+   * screens ask once without a game and filter the answer themselves. */
+  listEngines: (game?: Game) => call<Engine[]>("list_engines", { game: game ?? null }),
 
   listClients: () => call<Client[]>("list_clients"),
-  createClient: (name: string, engineId: string) =>
-    call<Client>("create_client", { name, engineId }),
+  createClient: (name: string, engineId: string, game: Game) =>
+    call<Client>("create_client", { name, engineId, game }),
   /**
    * Changes the name, the mod folder, or both. A field left out keeps its
    * value; an empty `fsGame` clears it back to the default of the engine.
@@ -419,6 +515,10 @@ export type PlayersSource = "info" | "status" | "unknown";
 
 /** `src-tauri/src/servers/mod.rs`: one row of the browser. */
 export interface ServerInfo {
+  // --- slice: game core ---
+  /** Which game this server runs. A row comes from the master list of one
+   * game, so it is never in doubt. */
+  game: Game;
   /** `ip:port`, the key of the row everywhere in the launcher. */
   address: string;
   /** Host name as the server sent it, `^1`-style colour codes included. */
@@ -442,9 +542,11 @@ export interface ServerInfo {
   playersSource: PlayersSource;
   maxClients: number;
   needpass: boolean;
-  /** `fs_game`, `base` when the server runs no mod. */
-  game: string;
-  /** 26 is Jedi Academy 1.01. */
+  // --- slice: game core ---
+  /** `fs_game`, `base` when the server runs no mod. Called `game` until 0.3,
+   * when that name went to the field above. */
+  modName: string;
+  /** 26 is Jedi Academy 1.01; 15 and 16 are Jedi Outcast 1.02/1.03 and 1.04. */
   protocol: number;
   pingMs: number;
   /** Listed in the bundled `trusted_servers.json`. */
@@ -484,11 +586,17 @@ export interface ServerStatus {
 
 /** Payload of the `servers:batch` event. */
 export interface ServersBatchEvent {
+  // --- slice: game core ---
+  /** The game being refreshed: the event names stayed, the payload says
+   * whose rows these are. */
+  game: Game;
   servers: ServerInfo[];
 }
 
 /** Payload of the `servers:done` event, emitted once per refresh. */
 export interface ServersDoneEvent {
+  // --- slice: game core ---
+  game: Game;
   /** Addresses the masters returned. */
   total: number;
   /** How many of them answered `getinfo`. */
@@ -496,18 +604,30 @@ export interface ServersDoneEvent {
   elapsedMs: number;
 }
 
+/**
+ * The server browser.
+ *
+ * --- slice: game core ---
+ * Every call takes an optional `game`. Leaving it out means the active game,
+ * which the core reads from the settings, so a screen that has not been scoped
+ * yet keeps working.
+ */
 export const serversIpc = {
-  getCachedServers: () => call<ServerInfo[]>("get_cached_servers"),
-  /** `masters` overrides the two stock master servers. */
-  refreshServers: (masters?: string[]) =>
-    call<ServerInfo[]>("refresh_servers", { masters: masters ?? null }),
-  getServerStatus: (address: string) =>
-    call<ServerStatus>("get_server_status", { address }),
+  getCachedServers: (game?: Game) =>
+    call<ServerInfo[]>("get_cached_servers", { game: game ?? null }),
+  /** `masters` overrides the stock master servers of the game. */
+  refreshServers: (game?: Game, masters?: string[]) =>
+    call<ServerInfo[]>("refresh_servers", {
+      game: game ?? null,
+      masters: masters ?? null,
+    }),
+  getServerStatus: (address: string, game?: Game) =>
+    call<ServerStatus>("get_server_status", { address, game: game ?? null }),
   listTrustedServers: () => call<TrustedServer[]>("list_trusted_servers"),
-  setServerFavorite: (address: string, favorite: boolean) =>
-    call<Settings>("set_server_favorite", { address, favorite }),
-  addServerHistory: (address: string) =>
-    call<Settings>("add_server_history", { address }),
+  setServerFavorite: (address: string, favorite: boolean, game?: Game) =>
+    call<Settings>("set_server_favorite", { address, favorite, game: game ?? null }),
+  addServerHistory: (address: string, game?: Game) =>
+    call<Settings>("add_server_history", { address, game: game ?? null }),
 };
 
 // ---------------------------------------------------------------------------
@@ -533,10 +653,18 @@ export interface LevelshotStats {
 }
 
 export const levelshotsIpc = {
-  /** `null` when nothing the player owns has a picture of this map. */
-  getLevelshot: (map: string) =>
-    call<Levelshot | null>("get_levelshot", { map }),
+  /**
+   * `null` when nothing the player owns has a picture of this map.
+   *
+   * --- slice: game core ---
+   * `game` says whose map it is; leaving it out means the active game. The
+   * same name is a different picture in the two games — `ffa_bespin` exists in
+   * both — so the index keys on `<game>/<map>` and so does this call.
+   */
+  getLevelshot: (map: string, game?: Game) =>
+    call<Levelshot | null>("get_levelshot", { map, game: game ?? null }),
   rebuildLevelshots: () => call<LevelshotStats>("rebuild_levelshots"),
+  /** Every indexed map, as `<game>/<map>` keys. */
   listLevelshots: () => call<string[]>("list_levelshots"),
 };
 

@@ -27,14 +27,18 @@ pub const OOB_HEADER: [u8; 4] = [0xff, 0xff, 0xff, 0xff];
 
 /// Network protocol of Jedi Academy 1.01, the only build the community plays.
 /// `PROTOCOL_VERSION` in `codemp/qcommon/qcommon.h:214`.
+///
+/// --- slice: game core ---
+/// Only a fallback now: which protocols a refresh asks for comes from
+/// [`crate::game::GameSpec::master_protocols`], because Jedi Outcast needs two.
+/// This constant is what an `infoResponse` without a `protocol` key reads as,
+/// and a Jedi Academy row is the only one that can lack it in practice.
 pub const PROTOCOL_VERSION: u16 = 26;
 
-/// Default port of both master servers, `PORT_MASTER` in `qcommon.h:222`.
+/// Default port of the Jedi Academy master servers, `PORT_MASTER` in
+/// `qcommon.h:222`. The Jedi Outcast masters carry their port in the address:
+/// theirs is 28060.
 pub const MASTER_PORT: u16 = 29060;
-
-/// The master servers a stock client asks, `sv_master1` and `sv_master2` in
-/// `codemp/server/sv_init.cpp:989`.
-pub const DEFAULT_MASTERS: &[&str] = &["masterjk3.ravensoft.com", "master.jkhub.org"];
 
 /// Builds a connectionless datagram: the four `0xff` bytes and the text.
 ///
@@ -164,30 +168,11 @@ pub fn strip_colors(text: &str) -> String {
     out
 }
 
-/// Labels of `gametype_t`, in the order of `codemp/game/bg_public.h:234`.
-const GAMETYPE_LABELS: [&str; 10] = [
-    "FFA",
-    "Holocron",
-    "Jedi Master",
-    "Duel",
-    "Power Duel",
-    "Single Player",
-    "Team FFA",
-    "Siege",
-    "CTF",
-    "CTY",
-];
-
-/// Turns a `gametype` number into the label the browser shows.
-///
-/// Mods invent their own numbers above the enum, so an unknown value keeps its
-/// digits instead of pretending to be FFA.
-pub fn gametype_label(gametype: u8) -> String {
-    GAMETYPE_LABELS
-        .get(gametype as usize)
-        .map(|label| (*label).to_string())
-        .unwrap_or_else(|| format!("Mode {gametype}"))
-}
+// --- slice: game core ---
+// The `gametype_t` tables moved to `crate::game`: the two games agree on the
+// first four numbers and disagree on every one above them, so a single table
+// would label a Jedi Outcast Saga server "Siege". Read them through
+// `game.spec().gametype_label(n)`.
 
 /// One row of a `statusResponse` player list.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -407,18 +392,6 @@ mod tests {
         assert_eq!(strip_colors("^^1x"), "^x");
         assert_eq!(strip_colors("2^2 vs ^a b^"), "2 vs ^a b^");
         assert_eq!(strip_colors("^"), "^");
-    }
-
-    #[test]
-    fn maps_every_gametype_of_the_enum() {
-        assert_eq!(gametype_label(0), "FFA");
-        assert_eq!(gametype_label(3), "Duel");
-        assert_eq!(gametype_label(4), "Power Duel");
-        assert_eq!(gametype_label(6), "Team FFA");
-        assert_eq!(gametype_label(7), "Siege");
-        assert_eq!(gametype_label(9), "CTY");
-        assert_eq!(gametype_label(10), "Mode 10");
-        assert_eq!(gametype_label(200), "Mode 200");
     }
 
     #[test]

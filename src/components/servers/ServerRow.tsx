@@ -127,8 +127,8 @@ export function ServerRow({
 
       <Ping ms={server.pingMs} />
 
-      <span className="text-mono-xs text-fg-muted truncate" title={server.game}>
-        {server.game}
+      <span className="text-mono-xs text-fg-muted truncate" title={server.modName}>
+        {server.modName}
       </span>
     </div>
   );
