@@ -28,10 +28,16 @@
 //! a missing entry is rebuilt by inspecting the pk3, so deleting the sidecar
 //! costs nothing but the display names.
 //!
+//! This module reads `home\` and nothing else. A Jedi Outcast client has a
+//! second root of its own, `clients\<slug>\basepath\`, whose `base` entry is a
+//! junction into the player's game folder — see
+//! [`crate::launch::prepare_basepath`]. Neither the scan nor any command here
+//! goes near it: everything below starts at `home\`, one level down, so the
+//! retail archives never appear in the library and no toggle can rename one.
+//!
 //! --- slice: game core ---
 //! One class of file in `home\base\` is not the player's. A Jedi Outcast
-//! client runs with the game folder on `fs_basepath`, which leaves the
-//! unpacked build off the search path, so
+//! client keeps the unpacked build off the search path, so
 //! [`crate::engine_install::sync_engine_archives`] mirrors JK2MV's own
 //! `assetsmv.pk3` and `assetsmv2.pk3` into `home\base\` before every launch.
 //! Those copies are part of the engine: this module hides them from the list,
@@ -1579,6 +1585,28 @@ mod tests {
             vec!["mv/assetsmv.pk3"]
         );
         assert!(set_enabled(&data, "jk2", "mv/assetsmv.pk3", false).is_ok());
+    }
+
+    #[test]
+    fn the_base_root_of_a_jedi_outcast_client_is_not_part_of_the_library() {
+        // `basepath\base` is a junction into the player's game folder. A scan
+        // that reached it would list the retail archives as the player's own,
+        // and the toggle on the card would try to rename one of them.
+        let root = TempRoot::new("basepath-out-of-the-library");
+        let (data, home) = root.jedi_outcast_client("jk2");
+        write_pk3(&home.join("skin.pk3"), &["models/players/jaden/model.glm"]);
+
+        let base_root = data.client_dir("jk2").join("basepath").join("base");
+        fs::create_dir_all(&base_root).expect("the base root");
+        write_pk3(&base_root.join("assets0.pk3"), &["models/players/kyle/model.glm"]);
+
+        let items = read_library(&data, "jk2").expect("list");
+        assert_eq!(
+            items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            vec!["base/skin.pk3"],
+            "the scan starts at home\\ and goes one level down"
+        );
+        assert_eq!(conflicts(&data, "jk2").expect("conflicts").total, 0);
     }
 
     #[test]

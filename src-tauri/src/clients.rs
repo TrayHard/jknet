@@ -10,10 +10,18 @@
 //! clients\<slug>\client.json   the record below
 //! clients\<slug>\engine\       engine files, filled by the installer later
 //! clients\<slug>\home\base\    fs_homepath: configs, screenshots, mod folders
+//! clients\<slug>\basepath\     fs_basepath of a Jedi Outcast client only,
+//!                              built at launch by launch::prepare_basepath
 //! ```
 //!
 //! The slug is derived from the first name and never changes afterwards, so a
 //! rename cannot break a path that something else already stored.
+//!
+//! --- slice: game core ---
+//! `basepath\base` is a directory junction into the player's game folder, and
+//! that makes deleting a client the most dangerous operation in the launcher.
+//! [`remove_client_dir`] unlinks it first and refuses to recurse if that
+//! fails.
 
 use std::fs;
 use std::path::Path;
@@ -179,7 +187,7 @@ pub fn delete_client(state: tauri::State<'_, AppState>, id: String) -> Result<()
     if !dir.is_dir() {
         return Err(AppError::NotFound(format!("client {id}")));
     }
-    fs::remove_dir_all(&dir).map_err(|e| AppError::io_path("cannot delete", &dir, e))?;
+    remove_client_dir(&dir)?;
     log::info!("deleted client {id}");
 
     // A deleted client must not stay the default one, of the launcher or of
@@ -200,6 +208,40 @@ pub fn delete_client(state: tauri::State<'_, AppState>, id: String) -> Result<()
         state.set_settings(settings)?;
     }
     Ok(())
+}
+
+// --- slice: game core ---
+
+/// Deletes a client folder, unlinking `basepath\base` before anything
+/// recursive happens.
+///
+/// A Jedi Outcast client keeps a directory junction at `basepath\base` that
+/// points into the player's game folder — see
+/// [`crate::launch::prepare_basepath`]. Windows `RemoveDirectoryW`, which is
+/// what [`fs::remove_dir`] calls, deletes a reparse point as the link it is
+/// and leaves the target alone; that is the operation this function performs
+/// first, and on its own.
+///
+/// [`fs::remove_dir_all`] documents the same behaviour — it does not follow
+/// links, it removes them — and the unlink above is therefore a second lock on
+/// the same door. It is here because the cost of that door opening is the
+/// player's copy of the game, and because a failure to unlink is reported
+/// rather than recursed past: if the link will not go, nothing else does
+/// either.
+fn remove_client_dir(dir: &Path) -> Result<()> {
+    let link = dir
+        .join(paths::CLIENT_BASEPATH_DIR)
+        .join(paths::BASE_FOLDER);
+    if let Ok(meta) = fs::symlink_metadata(&link) {
+        // A real folder here is the launcher's own fallback copy, or something
+        // the player put inside a client they are deleting. Either way the
+        // recursive removal below owns it.
+        if meta.file_type().is_symlink() {
+            fs::remove_dir(&link).map_err(|e| AppError::io_path("cannot unlink", &link, e))?;
+            log::info!("unlinked {}", link.display());
+        }
+    }
+    fs::remove_dir_all(dir).map_err(|e| AppError::io_path("cannot delete", dir, e))
 }
 
 // ---------------------------------------------------------------------------
@@ -400,6 +442,83 @@ mod tests {
 
         let json = serde_json::to_string(&record).expect("it serializes");
         assert!(json.contains("\"game\":\"jo\""), "{json}");
+    }
+
+    /// A client folder with the layout of an installed Jedi Outcast client.
+    fn client_layout(root: &Path) -> std::path::PathBuf {
+        let dir = root.join("jk2");
+        fs::create_dir_all(dir.join(paths::CLIENT_ENGINE_DIR)).expect("the engine folder");
+        fs::create_dir_all(dir.join(paths::CLIENT_HOME_DIR).join(paths::BASE_FOLDER))
+            .expect("the home folder");
+        fs::create_dir_all(dir.join(paths::CLIENT_BASEPATH_DIR)).expect("the base root");
+        dir
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn deleting_a_client_unlinks_the_game_folder_instead_of_emptying_it() {
+        // The one operation in the launcher that could cost a player their
+        // copy of the game. `basepath\base` is a junction into it; the removal
+        // has to take the link and leave the folder.
+        let game = tempfile::tempdir().expect("a game root");
+        let game_base = game.path().join("GameData").join("base");
+        fs::create_dir_all(&game_base).expect("the game base folder");
+        fs::write(game_base.join("assets0.pk3"), b"the player's own copy").expect("an archive");
+
+        let clients = tempfile::tempdir().expect("a clients root");
+        let dir = client_layout(clients.path());
+        let link = dir.join(paths::CLIENT_BASEPATH_DIR).join(paths::BASE_FOLDER);
+        junction::create(&game_base, &link).expect("the junction");
+        assert!(link.join("assets0.pk3").is_file(), "the link works");
+
+        remove_client_dir(&dir).expect("the client is deleted");
+
+        assert!(!dir.exists(), "the client folder is gone");
+        assert!(
+            game_base.join("assets0.pk3").is_file(),
+            "the game folder must survive its client"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_recursive_removal_stops_at_a_junction() {
+        // The assumption the whole layout rests on, pinned rather than
+        // believed: `fs::remove_dir_all` deletes a link and does not walk
+        // through it. `remove_client_dir` unlinks first anyway — this is what
+        // makes that a second lock rather than the only one.
+        let game = tempfile::tempdir().expect("a game root");
+        let game_base = game.path().join("base");
+        fs::create_dir_all(&game_base).expect("the game base folder");
+        fs::write(game_base.join("assets0.pk3"), b"the player's own copy").expect("an archive");
+
+        let client = tempfile::tempdir().expect("a client root");
+        let dir = client.path().join("jk2");
+        fs::create_dir_all(dir.join(paths::CLIENT_BASEPATH_DIR)).expect("the base root");
+        junction::create(
+            &game_base,
+            dir.join(paths::CLIENT_BASEPATH_DIR).join(paths::BASE_FOLDER),
+        )
+        .expect("the junction");
+
+        fs::remove_dir_all(&dir).expect("the removal");
+        assert!(!dir.exists());
+        assert!(game_base.join("assets0.pk3").is_file());
+    }
+
+    #[test]
+    fn deleting_a_client_takes_the_folders_that_really_are_its_own() {
+        // The mirror image of the test above: a real folder where the link
+        // usually is belongs to the client and goes with it. That is the
+        // fallback copy of `launch::prepare_basepath`, among other things.
+        let clients = tempfile::tempdir().expect("a clients root");
+        let dir = client_layout(clients.path());
+        let copies = dir.join(paths::CLIENT_BASEPATH_DIR).join(paths::BASE_FOLDER);
+        fs::create_dir_all(&copies).expect("the copied base folder");
+        fs::write(copies.join("assets0.pk3"), b"a copy JKNet made").expect("a copy");
+
+        remove_client_dir(&dir).expect("the client is deleted");
+        assert!(!dir.exists());
     }
 
     #[test]
