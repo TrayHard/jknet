@@ -1260,8 +1260,13 @@ export interface JkhubCategoriesUpdated {
 // of every file of every leaf category. It is what the tab lists and searches
 // from, so a file in a category nobody opened is still findable.
 
-/** Where the index that answered came from. */
-export type JkhubIndexSource = "cache" | "snapshot";
+/**
+ * Where the index that answered came from.
+ *
+ * `none` is the one state the tab cannot browse in: neither a crawl of this
+ * machine nor the copy inside the build.
+ */
+export type JkhubIndexSource = "cache" | "snapshot" | "none";
 
 /** The answer of `jkhub_search`: one page of results out of the index. */
 export interface JkhubSearchResult {
@@ -1287,16 +1292,26 @@ export interface JkhubSearchResult {
 /** What the launcher knows about the catalogue index of one game. */
 export interface JkhubIndexStatus {
   game: Game;
-  indexed: boolean;
+  /**
+   * True when there is something to search: a crawl of this machine, or the
+   * copy the build shipped. False only when both are missing, which is the one
+   * state the tab blocks browsing for.
+   */
+  available: boolean;
   builtAt: string;
   updatedAt: string;
   /** Seconds since the last write, so the screen needs no date parser. */
   age: number;
   files: number;
-  source: JkhubIndexSource | null;
+  source: JkhubIndexSource;
   stale: boolean;
   /** True while a crawl or a top-up of this game is in flight. */
   building: boolean;
+  /**
+   * How far that run has got. Answered as well as emitted, so a tab opened
+   * halfway through a crawl draws the bar it heard no event for.
+   */
+  progress: JkhubIndexProgress | null;
 }
 
 /** Payload of `jkhub:index-updated`, and the answer of `jkhub_refresh_index`. */
@@ -1312,18 +1327,27 @@ export interface JkhubIndexUpdate {
   full: boolean;
   /** True when the index was current and nobody asked, so nothing was spent. */
   skipped: boolean;
+  /**
+   * True when the player stopped the crawl. The index stays as it was, and the
+   * screen offers to start again.
+   */
+  cancelled: boolean;
 }
 
 /** Which half of the work a refresh is doing. */
 export type JkhubIndexPhase = "categories" | "files" | "details";
 
-/** Payload of `jkhub:index-progress`. */
+/** Payload of `jkhub:index-progress`, and the `progress` of the status. */
 export interface JkhubIndexProgress {
   game: Game;
   done: number;
   /** An estimate: a category of unknown size counts as one page until asked. */
   total: number;
   phase: JkhubIndexPhase;
+  /** Requests made to jkhub.org so far. */
+  requests: number;
+  /** Milliseconds since this run started, which is what an ETA is made of. */
+  elapsedMs: number;
 }
 
 /** What `jkhub_search` is asked for. */
@@ -1420,4 +1444,13 @@ export const jkhubIpc = {
    */
   refreshIndex: (game?: Game, full = false) =>
     call<JkhubIndexUpdate>("jkhub_refresh_index", { game: game ?? null, full }),
+  // --- slice: jkhub index startup ---
+  /**
+   * Stops the crawl of one game.
+   *
+   * The run notices between pages and leaves the index exactly as it was, so
+   * nothing is half-written. Answers even when nothing was running.
+   */
+  cancelIndex: (game?: Game) =>
+    call<void>("jkhub_cancel_index", { game: game ?? null }),
 };

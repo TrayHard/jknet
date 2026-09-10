@@ -29,7 +29,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
+use futures_util::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
@@ -39,7 +41,7 @@ use crate::paths::DataPaths;
 use crate::timestamp;
 
 use super::cache;
-use super::client::JkhubClient;
+use super::client::{JkhubClient, Lane};
 use super::parse;
 use super::source::{self, HtmlSource};
 use super::types::{JkhubAuthor, JkhubCard, JkhubCategory, JkhubGame, JkhubSort};
@@ -494,6 +496,11 @@ pub enum IndexSource {
     Cache,
     /// The copy that shipped with the build.
     Snapshot,
+    /// Neither, so there is nothing to search yet. Only `jkhub_index_status`
+    /// ever answers this: a [`LoadedIndex`] by definition came from one of the
+    /// two above.
+    #[serde(rename = "none")]
+    Missing,
 }
 
 /// An index in memory, with the folded text a search runs over.
@@ -796,7 +803,7 @@ pub fn escalates(unknown: usize) -> bool {
 // ---------------------------------------------------------------------------
 
 /// Which half of the work a crawl is doing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum IndexPhase {
     /// Reading the category tree the crawl needs before it can start.
@@ -807,8 +814,14 @@ pub enum IndexPhase {
     Details,
 }
 
-/// Payload of `jkhub:index-progress`.
-#[derive(Debug, Clone, Copy, Serialize)]
+/// Payload of `jkhub:index-progress`, and the `progress` of
+/// `jkhub_index_status`.
+///
+/// Carries enough for a progress bar to be honest about the wait: how far the
+/// work has got, what it has cost so far, and how long it has been running —
+/// from which the screen works out the rate and the time left rather than
+/// printing a number the core invented.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexProgress {
     pub game: Game,
@@ -818,6 +831,10 @@ pub struct IndexProgress {
     /// as one page until its first page says otherwise.
     pub total: u32,
     pub phase: IndexPhase,
+    /// Requests made to jkhub.org so far.
+    pub requests: u32,
+    /// Milliseconds since this run started.
+    pub elapsed_ms: u64,
 }
 
 /// Payload of `jkhub:index-updated`, and the answer of `jkhub_refresh_index`.
@@ -837,6 +854,11 @@ pub struct IndexUpdate {
     /// True when the plan was to do nothing: the index was current and nobody
     /// asked for a refresh.
     pub skipped: bool,
+    /// True when the player stopped the crawl before it finished.
+    ///
+    /// An answer rather than a failure: the launcher spent some requests, kept
+    /// the index it already had, and the screen has a button to start again.
+    pub cancelled: bool,
 }
 
 impl IndexUpdate {
@@ -851,6 +873,7 @@ impl IndexUpdate {
             requests: 0,
             full: false,
             skipped: true,
+            cancelled: false,
         }
     }
 
@@ -860,24 +883,67 @@ impl IndexUpdate {
     }
 }
 
-/// Sends one progress event, and says nothing when the channel is gone.
-fn progress(app: &AppHandle, game: Game, phase: IndexPhase, done: u32, total: u32) {
-    if let Err(e) = app.emit(
-        INDEX_PROGRESS_EVENT,
-        IndexProgress {
-            game,
-            done,
-            total,
-            phase,
-        },
-    ) {
+/// How far a crawl has got, as the loop that drives it counts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CrawlStep {
+    pub done: u32,
+    pub total: u32,
+    pub requests: u32,
+    pub elapsed_ms: u64,
+}
+
+/// Sends one progress event and remembers it, so a tab opened halfway through
+/// a crawl draws the bar it missed the events for.
+///
+/// Says nothing when the channel is gone: a progress line is not worth an
+/// error path.
+fn progress(app: &AppHandle, game: Game, phase: IndexPhase, step: CrawlStep) {
+    let payload = IndexProgress {
+        game,
+        done: step.done,
+        total: step.total,
+        phase,
+        requests: step.requests,
+        elapsed_ms: step.elapsed_ms,
+    };
+    super::note_progress(app, payload);
+    if let Err(e) = app.emit(INDEX_PROGRESS_EVENT, payload) {
         log::debug!("cannot emit {INDEX_PROGRESS_EVENT}: {e}");
     }
+}
+
+/// Asks whether the work should stop, checked between pages.
+///
+/// `Fn` rather than a channel because that is all the crawl needs: the state
+/// that owns the answer is a set of games in `JkhubState`, and the crawl only
+/// has to read it.
+pub type StopFlag<'a> = &'a (dyn Fn() -> bool + Send + Sync);
+
+/// Whether a stop was asked for, treating «nobody can ask» as «no».
+fn stopped(stop: Option<StopFlag<'_>>) -> bool {
+    stop.is_some_and(|ask| ask())
 }
 
 // ---------------------------------------------------------------------------
 // Building the index
 // ---------------------------------------------------------------------------
+
+/// One listing page of one leaf, as the crawl asks for it.
+#[derive(Debug, Clone, Copy)]
+struct PageJob {
+    /// Index into the list of leaves, which is what keeps the merge ordered.
+    leaf: usize,
+    page: u32,
+}
+
+/// What a crawl produced.
+pub struct Crawled {
+    pub files: Vec<IndexedFile>,
+    /// Requests this crawl made to jkhub.org.
+    pub requests: u32,
+    /// True when the player stopped it before it read every page.
+    pub cancelled: bool,
+}
 
 /// Every listing page of every leaf category of one game.
 ///
@@ -886,66 +952,153 @@ fn progress(app: &AppHandle, game: Game, phase: IndexPhase, done: u32, total: u3
 /// category yet.» and is skipped. `Both Games/Other` sits in both trees, so
 /// its files land in both indexes — which is what the site means by the name.
 ///
-/// Pages are read one at a time, ordered by `file_updated` descending, the
-/// same address the tab opens. Nothing here goes through the page cache: the
-/// index is the cache, and a hundred and fifty listing documents on disk would
-/// be a second copy of it.
+/// Two rounds, each of them reading as many pages at a time as the crawl lane
+/// of the limiter allows:
+///
+/// 1. the first page of every leaf, which is also what says how many pages the
+///    leaf really has;
+/// 2. every remaining page of every leaf.
+///
+/// One page at a time was what made the first crawl of Jedi Academy take a
+/// minute and a half: the request itself is a quarter of a second and the gap
+/// in front of it was three tenths, so nothing overlapped. The rounds are what
+/// let the gap do the pacing instead of the latency.
+///
+/// The answers arrive in whatever order the site serves them and are put back
+/// in order before the merge, so a file that two categories list still lands
+/// in the first of them — the same entry the serial crawl produced.
+///
+/// Nothing here goes through the page cache: the index is the cache, and a
+/// hundred and fifty listing documents on disk would be a second copy of it.
 pub async fn crawl(
     client: &JkhubClient,
     game: Game,
     tree: &[JkhubCategory],
-    requests: &mut u32,
-    on_progress: &mut (dyn FnMut(u32, u32) + Send),
-) -> Result<Vec<IndexedFile>> {
+    stop: Option<StopFlag<'_>>,
+    on_progress: &mut (dyn FnMut(CrawlStep) + Send),
+) -> Result<Crawled> {
     let leaves: Vec<&JkhubCategory> = tree.iter().filter(|entry| entry.has_files).collect();
-    let mut total = leaves
-        .iter()
-        .map(|leaf| estimated_pages(leaf.file_count))
-        .sum::<u32>()
-        .max(1);
-    let mut done = 0;
-    let mut files: Vec<IndexedFile> = Vec::new();
-    let mut seen: HashSet<u32> = HashSet::new();
+    // Never more pages in flight than the lane would let through anyway:
+    // queueing more only moves the wait from this loop into the limiter.
+    let at_once = client.limiter(Lane::Crawl).pace().parallel;
+    let started = Instant::now();
+    let mut step = CrawlStep {
+        done: 0,
+        total: leaves
+            .iter()
+            .map(|leaf| estimated_pages(leaf.file_count))
+            .sum::<u32>()
+            .max(1),
+        requests: 0,
+        elapsed_ms: 0,
+    };
+    // Pages of the site, kept by leaf and page number so the merge below reads
+    // them in the order a serial crawl would have.
+    let mut pages: BTreeMap<(usize, u32), Vec<JkhubCard>> = BTreeMap::new();
+    // How many pages each leaf really has, learned from its first page.
+    let mut counts: Vec<u32> = vec![1; leaves.len()];
+    let mut cancelled = false;
 
-    on_progress(done, total);
-    for leaf in leaves {
-        let mut expected = estimated_pages(leaf.file_count);
-        let mut page = 1;
-        loop {
-            let url = source::listing_url(leaf.id, &leaf.slug, JkhubSort::RecentlyUpdated, page);
-            let body = client.fetch_html(&url).await?;
-            *requests += 1;
+    on_progress(step);
+    let mut jobs: Vec<PageJob> = (0..leaves.len())
+        .map(|leaf| PageJob { leaf, page: 1 })
+        .collect();
+    for round in 0..2u8 {
+        if jobs.is_empty() {
+            break;
+        }
+        let round_jobs = std::mem::take(&mut jobs);
+        let mut answers = stream::iter(round_jobs)
+            .map(|job| {
+                let leaf = leaves[job.leaf];
+                let url =
+                    source::listing_url(leaf.id, &leaf.slug, JkhubSort::RecentlyUpdated, job.page);
+                async move { (job, client.fetch_html_in(&url, Lane::Crawl).await) }
+            })
+            .buffer_unordered(at_once);
+
+        while let Some((job, answer)) = answers.next().await {
+            let body = answer?;
+            step.requests += 1;
             let listing = parse::parse_listing(&body.body)?;
-            for card in listing.cards {
-                // A file listed twice — the site puts one under two categories
-                // now and then — keeps the first category the crawl met it in.
-                if seen.insert(card.id) {
-                    files.push(IndexedFile::from_card(card, leaf.id, leaf.game));
-                }
+            if round == 0 {
+                // The estimate from the tree is replaced by what the site says
+                // the moment it says it, so the count stops lying about a
+                // category whose file count the tree never learned.
+                let real = listing.pages.clamp(1, MAX_PAGES_PER_CATEGORY);
+                step.total = (step.total + real)
+                    .saturating_sub(estimated_pages(leaves[job.leaf].file_count));
+                counts[job.leaf] = real;
             }
+            pages.insert((job.leaf, job.page), listing.cards);
+            step.done += 1;
+            step.elapsed_ms = started.elapsed().as_millis() as u64;
+            on_progress(CrawlStep {
+                total: step.total.max(step.done),
+                ..step
+            });
 
-            done += 1;
-            // The estimate from the tree is replaced by what the site says the
-            // moment it says it, so the count stops lying about a category
-            // whose file count the tree never learned.
-            let real = listing.pages.clamp(1, MAX_PAGES_PER_CATEGORY);
-            total = (total + real).saturating_sub(expected);
-            expected = real;
-            on_progress(done, total.max(done));
-
-            if page >= real {
+            if stopped(stop) {
+                cancelled = true;
                 break;
             }
-            page += 1;
+        }
+        // Dropping the stream here drops the requests still in flight, which
+        // is what makes **Cancel** stop within one page rather than one round.
+        if cancelled {
+            break;
+        }
+        if round == 0 {
+            step.total = counts.iter().sum::<u32>().max(1);
+            jobs = (0..leaves.len())
+                .flat_map(|leaf| (2..=counts[leaf]).map(move |page| PageJob { leaf, page }))
+                .collect();
         }
     }
 
+    let files = merge_pages(&leaves, pages);
     log::info!(
-        "jkhub: crawled {} files of {} in {requests} request(s)",
+        "jkhub: crawled {} files of {} in {} request(s), {:.1} s{}",
         files.len(),
-        game.id()
+        game.id(),
+        step.requests,
+        started.elapsed().as_secs_f32(),
+        if cancelled { ", cancelled" } else { "" }
     );
-    Ok(files)
+    Ok(Crawled {
+        files,
+        requests: step.requests,
+        cancelled,
+    })
+}
+
+/// Puts the pages of a crawl back in the order a serial one read them, and
+/// turns their cards into entries of the index.
+///
+/// The order is the whole point. Pages come back in whatever order the site
+/// serves them, and the rule that decides which category a file belongs to —
+/// the first one the crawl met it in — would otherwise depend on the network.
+/// The map is keyed by `(leaf, page)`, so walking it in key order is walking
+/// the catalogue the way the old one-at-a-time loop did.
+fn merge_pages(
+    leaves: &[&JkhubCategory],
+    pages: BTreeMap<(usize, u32), Vec<JkhubCard>>,
+) -> Vec<IndexedFile> {
+    let mut files: Vec<IndexedFile> = Vec::new();
+    let mut seen: HashSet<u32> = HashSet::new();
+    for ((leaf, _page), cards) in pages {
+        let Some(leaf) = leaves.get(leaf) else {
+            continue;
+        };
+        for card in cards {
+            // A file listed twice — the site puts one under two categories
+            // now and then — keeps the first category the crawl met it in.
+            if seen.insert(card.id) {
+                files.push(IndexedFile::from_card(card, leaf.id, leaf.game));
+            }
+        }
+    }
+    files
 }
 
 /// Pages a category of this size takes, or one when the size is unknown.
@@ -998,6 +1151,25 @@ pub struct RefreshContext<'a> {
     /// one.
     pub snapshots: Option<PathBuf>,
     pub game: Game,
+    /// Asked between pages, so **Cancel** stops the crawl. `None` is a run
+    /// nobody can stop, which is what every test and the live rebuild want.
+    pub cancel: Option<StopFlag<'a>>,
+}
+
+/// The age a plan is made from: `None` only when nothing is indexed at all.
+///
+/// The difference matters more than it looks. An index read out of the
+/// snapshot inside the build is dated the day of the crawl that made it, so it
+/// asks for the cheap incremental path for its first week; only a machine with
+/// nothing at all pays for a crawl. Answering `None` for a snapshot — which is
+/// what a build with an unreadable snapshot did — turns every start into a
+/// hundred and fifty requests.
+pub fn age_of(index: &CatalogIndex, now: u64) -> Option<u64> {
+    if index.files.is_empty() {
+        None
+    } else {
+        Some(index.age(now))
+    }
 }
 
 /// Brings the index of one game up to date, by whichever path is warranted.
@@ -1024,11 +1196,7 @@ pub async fn run(context: &RefreshContext<'_>, manual: bool, full: bool) -> Resu
         Some(loaded) => loaded.index,
         None => CatalogIndex::new(game),
     };
-    let age = if index.files.is_empty() {
-        None
-    } else {
-        Some(index.age(timestamp::now_unix()))
-    };
+    let age = age_of(&index, timestamp::now_unix());
 
     let mut requests = 0;
     let plan = plan(age, manual, full);
@@ -1039,6 +1207,7 @@ pub async fn run(context: &RefreshContext<'_>, manual: bool, full: bool) -> Resu
     );
 
     let mut crawled = false;
+    let mut cancelled = false;
     let report = match plan {
         RefreshPlan::Nothing => {
             return Ok(IndexUpdate::skipped(game, index.files.len() as u32));
@@ -1049,16 +1218,40 @@ pub async fn run(context: &RefreshContext<'_>, manual: bool, full: bool) -> Resu
             // refresh turns into the crawl it was trying to avoid.
             None => {
                 crawled = true;
-                rebuild(context, &mut index, &mut requests).await?
+                match rebuild(context, &mut index, &mut requests).await? {
+                    Some(report) => report,
+                    None => {
+                        cancelled = true;
+                        MergeReport::default()
+                    }
+                }
             }
         },
         RefreshPlan::Full => {
             crawled = true;
-            rebuild(context, &mut index, &mut requests).await?
+            match rebuild(context, &mut index, &mut requests).await? {
+                Some(report) => report,
+                None => {
+                    cancelled = true;
+                    MergeReport::default()
+                }
+            }
         }
     };
 
-    if report.touched() {
+    // Any run that finished is written down, changes or none. Without that a
+    // crawl which found nothing new would leave the age where it was, and the
+    // next start would crawl the whole catalogue again — which is how a
+    // launcher whose snapshot is older than a week ends up paying a hundred
+    // and fifty requests every time it opens.
+    if !cancelled {
+        if !report.touched() {
+            log::debug!(
+                "jkhub: the {} catalogue is unchanged, and the index is stored anyway so its age \
+                 starts over",
+                game.id()
+            );
+        }
         index.touch();
         store(data, &index)?;
     }
@@ -1071,6 +1264,7 @@ pub async fn run(context: &RefreshContext<'_>, manual: bool, full: bool) -> Resu
         requests,
         full: crawled,
         skipped: false,
+        cancelled,
     };
     log::info!(
         "jkhub: the {} index took {requests} request(s): +{} ~{} -{}, {} files",
@@ -1121,9 +1315,21 @@ async fn top_up(
     }
 
     let total = unknown.len() as u32;
+    let started = Instant::now();
     let mut report = MergeReport::default();
     for (done, id) in unknown.into_iter().enumerate() {
-        progress(context.app, index.game, IndexPhase::Details, done as u32, total);
+        let done = done as u32;
+        progress(
+            context.app,
+            index.game,
+            IndexPhase::Details,
+            CrawlStep {
+                done,
+                total,
+                requests: *requests,
+                elapsed_ms: started.elapsed().as_millis() as u64,
+            },
+        );
         let view = source.file_opt(id).await?;
         *requests += 1;
         match view {
@@ -1135,18 +1341,44 @@ async fn top_up(
             }
             None => report.removed += index.remove(id).removed,
         }
+        if stopped(context.cancel) {
+            log::info!("jkhub: the {} top-up was stopped", index.game.id());
+            break;
+        }
     }
-    progress(context.app, index.game, IndexPhase::Details, total, total);
+    progress(
+        context.app,
+        index.game,
+        IndexPhase::Details,
+        CrawlStep {
+            done: total,
+            total,
+            requests: *requests,
+            elapsed_ms: started.elapsed().as_millis() as u64,
+        },
+    );
     Ok(Some(report))
 }
 
 /// Crawls every listing page of every leaf category of one game.
+///
+/// Answers `None` when the player stopped it: a half-read catalogue is not a
+/// catalogue, so the index stays exactly as it was.
 async fn rebuild(
     context: &RefreshContext<'_>,
     index: &mut CatalogIndex,
     requests: &mut u32,
-) -> Result<MergeReport> {
-    progress(context.app, index.game, IndexPhase::Categories, 0, 1);
+) -> Result<Option<MergeReport>> {
+    progress(
+        context.app,
+        index.game,
+        IndexPhase::Categories,
+        CrawlStep {
+            done: 0,
+            total: 1,
+            ..CrawlStep::default()
+        },
+    );
     let source = HtmlSource::new(context.client, context.data)
         .with_snapshots(context.snapshots.clone());
     // The tree comes from the disk cache or from the bundle in the common
@@ -1155,20 +1387,24 @@ async fn rebuild(
     let (tree, _) = source.categories_with_plan(index.game).await?;
     let game = index.game;
     let app = context.app;
-    let files = crawl(
+    let crawled = crawl(
         context.client,
         game,
         &tree.categories,
-        requests,
-        &mut |done, total| progress(app, game, IndexPhase::Files, done, total),
+        context.cancel,
+        &mut |step| progress(app, game, IndexPhase::Files, step),
     )
     .await?;
-    if files.is_empty() {
+    *requests += crawled.requests;
+    if crawled.cancelled {
+        return Ok(None);
+    }
+    if crawled.files.is_empty() {
         return Err(AppError::JkhubParse {
             what: format!("the {} catalogue crawled to nothing", index.game.id()),
         });
     }
-    Ok(index.replace(files))
+    Ok(Some(index.replace(crawled.files)))
 }
 
 // ---------------------------------------------------------------------------
@@ -1464,6 +1700,135 @@ mod tests {
         assert!(escalates(MAX_UNKNOWN + 1));
     }
 
+    /// The regression the whole fix answers: an index that came out of the
+    /// bundled snapshot is dated, so it asks for the cheap path rather than
+    /// for a hundred and fifty requests.
+    #[test]
+    fn a_snapshot_is_an_age_rather_than_a_hole() {
+        let now = 1_800_000_000;
+        let mut snapshot = CatalogIndex::new(Game::JediAcademy);
+        snapshot.replace(vec![file(1, "Terminative", 13)]);
+        // The document is written on the day of the crawl that made it and
+        // read back later.
+        snapshot.updated_unix = now - 2 * AUTO_REFRESH_INTERVAL;
+
+        let age = age_of(&snapshot, now).expect("a snapshot has a date");
+        assert_eq!(age, 2 * AUTO_REFRESH_INTERVAL);
+        assert_eq!(plan(Some(age), false, false), RefreshPlan::Incremental);
+
+        // And the same document, read the moment after it was written, costs
+        // nothing at all.
+        snapshot.updated_unix = now;
+        assert_eq!(
+            plan(age_of(&snapshot, now), false, false),
+            RefreshPlan::Nothing
+        );
+
+        // Only an empty index is a hole, and only a hole is a crawl.
+        let empty = CatalogIndex::new(Game::JediAcademy);
+        assert_eq!(age_of(&empty, now), None);
+        assert_eq!(plan(age_of(&empty, now), false, false), RefreshPlan::Full);
+    }
+
+    /// A leaf of a tree, as the crawl reads one.
+    fn leaf(id: u32, slug: &str) -> JkhubCategory {
+        JkhubCategory {
+            id,
+            slug: slug.into(),
+            name: slug.into(),
+            parent_id: Some(71),
+            game: JkhubGame::Ja,
+            file_count: Some(30),
+            has_files: true,
+            url: String::new(),
+        }
+    }
+
+    /// A listing card, as the parser produces one.
+    fn card(id: u32, title: &str) -> JkhubCard {
+        JkhubCard {
+            id,
+            slug: title.to_lowercase().replace(' ', "-"),
+            title: title.into(),
+            url: String::new(),
+            category_id: None,
+            author: None,
+            thumbnail_url: None,
+            description: String::new(),
+            downloads: Some(1),
+            date: Some("2026-01-01T00:00:00Z".into()),
+            date_label: Some("Updated".into()),
+            tags: Vec::new(),
+            rating: None,
+        }
+    }
+
+    /// Pages arrive in whatever order the site serves them; the catalogue must
+    /// not.
+    #[test]
+    fn pages_are_merged_in_the_order_a_one_at_a_time_crawl_read_them() {
+        let first = leaf(13, "free-for-all");
+        let second = leaf(15, "mixed-gametypes");
+        let leaves = vec![&first, &second];
+
+        // Inserted the way a `BTreeMap` would have got them: out of order, and
+        // with one file that both categories list.
+        let mut pages: BTreeMap<(usize, u32), Vec<JkhubCard>> = BTreeMap::new();
+        pages.insert((1, 1), vec![card(3, "Duel Yard"), card(1, "Terminative")]);
+        pages.insert((0, 2), vec![card(2, "Arena")]);
+        pages.insert((0, 1), vec![card(1, "Terminative")]);
+
+        let files = merge_pages(&leaves, pages);
+        assert_eq!(
+            files.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![1, 2, 3],
+            "leaf order first, page order second"
+        );
+        assert_eq!(
+            files[0].category_id, 13,
+            "a file two categories list keeps the first one the crawl met"
+        );
+        assert_eq!(files[2].category_id, 15);
+    }
+
+    /// The rule behind `available` in `jkhub_index_status`: only a machine
+    /// with neither document has nothing to search.
+    #[test]
+    fn an_index_comes_from_the_cache_or_from_the_bundle_and_is_missing_only_without_both() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let data = DataPaths::new(dir.path().to_path_buf());
+        data.ensure().expect("the layout is created");
+        let bundle = tempfile::tempdir().expect("a temp dir");
+        let bundle_dir = bundle.path().to_path_buf();
+        let game = Game::JediAcademy;
+
+        assert!(
+            load(&data, None, game).is_none(),
+            "no cache and no bundle is the one state the tab blocks itself for"
+        );
+        assert!(load(&data, Some(&bundle_dir), game).is_none());
+
+        // The bundle alone answers, and says where the answer came from.
+        let mut shipped = CatalogIndex::new(game);
+        shipped.replace(vec![file(1, "Terminative", 13)]);
+        std::fs::write(
+            bundle_dir.join(file_name(game)),
+            serde_json::to_string(&shipped).expect("it serializes"),
+        )
+        .expect("it writes");
+        let loaded = load(&data, Some(&bundle_dir), game).expect("the bundle answers");
+        assert_eq!(loaded.source, IndexSource::Snapshot);
+        assert_eq!(loaded.index.files.len(), 1);
+
+        // And the crawl of this machine wins over it.
+        let mut crawled = CatalogIndex::new(game);
+        crawled.replace(vec![file(1, "Terminative", 13), file(2, "Arena", 15)]);
+        store(&data, &crawled).expect("it writes");
+        let loaded = load(&data, Some(&bundle_dir), game).expect("the cache answers");
+        assert_eq!(loaded.source, IndexSource::Cache);
+        assert_eq!(loaded.index.files.len(), 2);
+    }
+
     #[test]
     fn a_stored_index_survives_a_write_and_a_read() {
         let dir = tempfile::tempdir().expect("a temp dir");
@@ -1682,14 +2047,12 @@ mod tests {
     /// bundled tree to know which categories exist, so a stale tree ships a
     /// catalogue that is missing whatever category the site added since.
     ///
-    /// The crawl costs one request per listing page, paced at one every
-    /// 300 ms by the launcher's own limiter: about 150 for Jedi Academy and
-    /// about 35 for Jedi Outcast.
+    /// The crawl costs one request per listing page — about 150 for Jedi
+    /// Academy and about 35 for Jedi Outcast — read four at a time a tenth of
+    /// a second apart through the crawl lane of the limiter.
     #[test]
     #[ignore = "talks to jkhub.org"]
     fn live_rebuild_the_bundled_indexes() {
-        use std::time::Instant;
-
         let client = JkhubClient::new().expect("a client");
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
@@ -1703,25 +2066,31 @@ mod tests {
                 .unwrap_or_else(|| panic!("{} ships a category tree", game.id()))
                 .categories;
             let started = Instant::now();
-            let mut requests = 0;
-            let files = runtime
-                .block_on(crawl(&client, game, &tree, &mut requests, &mut |done, total| {
-                    if done % 10 == 0 {
-                        println!("live: {} page {done} of {total}", game.id());
+            let crawled = runtime
+                .block_on(crawl(&client, game, &tree, None, &mut |step| {
+                    if step.done % 10 == 0 {
+                        println!(
+                            "live: {} page {} of {} at {:.1} s",
+                            game.id(),
+                            step.done,
+                            step.total,
+                            step.elapsed_ms as f32 / 1000.0
+                        );
                     }
                 }))
                 .unwrap_or_else(|e| panic!("the {} catalogue crawls: {e}", game.id()));
 
             let mut index = CatalogIndex::new(game);
-            index.replace(files);
+            index.replace(crawled.files);
             let file = dir.join(file_name(game));
             let text = serde_json::to_string(&index).expect("it serializes");
             std::fs::write(&file, format!("{text}\n")).expect("it writes");
             println!(
-                "live: {} holds {} files, {} bytes, {requests} request(s), {:.1} s",
+                "live: {} holds {} files, {} bytes, {} request(s), {:.1} s",
                 file.display(),
                 index.files.len(),
                 text.len() + 1,
+                crawled.requests,
                 started.elapsed().as_secs_f32()
             );
         }

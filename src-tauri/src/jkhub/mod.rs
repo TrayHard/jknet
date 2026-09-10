@@ -33,6 +33,10 @@ pub mod download;
 pub mod index;
 pub mod install;
 pub mod parse;
+// --- slice: jkhub index startup ---
+// Builds the catalogue index a few seconds after the launcher starts, instead
+// of under the player who typed the first word of a search.
+pub mod prewarm;
 pub mod snapshot;
 pub mod source;
 pub mod types;
@@ -54,7 +58,7 @@ use crate::state::AppState;
 use crate::timestamp;
 
 use client::JkhubClient;
-use index::{IndexSource, IndexUpdate, LoadedIndex, RefreshContext, SearchRequest};
+use index::{IndexProgress, IndexSource, IndexUpdate, LoadedIndex, RefreshContext, SearchRequest};
 use source::{HtmlSource, JkhubSource};
 use types::{
     CategoriesUpdatedEvent, InstalledEvent, JkhubCard, JkhubCategories, JkhubDownload,
@@ -168,6 +172,18 @@ pub struct JkhubState {
     /// a megabyte of JSON and folding three thousand descriptions per
     /// keystroke is the one way this feature could be slow.
     indexes: Mutex<HashMap<Game, Arc<LoadedIndex>>>,
+    // --- slice: jkhub index startup ---
+    /// The last progress step of each game.
+    ///
+    /// The events say the same thing, but a tab opened halfway through a crawl
+    /// has heard none of them and would draw an empty bar until the next one
+    /// arrives. `jkhub_index_status` answers with this instead.
+    progress: Mutex<HashMap<Game, IndexProgress>>,
+    /// Games whose run the player asked to stop.
+    ///
+    /// Read by the crawl between pages and cleared when the next run starts,
+    /// so a cancel never outlives the work it was meant for.
+    cancels: Mutex<HashSet<Game>>,
 }
 
 impl Default for JkhubState {
@@ -185,6 +201,8 @@ impl Default for JkhubState {
             trees: Refreshes::default(),
             catalogues: Refreshes::default(),
             indexes: Mutex::new(HashMap::new()),
+            progress: Mutex::new(HashMap::new()),
+            cancels: Mutex::new(HashSet::new()),
         }
     }
 }
@@ -226,6 +244,42 @@ impl JkhubState {
                 None => cached.clear(),
             },
             Err(e) => log::error!("cannot drop the JKHub index held in memory: {e}"),
+        }
+    }
+
+    // --- slice: jkhub index startup ---
+
+    /// How far the run of one game has got, or `None` when none has reported.
+    fn progress_of(&self, game: Game) -> Option<IndexProgress> {
+        self.progress.lock().ok()?.get(&game).copied()
+    }
+
+    /// Asks the run of one game to stop at the next page.
+    fn ask_to_stop(&self, game: Game) {
+        match self.cancels.lock() {
+            Ok(mut games) => {
+                games.insert(game);
+            }
+            Err(e) => log::error!("cannot stop the {} index run: {e}", game.id()),
+        }
+    }
+
+    /// Whether a stop was asked for. A poisoned lock answers «no»: a crawl
+    /// that runs to the end is better than one that stops because a lock
+    /// broke.
+    fn asked_to_stop(&self, game: Game) -> bool {
+        self.cancels
+            .lock()
+            .is_ok_and(|games| games.contains(&game))
+    }
+
+    /// Forgets a stop, so the next run is not cancelled by the last one.
+    fn clear_stop(&self, game: Game) {
+        match self.cancels.lock() {
+            Ok(mut games) => {
+                games.remove(&game);
+            }
+            Err(e) => log::error!("cannot clear the stop of {}: {e}", game.id()),
         }
     }
 
@@ -619,16 +673,24 @@ pub struct JkhubSearchResult {
 #[serde(rename_all = "camelCase")]
 pub struct JkhubIndexStatus {
     pub game: Game,
-    pub indexed: bool,
+    /// True when there is something to search: an index crawled on this
+    /// machine, or the copy the build shipped. False only when both are
+    /// missing — which is the one state the tab cannot browse in, and the one
+    /// it blocks itself for.
+    pub available: bool,
     pub built_at: String,
     pub updated_at: String,
     /// Seconds since the last write, so the screen needs no date parser.
     pub age: u64,
     pub files: u32,
-    pub source: Option<IndexSource>,
+    /// `cache`, `snapshot`, or `none` when there is no index at all.
+    pub source: IndexSource,
     pub stale: bool,
     /// True while a crawl or a top-up of this game is in flight.
     pub building: bool,
+    /// How far that run has got. Survives a tab that was opened after the run
+    /// started, which the progress events on their own do not.
+    pub progress: Option<IndexProgress>,
 }
 
 /// Searches the whole catalogue of one game, without asking jkhub.org.
@@ -709,29 +771,54 @@ pub async fn jkhub_index_status(
     let status = match &loaded {
         Some(loaded) => JkhubIndexStatus {
             game,
-            indexed: true,
+            available: true,
             built_at: loaded.index.built_at.clone(),
             updated_at: loaded.index.updated_at.clone(),
             age: loaded.index.age(timestamp::now_unix()),
             files: loaded.index.files.len() as u32,
-            source: Some(loaded.source),
+            source: loaded.source,
             stale: is_stale(loaded),
             building: jkhub.catalogues.running(game),
+            progress: jkhub.progress_of(game),
         },
         None => JkhubIndexStatus {
             game,
-            indexed: false,
+            available: false,
             built_at: String::new(),
             updated_at: String::new(),
             age: 0,
             files: 0,
-            source: None,
+            source: IndexSource::Missing,
             stale: true,
             building: jkhub.catalogues.running(game),
+            progress: jkhub.progress_of(game),
         },
     };
     refresh_index_behind(&app, game);
     Ok(status)
+}
+
+/// Stops the crawl or the top-up of one game.
+///
+/// The **Cancel** action of the blocking panel. The run notices between pages,
+/// leaves the index exactly as it was and answers `cancelled`, so nothing is
+/// half-written. The once-a-day guard keeps its stamp, which is what makes a
+/// cancel stick: the refresh behind the next answer will not start the same
+/// crawl over again a second later. **Try again** goes through
+/// `jkhub_refresh_index`, which ignores that guard.
+///
+/// Answers even when nothing is running: asking a finished run to stop is not
+/// a failure, and the screen has no way to know the difference in time.
+#[tauri::command]
+pub fn jkhub_cancel_index(
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+    game: Option<Game>,
+) -> Result<()> {
+    let game = state.settings()?.game_or_active(game);
+    jkhub.ask_to_stop(game);
+    log::info!("jkhub: asked to stop the {} index run", game.id());
+    Ok(())
 }
 
 /// Reads jkhub.org and brings the catalogue index of one game up to date.
@@ -763,63 +850,109 @@ pub async fn jkhub_refresh_index(
             game.id()
         )));
     }
+    // A stop asked for during the previous run must not end this one before it
+    // starts.
+    jkhub.clear_stop(game);
+    let held: &JkhubState = jkhub.inner();
+    let stop = move || held.asked_to_stop(game);
     let context = RefreshContext {
         app: &app,
         client,
         data: &data,
         snapshots: snapshot::bundled_dir(&app),
         game,
+        cancel: Some(&stop),
     };
     let answer = index::run(&context, true, full.unwrap_or(false)).await;
     jkhub.catalogues.finish(game);
+    jkhub.clear_stop(game);
     if answer.as_ref().is_ok_and(|update| update.touched()) {
         jkhub.forget_index(Some(game));
     }
     answer
 }
 
-/// Tops the index of one game up behind an answer that was already served.
+/// Brings the index of one game up to date, if the plan calls for it.
 ///
-/// Silent by design, like the tree walk next to it: the tab has a catalogue on
-/// it already, and a refresh that fails leaves that catalogue where it is. The
-/// one thing it says is `jkhub:index-updated`, and only when something changed.
+/// The shared body of two callers: the refresh behind the answer of
+/// `jkhub_index_status`, and the pre-warm a few seconds after the launcher
+/// starts. Both are silent by design — the tab has a catalogue on it already,
+/// and a refresh that fails leaves that catalogue where it is. The one thing
+/// they say is `jkhub:index-updated`, and only when something changed.
+///
+/// Refuses at once when a run of this game is in flight or when the last one
+/// was less than [`index::AUTO_REFRESH_INTERVAL`] ago, so a start, a game
+/// switch and an opened tab in the same minute read jkhub.org once between
+/// them.
+///
+/// Answers whether anything changed, which is what the pre-warm logs.
+pub async fn ensure_index(app: &AppHandle, game: Game) -> bool {
+    let jkhub = app.state::<JkhubState>();
+    if !jkhub
+        .catalogues
+        .start(game, timestamp::now_unix(), index::AUTO_REFRESH_INTERVAL)
+    {
+        return false;
+    }
+    jkhub.clear_stop(game);
+    let held: &JkhubState = jkhub.inner();
+    let stop = move || held.asked_to_stop(game);
+    let done = match (app.state::<AppState>().paths(), jkhub.client()) {
+        (Ok(data), Ok(client)) => {
+            let context = RefreshContext {
+                app,
+                client,
+                data: &data,
+                snapshots: snapshot::bundled_dir(app),
+                game,
+                cancel: Some(&stop),
+            };
+            match index::run(&context, false, false).await {
+                Ok(update) => update.touched(),
+                Err(e) => {
+                    log::warn!("jkhub: the {} index stays as it was, {e}", game.id());
+                    false
+                }
+            }
+        }
+        (Err(e), _) | (_, Err(e)) => {
+            log::warn!("jkhub: cannot refresh the {} index, {e}", game.id());
+            false
+        }
+    };
+    jkhub.catalogues.finish(game);
+    jkhub.clear_stop(game);
+    if done {
+        jkhub.forget_index(Some(game));
+    }
+    done
+}
+
+/// Tops the index of one game up behind an answer that was already served.
 fn refresh_index_behind(app: &AppHandle, game: Game) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let jkhub = app.state::<JkhubState>();
-        if !jkhub
-            .catalogues
-            .start(game, timestamp::now_unix(), index::AUTO_REFRESH_INTERVAL)
-        {
-            return;
-        }
-        let done = match (app.state::<AppState>().paths(), jkhub.client()) {
-            (Ok(data), Ok(client)) => {
-                let context = RefreshContext {
-                    app: &app,
-                    client,
-                    data: &data,
-                    snapshots: snapshot::bundled_dir(&app),
-                    game,
-                };
-                match index::run(&context, false, false).await {
-                    Ok(update) => update.touched(),
-                    Err(e) => {
-                        log::warn!("jkhub: the {} index stays as it was, {e}", game.id());
-                        false
-                    }
-                }
-            }
-            (Err(e), _) | (_, Err(e)) => {
-                log::warn!("jkhub: cannot refresh the {} index, {e}", game.id());
-                false
-            }
-        };
-        jkhub.catalogues.finish(game);
-        if done {
-            jkhub.forget_index(Some(game));
-        }
+        ensure_index(&app, game).await;
     });
+}
+
+/// Remembers the last progress step of one game, so a tab opened halfway
+/// through a run can draw the bar it heard no event for.
+///
+/// Called from `index`, which holds an app handle and no state of its own.
+/// Says nothing when the state is not managed yet: that is a test, or a
+/// startup that has not reached [`manage`].
+pub(super) fn note_progress(app: &AppHandle, step: IndexProgress) {
+    let Some(jkhub) = app.try_state::<JkhubState>() else {
+        return;
+    };
+    let held: &JkhubState = jkhub.inner();
+    match held.progress.lock() {
+        Ok(mut entries) => {
+            entries.insert(step.game, step);
+        }
+        Err(e) => log::debug!("cannot record the JKHub index progress: {e}"),
+    }
 }
 
 /// Whether an index is old enough that the screen should say so.
@@ -966,6 +1099,45 @@ mod tests {
             engine_published_at: None,
             fs_game: fs_game.map(str::to_string),
         }
+    }
+
+    /// **Cancel** and what happens after it.
+    #[test]
+    fn a_stop_is_asked_for_per_game_and_cleared_by_the_next_run() {
+        let state = JkhubState::default();
+        assert!(!state.asked_to_stop(Game::JediAcademy));
+
+        state.ask_to_stop(Game::JediAcademy);
+        assert!(state.asked_to_stop(Game::JediAcademy));
+        assert!(
+            !state.asked_to_stop(Game::JediOutcast),
+            "stopping one game must not stop the crawl of the other"
+        );
+
+        // A run that starts forgets the stop of the one before it, which is
+        // what makes **Try again** work.
+        state.clear_stop(Game::JediAcademy);
+        assert!(!state.asked_to_stop(Game::JediAcademy));
+    }
+
+    /// The once-a-day stamp is what makes a cancel stick: the refresh behind
+    /// the next answer refuses instead of starting the same crawl again.
+    #[test]
+    fn a_cancelled_run_is_not_restarted_a_second_later() {
+        let catalogues = Refreshes::default();
+        let now = 1_800_000_000;
+
+        assert!(catalogues.start(Game::JediAcademy, now, index::AUTO_REFRESH_INTERVAL));
+        // Cancelled: the run ends, the stamp stays.
+        catalogues.finish(Game::JediAcademy);
+        assert!(
+            !catalogues.start(Game::JediAcademy, now + 2, index::AUTO_REFRESH_INTERVAL),
+            "the status poll that follows a cancel must not crawl again"
+        );
+        assert!(
+            catalogues.start(Game::JediAcademy, now + 2, 0),
+            "**Try again** asks outright, and that is the interval it uses"
+        );
     }
 
     #[test]
