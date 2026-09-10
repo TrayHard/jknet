@@ -1,0 +1,56 @@
+{
+  "notConfigured": "JKNet accounts and friends need JKNet Online. It is not open yet, so this version keeps the feature switched off. A later update turns it on by itself.",
+  "card": {
+    "title": "Account",
+    "text": "A JKNet account carries your friends list and your invites. It is not needed to play.",
+    "linked": "{{provider}} linked"
+  },
+  "providers": {
+    "jkhub": "JKHub",
+    "discord": "Discord",
+    "dev": "the developer provider",
+    "devLabel": "Developer",
+    "signedInAs": "Signed in with {{provider}} as {{name}}",
+    "continueJkhub": "Continue with JKHub",
+    "continueJkhubNote": "The account most of the community already has.",
+    "continueDiscord": "Continue with Discord",
+    "continueDiscordNote": "Signs you in with the Discord you play with.",
+    "developer": "Developer sign-in",
+    "notAvailable": "{{provider}} sign-in is not available yet."
+  },
+  "waiting": {
+    "title": "Waiting for the browser…",
+    "text": "Finish signing in there, then come back to JKNet."
+  },
+  "displayName": {
+    "label": "Display name",
+    "saved": "Saved. Other players see this name.",
+    "rules": "3 to 24 characters: letters, digits, spaces, _ and -."
+  },
+  "danger": {
+    "title": "Danger zone",
+    "signOut": "Sign out",
+    "signOutText": "Keeps the account. Your clients and library stay where they are.",
+    "signingOut": "Signing out…",
+    "delete": "Delete account data",
+    "deleteText": "Removes the account, your friends and your invites from the service.",
+    "confirmTitle": "Delete your JKNet account?",
+    "confirmBody": "Your account, your friends list and your invites are removed from the service. Your clients, your library files and your settings stay on this machine. This cannot be undone.",
+    "confirm": "Delete account"
+  },
+  "url": {
+    "summary": "JKNet Online address (advanced)",
+    "label": "JKNet Online address",
+    "placeholder": "http://127.0.0.1:8787",
+    "signedIn": "Sign out before pointing JKNet at another service.",
+    "notConfigured": "For developers and self-hosted instances: an http:// or https:// address switches accounts and friends on for this machine.",
+    "hint": "An http:// or https:// address. Leave it empty to go back to the default."
+  },
+  "session": {
+    "expiredTitle": "Signed out: the session expired",
+    "expiredText": "Sign in again on the Settings screen to see your friends.",
+    "timedOut": "The sign-in took too long. Try again.",
+    "expired": "The sign-in expired. Try again.",
+    "failed": "The sign-in did not finish."
+  }
+}

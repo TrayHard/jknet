@@ -1,0 +1,63 @@
+{
+  "gametypes": {
+    "ja": {
+      "0": "FFA",
+      "1": "Holocron",
+      "2": "Jedi Master",
+      "3": "Duel",
+      "4": "Power Duel",
+      "5": "Single Player",
+      "6": "Team FFA",
+      "7": "Siege",
+      "8": "CTF",
+      "9": "CTY"
+    },
+    "jo": {
+      "0": "FFA",
+      "1": "Holocron",
+      "2": "Jedi Master",
+      "3": "Duel",
+      "4": "Single Player",
+      "5": "Team FFA",
+      "6": "Saga",
+      "7": "CTF",
+      "8": "CTY"
+    }
+  },
+  "gametypesShort": {
+    "ja": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "JM",
+      "3": "DUEL",
+      "4": "PDUEL",
+      "5": "SP",
+      "6": "TFFA",
+      "7": "SIEGE",
+      "8": "CTF",
+      "9": "CTY"
+    },
+    "jo": {
+      "0": "FFA",
+      "1": "HOLO",
+      "2": "JM",
+      "3": "DUEL",
+      "4": "SP",
+      "5": "TFFA",
+      "6": "SAGA",
+      "7": "CTF",
+      "8": "CTY"
+    }
+  },
+  "unknownGametype": "Mode {{number}}",
+  "sources": {
+    "steam": "Steam",
+    "gog": "GOG",
+    "manual": "Chosen by hand",
+    "configured": "Saved",
+    "configuredEarlier": "Saved earlier"
+  },
+  "map": {
+    "unknown": "unknown map"
+  }
+}

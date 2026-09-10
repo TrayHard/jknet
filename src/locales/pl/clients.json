@@ -1,0 +1,86 @@
+{
+  "title": "Clients",
+  "subtitle": "A client is an engine build with its own files and settings. Name it and it is yours.",
+  "newClient": "New client",
+  "gameFiles": {
+    "title": "{{game}} files",
+    "titleFallback": "Game files",
+    "ready": "Ready",
+    "notSet": "Not set",
+    "text": "JKNet reads <0>{{range}}</0> from this folder and never writes into it.",
+    "searching": "Looking for Steam and GOG copies…",
+    "noCopy": "No copy found",
+    "foundThrough": "Found through {{source}}. Confirm it to start using it.",
+    "changeFolder": "Change folder",
+    "useThisFolder": "Use this folder",
+    "pickTitle": "Select the GameData folder",
+    "invalid": "No game files in {{path}}. Missing: {{missing}}."
+  },
+  "list": {
+    "heading": "Your clients",
+    "emptyTitle": "No {{game}} clients yet",
+    "emptyText": "A client is a named engine build with its own mods and settings. Create one and it shows up here.",
+    "otherGame_one": "{{count}} {{game}} client — switch game in the sidebar to see it.",
+    "otherGame_few": "{{count}} {{game}} clients — switch game in the sidebar to see them.",
+    "otherGame_many": "{{count}} {{game}} clients — switch game in the sidebar to see them.",
+    "otherGame_other": "{{count}} {{game}} clients — switch game in the sidebar to see them."
+  },
+  "card": {
+    "default": "Default",
+    "makeDefault": "Make default",
+    "running": "Running",
+    "engineNotInstalled": "Engine not installed",
+    "meta": "{{id}} · created {{date}}",
+    "metaWithMod": "{{id}} · created {{date}} · fs_game {{mod}}",
+    "delete": "Delete",
+    "settingsOf": "Settings of {{client}}",
+    "settingsHint": "Name and mod folder",
+    "installedOn": "installed {{date}}",
+    "manualInstall": "This build has to be installed by hand."
+  },
+  "engine": {
+    "launch": "Launch",
+    "stop": "Stop",
+    "otherRunning": "Another client is already running",
+    "installFirst": "Install the engine first",
+    "checkUpdates": "Check updates",
+    "updateTo": "Update to {{version}}",
+    "updateToNewest": "Update to the newest build",
+    "upToDate": "Up to date",
+    "install": "Install engine",
+    "installVersion": "Install engine {{version}}"
+  },
+  "engines": {
+    "heading": "{{game}} engines",
+    "recommended": "Recommended"
+  },
+  "newDialog": {
+    "title": "New client",
+    "text": "A client is an engine build with its own files and settings. Give it a name you will recognise in the client list.",
+    "game": "Game",
+    "engine": "Engine",
+    "name": "Name",
+    "namePlaceholder": "Everyday",
+    "makeDefault": "Make it the default",
+    "makeDefaultText": "The Play button on Home starts the default client of the game it is on. Each game has its own.",
+    "makeDefaultSwitch": "Make this client the default one",
+    "download": "Download the engine now",
+    "downloadText": "Fetches the newest build from GitHub. Progress shows on the client card.",
+    "downloadSwitch": "Download the engine right after creating the client",
+    "create": "Create client"
+  },
+  "settingsDialog": {
+    "title": "Client settings",
+    "text": "The folder on disk keeps its name <0>{{id}}</0>, so a rename cannot break a path the launcher already stored.",
+    "name": "Name",
+    "namePlaceholder": "Everyday",
+    "modFolder": "Mod folder (fs_game)",
+    "modFolderHint": "The client starts in this folder of its home directory, passed as <0>+set fs_game</0>. Letters, digits, <1>_</1>, <2>-</2> and <3>+</3> only. Leave it empty for <4>{{folder}}</4>, the default of {{engine}}.",
+    "engineFallback": "the engine"
+  },
+  "missingToast": {
+    "title": "No {{game}} client yet",
+    "text": "Create one and it becomes the client this game starts. {{game}} clients are separate from the other game's.",
+    "action": "Create client"
+  }
+}

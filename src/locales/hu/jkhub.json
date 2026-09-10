@@ -1,0 +1,88 @@
+{
+  "sort": {
+    "label": "Sort by",
+    "recentlyUpdated": "Recently updated",
+    "newest": "Newest",
+    "mostDownloaded": "Most downloaded",
+    "topRated": "Top rated",
+    "name": "Name"
+  },
+  "filterPlaceholder": "Filter loaded files",
+  "refresh": "Refresh",
+  "fromCache": "From cache",
+  "tree": {
+    "heading": "Categories",
+    "update": "Update categories",
+    "updating": "Updating…",
+    "updateHint": "Walk the JKHub category tree again. Takes about twenty requests.",
+    "expand": "Expand {{category}}",
+    "collapse": "Collapse {{category}}",
+    "empty": "No categories yet."
+  },
+  "scope": {
+    "category": "{{category}} · installs into {{client}}",
+    "noCategory": "Pick a category · installs into {{client}}"
+  },
+  "loading": {
+    "categories": "Reading the JKHub categories…",
+    "files": "Loading files…"
+  },
+  "empty": {
+    "browserTitle": "JKHub needs the launcher window",
+    "browserText": "This tab talks to jkhub.org through the JKNet core, which a browser preview does not have.",
+    "unreachableTitle": "JKHub did not answer",
+    "categoryTitle": "This category did not load",
+    "filteredTitle": "Nothing matches",
+    "filteredText": "No loaded file matches the filter. Clear it, load more pages, or pick another category."
+  },
+  "loaded": "{{shown}} of {{total}} files loaded. Narrow the category or change the order to see the rest.",
+  "card": {
+    "open": "Open {{title}}",
+    "installed": "Installed",
+    "install": "Install",
+    "reinstall": "Reinstall",
+    "fallbackAuthor": "JKHub",
+    "updated": "Updated {{date}}",
+    "submitted": "Submitted {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Loading…",
+    "fallbackTitle": "File",
+    "openOnSite": "Open on JKHub",
+    "installTo": "Install to {{client}}",
+    "replaceAndInstall": "Replace and install",
+    "openScreenshot": "Open the screenshot",
+    "screenshot": "Screenshot",
+    "screenshotMissing": "JKHub did not serve this screenshot.",
+    "author": "Author",
+    "authorUnknown": "Unknown",
+    "updated": "Updated",
+    "submitted": "Submitted",
+    "rating": "Rating",
+    "ratingValue": "{{value}} of 5 · {{count}} reviews",
+    "notRated": "Not rated",
+    "downloads": "{{count}} downloads",
+    "views": "{{count}} views",
+    "comments": "{{count}} comments",
+    "versions": "Versions",
+    "downloading": "Downloading… {{received}}",
+    "downloadingOf": "Downloading… {{received}} of {{total}}"
+  },
+  "install": {
+    "pickClient": "Pick a client above first: a file is installed into a client.",
+    "toastTitle": "Installed into {{client}}",
+    "failedTitle": "Install failed",
+    "categoriesTitle": "Categories updated",
+    "categoriesText": "{{count}} categories read from JKHub."
+  },
+  "outcome": {
+    "installed": "Installed {{files}} into {{folder}}.",
+    "external": "This entry links to another site rather than an archive, so there is nothing to install. Open it on JKHub to follow the link.",
+    "unsupportedDownloaded": "The archive is a .{{format}}, which JKNet cannot open yet. It is downloaded already: unpack it by hand into the client's folder.",
+    "unsupported": "The archive is a .{{format}}, which JKNet cannot open yet. Open the file on JKHub and unpack it by hand.",
+    "noPk3": "The archive holds no pk3 file, so there is nothing to install into a client. Inside it: {{entries}}",
+    "showArchive": "Show the archive",
+    "conflicts_one": "{{files}} already is in {{folder}}. Press Replace and install to overwrite.",
+    "conflicts_other": "{{files}} already are in {{folder}}. Press Replace and install to overwrite."
+  }
+}

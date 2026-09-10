@@ -1,0 +1,39 @@
+{
+  "io": "{{context}}: {{reason}}",
+  "json": "{{context}}: {{reason}}",
+  "path": "Папка, нужная JKNet, недоступна: {{path}}",
+  "notFound": "Не найдено: {{what}}",
+  "invalidInput": "JKNet не может это принять: {{reason}}",
+  "alreadyExists": "Это уже есть: {{what}}",
+  "busy": "{{reason}}",
+  "state": "JKNet потерял собственное состояние: {{reason}}. Перезапустите лаунчер.",
+  "network": "Сетевой вызов не удался: {{reason}}",
+  "notImplemented": "Ещё не сделано: {{what}}",
+  "rateLimited": "{{reason}}",
+  "archive": "Архив не прочитан: {{reason}}",
+  "launch": "Игра не запускается: {{reason}}",
+  "image": "Картинка карты не прочитана: {{reason}}",
+  "signedOut": "Войдите в JKNet, чтобы увидеть друзей",
+  "gameMismatch": "{{reason}}",
+  "gameDataMissing": "Файлы игры {{game}}: {{reason}}",
+  "jkhubUnavailable": "JKHub недоступен: {{reason}}",
+  "jkhubParse": "Страницу JKHub не удалось разобрать: {{what}}. Скорее всего, сайт изменился.",
+  "jkhubDownload": "Загрузка с JKHub не удалась: {{reason}}",
+  "archiveUnsupported": "JKNet пока не открывает архивы .{{format}}.",
+  "noPk3Files": "В архиве нет ни одного файла pk3: {{entries}}",
+  "online": {
+    "notFound": "JKNet Online не знает такой учётной записи.",
+    "unauthorized": "JKNet Online отклонил сеанс. Войдите заново.",
+    "forbidden": "JKNet Online это не разрешает.",
+    "invalid": "JKNet Online отклонил запрос: {{message}}",
+    "conflict": "Это имя занято. Введите другое.",
+    "rateLimited": "Слишком много запросов к JKNet Online. Подождите немного и повторите.",
+    "providerError": "Провайдер входа пока недоступен: {{message}}",
+    "internal": "У JKNet Online собственная неполадка. Повторите позже.",
+    "notConfigured": "Служба JKNet Online ещё не открыта, поэтому в этой версии учётные записи и друзья выключены."
+  },
+  "frontend": {
+    "noRuntime": "Среда Tauri недоступна",
+    "unexpected": "Непредвиденная ошибка"
+  }
+}

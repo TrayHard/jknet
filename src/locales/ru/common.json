@@ -1,0 +1,66 @@
+{
+  "actions": {
+    "add": "Добавить",
+    "back": "Назад",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+    "continue": "Далее",
+    "delete": "Удалить",
+    "disable": "Выключить",
+    "dismiss": "Скрыть",
+    "loadMore": "Показать ещё",
+    "refresh": "Обновить",
+    "remove": "Удалить",
+    "retry": "Повторить",
+    "save": "Сохранить",
+    "seeAll": "Все серверы",
+    "tryAgain": "Повторить"
+  },
+  "states": {
+    "checking": "Проверка…",
+    "creating": "Создание…",
+    "deleting": "Удаление…",
+    "finishing": "Завершение…",
+    "installing": "Установка…",
+    "loading": "Загрузка…",
+    "reading": "Чтение…",
+    "removing": "Удаление…",
+    "saving": "Сохранение…",
+    "sending": "Отправка…",
+    "starting": "Запуск…"
+  },
+  "values": {
+    "empty": "—",
+    "notSet": "Не задана",
+    "unknown": "Неизвестно"
+  },
+  "units": {
+    "bytes": {
+      "b": "{{value}} Б",
+      "kb": "{{value}} КБ",
+      "mb": "{{value}} МБ",
+      "gb": "{{value}} ГБ"
+    },
+    "milliseconds": "{{value}} мс",
+    "seconds": "{{value}} с",
+    "minutes": "{{value}} мин",
+    "hours": "{{value}} ч",
+    "hoursMinutes": "{{hours}} ч {{minutes}} мин"
+  },
+  "window": {
+    "minimize": "Свернуть",
+    "maximize": "Развернуть",
+    "restore": "Восстановить",
+    "close": "Закрыть"
+  },
+  "select": {
+    "any": "Любой",
+    "nothingToChoose": "Выбирать не из чего"
+  },
+  "search": {
+    "nothingMatches": "Ничего не найдено"
+  },
+  "runtime": {
+    "missing": "Среда Tauri недоступна"
+  }
+}
