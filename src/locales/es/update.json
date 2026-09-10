@@ -1,11 +1,11 @@
 {
-  "available": "JKNet {{version}} is available",
-  "failedTitle": "Updating to JKNet {{version}} failed",
-  "install": "Install and restart",
-  "downloading": "Downloading… {{received}}",
-  "downloadingOf": "Downloading… {{received}} of {{total}}",
-  "installing": "Starting the installer…",
-  "checking": "Checking for updates…",
-  "unsupported": "Updates work in the installed launcher, not in a browser tab.",
-  "upToDate": "This is the latest version."
+  "available": "JKNet {{version}} está disponible",
+  "failedTitle": "No se pudo actualizar a JKNet {{version}}",
+  "install": "Instalar y reiniciar",
+  "downloading": "Descargando… {{received}}",
+  "downloadingOf": "Descargando… {{received}} de {{total}}",
+  "installing": "Iniciando el instalador…",
+  "checking": "Buscando actualizaciones…",
+  "unsupported": "Las actualizaciones funcionan en el lanzador instalado, no en una pestaña del navegador.",
+  "upToDate": "Esta es la última versión."
 }

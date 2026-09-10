@@ -1,84 +1,84 @@
 {
-  "title": "Friends",
-  "subtitle": "See who is online and join their server in one click.",
-  "subtitleCounts": "{{friends}} friends · {{online}} online",
-  "loading": "Loading your friends…",
-  "searchPlaceholder": "Search, or type a name to add",
-  "addFriend": "Add friend",
+  "title": "Amigos",
+  "subtitle": "Vea quién está en línea y únase a su servidor con un clic.",
+  "subtitleCounts": "{{friends}} amigos · {{online}} en línea",
+  "loading": "Cargando sus amigos…",
+  "searchPlaceholder": "Buscar o agregar por nombre",
+  "addFriend": "Agregar amigo",
   "live": {
-    "on": "Live",
-    "off": "Reconnecting",
-    "onText": "Changes arrive the moment they happen.",
-    "offText": "The service is out of reach; the list refreshes every 30 seconds."
+    "on": "En vivo",
+    "off": "Reconectando",
+    "onText": "Los cambios llegan en cuanto ocurren.",
+    "offText": "El servicio está fuera de alcance; la lista se actualiza cada 30 segundos."
   },
   "groups": {
-    "in_game": "In game",
-    "online": "Online",
-    "offline": "Offline"
+    "in_game": "En juego",
+    "online": "En línea",
+    "offline": "Desconectados"
   },
   "status": {
-    "playingOn": "Playing on {{server}} · {{address}}",
-    "playingOnAddress": "Playing on {{address}}",
-    "inGame": "In game",
-    "online": "Online",
-    "offline": "Offline",
-    "lastSeenJustNow": "Last seen just now",
-    "lastSeenOn": "Last seen on {{date}}",
-    "lastSeenMinutes_one": "Last seen {{count}} minute ago",
-    "lastSeenMinutes_many": "Last seen {{count}} minutes ago",
-    "lastSeenMinutes_other": "Last seen {{count}} minutes ago",
-    "lastSeenHours_one": "Last seen {{count}} hour ago",
-    "lastSeenHours_many": "Last seen {{count}} hours ago",
-    "lastSeenHours_other": "Last seen {{count}} hours ago",
-    "lastSeenDays_one": "Last seen {{count}} day ago",
-    "lastSeenDays_many": "Last seen {{count}} days ago",
-    "lastSeenDays_other": "Last seen {{count}} days ago"
+    "playingOn": "Jugando en {{server}} · {{address}}",
+    "playingOnAddress": "Jugando en {{address}}",
+    "inGame": "En juego",
+    "online": "En línea",
+    "offline": "Desconectado",
+    "lastSeenJustNow": "Visto por última vez ahora mismo",
+    "lastSeenMinutes_one": "Visto por última vez hace {{count}} minuto",
+    "lastSeenMinutes_many": "Visto por última vez hace {{count}} minutos",
+    "lastSeenMinutes_other": "Visto por última vez hace {{count}} minutos",
+    "lastSeenHours_one": "Visto por última vez hace {{count}} hora",
+    "lastSeenHours_many": "Visto por última vez hace {{count}} horas",
+    "lastSeenHours_other": "Visto por última vez hace {{count}} horas",
+    "lastSeenDays_one": "Visto por última vez hace {{count}} día",
+    "lastSeenDays_many": "Visto por última vez hace {{count}} días",
+    "lastSeenDays_other": "Visto por última vez hace {{count}} días",
+    "lastSeenOn": "Visto por última vez el {{date}}"
   },
   "empty": {
-    "offTitle": "Friends are not switched on yet",
-    "signInTitle": "Sign in to see your friends",
-    "signInText": "JKNet keeps your friends list on the service, so it follows you to any machine you sign in on.",
-    "signIn": "Sign in",
-    "noneTitle": "No friends yet",
-    "noneText": "Type a display name, a jkhub: name or a user id in the box above and press Add friend.",
-    "noMatchTitle": "Nobody matches “{{query}}”",
-    "noMatchText": "Press Add friend to send them a request instead.",
-    "pickFriend": "Select a friend to join their game or invite them to yours."
+    "offTitle": "Los amigos aún no están activados",
+    "signInTitle": "Inicie sesión para ver a sus amigos",
+    "signInText": "JKNet guarda su lista de amigos en el servicio, así que le acompaña a cualquier equipo en el que inicie sesión.",
+    "signIn": "Iniciar sesión",
+    "noneTitle": "Aún no hay amigos",
+    "noneText": "Escriba un nombre visible, un nombre jkhub: o un identificador de usuario en el cuadro de arriba y haga clic en Agregar amigo.",
+    "noMatchTitle": "Nadie coincide con «{{query}}»",
+    "noMatchText": "Haga clic en Agregar amigo para enviarle una solicitud.",
+    "pickFriend": "Seleccione un amigo para unirse a su partida o invitarlo a la suya."
   },
   "requests": {
-    "incoming": "Friend requests",
-    "outgoing": "Sent requests",
+    "incoming": "Solicitudes de amistad",
+    "outgoing": "Solicitudes enviadas",
     "heading": "{{title}} · {{count}}",
-    "accept": "Accept",
-    "decline": "Decline",
-    "cancel": "Cancel",
+    "accept": "Aceptar",
+    "decline": "Rechazar",
+    "cancel": "Cancelar",
     "handle": "{{provider}}:{{name}}"
   },
   "notices": {
-    "nowFriends": "You and {{name}} are now friends.",
-    "requestSent": "Request sent to {{name}}.",
-    "inviteSent": "Invite sent to {{name}}."
+    "nowFriends": "{{name}} y usted ya son amigos.",
+    "requestSent": "Solicitud enviada a {{name}}.",
+    "inviteSent": "Invitación enviada a {{name}}."
   },
   "row": {
-    "join": "Join",
-    "joining": "Starting…"
+    "join": "Unirse",
+    "joining": "Iniciando…"
   },
   "panel": {
-    "status": "Status",
-    "join": "Join game",
-    "joining": "Starting the game…",
-    "invite": "Invite to my game",
-    "inviteHintNoServer": "Join a server first, then invite your friends to it",
-    "inviteHint": "Invite to {{server}}",
-    "noServer": "Join a server from the Servers screen to invite anyone to it.",
-    "removeConfirm": "Remove {{name}}? You will both have to send a new request to be friends again.",
-    "remove": "Remove friend"
+    "status": "Estado",
+    "join": "Unirse a la partida",
+    "joining": "Iniciando la partida…",
+    "invite": "Invitar a mi partida",
+    "inviteHintNoServer": "Únase primero a un servidor y después invite ahí a sus amigos",
+    "inviteHint": "Invitar a {{server}}",
+    "noServer": "Únase a un servidor desde la pantalla Servidores para poder invitar a alguien.",
+    "removeConfirm": "¿Quitar a {{name}}? Los dos tendrán que enviar una solicitud nueva para volver a ser amigos.",
+    "remove": "Quitar amigo"
   },
   "invite": {
-    "toast": "{{name}} invites you to {{server}}",
-    "join": "Join",
-    "noClient": "Pick a default client on the Clients screen first",
-    "gameRunning": "A game is already running",
-    "connectTo": "Connect to {{address}}"
+    "toast": "{{name}} le invita a {{server}}",
+    "join": "Unirse",
+    "noClient": "Elija antes un cliente predeterminado en la pantalla Clientes",
+    "gameRunning": "Ya hay una partida en curso",
+    "connectTo": "Conectar a {{address}}"
   }
 }
