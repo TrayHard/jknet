@@ -15,7 +15,7 @@
     "promiseLaunch": "Uruchom dowolnego klienta jednym kliknięciem, ze Steam albo bez.",
     "promiseClients": "Trzymaj obok siebie kilku klientów, każdego z własnymi modami.",
     "promiseServers": "Znajdź aktywny serwer i dołącz do niego z launchera.",
-    "footer": "JKNet czyta pliki gry, które już masz. Nigdy nie zapisuje niczego do folderu gry."
+    "footer": "JKNet czyta pliki już zainstalowanej gry. Nigdy nie zapisuje niczego do folderu gry."
   },
   "resolving": {
     "heading": "Gdzie jest zainstalowana gra?",
@@ -25,7 +25,7 @@
   },
   "gameFiles": {
     "heading": "Gdzie są zainstalowane gry?",
-    "text": "JKNet potrzebuje folderu z plikiem base\\assets0.pk3. Czyta te archiwa i nic nie zapisuje do folderu. Jedna gra wystarczy, aby przejść dalej; drugą dodasz, kiedy zechcesz.",
+    "text": "JKNet potrzebuje folderu z plikiem base\\assets0.pk3. Czyta te archiwa i nic nie zapisuje do folderu. Jedna gra wystarczy, aby przejść dalej; drugą można dodać w dowolnej chwili.",
     "ready": "Gotowe",
     "notFound": "Nie znaleziono",
     "folderGroup": "Folder gry {{game}}",
@@ -34,7 +34,7 @@
     "searching": "Przeszukiwanie Steam i GOG…",
     "noCopy": "Nie znaleziono kopii gry {{game}} w Steam ani GOG. Wskaż folder samodzielnie albo pomiń tę grę.",
     "chooseAnother": "Wybierz inny folder",
-    "chooseAnotherText": "Wskaż folder GameData dowolnej kopii. JKNet sprawdzi go, zanim przejdziesz dalej.",
+    "chooseAnotherText": "Wskaż folder GameData dowolnej kopii. JKNet sprawdzi go przed przejściem dalej.",
     "pickTitle": "Wybierz folder GameData gry {{game}}",
     "invalid": "{{path}} nie zawiera plików gry {{game}}. {{detail}}",
     "missing": "Brakuje: {{files}}.",
@@ -43,7 +43,7 @@
   },
   "client": {
     "heading": "Utwórz pierwszego klienta",
-    "text": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. JKNet pobierze silnik za ciebie, a kolejnych klientów dodasz później.",
+    "text": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. JKNet pobiera silnik samodzielnie, a kolejnych klientów można dodać później.",
     "group": "Klient",
     "useExisting": "Użyj istniejącego klienta {{client}}",
     "engineReady": "Silnik gotowy",
@@ -68,13 +68,13 @@
     "signedInHeading": "Zalogowano",
     "signedInText": "Lista znajomych i zaproszenia będą odtąd podążać za tym kontem.",
     "heading": "Zaloguj się albo graj jako gość",
-    "text": "Konto jest opcjonalne. Wszystko, co dotąd ustawiono, działa bez niego, a zalogować się możesz później w Ustawieniach.",
+    "text": "Konto jest opcjonalne. Wszystko, co dotąd ustawiono, działa bez niego, a zalogować się można później w Ustawieniach.",
     "skip": "Pomiń, graj jako gość",
-    "providerFailed": "{{message}} Możesz grać jako gość i zalogować się później.",
+    "providerFailed": "{{message}} Można grać jako gość i zalogować się później.",
     "benefitsTitle": "Z kontem",
     "benefitFriends": "Lista znajomych i zaproszenie, które działa bez przekierowania portów.",
-    "benefitSync": "Biblioteka i ulubione serwery na każdym komputerze, z którego grasz.",
+    "benefitSync": "Biblioteka i ulubione serwery na każdym komputerze używanym do gry.",
     "benefitName": "Nazwa, którą inni gracze rozpoznają, zamiast wpisywanej na każdym serwerze.",
-    "privacy": "JKNet przechowuje nazwę konta i to, kto jest twoim znajomym. Pliki gry, ustawienia i zapisy zostają na tym komputerze."
+    "privacy": "JKNet przechowuje nazwę konta i listę znajomych. Pliki gry, ustawienia i zapisy zostają na tym komputerze."
   }
 }

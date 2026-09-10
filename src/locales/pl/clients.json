@@ -17,7 +17,7 @@
     "invalid": "Brak plików gry w {{path}}. Brakuje: {{missing}}."
   },
   "list": {
-    "heading": "Twoi klienci",
+    "heading": "Lista klientów",
     "emptyTitle": "Brak klientów {{game}}",
     "emptyText": "Klient to nazwana kompilacja silnika z własnymi modami i ustawieniami. Utwórz go, a pojawi się tutaj.",
     "otherGame_one": "{{count}} klient {{game}} — przełącz grę na pasku bocznym, aby go zobaczyć.",
@@ -56,7 +56,7 @@
   },
   "newDialog": {
     "title": "Nowy klient",
-    "text": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Nadaj mu nazwę, którą rozpoznasz na liście klientów.",
+    "text": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Nadaj mu nazwę łatwą do rozpoznania na liście klientów.",
     "game": "Gra",
     "engine": "Silnik",
     "name": "Nazwa",

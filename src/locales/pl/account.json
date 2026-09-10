@@ -14,7 +14,7 @@
     "continueJkhub": "Kontynuuj przez JKHub",
     "continueJkhubNote": "Konto, które ma już większość społeczności.",
     "continueDiscord": "Kontynuuj przez Discord",
-    "continueDiscordNote": "Loguje przez to konto Discord, z którym grasz.",
+    "continueDiscordNote": "Loguje przez konto Discord używane do gry.",
     "developer": "Logowanie deweloperskie",
     "notAvailable": "Logowanie przez {{provider}} nie jest jeszcze dostępne."
   },
@@ -42,7 +42,7 @@
     "summary": "Adres JKNet Online (zaawansowane)",
     "label": "Adres JKNet Online",
     "placeholder": "http://127.0.0.1:8787",
-    "signedIn": "Wyloguj się, zanim wskażesz JKNet inną usługę.",
+    "signedIn": "Wyloguj się przed zmianą usługi.",
     "notConfigured": "Dla deweloperów i własnych instancji: adres http:// lub https:// włącza konta i znajomych na tym komputerze.",
     "hint": "Adres http:// lub https://. Zostaw puste, aby wrócić do domyślnego."
   },

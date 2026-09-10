@@ -10,7 +10,7 @@
   "pickFilter": "Archiwa Jedi Academy",
   "clientBar": {
     "label": "Klient",
-    "hint": "Pliki trafiają tylko do tego klienta. Inny klient na tym samym silniku ma własny zestaw. Wymienieni są tu klienci {{game}}; drugą grę wybierzesz na pasku bocznym."
+    "hint": "Pliki trafiają tylko do tego klienta. Inny klient na tym samym silniku ma własny zestaw. Wymienieni są tu klienci {{game}}; drugą grę wybiera przełącznik na pasku bocznym."
   },
   "tabs": {
     "installed": "Zainstalowane",
@@ -57,7 +57,7 @@
     "noClientsText": "Plik biblioteki instaluje się do klienta. Utwórz pierwszego, a lista zacznie się zapełniać.",
     "newClient": "Nowy klient",
     "noFilesTitle": "{{client}} nie ma jeszcze plików",
-    "noFilesText": "Znajdź skiny, rękojeści, mapy i mody na JKHub, a potem dodaj tutaj pliki pk3. Możesz je też upuścić prosto na to okno.",
+    "noFilesText": "Znajdź skiny, rękojeści, mapy i mody na JKHub, a potem dodaj tutaj pliki pk3. Można je też upuścić prosto na to okno.",
     "filteredTitle": "Brak wyników",
     "filteredText": "Żaden plik tego klienta nie pasuje do wyszukiwania i filtrów. Wyczyść je, aby zobaczyć całą bibliotekę.",
     "updatesTitle": "Brak aktualizacji",

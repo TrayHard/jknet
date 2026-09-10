@@ -47,7 +47,7 @@
     "favorites": "Ulubione",
     "history": "Historia",
     "lan": "LAN",
-    "lanHint": "Wykrywanie rozgłoszeniowe pojawi się razem z modułem uruchamiania"
+    "lanHint": "Wykrywanie w sieci lokalnej nie jest jeszcze dostępne"
   },
   "columns": {
     "server": "SERWER",
@@ -82,7 +82,7 @@
     "favoritesTitle": "Brak ulubionych",
     "favoritesText": "Naciśnij gwiazdkę w wierszu, aby zatrzymać tu serwer.",
     "historyTitle": "Brak połączeń",
-    "historyText": "Serwery, z którymi się połączysz, pojawiają się tutaj, od najnowszych.",
+    "historyText": "Odwiedzone serwery pojawiają się tutaj, od najnowszych.",
     "trustedTitle": "Brak zaufanych serwerów na tej liście",
     "trustedText": "Wbudowana lista polecanych serwerów społeczności jest w tej wersji pusta.",
     "noneTitle": "Brak serwerów",
