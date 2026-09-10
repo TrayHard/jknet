@@ -21,6 +21,7 @@
 //! | `hub`            | the JKNet hub: its wire types and its HTTP client |
 //! | `account`        | signing in to the hub and owning the account    |
 //! | `friends`        | friends, presence and invites on top of `hub`   |
+//! | `jkhub`          | browsing jkhub.org and installing its files     |
 
 mod account;
 mod clients;
@@ -33,6 +34,11 @@ mod game_files;
 // `friends` the rest, so a token is attached to a request in one place and
 // one connection pool serves both.
 mod hub;
+// --- slice: jkhub ---
+// The public pages of jkhub.org, read behind a limiter and a cache. The module
+// owns its own HTTP client because a guest download needs the cookie jar the
+// file page was served with, which `hub` has no reason to share.
+mod jkhub;
 mod launch;
 mod levelshots;
 mod library;
@@ -169,6 +175,11 @@ pub fn run() {
             // cost nothing until a token appears, and neither of them touches
             // the window, so nothing here can hold up the first frame.
             friends::start(app.handle());
+            // --- slice: jkhub ---
+            // One client, one cookie jar and one limiter for the whole run.
+            // Built here rather than per call: the session a `csrfKey` belongs
+            // to is the session that jar holds.
+            jkhub::manage(app.handle());
 
             log::info!("JKNet {} started", app.package_info().version);
             // --- slice: hub gate ---
@@ -264,6 +275,14 @@ pub fn run() {
             friends::send_invite,
             friends::dismiss_invite,
             friends::join_friend,
+            // --- slice: jkhub ---
+            jkhub::jkhub_categories,
+            jkhub::jkhub_list,
+            jkhub::jkhub_file,
+            jkhub::jkhub_resolve_download,
+            jkhub::jkhub_install,
+            jkhub::jkhub_open,
+            jkhub::jkhub_clear_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
