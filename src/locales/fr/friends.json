@@ -35,7 +35,7 @@
     "lastSeenOn": "Vu le {{date}}"
   },
   "empty": {
-    "offTitle": "Les amis ne sont pas encore activés",
+    "offTitle": "La fonction Amis n’est pas encore activée",
     "signInTitle": "Connectez-vous pour voir vos amis",
     "signInText": "JKNet garde votre liste d’amis sur le service : elle vous suit sur chaque machine où vous vous connectez.",
     "signIn": "Se connecter",
