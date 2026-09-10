@@ -17,6 +17,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   errorMessage,
+  friendsEvents,
+  friendsIpc,
   ipc,
   launchIpc,
   libraryIpc,
@@ -27,8 +29,11 @@ import {
   type Engine,
   type EngineRelease,
   type EngineUpdate,
+  type FriendsView,
   type GameFilesCandidate,
+  type Invite,
   type LibraryItem,
+  type PresenceUpdated,
   type RunningGame,
   type ServerInfo,
   type ServersBatchEvent,
@@ -601,4 +606,173 @@ async function collectEngineVersions(
   // A copy, not the accumulator: a late answer must not edit the object React
   // Query already handed to a component that will not re-render for it.
   return { ...found };
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: friends ---
+//
+// One query holds the whole screen: `get_friends_state` answers with the four
+// lists and the player's own presence in one document. The core is the only
+// writer, so every mutation answers with the new document and drops it into
+// the cache, and the three `friends:*` events either patch one row or ask for
+// a refetch.
+// ---------------------------------------------------------------------------
+
+export const friendsKeys = {
+  /** The one document the Friends screen and the sidebar badge read. */
+  state: ["friends", "state"] as const,
+};
+
+/**
+ * Friends, requests, invites and my presence.
+ *
+ * No polling of its own. The core pushes `friends:changed` when anything
+ * moves — and, while the live socket is down, every 30 s regardless — so a
+ * timer here would only duplicate that. Mount `FriendsProvider` above the
+ * router for the events to arrive.
+ */
+export function useFriendsState(): UseQueryResult<FriendsView> {
+  return useQuery({
+    queryKey: friendsKeys.state,
+    queryFn: friendsIpc.getFriendsState,
+    staleTime: 15_000,
+  });
+}
+
+/** How many friends are online or in a game, for the sidebar badge. */
+export function useOnlineFriendCount(): number | undefined {
+  const friends = useFriendsState();
+  if (friends.data === undefined || !friends.data.signedIn) return undefined;
+  return friends.data.friends.filter(
+    (friend) => friend.presence.status !== "offline",
+  ).length;
+}
+
+/** Drops the answer of a mutation straight into the query cache. */
+function useFriendsWriter<TArgs>(
+  mutationFn: (args: TArgs) => Promise<FriendsView>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (view) => queryClient.setQueryData(friendsKeys.state, view),
+  });
+}
+
+export function useSendFriendRequest() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (query: string) => friendsIpc.sendFriendRequest(query),
+    // The result carries the refreshed lists next to the outcome, so the
+    // screen never shows "Request sent" over a list that does not have it yet.
+    onSuccess: (result) =>
+      queryClient.setQueryData(friendsKeys.state, result.state),
+  });
+}
+
+export function useAcceptFriendRequest() {
+  return useFriendsWriter((id: string) => friendsIpc.acceptFriendRequest(id));
+}
+
+/** Declines a request sent to me, or cancels one I sent. */
+export function useDeclineFriendRequest() {
+  return useFriendsWriter((id: string) => friendsIpc.declineFriendRequest(id));
+}
+
+export function useRemoveFriend() {
+  return useFriendsWriter((userId: string) => friendsIpc.removeFriend(userId));
+}
+
+export function useDismissInvite() {
+  return useFriendsWriter((id: string) => friendsIpc.dismissInvite(id));
+}
+
+export function useSendInvite() {
+  return useMutation({
+    mutationFn: ({
+      toUserId,
+      serverAddress,
+      serverName,
+    }: {
+      toUserId: string;
+      serverAddress: string;
+      serverName?: string | null;
+    }) => friendsIpc.sendInvite(toUserId, serverAddress, serverName),
+  });
+}
+
+/** Starts the default client on the server a friend is playing on. */
+export function useJoinFriend() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => friendsIpc.joinFriend(userId),
+    onSuccess: (running) => {
+      queryClient.setQueryData(launchKeys.runningGame, running);
+    },
+  });
+}
+
+/**
+ * Subscribes to the three `friends:*` events for the whole window.
+ *
+ * Mounted once, by `FriendsProvider`. `friends:presence` patches the one row
+ * it names rather than refetching, because it arrives every time any friend
+ * changes server; the other two ask for the document again, because they can
+ * move any of the four lists at once.
+ */
+export function useFriendsEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    const stops: UnlistenFn[] = [];
+
+    void (async () => {
+      const stopChanged = await listen(friendsEvents.changed, () => {
+        void queryClient.invalidateQueries({ queryKey: friendsKeys.state });
+      });
+      const stopPresence = await listen<PresenceUpdated>(
+        friendsEvents.presence,
+        (event) => {
+          queryClient.setQueryData<FriendsView>(friendsKeys.state, (view) =>
+            view === undefined
+              ? view
+              : {
+                  ...view,
+                  friends: view.friends.map((friend) =>
+                    friend.user.id === event.payload.userId
+                      ? { ...friend, presence: event.payload.presence }
+                      : friend,
+                  ),
+                },
+          );
+        },
+      );
+      const stopInvite = await listen<Invite>(friendsEvents.invite, (event) => {
+        // The toast is drawn from the invite list, so the arrival only has to
+        // put the invite in it. The core sends `friends:changed` as well, and
+        // adding it here means the toast appears without waiting for a fetch.
+        queryClient.setQueryData<FriendsView>(friendsKeys.state, (view) =>
+          view === undefined || view.invites.some((i) => i.id === event.payload.id)
+            ? view
+            : { ...view, invites: [event.payload, ...view.invites] },
+        );
+      });
+
+      // The effect may have been torn down while the three promises resolved.
+      if (disposed) {
+        stopChanged();
+        stopPresence();
+        stopInvite();
+        return;
+      }
+      stops.push(stopChanged, stopPresence, stopInvite);
+    })();
+
+    return () => {
+      disposed = true;
+      for (const stop of stops) stop();
+    };
+  }, [queryClient]);
 }
