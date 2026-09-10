@@ -55,16 +55,23 @@ pub enum AppError {
     #[error("internal state is unavailable: {0}")]
     State(String),
 
+    /// A socket, a name lookup, an HTTP request or a remote peer failed. The
+    /// message names the address, because "connection refused" alone is
+    /// unusable in a log of a scan across a thousand servers. Covers both the
+    /// UDP scan of the server browser and the GitHub API of the installer.
+    #[error("network: {0}")]
+    Network(String),
+
     /// The feature is planned but the skeleton does not implement it yet.
+    /// Nothing returns it now that the last stub is gone; kept because the
+    /// next stub needs it and `clippy` only complains about the dead variant.
+    #[allow(dead_code)]
     #[error("not implemented: {0}")]
     NotImplemented(&'static str),
 
     // --- slice: launch ---
-    /// An HTTP request failed, or the answer was not the one expected. Covers
-    /// the GitHub API and the engine download.
-    #[error("network error: {0}")]
-    Network(String),
-
+    // The HTTP failures of the GitHub client share `Network` above with the
+    // UDP failures of the server browser: one variant, one log prefix.
     /// GitHub refused an anonymous request because the hourly quota is spent.
     /// Separate from `Network` because the cure is waiting, not retrying.
     #[error("{0}")]

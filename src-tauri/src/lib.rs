@@ -14,7 +14,7 @@
 //! | `engines`        | static registry of engine builds                |
 //! | `engine_install` | GitHub releases, downloads and archive unpacking |
 //! | `clients`        | named engine instances on disk                  |
-//! | `servers`        | server browser (stub)                           |
+//! | `servers`        | master server queries, ping and the server cache |
 //! | `launch`         | starting a client and watching it run           |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
 
@@ -86,8 +86,6 @@ pub fn run() {
             clients::create_client,
             clients::rename_client,
             clients::delete_client,
-            servers::list_servers,
-            servers::refresh_servers,
             launch::launch_client,
             // --- slice: library ---
             library::list_library,
@@ -103,6 +101,13 @@ pub fn run() {
             engines::check_engine_update,
             launch::get_running_game,
             launch::stop_game,
+            // --- slice: servers ---
+            servers::get_cached_servers,
+            servers::refresh_servers,
+            servers::get_server_status,
+            servers::list_trusted_servers,
+            servers::set_server_favorite,
+            servers::add_server_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
