@@ -1,12 +1,14 @@
 import { Library, Monitor, Server, Settings, Users } from "lucide-react";
 import { useNavigate } from "react-router";
 
+// --- slice: game switch ---
+import { clientsOfGame, useActiveGame, useDefaultClient } from "../lib/game";
 import {
   useAccountState,
   useClients,
   useOnlineFriendCount,
-  useSettings,
 } from "../lib/queries";
+import { GameSwitch } from "./GameSwitch";
 import { Avatar, NavItem } from "./ui";
 
 /**
@@ -15,7 +17,6 @@ import { Avatar, NavItem } from "./ui";
  */
 export function Sidebar() {
   const navigate = useNavigate();
-  const settings = useSettings();
   const clients = useClients();
   // --- slice: account ---
   const account = useAccountState();
@@ -23,15 +24,23 @@ export function Sidebar() {
   // Undefined while signed out or still loading, which leaves the counter off
   // rather than claiming zero friends are online.
   const friendsOnline = useOnlineFriendCount();
+  // --- slice: game switch ---
+  // Both the client counter and the name under the avatar belong to the game
+  // the switcher is on: a Jedi Academy client is not a client a player looking
+  // at Jedi Outcast can start.
+  const activeGame = useActiveGame();
+  const gameClients = clientsOfGame(clients.data, activeGame);
+  const defaultClient = useDefaultClient();
 
-  const defaultClient = clients.data?.find(
-    (client) => client.id === settings.data?.defaultClientId,
-  );
   const user = account.data?.hubSignedIn ? (account.data.hubUser ?? null) : null;
 
   return (
     <nav className="flex flex-col shrink-0 w-232 bg-sidebar border-r border-line-subtle">
       <div className="flex-1 flex flex-col gap-20 p-12 overflow-y-auto">
+        {/* --- slice: game switch --- above the navigation, because it scopes
+            every route below it rather than being one of them. */}
+        <GameSwitch />
+
         <Group title="Play">
           <NavItem to="/" end icon={<Monitor size={20} />} label="Home" />
           <NavItem to="/servers" icon={<Server size={20} />} label="Servers" />
@@ -43,7 +52,7 @@ export function Sidebar() {
             to="/clients"
             icon={<Monitor size={20} />}
             label="Clients"
-            count={clients.data?.length}
+            count={clients.isSuccess ? gameClients.length : undefined}
           />
         </Group>
 
