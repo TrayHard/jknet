@@ -1,0 +1,64 @@
+{
+  "title": "Settings",
+  "subtitle": "Language, launch, downloads, appearance and account.",
+  "dataFolder": {
+    "title": "Data folder",
+    "text": "Clients, library and logs live here.",
+    "open": "Open JKNet folder"
+  },
+  "language": {
+    "title": "Language",
+    "text": "The launcher speaks the language you pick here. Server names, map names and file titles stay as their authors wrote them.",
+    "label": "Interface language",
+    "system": "System language",
+    "systemWith": "System language ({{language}})",
+    "needsTranslation": "This language is not translated yet and shows English."
+  },
+  "gameFiles": {
+    "title": "Game files",
+    "text": "JKNet reads the archives in these folders and writes nothing into them. One game is enough; set up the other whenever you like.",
+    "row": "{{game}} files",
+    "playStarts": "Play starts {{client}}",
+    "noDefault": "No default client yet",
+    "locate": "Locate",
+    "change": "Change",
+    "pickTitle": "Select the {{game}} GameData folder",
+    "invalid": "No {{game}} files in {{path}}. Missing: {{missing}}."
+  },
+  "launch": {
+    "title": "Launch",
+    "label": "Extra launch arguments",
+    "placeholder": "+set r_fullscreen 0 +set r_mode 4",
+    "hint": "Appended to every client, exactly as in a shortcut. Example: <0>+set r_fullscreen 0 +set r_mode 4</0>. Double quotes keep a value with a space together."
+  },
+  "onboarding": {
+    "title": "First-time setup",
+    "text": "Walks through game files, a client and an account again. Nothing you have set up is removed.",
+    "action": "Run first-time setup again"
+  },
+  "cache": {
+    "title": "Cache",
+    "mapPictures": "Map pictures",
+    "reading": "Reading the index…",
+    "perGame": "{{count}} {{game}}",
+    "lastRebuild": "Last rebuild: {{maps}} pictures from {{sources}} files in {{elapsed}}.",
+    "rebuild": "Rebuild",
+    "rebuilding": "Rebuilding…",
+    "count_one": "{{count}} map has a picture, read from the pk3 files you already own. Nothing is downloaded.",
+    "count_many": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded.",
+    "count_other": "{{count}} maps have a picture, read from the pk3 files you already own. Nothing is downloaded."
+  },
+  "rest": {
+    "title": "The rest of the settings is not wired up yet",
+    "text": "The Downloads and Appearance sections arrive together with the features they control."
+  },
+  "about": {
+    "title": "About",
+    "text": "JKNet updates itself from GitHub Releases. Every package is signed, and an unsigned one is refused.",
+    "version": "Version {{version}}",
+    "versionUnknown": "Version unknown",
+    "license": "GPL-3.0-or-later",
+    "check": "Check for updates",
+    "install": "Install and restart"
+  }
+}

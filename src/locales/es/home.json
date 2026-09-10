@@ -1,0 +1,33 @@
+{
+  "title": "Home",
+  "subtitle": "{{game}} · jump back in, or pick a server from the browser.",
+  "launchError": "{{message}} <0>Open the Clients screen</0> to set the game folder or install the engine.",
+  "hero": {
+    "quickPlay": "Quick play",
+    "inGame": "In game",
+    "running": "Running: {{client}}",
+    "noClient": "No {{game}} client yet",
+    "runningText": "Started <0>{{age}}</0> ago, process {{pid}}. The launcher steps aside while you play.",
+    "readyText": "Start the default client and pick a server from the in-game menu.",
+    "noClientText": "A client is an engine build with its own files and settings. Make one and {{game}} is one press away.",
+    "createClient": "Create a {{game}} client",
+    "play": "Play",
+    "playHint": "Mark a client as the default one",
+    "stop": "Stop",
+    "manageClients": "Manage clients",
+    "aMoment": "a moment"
+  },
+  "gameFiles": {
+    "title": "JKNet does not know where your {{game}} files are",
+    "text": "Point it at the <0>GameData</0> folder of your copy and the game is ready to start. Browsing servers works without it.",
+    "locate": "Locate files"
+  },
+  "topServers": {
+    "trusted": "Trusted servers",
+    "busiest": "Busiest servers",
+    "emptyTitle": "No servers in the cache yet",
+    "emptyText": "Open the Servers screen once and the busiest ones show up here.",
+    "openServers": "Open Servers",
+    "seeAll": "See all"
+  }
+}

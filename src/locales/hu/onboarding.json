@@ -1,0 +1,80 @@
+{
+  "steps": {
+    "gameFiles": "Game files",
+    "client": "Client",
+    "account": "Account"
+  },
+  "panel": {
+    "position": "Step {{step}} of {{total}}",
+    "stepDone": " (done)",
+    "stepCurrent": " (current step)",
+    "stepUpcoming": " (not started)"
+  },
+  "brand": {
+    "tagline": "One launcher for Jedi Academy multiplayer.",
+    "promiseLaunch": "Start any client in one click, with or without Steam.",
+    "promiseClients": "Keep several clients side by side, each with its own mods.",
+    "promiseServers": "Find a live server and join it from the launcher.",
+    "footer": "JKNet reads the game files you already own. It never writes into the game folder."
+  },
+  "resolving": {
+    "heading": "Where is the game installed?",
+    "text": "JKNet needs the folder that holds base\\assets0.pk3 to assets3.pk3.",
+    "reading": "Reading your setup…",
+    "failed": "Restart the launcher once the problem is fixed."
+  },
+  "gameFiles": {
+    "heading": "Where are the games installed?",
+    "text": "JKNet needs the folder that holds base\\assets0.pk3. It reads those archives and writes nothing into the folder. One game is enough to carry on; add the other whenever you like.",
+    "ready": "Ready",
+    "notFound": "Not found",
+    "folderGroup": "{{game}} folder",
+    "assetsFound": "Assets found",
+    "assetsMissing": "Assets missing",
+    "searching": "Looking through Steam and GOG…",
+    "noCopy": "No copy of {{game}} turned up in Steam or GOG. Point JKNet at the folder yourself, or skip this game.",
+    "chooseAnother": "Choose another folder",
+    "chooseAnotherText": "Pick the GameData folder of any copy. JKNet checks it before you continue.",
+    "pickTitle": "Select the {{game}} GameData folder",
+    "invalid": "{{path}} has no {{game}} files. {{detail}}",
+    "missing": "Missing: {{files}}.",
+    "unreadable": "The folder holds no readable archives.",
+    "license": "JKNet does not ship game files. You need a licensed copy of Star Wars Jedi Knight: Jedi Academy or Jedi Knight II: Jedi Outcast from Steam, GOG or a disc."
+  },
+  "client": {
+    "heading": "Create your first client",
+    "text": "A client is an engine build with its own files and settings. JKNet downloads the engine for you, and you can add more clients later.",
+    "group": "Client",
+    "useExisting": "Use existing client {{client}}",
+    "engineReady": "Engine ready",
+    "noEngine": "No engine yet",
+    "existingMeta": "{{engine}} · folder <0>clients\\{{folder}}</0>",
+    "latest": "latest",
+    "manualInstall": "This build has to be installed by hand.",
+    "nameLabel": "Client name",
+    "namePlaceholder": "Everyday",
+    "nameDefault": "Everyday",
+    "nameHint": "Its files go into <0>clients\\{{folder}}</0> inside the JKNet data folder. Renaming the client later keeps that folder.",
+    "skipDownload": "Skip download",
+    "askingGithub": "Asking GitHub for the newest build…",
+    "cacheNote": "The archive lands in the JKNet cache, so a second client on the same engine installs without another download.",
+    "continueWithoutWaiting": "Continue without waiting",
+    "failedTitle": "The client is created. Its engine is not installed yet.",
+    "failedText": "Folder <0>clients\\{{folder}}</0>. Retry the download, or skip it and install the engine later from the Clients screen."
+  },
+  "account": {
+    "offHeading": "Accounts and friends come later",
+    "offText": "Everything you have set up so far works without an account. Your game files, your settings and your saves stay on this machine.",
+    "signedInHeading": "You are signed in",
+    "signedInText": "Your friends list and your invites follow this account from now on.",
+    "heading": "Sign in, or play as a guest",
+    "text": "An account is optional. Everything you have set up so far works without one, and you can sign in later from Settings.",
+    "skip": "Skip, play as guest",
+    "providerFailed": "{{message}} You can play as a guest and sign in later.",
+    "benefitsTitle": "With an account",
+    "benefitFriends": "A friends list, with an invite that works without port forwarding.",
+    "benefitSync": "Your library and your favourite servers on every machine you play from.",
+    "benefitName": "A name other players recognise, instead of one typed into each server.",
+    "privacy": "JKNet stores your account name and who your friends are. Your game files, your settings and your saves stay on this machine."
+  }
+}
