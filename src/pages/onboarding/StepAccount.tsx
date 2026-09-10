@@ -1,11 +1,10 @@
 import { AlertTriangle, Shield } from "lucide-react";
 import { useState } from "react";
 
-import { Avatar } from "../../components/account/Avatar";
 import { providerLine } from "../../components/account/provider";
 import { ProviderButtons } from "../../components/account/ProviderButtons";
 import { WaitingForBrowser } from "../../components/account/WaitingForBrowser";
-import { Button } from "../../components/ui";
+import { Avatar, Button } from "../../components/ui";
 import { errorMessage } from "../../lib/ipc";
 import { useAccountState, useSignIn, useUpdateSettings } from "../../lib/queries";
 import { StepPanel } from "./StepPanel";
@@ -77,7 +76,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
     >
       {signedIn && user ? (
         <section className="flex items-center gap-12 rounded-lg border border-line bg-surface p-16">
-          <Avatar user={user} size="lg" />
+          <Avatar name={user.displayName} src={user.avatarUrl} size="lg" />
           <span className="flex-1 min-w-0 flex flex-col">
             <span className="text-heading-sm text-fg truncate">
               {user.displayName}

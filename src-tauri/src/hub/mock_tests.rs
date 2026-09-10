@@ -31,7 +31,7 @@ const PORT_CONFLICT: u16 = 8793;
 const PORT_UNUSED: u16 = 8794;
 
 /// A running `mock-hub.mjs` that stops when the test does, however it ends.
-struct MockHub {
+pub(crate) struct MockHub {
     child: Child,
     port: u16,
 }
@@ -45,7 +45,7 @@ impl Drop for MockHub {
 
 impl MockHub {
     /// Starts the mock and waits until it accepts a connection.
-    fn start(port: u16) -> MockHub {
+    pub(crate) fn start(port: u16) -> MockHub {
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("src-tauri has a parent")
@@ -76,9 +76,13 @@ impl MockHub {
         panic!("the mock hub did not listen on {port} within 10 s");
     }
 
+    pub(crate) fn base_url(&self) -> String {
+        format!("http://127.0.0.1:{}", self.port)
+    }
+
     fn context(&self) -> HubContext {
         HubContext {
-            base_url: format!("http://127.0.0.1:{}", self.port),
+            base_url: self.base_url(),
             token: None,
         }
     }
@@ -147,10 +151,63 @@ async fn signs_in_reads_the_account_renames_it_and_signs_out() {
         .expect("the rename lands");
     assert_eq!(renamed.display_name, "Kyle Katarn");
 
+    // The mock seeds one world at the first sign-in: three friends in the
+    // three states the screen groups by, and a request in each direction.
     let friends = client.get_friends(&ctx).await.expect("the list reads back");
-    assert_eq!(friends.friends.len(), 2);
+    assert_eq!(friends.friends.len(), 3);
     assert_eq!(friends.friends[0].presence.status, "in_game");
-    assert!(friends.incoming.is_empty());
+    assert_eq!(friends.incoming.len(), 1);
+    assert_eq!(friends.outgoing.len(), 1);
+
+    // Accepting moves the one incoming request into the friends list, and the
+    // answer is the friendship it became.
+    let request = friends.incoming[0].id.clone();
+    let accepted = client
+        .accept_request(&ctx, &request)
+        .await
+        .expect("the request is accepted");
+    assert_eq!(accepted.user.id, friends.incoming[0].from.id);
+
+    let after = client.get_friends(&ctx).await.expect("the list reads back");
+    assert_eq!(after.friends.len(), 4);
+    assert!(after.incoming.is_empty());
+
+    // Presence goes out as the heartbeat sends it, and comes back stored.
+    let put = client
+        .put_presence(
+            &ctx,
+            &crate::hub::PresenceUpdate {
+                status: crate::hub::Presence::IN_GAME.into(),
+                server_address: Some("203.0.113.10:29070".into()),
+                server_name: Some("EU FFA".into()),
+                client_name: Some("Everyday".into()),
+            },
+        )
+        .await
+        .expect("the presence lands");
+    assert_eq!(put.status, crate::hub::Presence::IN_GAME);
+    assert!(put.in_game());
+
+    // Invites: one goes out, and the list of the ones addressed to me is
+    // empty, because the hub does not hand back what I sent.
+    let invite = client
+        .create_invite(
+            &ctx,
+            &crate::hub::NewInvite {
+                to_user_id: after.friends[0].user.id.clone(),
+                server_address: "203.0.113.10:29070".into(),
+                server_name: Some("EU FFA".into()),
+                message: Some("Duel?".into()),
+            },
+        )
+        .await
+        .expect("the invite is created");
+    assert_eq!(invite.server_address, "203.0.113.10:29070");
+    assert!(client
+        .list_invites(&ctx)
+        .await
+        .expect("the invites read back")
+        .is_empty());
 
     client.logout(&ctx).await.expect("the sign-out lands");
 

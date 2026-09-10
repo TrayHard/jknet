@@ -368,6 +368,9 @@ export interface EngineInstallProgress {
 export interface GameStarted {
   clientId: string;
   pid: number;
+  // --- slice: friends ---
+  /** The `+connect` address, or `null` when the game opened on its menu. */
+  connect: string | null;
 }
 
 /** Payload of `launch:game-exited`. */
@@ -649,3 +652,139 @@ export function hubErrorCode(error: unknown): string | null {
 export function hubErrorMessage(error: unknown): string {
   return errorMessage(error).replace(/^hub [a-z_]+: /, "");
 }
+
+// ---------------------------------------------------------------------------
+// --- slice: friends ---
+//
+// Friends, presence and invites, `src-tauri/src/friends/`. The types below
+// mirror `src-tauri/src/hub/types.rs`, which in turn mirrors the `## Types`
+// table of the hub contract, so the three stay readable side by side. The
+// launcher never talks to the hub from the frontend: a token in a webview is a
+// token in the devtools network tab.
+// ---------------------------------------------------------------------------
+
+/**
+ * Calls a friends command, or the mock hub when the page is in a browser.
+ *
+ * The Friends screen is nothing but commands, so outside Tauri it would be one
+ * error line and no layout at all. In a development build the call goes to
+ * `scripts/mock-hub.mjs` over `fetch` instead; `import.meta.env.DEV` is a
+ * compile-time constant, so both the branch and `devHub.ts` behind it are gone
+ * from a production bundle. Inside Tauri nothing changes.
+ */
+function callFriends<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  if (import.meta.env.DEV && !isTauri()) {
+    return import("./devHub").then((module) => module.devFriends<T>(command, args));
+  }
+  return call<T>(command, args);
+}
+
+/** Where a player is. `offline` is derived by the hub from a missed heartbeat. */
+export type PresenceStatus = "online" | "in_game" | "offline";
+
+export interface Presence {
+  status: PresenceStatus;
+  /** `ip:port` of the server, when the player joined one from JKNet. */
+  serverAddress: string | null;
+  /** Host name of that server, colour codes removed. */
+  serverName: string | null;
+  /** Name of the JKNet client they started. */
+  clientName: string | null;
+  /** RFC 3339 time the status last changed. */
+  since: string;
+}
+
+export interface Friend {
+  user: HubUser;
+  presence: Presence;
+  friendsSince: string;
+}
+
+/** A friend request; which list it is in says whether it is mine to accept. */
+export interface FriendRequest {
+  id: string;
+  from: HubUser;
+  to: HubUser;
+  createdAt: string;
+}
+
+export interface Invite {
+  id: string;
+  from: HubUser;
+  serverAddress: string;
+  serverName: string | null;
+  message: string | null;
+  createdAt: string;
+  /** The hub drops an invite ten minutes after it was made. */
+  expiresAt: string;
+}
+
+/** `src-tauri/src/friends/mod.rs`: everything the Friends screen renders. */
+export interface FriendsView {
+  /** False while nobody is signed in. The lists are then empty, not absent. */
+  signedIn: boolean;
+  /** Whether the live socket is up; false means updates arrive on a timer. */
+  live: boolean;
+  friends: Friend[];
+  incoming: FriendRequest[];
+  outgoing: FriendRequest[];
+  /** Invites addressed to me, newest first. */
+  invites: Invite[];
+  /** What the launcher reports about me. */
+  presence: Presence;
+}
+
+/** The answer of `send_friend_request`. */
+export interface RequestSent {
+  /** `requested`, or `accepted` when they had already asked me. */
+  outcome: "requested" | "accepted";
+  displayName: string;
+  state: FriendsView;
+}
+
+/** Payload of `friends:presence`. */
+export interface PresenceUpdated {
+  userId: string;
+  presence: Presence;
+}
+
+/** Event names the friends slice emits. */
+export const friendsEvents = {
+  /** A nudge with no payload: read the lists again. */
+  changed: "friends:changed",
+  /** One friend moved: patch one row. */
+  presence: "friends:presence",
+  /** An `Invite` arrived. */
+  invite: "friends:invite",
+} as const;
+
+export const friendsIpc = {
+  getFriendsState: () => callFriends<FriendsView>("get_friends_state"),
+  /** `query` is a display name, `provider:name` or a user id. */
+  sendFriendRequest: (query: string) =>
+    callFriends<RequestSent>("send_friend_request", { query }),
+  acceptFriendRequest: (id: string) =>
+    callFriends<FriendsView>("accept_friend_request", { id }),
+  /** Declines a request sent to me, or cancels one I sent. */
+  declineFriendRequest: (id: string) =>
+    callFriends<FriendsView>("decline_friend_request", { id }),
+  removeFriend: (userId: string) => callFriends<FriendsView>("remove_friend", { userId }),
+  sendInvite: (
+    toUserId: string,
+    serverAddress: string,
+    serverName?: string | null,
+    message?: string | null,
+  ) =>
+    callFriends<Invite>("send_invite", {
+      toUserId,
+      serverAddress,
+      serverName: serverName ?? null,
+      message: message ?? null,
+    }),
+  dismissInvite: (id: string) => callFriends<FriendsView>("dismiss_invite", { id }),
+  /** Starts the default client on the server that friend is playing on. */
+  joinFriend: (userId: string) => callFriends<RunningGame>("join_friend", { userId }),
+};

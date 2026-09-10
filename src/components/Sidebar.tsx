@@ -1,10 +1,13 @@
 import { Library, Monitor, Server, Settings, Users } from "lucide-react";
 import { useNavigate } from "react-router";
 
-import { useAccountState, useClients, useSettings } from "../lib/queries";
-// --- slice: account ---
-import { Avatar } from "./account/Avatar";
-import { NavItem } from "./ui";
+import {
+  useAccountState,
+  useClients,
+  useOnlineFriendCount,
+  useSettings,
+} from "../lib/queries";
+import { Avatar, NavItem } from "./ui";
 
 /**
  * The 232 px navigation column: three groups of routes and the user block at
@@ -16,6 +19,10 @@ export function Sidebar() {
   const clients = useClients();
   // --- slice: account ---
   const account = useAccountState();
+  // --- slice: friends ---
+  // Undefined while signed out or still loading, which leaves the counter off
+  // rather than claiming zero friends are online.
+  const friendsOnline = useOnlineFriendCount();
 
   const defaultClient = clients.data?.find(
     (client) => client.id === settings.data?.defaultClientId,
@@ -41,7 +48,12 @@ export function Sidebar() {
         </Group>
 
         <Group title="Community">
-          <NavItem to="/friends" icon={<Users size={20} />} label="Friends" />
+          <NavItem
+            to="/friends"
+            icon={<Users size={20} />}
+            label="Friends"
+            count={friendsOnline}
+          />
         </Group>
       </div>
 
@@ -54,7 +66,7 @@ export function Sidebar() {
           onClick={() => void navigate("/settings?section=account")}
           className="flex-1 min-w-0 flex items-center gap-8 rounded-sm p-4 -m-4 text-left hover:bg-hover-overlay transition-colors duration-150 cursor-pointer"
         >
-          <Avatar user={user} size="md" />
+          <Avatar name={user?.displayName ?? null} src={user?.avatarUrl} size="md" />
           <span className="flex-1 min-w-0">
             <span className="block text-body-sm-medium text-fg truncate">
               {user ? user.displayName : "Guest"}

@@ -11,9 +11,8 @@ import {
   useUpdateDisplayName,
   useUpdateSettings,
 } from "../../lib/queries";
-import { Badge, Button, Input } from "../ui";
+import { Avatar, Badge, Button, Input } from "../ui";
 import { AccountDialog } from "./AccountDialog";
-import { Avatar } from "./Avatar";
 import { providerLabel, providerLine } from "./provider";
 import { ProviderButtons } from "./ProviderButtons";
 import { WaitingForBrowser } from "./WaitingForBrowser";
@@ -80,7 +79,7 @@ function SignedIn({ user }: { user: HubUser }) {
   return (
     <>
       <div className="flex items-center gap-12">
-        <Avatar user={user} size="lg" />
+        <Avatar name={user.displayName} src={user.avatarUrl} size="lg" />
         <span className="flex-1 min-w-0 flex flex-col">
           <span className="text-body-md-medium text-fg truncate">
             {user.displayName}

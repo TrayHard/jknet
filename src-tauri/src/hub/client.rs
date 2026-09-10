@@ -100,6 +100,32 @@ impl HubContext {
     fn url(&self, path: &str) -> String {
         format!("{}{path}", self.base_url)
     }
+
+    /// The full address of the live socket, or `None` while signed out.
+    ///
+    /// `GET /v1/ws` authenticates with a query parameter rather than a header,
+    /// because a browser-style WebSocket handshake carries no `Authorization`.
+    /// The token is not escaped: the contract makes it 64 hex characters, and
+    /// [`HubContext::from_settings`] keeps whatever the sign-in stored.
+    pub fn ws_url(&self) -> Option<String> {
+        let token = self.token.as_deref()?;
+        Some(format!("{}/v1/ws?token={token}", ws_base(&self.base_url)))
+    }
+}
+
+/// Turns the API address into the address of the live socket.
+///
+/// `http` becomes `ws` and `https` becomes `wss`, which is the whole
+/// transformation: the contract puts the socket on the same host, port and
+/// path prefix as the API. An address that is already a socket address is left
+/// alone, because a hub reachable at `ws://…` in a test rig is still a hub.
+fn ws_base(base_url: &str) -> String {
+    let base = base_url.trim_end_matches('/');
+    match base.split_once("://") {
+        Some(("http", rest)) => format!("ws://{rest}"),
+        Some(("https", rest)) => format!("wss://{rest}"),
+        _ => base.to_string(),
+    }
 }
 
 /// Trims a hub URL and drops the trailing slash, so joining a path never
@@ -249,6 +275,13 @@ impl HubClient {
 
     // -- Me -----------------------------------------------------------------
 
+    /// Reads the account and its presence from the hub.
+    ///
+    /// No command calls it: the sidebar and the Account card answer from the
+    /// copy in `settings.json`, which every write keeps current. It stays
+    /// because it is the one call that would notice a token invalidated
+    /// somewhere else, and because the mock tests walk the whole contract.
+    #[allow(dead_code)]
     pub async fn get_me(&self, ctx: &HubContext) -> Result<Me> {
         self.call(ctx, Method::GET, "/v1/me", None, true)
             .await?
@@ -621,6 +654,35 @@ mod tests {
             token: None,
         };
         assert_eq!(ctx.url("/v1/me"), "http://127.0.0.1:8787/v1/me");
+    }
+
+    #[test]
+    fn the_socket_address_follows_the_scheme_of_the_api() {
+        let signed_in = |base: &str| HubContext {
+            base_url: normalize_hub_url(base),
+            token: Some("dead".into()),
+        };
+        assert_eq!(
+            signed_in("http://127.0.0.1:8787").ws_url().expect("a socket"),
+            "ws://127.0.0.1:8787/v1/ws?token=dead"
+        );
+        assert_eq!(
+            signed_in("https://hub.jknet.gg/").ws_url().expect("a socket"),
+            "wss://hub.jknet.gg/v1/ws?token=dead"
+        );
+        // A path prefix belongs to the hub, so it stays in front of `/v1`.
+        assert_eq!(
+            signed_in("https://example.test/hub/").ws_url().expect("a socket"),
+            "wss://example.test/hub/v1/ws?token=dead"
+        );
+
+        // Signed out there is nothing to authenticate the socket with, and a
+        // socket without a token is a 401 the moment it opens.
+        let signed_out = HubContext {
+            base_url: DEFAULT_HUB_URL.into(),
+            token: None,
+        };
+        assert_eq!(signed_out.ws_url(), None);
     }
 
     #[test]
