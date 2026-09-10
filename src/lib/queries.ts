@@ -16,11 +16,17 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  accountIpc,
+  ACCOUNT_CHANGED_EVENT,
   errorMessage,
+  hubErrorCode,
+  hubErrorMessage,
   ipc,
   launchIpc,
   libraryIpc,
   serversIpc,
+  type AccountChanged,
+  type AccountState,
   type Client,
   type ConflictReport,
   type DataPaths,
@@ -28,6 +34,8 @@ import {
   type EngineRelease,
   type EngineUpdate,
   type GameFilesCandidate,
+  type HubProvider,
+  type HubUser,
   type LibraryItem,
   type RunningGame,
   type ServerInfo,
@@ -601,4 +609,236 @@ async function collectEngineVersions(
   // A copy, not the accumulator: a late answer must not edit the object React
   // Query already handed to a component that will not re-render for it.
   return { ...found };
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: account ---
+//
+// The hub account. Every hook here works through `accountIpc`, so the bearer
+// token stays in the core: the frontend asks whether one exists and who it
+// belongs to, never what it is.
+// ---------------------------------------------------------------------------
+
+export const accountKeys = {
+  /** Whether a token is on file, and the account it belongs to. */
+  state: ["account", "state"] as const,
+};
+
+/**
+ * The account as the core sees it.
+ *
+ * The query is local — the core answers from `settings.json` without touching
+ * the network — so the sidebar paints a name on the first frame. The listener
+ * keeps every mounted copy in step with a sign-out done on another screen.
+ */
+export function useAccountState(): UseQueryResult<AccountState> {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let stop: UnlistenFn | undefined;
+
+    void (async () => {
+      const unlisten = await listen<AccountChanged>(ACCOUNT_CHANGED_EVENT, () => {
+        queryClient.invalidateQueries({ queryKey: accountKeys.state });
+        // The account is cached in the settings document too, and the Settings
+        // screen reads the hub address out of it.
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      });
+      if (disposed) {
+        unlisten();
+        return;
+      }
+      stop = unlisten;
+    })();
+
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [queryClient]);
+
+  return useQuery({
+    queryKey: accountKeys.state,
+    queryFn: accountIpc.getAccountState,
+    staleTime: Infinity,
+  });
+}
+
+/** Where a sign-in has got to. */
+export type SignInPhase = "idle" | "starting" | "waiting" | "done" | "error";
+
+/** What `useSignIn` gives a screen. */
+export interface SignInFlow {
+  phase: SignInPhase;
+  /** The provider being signed in with, while one is. */
+  provider: HubProvider | null;
+  /** The account, once the browser has sent the player back. */
+  user: HubUser | null;
+  /** What to print when `phase` is `error`. */
+  error: string | null;
+  /** The address opened in the browser, for a browser that stayed shut. */
+  url: string | null;
+  start: (provider: HubProvider) => void;
+  /** Stops polling. The session on the hub expires on its own. */
+  cancel: () => void;
+}
+
+/** How often the session is read while the browser tab is open. */
+const POLL_EVERY_MS = 2_000;
+/** The contract expires a session after ten minutes; polling stops with it. */
+const POLL_BUDGET_MS = 10 * 60_000;
+
+/**
+ * Runs one browser sign-in from the launcher's side.
+ *
+ * The core opens the browser and stores the token; this hook does the waiting.
+ * It polls rather than listens because there is nothing to listen to: the
+ * player's browser talks to the hub, not to the launcher, and a launcher that
+ * opened a port to hear about it would need a firewall prompt to sign in.
+ */
+export function useSignIn(): SignInFlow {
+  const queryClient = useQueryClient();
+  const [phase, setPhase] = useState<SignInPhase>("idle");
+  const [provider, setProvider] = useState<HubProvider | null>(null);
+  const [user, setUser] = useState<HubUser | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+
+  const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  // A poll that has not answered yet must not start a second one: a hub that
+  // takes three seconds would otherwise collect a queue of them.
+  const polling = useRef(false);
+
+  const stopPolling = useCallback(() => {
+    if (timer.current !== undefined) clearInterval(timer.current);
+    timer.current = undefined;
+    polling.current = false;
+  }, []);
+
+  // A screen left mid-sign-in must not leave an interval calling a command.
+  useEffect(() => stopPolling, [stopPolling]);
+
+  const cancel = useCallback(() => {
+    stopPolling();
+    setPhase("idle");
+    setProvider(null);
+    setError(null);
+    setUrl(null);
+  }, [stopPolling]);
+
+  const start = useCallback(
+    (chosen: HubProvider) => {
+      stopPolling();
+      setPhase("starting");
+      setProvider(chosen);
+      setUser(null);
+      setError(null);
+      setUrl(null);
+
+      accountIpc
+        .beginSignIn(chosen)
+        .then((session) => {
+          setUrl(session.url);
+          setPhase("waiting");
+
+          const deadline = Date.now() + POLL_BUDGET_MS;
+          timer.current = setInterval(() => {
+            if (Date.now() > deadline) {
+              stopPolling();
+              setPhase("error");
+              setError("The sign-in took too long. Try again.");
+              return;
+            }
+            if (polling.current) return;
+            polling.current = true;
+
+            accountIpc
+              .pollSignIn(session.sessionId)
+              .then((answer) => {
+                if (answer.status === "pending") return;
+                stopPolling();
+                if (answer.status === "done" && answer.user) {
+                  setUser(answer.user);
+                  setPhase("done");
+                  queryClient.invalidateQueries({ queryKey: accountKeys.state });
+                  queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+                  return;
+                }
+                setPhase("error");
+                setError(
+                  answer.error ??
+                    (answer.status === "expired"
+                      ? "The sign-in expired. Try again."
+                      : "The sign-in did not finish."),
+                );
+              })
+              .catch((e: unknown) => {
+                stopPolling();
+                setPhase("error");
+                setError(hubErrorMessage(e));
+              })
+              .finally(() => {
+                polling.current = false;
+              });
+          }, POLL_EVERY_MS);
+        })
+        .catch((e: unknown) => {
+          setPhase("error");
+          // A provider that has issued no OAuth client yet is the expected
+          // answer rather than a failure, so it reads as one.
+          setError(
+            hubErrorCode(e) === "provider_error"
+              ? providerUnavailable(chosen)
+              : hubErrorMessage(e),
+          );
+        });
+    },
+    [queryClient, stopPolling],
+  );
+
+  return { phase, provider, user, error, url, start, cancel };
+}
+
+/** What a provider without an OAuth client yet reads as. */
+function providerUnavailable(provider: HubProvider): string {
+  const name = provider === "discord" ? "Discord" : "JKHub";
+  return `${name} sign-in is not available yet.`;
+}
+
+/** Invalidates everything that shows an account. */
+function useAccountRefresh() {
+  const queryClient = useQueryClient();
+  return () => {
+    queryClient.invalidateQueries({ queryKey: accountKeys.state });
+    queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+  };
+}
+
+/** Forgets the account here and invalidates the token on the hub. */
+export function useSignOut() {
+  const refresh = useAccountRefresh();
+  return useMutation({
+    mutationFn: () => accountIpc.signOut(),
+    onSuccess: refresh,
+  });
+}
+
+/** Renames the account. A taken name comes back as a `conflict`. */
+export function useUpdateDisplayName() {
+  const refresh = useAccountRefresh();
+  return useMutation({
+    mutationFn: (displayName: string) => accountIpc.updateDisplayName(displayName),
+    onSuccess: refresh,
+  });
+}
+
+/** Deletes the account on the hub. Nothing on this machine is touched. */
+export function useDeleteAccount() {
+  const refresh = useAccountRefresh();
+  return useMutation({
+    mutationFn: () => accountIpc.deleteAccount(),
+    onSuccess: refresh,
+  });
 }

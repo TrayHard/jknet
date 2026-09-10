@@ -9,9 +9,14 @@
 /**
  * Whether JKNet can sign a player in.
  *
- * Accounts are drawn in the design — the third onboarding step and the Friends
- * screen both offer JKHub and Discord — but no command backs them yet. While
- * this is false the providers render disabled with a "Soon" badge, and playing
- * as a guest is the primary way out of onboarding.
+ * True since the account slice landed: the third onboarding step and the
+ * Account card of the Settings screen both run a real sign-in against the
+ * JKNet hub. What is still missing is on the hub's side rather than here —
+ * JKHub and Discord have issued no OAuth client, so those two providers answer
+ * `provider_error` until they do, and the launcher says so where the player
+ * pressed the button.
+ *
+ * Nothing reads this constant any more. It stays as the switch the Friends
+ * screen will want when it separates "no account" from "no friends yet".
  */
-export const ACCOUNTS_ENABLED: boolean = false;
+export const ACCOUNTS_ENABLED: boolean = true;

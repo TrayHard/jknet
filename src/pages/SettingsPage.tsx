@@ -6,9 +6,11 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 
 import { AboutCard } from "../components/AboutCard";
+// --- slice: account ---
+import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
@@ -28,6 +30,17 @@ export function SettingsPage() {
   const dataPaths = useDataPaths();
   const settings = useSettings();
   const [error, setError] = useState<string | null>(null);
+  // --- slice: account ---
+  // The sidebar's user block links to `#/settings?section=account`, so the
+  // card the player asked for is the one they land on.
+  const [search] = useSearchParams();
+  const section = search.get("section");
+  useEffect(() => {
+    if (section !== "account") return;
+    document
+      .getElementById(ACCOUNT_SECTION_ID)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [section]);
 
   const dataRoot = dataPaths.data?.dataRoot ?? null;
   const failure =
@@ -85,10 +98,13 @@ export function SettingsPage() {
 
       <ExtraLaunchArgs onError={setError} />
 
+      {/* --- slice: account --- */}
+      <AccountCard />
+
       <EmptyState
         icon={<SlidersHorizontal size={24} />}
         title="The rest of the settings is not wired up yet"
-        text="The Downloads, Appearance and Account sections arrive together with the features they control."
+        text="The Downloads and Appearance sections arrive together with the features they control."
         className="mb-24"
       />
 
