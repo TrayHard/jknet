@@ -26,6 +26,8 @@ thiserror = "2.0.20"
 log = "0.4.34"
 tauri-plugin-log = "2.9.1"
 tauri-plugin-dialog = "2.7.3"
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+sha1 = "0.11.0"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

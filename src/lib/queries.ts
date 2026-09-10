@@ -14,10 +14,13 @@ import {
 
 import {
   ipc,
+  libraryIpc,
   type Client,
+  type ConflictReport,
   type DataPaths,
   type Engine,
   type GameFilesCandidate,
+  type LibraryItem,
   type Settings,
 } from "./ipc";
 
@@ -95,5 +98,87 @@ export function useDeleteClient() {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     },
+  });
+}
+
+// --- slice: library ---------------------------------------------------------
+//
+// Every key starts with `queryKeys.library`, so one invalidation of that
+// prefix refreshes the list and the conflicts of every client at once.
+
+export const libraryKeys = {
+  items: (clientId: string) => [...queryKeys.library, clientId, "items"] as const,
+  conflicts: (clientId: string) =>
+    [...queryKeys.library, clientId, "conflicts"] as const,
+};
+
+/** The pk3 files of one client. Idle until a client is selected. */
+export function useLibrary(clientId: string | null): UseQueryResult<LibraryItem[]> {
+  return useQuery({
+    queryKey: libraryKeys.items(clientId ?? ""),
+    queryFn: () => libraryIpc.listLibrary(clientId as string),
+    enabled: clientId != null,
+  });
+}
+
+/**
+ * Internal paths carried by more than one enabled archive.
+ *
+ * The core opens every archive to answer, and caches the result per file set,
+ * so the cost lands once per change rather than once per render.
+ */
+export function useLibraryConflicts(
+  clientId: string | null,
+): UseQueryResult<ConflictReport> {
+  return useQuery({
+    queryKey: libraryKeys.conflicts(clientId ?? ""),
+    queryFn: () => libraryIpc.findLibraryConflicts(clientId as string),
+    enabled: clientId != null,
+  });
+}
+
+/** Invalidates both library keys of one client after a write. */
+function useLibraryRefresh(clientId: string | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    if (clientId == null) return;
+    queryClient.invalidateQueries({ queryKey: libraryKeys.items(clientId) });
+    queryClient.invalidateQueries({ queryKey: libraryKeys.conflicts(clientId) });
+  };
+}
+
+export function useAddLibraryFiles(clientId: string | null) {
+  const refresh = useLibraryRefresh(clientId);
+  return useMutation({
+    mutationFn: (paths: string[]) =>
+      libraryIpc.addLibraryFiles(clientId as string, paths),
+    onSuccess: refresh,
+  });
+}
+
+export function useSetLibraryItemEnabled(clientId: string | null) {
+  const refresh = useLibraryRefresh(clientId);
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      libraryIpc.setLibraryItemEnabled(clientId as string, id, enabled),
+    onSuccess: refresh,
+  });
+}
+
+export function useRemoveLibraryItem(clientId: string | null) {
+  const refresh = useLibraryRefresh(clientId);
+  return useMutation({
+    mutationFn: (id: string) =>
+      libraryIpc.removeLibraryItem(clientId as string, id),
+    onSuccess: refresh,
+  });
+}
+
+export function useRenameLibraryItem(clientId: string | null) {
+  const refresh = useLibraryRefresh(clientId);
+  return useMutation({
+    mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
+      libraryIpc.renameLibraryItem(clientId as string, id, displayName),
+    onSuccess: refresh,
   });
 }

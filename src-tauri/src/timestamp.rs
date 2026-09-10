@@ -18,7 +18,7 @@ pub fn now_rfc3339() -> String {
 }
 
 /// Formats Unix seconds as an RFC 3339 string in UTC.
-fn from_unix_seconds(seconds: u64) -> String {
+pub fn from_unix_seconds(seconds: u64) -> String {
     let days = (seconds / 86_400) as i64;
     let time_of_day = seconds % 86_400;
     let (year, month, day) = civil_from_days(days);
