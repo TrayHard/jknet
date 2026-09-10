@@ -17,6 +17,7 @@
 //! | `servers`        | master server queries, ping and the server cache |
 //! | `launch`         | starting a client and watching it run           |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
+//! | `levelshots`     | map pictures extracted from the player's pk3 files |
 
 mod clients;
 mod engine_install;
@@ -24,6 +25,7 @@ mod engines;
 mod error;
 mod game_files;
 mod launch;
+mod levelshots;
 mod library;
 mod paths;
 mod servers;
@@ -35,6 +37,7 @@ use std::path::PathBuf;
 
 use engine_install::InstallState;
 use launch::LaunchState;
+use levelshots::LevelshotState;
 use state::AppState;
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
@@ -122,6 +125,14 @@ pub fn run() {
             if let Some((legacy_root, report)) = &migration {
                 report.report(legacy_root, &app_state.config_root);
             }
+            // --- slice: maps ---
+            // The asset protocol serves `cache\levelshots\` to the webview.
+            // `tauri.conf.json` scopes it to the folder under `$APPLOCALDATA`;
+            // this adds the resolved one, which differs when the player moved
+            // the data folder with `dataDirOverride`.
+            if let Ok(paths) = app_state.paths() {
+                levelshots::allow_cache_folder(app.handle(), &paths);
+            }
             app.manage(app_state);
 
             #[cfg(desktop)]
@@ -142,6 +153,10 @@ pub fn run() {
         // with an install in flight is separate for the same reason.
         .manage(LaunchState::default())
         .manage(InstallState::default())
+        // --- slice: maps ---
+        // One rebuild of the levelshot index at a time, and the set of maps
+        // nothing on this disk has a picture for.
+        .manage(LevelshotState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -175,6 +190,10 @@ pub fn run() {
             servers::list_trusted_servers,
             servers::set_server_favorite,
             servers::add_server_history,
+            // --- slice: maps ---
+            levelshots::get_levelshot,
+            levelshots::rebuild_levelshots,
+            levelshots::list_levelshots,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

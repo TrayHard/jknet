@@ -974,7 +974,10 @@ fn conflicts(data: &DataPaths, client_id: &str) -> Result<ConflictReport> {
 
 /// Sort key of `paksort` in `codemp/qcommon/files.cpp:3025`: a `dl_` archive
 /// always loads after the rest, the others compare case-insensitively.
-fn pak_order(file_name: &str) -> (u8, String) {
+///
+/// Shared with `levelshots.rs`, which reads the same archives in the same
+/// order to decide which map picture the player actually sees.
+pub(crate) fn pak_order(file_name: &str) -> (u8, String) {
     let lower = file_name.to_ascii_lowercase();
     let downloaded = u8::from(lower.starts_with("dl_"));
     (downloaded, lower)
