@@ -21,6 +21,12 @@
 //! screen can render its sign-in prompt without a special case in the
 //! frontend.
 //!
+//! A build whose hub address is blank reads the same way. `HubContext` calls
+//! such a launcher signed out whatever `hub_token` holds, so the background
+//! tasks never start and no command reaches the network; the commands that
+//! need an account answer `AppError::HubNotConfigured` instead of
+//! `AppError::SignedOut`, because signing in is not the cure.
+//!
 //! Signing in and out is an event, not a poll. `account:changed` bumps
 //! [`FriendsState::note_account_change`], and both background tasks wake on
 //! it: the heartbeat sends the first push of a fresh sign-in at once, and the
@@ -401,9 +407,15 @@ pub async fn join_friend(
 /// Account card on the Settings screen.
 ///
 /// Refusing here rather than letting the hub answer `401` costs no round trip
-/// and gives the player the sentence that names the cure.
+/// and gives the player the sentence that names the cure. The two refusals are
+/// different cures, so they are different errors: a build with no hub cannot
+/// be signed in to at all, while a signed-out one is one button away.
 fn require_account(state: &AppState) -> Result<HubContext> {
     let ctx = HubContext::from_settings(&state.settings()?);
+    // --- slice: hub gate ---
+    if !ctx.configured() {
+        return Err(AppError::HubNotConfigured);
+    }
     if !ctx.signed_in() {
         return Err(AppError::SignedOut);
     }
@@ -723,6 +735,23 @@ mod tests {
                 .is_err(),
             "the tasks were woken by something that did not change"
         );
+    }
+
+    // --- slice: hub gate ---
+
+    #[test]
+    fn a_build_without_a_hub_keeps_both_background_tasks_quiet() {
+        // The two gates are one question asked in two places: the heartbeat
+        // stops at `HubContext::signed_in` in `presence::push`, and the live
+        // socket at `HubContext::ws_url` in `live::socket_url`. A stale token
+        // in `settings.json` must not get past either.
+        let ctx = HubContext {
+            base_url: String::new(),
+            token: Some("0123456789abcdef".into()),
+        };
+        assert!(!ctx.configured());
+        assert!(!ctx.signed_in(), "the heartbeat would push to nowhere");
+        assert_eq!(ctx.ws_url(), None, "the socket would dial nowhere");
     }
 
     #[test]

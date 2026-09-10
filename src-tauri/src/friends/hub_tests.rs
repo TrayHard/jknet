@@ -27,7 +27,7 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::hub::{
     HubClient, HubContext, HubUser, LiveFrame, Presence, PresenceUpdate, PresenceUpdated,
-    DEFAULT_HUB_URL,
+    DEV_HUB_URL,
 };
 
 /// How long the socket is given to deliver the frame the test is waiting for.
@@ -236,7 +236,7 @@ where
 /// form is the whole of the `dev` provider.
 async fn sign_in(client: &HubClient, display_name: &str) -> Player {
     let anonymous = HubContext {
-        base_url: DEFAULT_HUB_URL.into(),
+        base_url: DEV_HUB_URL.into(),
         token: None,
     };
     let session = client
@@ -263,7 +263,7 @@ async fn sign_in(client: &HubClient, display_name: &str) -> Player {
     // code to give, so the hub asks for a name instead. Same path, same method.
     let done = browser
         .get(format!(
-            "{DEFAULT_HUB_URL}/v1/auth/dev/callback?state={state}&name={}",
+            "{DEV_HUB_URL}/v1/auth/dev/callback?state={state}&name={}",
             encode(display_name)
         ))
         .send()
@@ -304,7 +304,7 @@ async fn sign_in(client: &HubClient, display_name: &str) -> Player {
         name: user.display_name.clone(),
         user,
         ctx: HubContext {
-            base_url: DEFAULT_HUB_URL.into(),
+            base_url: DEV_HUB_URL.into(),
             token: Some(token),
         },
     }

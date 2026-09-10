@@ -14,11 +14,16 @@ import {
 import { RequestList } from "../components/friends/RequestList";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Badge, Button, EmptyState, Input } from "../components/ui";
-import { errorMessage, type Presence } from "../lib/ipc";
+import {
+  errorMessage,
+  HUB_NOT_CONFIGURED_TEXT,
+  type Presence,
+} from "../lib/ipc";
 import {
   useAcceptFriendRequest,
   useDeclineFriendRequest,
   useFriendsState,
+  useHubConfigured,
   useJoinFriend,
   useRemoveFriend,
   useRunningGame,
@@ -46,6 +51,8 @@ export function FriendsPage() {
   const navigate = useNavigate();
   const friends = useFriendsState();
   const running = useRunningGame();
+  // --- slice: hub gate ---
+  const hubConfigured = useHubConfigured();
 
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -88,6 +95,26 @@ export function FriendsPage() {
       },
     });
   };
+
+  // --- slice: hub gate ---
+  // Before the sign-in prompt: with no hub there is nothing to sign in to, and
+  // a **Sign in** button here would send the player to a card that says the
+  // same thing. No counters either — there is nobody to count.
+  if (hubConfigured === false) {
+    return (
+      <Page>
+        <PageHeader
+          title="Friends"
+          subtitle="See who is online and join their server in one click."
+        />
+        <EmptyState
+          icon={<Users size={24} />}
+          title="Friends are not switched on yet"
+          text={HUB_NOT_CONFIGURED_TEXT}
+        />
+      </Page>
+    );
+  }
 
   if (view !== undefined && !view.signedIn) {
     return (
