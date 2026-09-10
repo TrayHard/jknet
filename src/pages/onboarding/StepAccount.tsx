@@ -5,7 +5,7 @@ import { providerLine } from "../../components/account/provider";
 import { ProviderButtons } from "../../components/account/ProviderButtons";
 import { WaitingForBrowser } from "../../components/account/WaitingForBrowser";
 import { Avatar, Button } from "../../components/ui";
-import { errorMessage, HUB_NOT_CONFIGURED_TEXT } from "../../lib/ipc";
+import { errorMessage, ONLINE_NOT_CONFIGURED_TEXT } from "../../lib/ipc";
 import { useAccountState, useSignIn, useUpdateSettings } from "../../lib/queries";
 import { StepPanel } from "./StepPanel";
 
@@ -29,7 +29,7 @@ const BENEFITS = [
  * refused: JKHub and Discord have issued no OAuth client yet, and a player who
  * meets that on their first run must still reach the Play button.
  *
- * With no hub in this build the step is one sentence and **Continue**. It
+ * With no service in this build the step is one sentence and **Continue**. It
  * stays in the sequence rather than disappearing from `steps.ts`: the first
  * run is three steps in the design and in the badges, and a setup that is
  * three steps long for one player and two for another is harder to explain
@@ -41,11 +41,11 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
   const updateSettings = useUpdateSettings();
   const [error, setError] = useState<string | null>(null);
 
-  // --- slice: hub gate ---
-  const configured = account.data?.hubConfigured ?? true;
+  // --- slice: online gate ---
+  const configured = account.data?.onlineConfigured ?? true;
   // The signed-in account, from this sign-in or from a previous run.
-  const user = flow.user ?? account.data?.hubUser ?? null;
-  const signedIn = flow.phase === "done" || (account.data?.hubSignedIn ?? false);
+  const user = flow.user ?? account.data?.onlineUser ?? null;
+  const signedIn = flow.phase === "done" || (account.data?.onlineSignedIn ?? false);
   const waiting = flow.phase === "starting" || flow.phase === "waiting";
 
   const finish = () => {
@@ -56,8 +56,8 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
     );
   };
 
-  // --- slice: hub gate ---
-  // No hub in this build: one sentence and one button. The provider buttons,
+  // --- slice: online gate ---
+  // No service in this build: one sentence and one button. The provider buttons,
   // the waiting-for-browser state and the list of what an account is good for
   // all go with them — every one of them is an offer this build cannot keep.
   if (!configured) {
@@ -65,7 +65,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
       <StepPanel
         step={3}
         heading="Accounts and friends come later"
-        text={HUB_NOT_CONFIGURED_TEXT}
+        text={ONLINE_NOT_CONFIGURED_TEXT}
         error={error}
         onBack={onBack}
         footer={
@@ -146,7 +146,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
           <ProviderButtons
             onPick={flow.start}
             busy={waiting}
-            localHub={account.data?.localHub ?? false}
+            localOnline={account.data?.localOnline ?? false}
           />
         </>
       )}

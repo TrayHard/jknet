@@ -1,6 +1,6 @@
 import { Check, X } from "lucide-react";
 
-import type { FriendRequest, HubUser } from "../../lib/ipc";
+import type { FriendRequest, OnlineUser } from "../../lib/ipc";
 import { Avatar, Button } from "../ui";
 
 interface RequestListProps {
@@ -40,7 +40,7 @@ export function RequestList({
         {title} · {requests.length}
       </span>
       {requests.map((request) => {
-        const person: HubUser = side === "from" ? request.from : request.to;
+        const person: OnlineUser = side === "from" ? request.from : request.to;
         const busy = busyId === request.id;
         return (
           <div

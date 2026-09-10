@@ -203,7 +203,7 @@ export function hasGameFiles(
 /**
  * The game a server port belongs to.
  *
- * Presence on the hub names the server a friend is on but not the game they
+ * Presence on the service names the server a friend is on but not the game they
  * are playing, so the port has to answer for it. The windows start at each
  * game's `PORT_SERVER`, which arrives in `GameInfo.serverPort`, and run
  * [`PORT_SPAN`] ports up to cover a machine hosting several servers. Anything
@@ -211,7 +211,7 @@ export function hasGameFiles(
  *
  * The rule is `Game::from_server_port` in `src-tauri/src/game.rs`, where it has
  * a test; this is the same rule where the interface needs it before a command
- * is called. A `game` field in the hub's presence document would retire both.
+ * is called. A `game` field in the service's presence document would retire both.
  */
 export function gameFromServerPort(
   port: number,

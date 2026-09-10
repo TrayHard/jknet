@@ -19,9 +19,9 @@
 //! | `launch`         | starting a client and watching it run           |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
 //! | `levelshots`     | map pictures extracted from the player's pk3 files |
-//! | `hub`            | the JKNet hub: its wire types and its HTTP client |
-//! | `account`        | signing in to the hub and owning the account    |
-//! | `friends`        | friends, presence and invites on top of `hub`   |
+//! | `online`         | JKNet Online: its wire types and its HTTP client |
+//! | `account`        | signing in to the service and owning the account |
+//! | `friends`        | friends, presence and invites on top of `online` |
 //! | `jkhub`          | browsing jkhub.org and installing its files     |
 
 mod account;
@@ -32,18 +32,18 @@ mod error;
 mod friends;
 mod game;
 mod game_files;
-// The one client of hub API v1. `account` calls its sign-in half and
-// `friends` the rest, so a token is attached to a request in one place and
-// one connection pool serves both.
-mod hub;
 // --- slice: jkhub ---
 // The public pages of jkhub.org, read behind a limiter and a cache. The module
 // owns its own HTTP client because a guest download needs the cookie jar the
-// file page was served with, which `hub` has no reason to share.
+// file page was served with, which `online` has no reason to share.
 mod jkhub;
 mod launch;
 mod levelshots;
 mod library;
+// The one client of JKNet Online API v1. `account` calls its sign-in half and
+// `friends` the rest, so a token is attached to a request in one place and
+// one connection pool serves both.
+mod online;
 mod paths;
 mod servers;
 mod settings;
@@ -163,12 +163,12 @@ pub fn run() {
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
             // --- slice: account ---
-            // From here on a hub that refuses the stored token signs the
+            // From here on a service that refuses the stored token signs the
             // launcher out, instead of leaving a signed-in sidebar over a
             // screen where every call fails. The client reports the refusal,
             // `account` owns what it means.
             let signed_out = app.handle().clone();
-            app.state::<hub::HubClient>()
+            app.state::<online::OnlineClient>()
                 .report_refusals_to(move |token| {
                     account::expire_session(&signed_out, token);
                 });
@@ -184,22 +184,22 @@ pub fn run() {
             jkhub::manage(app.handle());
 
             log::info!("JKNet {} started", app.package_info().version);
-            // --- slice: hub gate ---
+            // --- slice: online gate ---
             // The first question a report about a missing Friends screen has
-            // to answer: this build has no hub, or it has one and cannot reach
+            // to answer: this build has no service, or it has one and cannot reach
             // it. The address is not a secret; the token never appears here.
             match app.state::<AppState>().settings() {
                 Ok(settings) => {
-                    let url = hub::normalize_hub_url(&settings.hub_url);
-                    if hub::hub_configured(&url) {
-                        log::info!("hub: {url}");
+                    let url = online::normalize_online_url(&settings.online_url);
+                    if online::online_configured(&url) {
+                        log::info!("online: {url}");
                     } else {
                         log::info!(
-                            "hub: not configured in this build, so the account and friends screens stay switched off"
+                            "online: not configured in this build, so the account and friends screens stay switched off"
                         );
                     }
                 }
-                Err(e) => log::warn!("cannot read the hub address: {e}"),
+                Err(e) => log::warn!("cannot read the service address: {e}"),
             }
             Ok(())
         })
@@ -214,11 +214,11 @@ pub fn run() {
         // nothing on this disk has a picture for.
         .manage(LevelshotState::default())
         // --- slice: account ---
-        // One connection pool for every call to the hub. Where to call and
+        // One connection pool for every call to the service. Where to call and
         // who to call as come from the settings at the moment of the call, so
         // nothing here goes stale when the player signs in or points the
-        // launcher at another hub.
-        .manage(hub::HubClient::new())
+        // launcher at another service.
+        .manage(online::OnlineClient::new())
         // --- slice: friends ---
         // The presence the launcher reports and whether the live socket is
         // up. Kept apart from `AppState` for the same reason as the two above:

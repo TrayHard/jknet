@@ -1,4 +1,4 @@
-//! The live socket: what the hub pushes, turned into Tauri events.
+//! The live socket: what the service pushes, turned into Tauri events.
 //!
 //! One task holds one WebSocket to `/v1/ws?token=…` and forwards every frame
 //! to the window. When the socket is unreachable the same task keeps the
@@ -8,7 +8,7 @@
 //!
 //! ## Frames and events
 //!
-//! | Hub frame          | Tauri event         | What the screen does        |
+//! | Online frame          | Tauri event         | What the screen does        |
 //! | ------------------ | ------------------- | --------------------------- |
 //! | `friend.request`   | `friends:changed`   | refetch `get_friends_state` |
 //! | `friend.accepted`  | `friends:changed`   | refetch                     |
@@ -25,7 +25,7 @@
 //! it arrives for every friend who moves between servers, so it patches a
 //! single row.
 //!
-//! Three things the hub does that the contract leaves open, and that the table
+//! Three things the service does that the contract leaves open, and that the table
 //! above already accounts for:
 //!
 //! - `friend.removed` arrives for a declined or a cancelled request as well as
@@ -33,7 +33,7 @@
 //!   refetch covers every case without the launcher working out which it was.
 //! - `presence.updated` arrives only when a field of the presence changes. A
 //!   heartbeat that repeats itself produces nothing, so silence on this socket
-//!   never means a friend went quiet — the hub says that with its own
+//!   never means a friend went quiet — the service says that with its own
 //!   `presence.updated` when the presence expires.
 //! - `me.updated` reaches the owner of the token and nobody else, so a friend
 //!   renaming themselves shows up on the next `GET /v1/friends` rather than at
@@ -44,7 +44,7 @@
 //! Backoff doubles from [`MIN_BACKOFF`] to [`MAX_BACKOFF`] and resets after a
 //! socket that stayed up. The ceiling is also the fallback period: while the
 //! socket is down the loop asks the window to refetch on every attempt, so a
-//! hub that is off gives the screen a 30 s refresh instead of nothing.
+//! service that is off gives the screen a 30 s refresh instead of nothing.
 //!
 //! Signing in or out does not wait for either timer. `account:changed` wakes
 //! the loop, which closes a socket holding a revoked token and opens one for
@@ -57,7 +57,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::hub::{FriendRemoved, HubContext, Invite, LiveFrame, PresenceUpdated};
+use crate::online::{FriendRemoved, Invite, LiveFrame, OnlineContext, PresenceUpdated};
 use crate::state::AppState;
 
 use super::{FriendsState, EVENT_CHANGED, EVENT_INVITE, EVENT_PRESENCE};
@@ -70,7 +70,7 @@ const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
 /// How long a silent socket is given before it counts as dead.
 ///
-/// The hub pings on its own schedule and closes a client that misses three
+/// The service pings on its own schedule and closes a client that misses three
 /// pongs. Three ping periods of silence in the other direction means the same
 /// thing has happened to us — usually a laptop that slept — and a fresh
 /// connection is faster than waiting for a TCP timeout.
@@ -128,13 +128,13 @@ fn next_backoff(current: Duration) -> Duration {
 /// nobody is signed in.
 fn socket_url(app: &AppHandle) -> Option<String> {
     let settings = app.state::<AppState>().settings().ok()?;
-    HubContext::from_settings(&settings).ws_url()
+    OnlineContext::from_settings(&settings).ws_url()
 }
 
 /// Holds one connection open and forwards its frames.
 ///
 /// Answers `true` when the socket delivered at least one frame, which is what
-/// separates "the hub dropped us" from "the address never worked".
+/// separates "the service dropped us" from "the address never worked".
 async fn pump(
     app: &AppHandle,
     url: &str,
@@ -152,8 +152,8 @@ async fn pump(
     loop {
         let message = tokio::select! {
             // Signed out, or signed in as somebody else. Either way this
-            // socket is holding a token the hub has just revoked, and closing
-            // it politely is better than waiting for the hub to notice.
+            // socket is holding a token the service has just revoked, and closing
+            // it politely is better than waiting for the service to notice.
             _ = account.changed() => {
                 let _ = socket.close(None).await;
                 log::info!("live socket closed: the account changed");
@@ -190,7 +190,7 @@ async fn pump(
                     .map_err(|e| format!("cannot answer a protocol ping: {e}"))?;
             }
             Message::Close(frame) => {
-                log::debug!("the hub closed the live socket: {frame:?}");
+                log::debug!("the service closed the live socket: {frame:?}");
                 return Ok(delivered);
             }
             _ => {}
@@ -231,7 +231,7 @@ fn handle_frame(app: &AppHandle, text: &str) -> bool {
             }
         }
         // "that relationship is gone", whichever of the three lists held it:
-        // the hub sends this for a friendship that ended and for a request
+        // the service sends this for a friendship that ended and for a request
         // that was declined or cancelled. One refetch settles all three.
         "friend.removed" => {
             match serde_json::from_value::<FriendRemoved>(frame.payload) {
@@ -312,10 +312,10 @@ mod tests {
 // Against the stand-in
 // ---------------------------------------------------------------------------
 
-/// Opens a socket to `scripts/mock-hub.mjs`, which the test starts itself:
+/// Opens a socket to `scripts/mock-online.mjs`, which the test starts itself:
 ///
 /// ```text
-/// cargo test --lib -- --ignored --nocapture answers_the_ping_of_the_mock_hub
+/// cargo test --lib -- --ignored --nocapture answers_the_ping_of_the_mock_service
 /// ```
 ///
 /// Ignored because it needs Node on `PATH` and a free port. It is the only
@@ -324,16 +324,16 @@ mod tests {
 #[cfg(test)]
 mod live_tests {
     use super::*;
-    use crate::hub::mock_tests::MockHub;
+    use crate::online::mock_tests::MockOnline;
 
-    /// Not the stock port: a machine running the real hub has that one.
+    /// Not the stock port: a machine running the real service has that one.
     const PORT: u16 = 8795;
 
     #[tokio::test]
-    #[ignore = "starts scripts/mock-hub.mjs, so it needs Node and a free port"]
-    async fn answers_the_ping_of_the_mock_hub() {
-        let mock = MockHub::start(PORT);
-        let ctx = HubContext {
+    #[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+    async fn answers_the_ping_of_the_mock_service() {
+        let mock = MockOnline::start(PORT);
+        let ctx = OnlineContext {
             base_url: mock.base_url(),
             // The mock believes the token it handed out, and the socket only
             // checks that the parameter is there at all.
@@ -342,7 +342,7 @@ mod live_tests {
         let url = ctx.ws_url().expect("a signed-in context has a socket");
         let (mut socket, _) = tokio_tungstenite::connect_async(&url)
             .await
-            .expect("the mock hub is running");
+            .expect("the mock service is running");
 
         // The mock pings on connect, then sends an invite. Read until the
         // first `ping`, answer it, and make sure the socket survives.
@@ -366,7 +366,7 @@ mod live_tests {
                 break;
             }
         }
-        assert!(answered, "the mock hub never pinged");
+        assert!(answered, "the mock service never pinged");
 
         // Still alive after the pong: the mock closes a client that misses it.
         let after = tokio::time::timeout(Duration::from_secs(25), socket.next()).await;

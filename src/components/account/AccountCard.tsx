@@ -2,9 +2,9 @@ import { AlertTriangle, Check, LogOut, Server, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
-  HUB_NOT_CONFIGURED_TEXT,
-  hubErrorMessage,
-  type HubUser,
+  ONLINE_NOT_CONFIGURED_TEXT,
+  onlineErrorMessage,
+  type OnlineUser,
 } from "../../lib/ipc";
 import {
   useAccountState,
@@ -29,14 +29,15 @@ export const ACCOUNT_SECTION_ID = "settings-account";
  * Signed out, the card is the sign-in from the first run without the first
  * run. Signed in, it is the only place that owns the account: the display
  * name, which provider it came from, and the two ways out — sign out here, or
- * delete the account on the hub. Both live in a danger zone at the bottom
+ * delete the account on the service. Both live in a danger zone at the bottom
  * because one of them cannot be undone.
  *
- * The Hub URL field sits under them, marked advanced. It exists because the
- * production hub has no address yet: a tester points the launcher at a hub of
- * their own, and the field is what makes the Developer sign-in appear.
+ * The JKNet Online address field sits under them, marked advanced. It exists
+ * because the production service has no address yet: a tester points the
+ * launcher at a service of their own, and the field is what makes the Developer
+ * sign-in appear.
  *
- * With no hub at all — a release build until the service is deployed — the
+ * With no service at all — a release build until the service is deployed — the
  * card is that sentence and the field, and nothing else. Sign-in buttons there
  * would every one of them end in a connection error.
  */
@@ -44,9 +45,9 @@ export function AccountCard() {
   const account = useAccountState();
   const flow = useSignIn();
 
-  const configured = account.data?.hubConfigured ?? true;
-  const user = flow.user ?? account.data?.hubUser ?? null;
-  const signedIn = flow.phase === "done" || (account.data?.hubSignedIn ?? false);
+  const configured = account.data?.onlineConfigured ?? true;
+  const user = flow.user ?? account.data?.onlineUser ?? null;
+  const signedIn = flow.phase === "done" || (account.data?.onlineSignedIn ?? false);
   const waiting = flow.phase === "starting" || flow.phase === "waiting";
 
   return (
@@ -58,7 +59,7 @@ export function AccountCard() {
       <p className="text-body-sm text-fg-secondary">
         {configured
           ? "A JKNet account carries your friends list and your invites. It is not needed to play."
-          : HUB_NOT_CONFIGURED_TEXT}
+          : ONLINE_NOT_CONFIGURED_TEXT}
       </p>
 
       {configured ? (
@@ -71,13 +72,13 @@ export function AccountCard() {
             <SignedOut
               error={flow.error}
               onPick={flow.start}
-              localHub={account.data?.localHub ?? false}
+              localOnline={account.data?.localOnline ?? false}
             />
           )}
         </div>
       ) : null}
 
-      <HubUrlField configured={configured} />
+      <OnlineUrlField configured={configured} />
     </section>
   );
 }
@@ -86,7 +87,7 @@ export function AccountCard() {
 // Signed in
 // ---------------------------------------------------------------------------
 
-function SignedIn({ user }: { user: HubUser }) {
+function SignedIn({ user }: { user: OnlineUser }) {
   return (
     <>
       <div className="flex items-center gap-12">
@@ -113,12 +114,12 @@ function SignedIn({ user }: { user: HubUser }) {
 /**
  * The display name, saved on demand rather than on blur.
  *
- * Unlike the launch arguments next door, this write can be refused: the hub
+ * Unlike the launch arguments next door, this write can be refused: the service
  * owns the namespace and answers `409` when the name is taken. A field that
  * saved silently on blur would report that refusal a moment after the player
  * had moved on, so the button stays.
  */
-function DisplayNameField({ user }: { user: HubUser }) {
+function DisplayNameField({ user }: { user: OnlineUser }) {
   const rename = useUpdateDisplayName();
   const [value, setValue] = useState(user.displayName);
   const [error, setError] = useState<string | null>(null);
@@ -138,7 +139,7 @@ function DisplayNameField({ user }: { user: HubUser }) {
     setSaved(false);
     rename.mutate(value.trim(), {
       onSuccess: () => setSaved(true),
-      onError: (e) => setError(hubErrorMessage(e)),
+      onError: (e) => setError(onlineErrorMessage(e)),
     });
   };
 
@@ -218,7 +219,7 @@ function DangerZone() {
           onClick={() => {
             setError(null);
             signOut.mutate(undefined, {
-              onError: (e) => setError(hubErrorMessage(e)),
+              onError: (e) => setError(onlineErrorMessage(e)),
             });
           }}
         >
@@ -232,7 +233,7 @@ function DangerZone() {
             Delete account data
           </span>
           <span className="text-body-sm text-fg-muted">
-            Removes the account, your friends and your invites from the hub.
+            Removes the account, your friends and your invites from the service.
           </span>
         </span>
         <Button
@@ -252,7 +253,7 @@ function DangerZone() {
         <Dialog
           variant="danger"
           title="Delete your JKNet account?"
-          body="Your account, your friends list and your invites are removed from the hub. Your clients, your library files and your settings stay on this machine. This cannot be undone."
+          body="Your account, your friends list and your invites are removed from the service. Your clients, your library files and your settings stay on this machine. This cannot be undone."
           onClose={() => setConfirming(false)}
           actions={
             <>
@@ -270,7 +271,7 @@ function DangerZone() {
                     onSuccess: () => setConfirming(false),
                     onError: (e) => {
                       setConfirming(false);
-                      setError(hubErrorMessage(e));
+                      setError(onlineErrorMessage(e));
                     },
                   })
                 }
@@ -292,11 +293,11 @@ function DangerZone() {
 function SignedOut({
   error,
   onPick,
-  localHub,
+  localOnline,
 }: {
   error: string | null;
   onPick: ReturnType<typeof useSignIn>["start"];
-  localHub: boolean;
+  localOnline: boolean;
 }) {
   return (
     <>
@@ -309,35 +310,35 @@ function SignedOut({
           <span className="text-body-sm text-fg break-words">{error}</span>
         </div>
       ) : null}
-      <ProviderButtons onPick={onPick} localHub={localHub} />
+      <ProviderButtons onPick={onPick} localOnline={localOnline} />
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Hub address
+// JKNet Online address
 // ---------------------------------------------------------------------------
 
 /**
- * Where the launcher looks for the hub.
+ * Where the launcher looks for the service.
  *
- * Advanced on purpose: nobody needs it until the production hub exists, and
+ * Advanced on purpose: nobody needs it until the production service exists, and
  * pointing the launcher elsewhere while signed in would leave a token issued
- * by one hub on the requests of another. So the field refuses to save while an
+ * by one service on the requests of another. So the field refuses to save while an
  * account is signed in, and says why.
  *
- * It stays on the card while the hub is switched off, because it is the only
+ * It stays on the card while the service is switched off, because it is the only
  * way a developer or a self-hoster switches it back on without a new build.
  */
-function HubUrlField({ configured }: { configured: boolean }) {
+function OnlineUrlField({ configured }: { configured: boolean }) {
   const settings = useSettings();
   const account = useAccountState();
   const updateSettings = useUpdateSettings();
 
-  const stored = settings.data?.hubUrl ?? "";
+  const stored = settings.data?.onlineUrl ?? "";
   const [value, setValue] = useState(stored);
   const [error, setError] = useState<string | null>(null);
-  const signedIn = account.data?.hubSignedIn ?? false;
+  const signedIn = account.data?.onlineSignedIn ?? false;
 
   useEffect(() => setValue(stored), [stored]);
 
@@ -346,8 +347,8 @@ function HubUrlField({ configured }: { configured: boolean }) {
   const save = () => {
     setError(null);
     updateSettings.mutate(
-      { hubUrl: value.trim() },
-      { onError: (e) => setError(hubErrorMessage(e)) },
+      { onlineUrl: value.trim() },
+      { onError: (e) => setError(onlineErrorMessage(e)) },
     );
   };
 
@@ -355,12 +356,12 @@ function HubUrlField({ configured }: { configured: boolean }) {
     <details className="border-t border-line-subtle mt-16 pt-16">
       <summary className="flex items-center gap-8 text-body-sm-medium text-fg-secondary cursor-pointer select-none">
         <Server size={16} />
-        Hub address (advanced)
+        JKNet Online address (advanced)
       </summary>
 
       <div className="flex items-start gap-8 pt-12">
         <Input
-          aria-label="Hub address"
+          aria-label="JKNet Online address"
           className="flex-1"
           value={value}
           placeholder="http://127.0.0.1:8787"
@@ -392,11 +393,11 @@ function HubUrlField({ configured }: { configured: boolean }) {
   );
 }
 
-/** What the line under the Hub address field says, in its three states. */
+/** What the line under the JKNet Online address field says, in its three states. */
 function hint(signedIn: boolean, configured: boolean): string {
-  if (signedIn) return "Sign out before pointing JKNet at another hub.";
+  if (signedIn) return "Sign out before pointing JKNet at another service.";
   if (!configured) {
-    return "For developers and self-hosted hubs: an http:// or https:// address switches accounts and friends on for this machine.";
+    return "For developers and self-hosted instances: an http:// or https:// address switches accounts and friends on for this machine.";
   }
   return "An http:// or https:// address. Leave it empty to go back to the default.";
 }

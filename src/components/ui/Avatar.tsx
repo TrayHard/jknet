@@ -40,7 +40,7 @@ const DOT_TONE: Record<AvatarStatus, string> = {
 /**
  * Initials of a display name: at most two letters.
  *
- * Names on the hub carry whatever the identity provider allowed, so the split
+ * Names on the service carry whatever the identity provider allowed, so the split
  * is on anything that is not a letter or a digit — `kyle_k`, `Kyle-Katarn` and
  * `Kyle Katarn` all have to give something better than a blank circle.
  */
@@ -58,10 +58,10 @@ export function initials(name: string): string {
  * The Avatar of the design: a circle with initials, a picture when the
  * provider gave one, and an optional presence dot.
  *
- * A hub account may have no picture at all — the dev provider never sets one,
+ * A service account may have no picture at all — the dev provider never sets one,
  * and a JKHub account without one is common — so initials are the normal case
  * rather than the fallback. A picture that fails to load falls back to them
- * too: the hub stores whatever URL the provider gave it, and that URL outlives
+ * too: the service stores whatever URL the provider gave it, and that URL outlives
  * neither a renamed CDN nor an account deleted on the provider's side.
  */
 export function Avatar({ name, src, size = "md", status, className }: AvatarProps) {

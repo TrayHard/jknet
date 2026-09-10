@@ -100,14 +100,14 @@ pub enum AppError {
     Image(String),
 
     // --- slice: friends ---
-    /// Nobody is signed in, so there is no token to talk to the hub with. Its
+    /// Nobody is signed in, so there is no token to talk to the service with. Its
     /// own variant because the cure is the Account card on the Settings
     /// screen, not a retry.
     #[error("sign in to JKNet to see your friends")]
     SignedOut,
 
     // --- slice: account ---
-    /// The JKNet hub refused a request and said why in the code of its error
+    /// JKNet Online refused a request and said why in the code of its error
     /// document: `not_found`, `unauthorized`, `forbidden`, `invalid`,
     /// `conflict`, `rate_limited`, `provider_error` or `internal`.
     ///
@@ -115,10 +115,10 @@ pub enum AppError {
     /// reaches the frontend as a plain string, and the screens have to tell
     /// the codes apart: `provider_error` means "JKHub has not issued an OAuth
     /// client yet, keep the guest button", while `conflict` on the same screen
-    /// means "that display name is taken, type another one". `hubErrorCode`
+    /// means "that display name is taken, type another one". `onlineErrorCode`
     /// in `src/lib/ipc.ts` reads the prefix back out.
-    #[error("hub {code}: {message}")]
-    Hub { code: String, message: String },
+    #[error("online {code}: {message}")]
+    Online { code: String, message: String },
 
     // --- slice: game core ---
     /// Two entities of different games were put together: a Jedi Outcast
@@ -137,17 +137,17 @@ pub enum AppError {
         reason: String,
     },
 
-    // --- slice: hub gate ---
-    /// This build has no hub address, so there is nothing to call.
+    // --- slice: online gate ---
+    /// This build has no service address, so there is nothing to call.
     ///
     /// Not a network failure and not a sign-out: the service is not open yet,
     /// and the screens answer it with a sentence rather than an error box. It
-    /// travels in the same `hub <code>: <message>` envelope as [`AppError::Hub`]
-    /// so that `hubErrorCode` in `src/lib/ipc.ts` reads it back like any other
-    /// code — hence the doubled word: `hub` is the envelope and
-    /// [`HUB_NOT_CONFIGURED_CODE`] is the code inside it.
-    #[error("hub {}: JKNet Hub is not configured in this build", HUB_NOT_CONFIGURED_CODE)]
-    HubNotConfigured,
+    /// travels in the same `online <code>: <message>` envelope as [`AppError::Online`]
+    /// so that `onlineErrorCode` in `src/lib/ipc.ts` reads it back like any other
+    /// code — hence the doubled word: `online` is the envelope and
+    /// [`ONLINE_NOT_CONFIGURED_CODE`] is the code inside it.
+    #[error("online {}: JKNet Online is not configured in this build", ONLINE_NOT_CONFIGURED_CODE)]
+    OnlineNotConfigured,
 
     // --- slice: jkhub ---
     /// jkhub.org could not be reached, answered with a status the reader does
@@ -180,12 +180,12 @@ pub enum AppError {
     NoPk3Files { entries: String },
 }
 
-// --- slice: hub gate ---
-/// The code the frontend matches on for [`AppError::HubNotConfigured`].
+// --- slice: online gate ---
+/// The code the frontend matches on for [`AppError::OnlineNotConfigured`].
 ///
 /// Declared once so the rendered message and the frontend helper cannot drift
 /// apart; the test below pins them together.
-pub const HUB_NOT_CONFIGURED_CODE: &str = "hub_not_configured";
+pub const ONLINE_NOT_CONFIGURED_CODE: &str = "online_not_configured";
 
 impl From<reqwest::Error> for AppError {
     fn from(source: reqwest::Error) -> Self {
@@ -239,19 +239,19 @@ impl Serialize for AppError {
 mod tests {
     use super::*;
 
-    // --- slice: hub gate ---
+    // --- slice: online gate ---
     #[test]
-    fn a_missing_hub_reaches_the_frontend_as_a_code_it_can_match_on() {
-        // `hubErrorCode` in `src/lib/ipc.ts` reads `^hub ([a-z_]+): `, so the
+    fn a_missing_service_reaches_the_frontend_as_a_code_it_can_match_on() {
+        // `onlineErrorCode` in `src/lib/ipc.ts` reads `^online ([a-z_]+): `, so the
         // envelope has to survive both the rendering and the serialization.
-        let rendered = AppError::HubNotConfigured.to_string();
+        let rendered = AppError::OnlineNotConfigured.to_string();
         assert_eq!(
             rendered,
-            "hub hub_not_configured: JKNet Hub is not configured in this build"
+            "online online_not_configured: JKNet Online is not configured in this build"
         );
-        assert!(rendered.starts_with(&format!("hub {HUB_NOT_CONFIGURED_CODE}: ")));
+        assert!(rendered.starts_with(&format!("online {ONLINE_NOT_CONFIGURED_CODE}: ")));
 
-        let json = serde_json::to_string(&AppError::HubNotConfigured)
+        let json = serde_json::to_string(&AppError::OnlineNotConfigured)
             .expect("an error serializes as a string");
         assert_eq!(json, format!("{rendered:?}"));
     }

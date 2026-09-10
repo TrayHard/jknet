@@ -1,13 +1,13 @@
-//! Signing in to the hub and owning the account, as commands.
+//! Signing in to the service and owning the account, as commands.
 //!
 //! The sign-in is a browser round trip with no deep link: the launcher asks
-//! the hub for a session, opens the session's URL in the system browser, and
+//! the service for a session, opens the session's URL in the system browser, and
 //! then polls the session until the provider sends the player back. Nothing
 //! listens on a port and no custom URL scheme is registered, so nothing has to
 //! survive a firewall prompt or a second launcher installed next to this one.
 //!
 //! ```text
-//! frontend            core                       hub                browser
+//! frontend            core                    online                browser
 //!    | begin_sign_in    |                         |                    |
 //!    |----------------->| POST /v1/auth/login-sessions                  |
 //!    |                  |------------------------>|                    |
@@ -34,9 +34,9 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{AppError, Result};
-use crate::hub::{
-    is_http_url, is_local_hub, normalize_display_name, HubClient, HubContext, HubUser, SignInPoll,
-    PROVIDERS,
+use crate::online::{
+    is_http_url, is_local_online, normalize_display_name, OnlineClient, OnlineContext, OnlineUser,
+    SignInPoll, PROVIDERS,
 };
 use crate::settings::Settings;
 use crate::state::AppState;
@@ -70,9 +70,9 @@ pub enum AccountChangeReason {
     SignedOut,
     /// The display name changed; the account is the same one.
     Renamed,
-    /// The player deleted the account on the hub.
+    /// The player deleted the account on the service.
     Deleted,
-    /// The hub refused the stored token, so the launcher forgot it. Nobody
+    /// The service refused the stored token, so the launcher forgot it. Nobody
     /// asked for this one, which is why the window says so out loud.
     Expired,
 }
@@ -81,26 +81,26 @@ pub enum AccountChangeReason {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountState {
-    /// Whether this build has a hub to talk to at all.
+    /// Whether this build has a service to talk to at all.
     ///
-    /// False in a release build until `hub::RELEASE_HUB_URL` names the public
+    /// False in a release build until `online::RELEASE_ONLINE_URL` names the public
     /// origin, and until then the whole account and friends interface is one
     /// sentence saying so. The player turns it on for their machine by typing
-    /// an address into **Hub address** on the Settings screen, which is why
+    /// an address into **JKNet Online address** on the Settings screen, which is why
     /// that field stays visible in this state.
-    pub hub_configured: bool,
-    /// Whether a token is on file. It says nothing about whether the hub still
+    pub online_configured: bool,
+    /// Whether a token is on file. It says nothing about whether the service still
     /// accepts it: finding that out costs a request, and the sidebar has to
     /// paint before one could answer.
-    pub hub_signed_in: bool,
-    /// The account as it was when the launcher last heard from the hub.
-    pub hub_user: Option<HubUser>,
-    /// The hub this launcher talks to, so the Settings screen can show it.
+    pub online_signed_in: bool,
+    /// The account as it was when the launcher last heard from the service.
+    pub online_user: Option<OnlineUser>,
+    /// The service this launcher talks to, so the Settings screen can show it.
     /// Empty when there is none.
-    pub hub_url: String,
-    /// Whether that hub runs on this machine, which is what makes the
+    pub online_url: String,
+    /// Whether that service runs on this machine, which is what makes the
     /// Developer sign-in button appear.
-    pub local_hub: bool,
+    pub local_online: bool,
 }
 
 /// What `begin_sign_in` hands back: the session to poll and the URL that was
@@ -126,34 +126,34 @@ pub fn get_account_state(state: tauri::State<'_, AppState>) -> Result<AccountSta
 /// Opens a sign-in session and sends the player to the browser.
 ///
 /// The command opens the URL itself rather than handing it to the frontend:
-/// the answer of the hub is the one string that decides where the player's
+/// the answer of the service is the one string that decides where the player's
 /// browser goes, and it is checked for an `http` scheme in the core, one step
 /// away from anything a webview could be talked into.
 #[tauri::command]
 pub async fn begin_sign_in(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     provider: String,
 ) -> Result<SignInStart> {
     let settings = state.settings()?;
-    let ctx = HubContext::from_settings(&settings);
-    // --- slice: hub gate ---
-    // Before the provider check, so a build with no hub says "the service is
+    let ctx = OnlineContext::from_settings(&settings);
+    // --- slice: online gate ---
+    // Before the provider check, so a build with no service says "the service is
     // not open yet" rather than "the developer sign-in only works against a
-    // hub on this machine" — a sentence about a hub that does not exist.
+    // service on this machine" — a sentence about a service that does not exist.
     if !ctx.configured() {
-        return Err(AppError::HubNotConfigured);
+        return Err(AppError::OnlineNotConfigured);
     }
     let provider = check_provider(&provider, &ctx)?;
 
-    let session = hub
+    let session = online
         .create_login_session(&ctx, provider, device_name().as_deref())
         .await?;
 
     if !is_http_url(&session.url) {
         return Err(AppError::InvalidInput(format!(
-            "the hub answered with {:?}, which is not a URL the launcher opens",
+            "the service answered with {:?}, which is not a URL the launcher opens",
             session.url
         )));
     }
@@ -181,12 +181,12 @@ pub async fn begin_sign_in(
 pub async fn poll_sign_in(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     session_id: String,
 ) -> Result<SignInPoll> {
     let settings = state.settings()?;
-    let ctx = HubContext::from_settings(&settings);
-    let session = hub.poll_login_session(&ctx, &session_id).await?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let session = online.poll_login_session(&ctx, &session_id).await?;
 
     if session.status != "done" {
         return Ok(SignInPoll {
@@ -210,13 +210,13 @@ pub async fn poll_sign_in(
         // The contract hands out the token exactly once. A second read that
         // finds the session done is the same sign-in seen twice, which is
         // fine as long as the first read stored something.
-        _ => match (ctx.signed_in(), settings.hub_user.clone()) {
+        _ => match (ctx.signed_in(), settings.online_user.clone()) {
             (true, Some(user)) => Ok(SignInPoll {
                 status: "done".into(),
                 user: Some(user),
                 error: None,
             }),
-            _ => Err(AppError::Hub {
+            _ => Err(AppError::Online {
                 code: "conflict".into(),
                 message: "this sign-in was already used. Start again.".into(),
             }),
@@ -224,23 +224,23 @@ pub async fn poll_sign_in(
     }
 }
 
-/// Forgets the account on this machine and invalidates the token on the hub.
+/// Forgets the account on this machine and invalidates the token on the service.
 ///
-/// A hub that cannot be reached does not keep the player signed in: the local
+/// A service that cannot be reached does not keep the player signed in: the local
 /// half runs whatever the remote half answered, because the alternative is a
 /// Sign out button that does nothing while the network is down.
 #[tauri::command]
 pub async fn sign_out(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
 ) -> Result<()> {
     let settings = state.settings()?;
-    let ctx = HubContext::from_settings(&settings);
+    let ctx = OnlineContext::from_settings(&settings);
 
     if ctx.signed_in() {
-        if let Err(e) = hub.logout(&ctx).await {
-            log::warn!("the hub did not confirm the sign-out: {e}");
+        if let Err(e) = online.logout(&ctx).await {
+            log::warn!("the service did not confirm the sign-out: {e}");
         }
     }
 
@@ -252,11 +252,11 @@ pub async fn sign_out(
 
 /// Renames the account.
 ///
-/// The name is cleaned and measured here first: the hub applies the same rules
+/// The name is cleaned and measured here first: the service applies the same rules
 /// and would answer `400`, but a round trip to be told "too short" is a round
 /// trip the player waits through.
 ///
-/// The rename reaches this launcher alone. The hub sends `me.updated` to the
+/// The rename reaches this launcher alone. The service sends `me.updated` to the
 /// owner of the token and to nobody else, because a friend receiving it would
 /// read someone else's profile as their own. Friends learn the new name from
 /// `GET /v1/friends`, which the Friends screen polls anyway.
@@ -264,14 +264,14 @@ pub async fn sign_out(
 pub async fn update_display_name(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
     display_name: String,
-) -> Result<HubUser> {
+) -> Result<OnlineUser> {
     let name = normalize_display_name(&display_name)?;
     let settings = state.settings()?;
-    let ctx = HubContext::from_settings(&settings);
+    let ctx = OnlineContext::from_settings(&settings);
 
-    let user = hub.patch_me(&ctx, &name).await?;
+    let user = online.patch_me(&ctx, &name).await?;
     store_account(&state, ctx.token.clone(), Some(user.clone()))?;
     // Signed in either way; the payload exists so a listener knows to reread
     // the account rather than to work out what changed.
@@ -282,20 +282,20 @@ pub async fn update_display_name(
 /// Deletes the account, its friendships, its requests and its invites.
 ///
 /// Nothing on this machine goes with it: clients, library files and settings
-/// are the launcher's, not the hub's.
+/// are the launcher's, not the service's.
 #[tauri::command]
 pub async fn delete_account(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
-    hub: tauri::State<'_, HubClient>,
+    online: tauri::State<'_, OnlineClient>,
 ) -> Result<()> {
     let settings = state.settings()?;
-    let ctx = HubContext::from_settings(&settings);
+    let ctx = OnlineContext::from_settings(&settings);
 
-    hub.delete_me(&ctx).await?;
+    online.delete_me(&ctx).await?;
     store_account(&state, None, None)?;
     announce(&app, false, AccountChangeReason::Deleted);
-    log::info!("the hub account was deleted");
+    log::info!("the service account was deleted");
     Ok(())
 }
 
@@ -306,15 +306,15 @@ pub async fn delete_account(
 /// Builds the answer of `get_account_state` from a settings document.
 ///
 /// Pure, so the rules it encodes — a blank token is not a sign-in, a build
-/// with no hub is signed out, the Developer button belongs to a local hub —
-/// are tested without a hub.
+/// with no service is signed out, the Developer button belongs to a local service —
+/// are tested without a service.
 ///
 /// It never fails and never touches the network, which is what lets the
 /// sidebar and the Account card paint on the first frame of a launcher whose
-/// hub is switched off.
+/// service is switched off.
 fn account_state(settings: &Settings) -> AccountState {
-    let ctx = HubContext::from_settings(settings);
-    account_state_of(ctx, settings.hub_user.clone())
+    let ctx = OnlineContext::from_settings(settings);
+    account_state_of(ctx, settings.online_user.clone())
 }
 
 /// The same answer, built from the address and token that are actually in
@@ -322,40 +322,41 @@ fn account_state(settings: &Settings) -> AccountState {
 ///
 /// Split from [`account_state`] for the one state a debug build cannot reach
 /// through `settings.json`: a blank stored address means "the default of this
-/// build", and that default is a hub in a debug build. The release state —
-/// no hub at all — is a `HubContext` with a blank `base_url`, which this takes
-/// directly, so both halves of the switch are covered by one `cargo test`.
-fn account_state_of(ctx: HubContext, user: Option<HubUser>) -> AccountState {
+/// build", and that default is a service in a debug build. The release state —
+/// no service at all — is an `OnlineContext` with a blank `base_url`, which
+/// this takes directly, so both halves of the switch are covered by one
+/// `cargo test`.
+fn account_state_of(ctx: OnlineContext, user: Option<OnlineUser>) -> AccountState {
     let configured = ctx.configured();
     AccountState {
-        hub_configured: configured,
-        // Everything below follows the address. With no hub there is nobody to
+        online_configured: configured,
+        // Everything below follows the address. With no service there is nobody to
         // be signed in to, no account to name, and the Developer button would
         // open a sign-in that cannot start.
-        hub_signed_in: ctx.signed_in(),
-        hub_user: if configured { user } else { None },
-        local_hub: configured && is_local_hub(&ctx.base_url),
-        hub_url: ctx.base_url,
+        online_signed_in: ctx.signed_in(),
+        online_user: if configured { user } else { None },
+        local_online: configured && is_local_online(&ctx.base_url),
+        online_url: ctx.base_url,
     }
 }
 
 /// Refuses a provider the contract does not have, and the developer provider
-/// against a hub that is not on this machine.
-fn check_provider<'a>(provider: &'a str, ctx: &HubContext) -> Result<&'a str> {
+/// against a service that is not on this machine.
+fn check_provider<'a>(provider: &'a str, ctx: &OnlineContext) -> Result<&'a str> {
     if !PROVIDERS.contains(&provider) {
         return Err(AppError::InvalidInput(format!(
             "sign-in provider {provider:?}"
         )));
     }
-    if provider == "dev" && !is_local_hub(&ctx.base_url) {
+    if provider == "dev" && !is_local_online(&ctx.base_url) {
         return Err(AppError::InvalidInput(
-            "the developer sign-in only works against a hub on this machine".into(),
+            "the developer sign-in only works against a service on this machine".into(),
         ));
     }
     Ok(provider)
 }
 
-/// The name the hub shows next to the session, so a player can tell the
+/// The name the service shows next to the session, so a player can tell the
 /// machine they are signing in from. Absent is fine: the field is optional.
 fn device_name() -> Option<String> {
     std::env::var("COMPUTERNAME")
@@ -372,11 +373,11 @@ fn device_name() -> Option<String> {
 fn store_account(
     state: &AppState,
     token: Option<String>,
-    user: Option<HubUser>,
+    user: Option<OnlineUser>,
 ) -> Result<()> {
     let mut settings = Settings::current(state)?;
-    settings.hub_token = token;
-    settings.hub_user = user;
+    settings.online_token = token;
+    settings.online_user = user;
     settings.save(state)?;
     state.set_settings(settings)
 }
@@ -397,16 +398,16 @@ fn announce(app: &tauri::AppHandle, signed_in: bool, reason: AccountChangeReason
 // An expired session
 // ---------------------------------------------------------------------------
 
-/// Forgets a token the hub no longer accepts.
+/// Forgets a token the service no longer accepts.
 ///
-/// Called from [`crate::hub::HubClient`] when a request that carried a token
+/// Called from [`crate::online::OnlineClient`] when a request that carried a token
 /// came back `401`, which is what an expired token — the contract gives one 90
 /// days — or one revoked on another machine looks like from here. Without this
 /// the sidebar keeps showing a name while every call and every heartbeat fails,
 /// until the player works out that **Sign out** is the cure.
 ///
 /// The call comes into this module rather than the settings on purpose: the
-/// account is the one writer of `hub_token` and `hub_user`, so the transition
+/// account is the one writer of `online_token` and `online_user`, so the transition
 /// lives next to every other write of those two fields, and one event name is
 /// emitted from one place.
 ///
@@ -428,7 +429,7 @@ pub fn expire_session(app: &tauri::AppHandle, token: &str) {
 
     // The file first, then memory. A file that refuses the write is worth a
     // line in the log and nothing more: the launcher still has to stop using a
-    // token the hub refuses, and every later call reads the copy in memory.
+    // token the service refuses, and every later call reads the copy in memory.
     if let Err(e) = settings.save(&state) {
         log::warn!("cannot write the settings after a refused token: {e}");
     }
@@ -437,7 +438,7 @@ pub fn expire_session(app: &tauri::AppHandle, token: &str) {
         return;
     }
 
-    log::warn!("the hub refused the token: signed out");
+    log::warn!("the service refused the token: signed out");
     announce(app, false, AccountChangeReason::Expired);
 }
 
@@ -445,19 +446,19 @@ pub fn expire_session(app: &tauri::AppHandle, token: &str) {
 /// force.
 ///
 /// Pure, and the whole state transition of an expired session: what it leaves
-/// behind is a signed-out document that still names its hub, so the Sign in
+/// behind is a signed-out document that still names its service, so the Sign in
 /// button on the next screen talks to the same one.
 ///
 /// The comparison is what makes a burst of refusals do the work once, and what
 /// keeps a `401` that belongs to a previous session from signing out the one
 /// the player has just started.
 fn clear_session(settings: &mut Settings, token: &str) -> bool {
-    let current = settings.hub_token.as_deref().map(str::trim);
+    let current = settings.online_token.as_deref().map(str::trim);
     if current != Some(token.trim()) {
         return false;
     }
-    settings.hub_token = None;
-    settings.hub_user = None;
+    settings.online_token = None;
+    settings.online_user = None;
     true
 }
 
@@ -469,10 +470,10 @@ mod tests {
         Settings {
             // Named rather than taken from `Settings::default()`: the default
             // follows the build profile, and these tests are about the account
-            // and not about which hub a profile ships with.
-            hub_url: crate::hub::DEV_HUB_URL.into(),
-            hub_token: Some("0123456789abcdef".into()),
-            hub_user: Some(HubUser {
+            // and not about which service a profile ships with.
+            online_url: crate::online::DEV_ONLINE_URL.into(),
+            online_token: Some("0123456789abcdef".into()),
+            online_user: Some(OnlineUser {
                 id: "01JBX7Q2".into(),
                 display_name: "Kyle Katarn".into(),
                 avatar_url: None,
@@ -485,61 +486,61 @@ mod tests {
     }
 
     #[test]
-    fn the_account_state_follows_the_token_and_the_hub() {
+    fn the_account_state_follows_the_token_and_the_service() {
         let state = account_state(&signed_in_settings());
-        assert!(state.hub_configured);
-        assert!(state.hub_signed_in);
-        assert_eq!(state.hub_user.expect("a user").display_name, "Kyle Katarn");
-        // The development hub runs here, so the Developer button shows.
-        assert!(state.local_hub);
-        assert_eq!(state.hub_url, crate::hub::DEV_HUB_URL);
+        assert!(state.online_configured);
+        assert!(state.online_signed_in);
+        assert_eq!(state.online_user.expect("a user").display_name, "Kyle Katarn");
+        // The development service runs here, so the Developer button shows.
+        assert!(state.local_online);
+        assert_eq!(state.online_url, crate::online::DEV_ONLINE_URL);
     }
 
-    // --- slice: hub gate ---
+    // --- slice: online gate ---
 
     /// A context with a token and whatever address the case is about. A blank
-    /// one is what a release build builds until `RELEASE_HUB_URL` names an
+    /// one is what a release build builds until `RELEASE_ONLINE_URL` names an
     /// origin, and what a debug build cannot produce from `settings.json`.
-    fn signed_in_at(base_url: &str) -> HubContext {
-        HubContext {
+    fn signed_in_at(base_url: &str) -> OnlineContext {
+        OnlineContext {
             base_url: base_url.into(),
             token: Some("0123456789abcdef".into()),
         }
     }
 
-    fn stored_user() -> Option<HubUser> {
-        signed_in_settings().hub_user
+    fn stored_user() -> Option<OnlineUser> {
+        signed_in_settings().online_user
     }
 
     #[test]
-    fn a_build_without_a_hub_is_signed_out_and_says_which_of_the_two_it_is() {
+    fn a_build_without_a_service_is_signed_out_and_says_which_of_the_two_it_is() {
         // The token is deliberately still there: a player who signed in
-        // against a hub of their own and then lost the address must not keep a
+        // against a service of their own and then lost the address must not keep a
         // signed-in sidebar over screens with nothing behind them.
         let state = account_state_of(signed_in_at(""), stored_user());
-        assert!(!state.hub_configured);
-        assert!(!state.hub_signed_in);
-        assert_eq!(state.hub_user, None);
-        assert!(!state.local_hub);
+        assert!(!state.online_configured);
+        assert!(!state.online_signed_in);
+        assert_eq!(state.online_user, None);
+        assert!(!state.local_online);
         // Empty rather than an address nothing answers at: the Settings screen
-        // prints this string in the **Hub address** field.
-        assert_eq!(state.hub_url, "");
+        // prints this string in the **JKNet Online address** field.
+        assert_eq!(state.online_url, "");
     }
 
     #[test]
     fn typing_an_address_switches_the_feature_on_without_a_new_build() {
-        // How a self-hoster or a tester turns the hub on, and how the whole
+        // How a self-hoster or a tester turns the service on, and how the whole
         // Account and Friends interface comes back.
-        assert!(!account_state_of(signed_in_at(""), stored_user()).hub_configured);
+        assert!(!account_state_of(signed_in_at(""), stored_user()).online_configured);
 
         let state = account_state_of(
-            signed_in_at(&crate::hub::normalize_hub_url("https://hub.jknet.gg/")),
+            signed_in_at(&crate::online::normalize_online_url("https://online.jknet.gg/")),
             stored_user(),
         );
-        assert!(state.hub_configured);
-        assert!(state.hub_signed_in);
-        assert_eq!(state.hub_url, "https://hub.jknet.gg");
-        assert!(!state.local_hub);
+        assert!(state.online_configured);
+        assert!(state.online_signed_in);
+        assert_eq!(state.online_url, "https://online.jknet.gg");
+        assert!(!state.local_online);
     }
 
     #[test]
@@ -547,7 +548,7 @@ mod tests {
         // `AccountState` in `src/lib/ipc.ts` switches on this field name.
         let json = serde_json::to_string(&account_state(&signed_in_settings()))
             .expect("the state serializes");
-        assert!(json.contains("\"hubConfigured\":true"), "{json}");
+        assert!(json.contains("\"onlineConfigured\":true"), "{json}");
     }
 
     #[test]
@@ -555,34 +556,34 @@ mod tests {
         // What a hand-edited `settings.json` produces, and what would otherwise
         // give the player a signed-in sidebar and a 401 on every click.
         let mut settings = signed_in_settings();
-        settings.hub_token = Some("   ".into());
-        assert!(!account_state(&settings).hub_signed_in);
+        settings.online_token = Some("   ".into());
+        assert!(!account_state(&settings).online_signed_in);
 
-        settings.hub_token = None;
-        assert!(!account_state(&settings).hub_signed_in);
+        settings.online_token = None;
+        assert!(!account_state(&settings).online_signed_in);
     }
 
     #[test]
-    fn a_remote_hub_hides_the_developer_button() {
+    fn a_remote_service_hides_the_developer_button() {
         let mut settings = signed_in_settings();
-        settings.hub_url = "https://hub.jknet.gg".into();
+        settings.online_url = "https://online.jknet.gg".into();
         let state = account_state(&settings);
-        assert!(!state.local_hub);
-        assert_eq!(state.hub_url, "https://hub.jknet.gg");
+        assert!(!state.local_online);
+        assert_eq!(state.online_url, "https://online.jknet.gg");
     }
 
     #[test]
-    fn a_refused_token_leaves_a_signed_out_document_that_still_names_its_hub() {
+    fn a_refused_token_leaves_a_signed_out_document_that_still_names_its_service() {
         let mut settings = signed_in_settings();
-        settings.hub_url = "https://hub.jknet.gg".into();
+        settings.online_url = "https://online.jknet.gg".into();
         assert!(clear_session(&mut settings, "0123456789abcdef"));
 
-        assert_eq!(settings.hub_token, None);
-        assert_eq!(settings.hub_user, None);
-        assert!(!account_state(&settings).hub_signed_in);
+        assert_eq!(settings.online_token, None);
+        assert_eq!(settings.online_user, None);
+        assert!(!account_state(&settings).online_signed_in);
         // The address is not part of the session: signing in again has to go
-        // to the hub the player chose, not back to the development one.
-        assert_eq!(settings.hub_url, "https://hub.jknet.gg");
+        // to the service the player chose, not back to the development one.
+        assert_eq!(settings.online_url, "https://online.jknet.gg");
     }
 
     #[test]
@@ -601,8 +602,8 @@ mod tests {
         // Acting on its answer would sign out the session they just started.
         let mut settings = signed_in_settings();
         assert!(!clear_session(&mut settings, "an-older-token"));
-        assert!(settings.hub_token.is_some());
-        assert!(settings.hub_user.is_some());
+        assert!(settings.online_token.is_some());
+        assert!(settings.online_user.is_some());
     }
 
     #[test]
@@ -623,18 +624,18 @@ mod tests {
     }
 
     #[test]
-    fn the_developer_provider_is_refused_against_a_hub_on_the_internet() {
-        let remote = HubContext {
-            base_url: "https://hub.jknet.gg".into(),
+    fn the_developer_provider_is_refused_against_a_service_on_the_internet() {
+        let remote = OnlineContext {
+            base_url: "https://online.jknet.gg".into(),
             token: None,
         };
         // The dev provider hands out an account for any name typed into a
-        // form. Offering it against someone else's hub offers an open door.
+        // form. Offering it against someone else's service offers an open door.
         assert!(check_provider("dev", &remote).is_err());
         assert!(check_provider("jkhub", &remote).is_ok());
 
-        let local = HubContext {
-            base_url: crate::hub::DEV_HUB_URL.into(),
+        let local = OnlineContext {
+            base_url: crate::online::DEV_ONLINE_URL.into(),
             token: None,
         };
         assert!(check_provider("dev", &local).is_ok());
