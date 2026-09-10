@@ -1,94 +1,94 @@
 {
-  "title": "Library",
-  "subtitle": "Skins, hilts, maps and mods, installed into the client you choose.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} files · {{enabled}} enabled · {{size}}",
-  "noEngine": "no engine",
-  "searchPlaceholder": "Search files",
-  "browseJkhub": "Browse JKHub",
-  "addFiles": "Add files",
-  "pickTitle": "Add pk3 files",
-  "pickFilter": "Jedi Academy archives",
+  "title": "Бібліотека",
+  "subtitle": "Скіни, руків’я, карти та моди — встановлюються у вибраний клієнт.",
+  "subtitleClient": "{{client}} · {{engine}} · файлів: {{files}} · увімкнено: {{enabled}} · {{size}}",
+  "noEngine": "рушія немає",
+  "searchPlaceholder": "Пошук за файлами",
+  "browseJkhub": "Каталог JKHub",
+  "addFiles": "Додати файли",
+  "pickTitle": "Додати файли pk3",
+  "pickFilter": "Архіви Jedi Academy",
   "clientBar": {
-    "label": "Client",
-    "hint": "Files are installed into this client only. Another client with the same engine keeps its own set. {{game}} clients are listed here; switch game in the sidebar for the other ones."
+    "label": "Клієнт",
+    "hint": "Файли встановлюються лише в цей клієнт. В іншого клієнта на тому самому рушії свій набір. Тут перелічено клієнти {{game}}; для решти перемкніть гру в бічній панелі."
   },
   "tabs": {
-    "installed": "Installed",
-    "jkhub": "Browse JKHub",
-    "updates": "Updates"
+    "installed": "Встановлені",
+    "jkhub": "Каталог JKHub",
+    "updates": "Оновлення"
   },
   "sort": {
-    "label": "Sort by",
-    "recent": "Recent",
-    "name": "Name",
-    "size": "Size"
+    "label": "Сортування",
+    "recent": "За датою",
+    "name": "За назвою",
+    "size": "За розміром"
   },
   "categories": {
-    "all": "All",
-    "skin": "Skins",
-    "hilt": "Hilts",
-    "map": "Maps",
-    "mod": "Mods",
-    "hud": "HUD & UI",
-    "sound": "Sounds",
-    "other": "Other"
+    "all": "Усі",
+    "skin": "Скіни",
+    "hilt": "Руків’я",
+    "map": "Карти",
+    "mod": "Моди",
+    "hud": "HUD та інтерфейс",
+    "sound": "Звуки",
+    "other": "Інше"
   },
   "categoryOne": {
-    "skin": "Skin",
-    "hilt": "Hilt",
-    "map": "Map",
-    "mod": "Mod",
+    "skin": "Скін",
+    "hilt": "Руків’я",
+    "map": "Карта",
+    "mod": "Мод",
     "hud": "HUD",
-    "sound": "Sound",
-    "other": "Other"
+    "sound": "Звук",
+    "other": "Інше"
   },
-  "onlyEnabled": "Only enabled",
-  "onlyEnabledSwitch": "Show only enabled files",
+  "onlyEnabled": "Лише увімкнені",
+  "onlyEnabledSwitch": "Показувати лише увімкнені файли",
   "card": {
-    "addedByHand": "Added by hand",
+    "addedByHand": "Додано вручну",
     "sourceWithFolder": "{{source}} · {{folder}}",
-    "conflict": "Conflict",
-    "enable": "Enable {{file}}",
-    "remove": "Remove {{file}}",
-    "removeHint": "Remove from this client"
+    "conflict": "Конфлікт",
+    "enable": "Увімкнути {{file}}",
+    "remove": "Видалити {{file}}",
+    "removeHint": "Видалити з цього клієнта"
   },
   "empty": {
-    "noClientsTitle": "No {{game}} clients yet",
-    "noClientsText": "A library file is installed into a client. Create one and this list starts filling up.",
-    "newClient": "New client",
-    "noFilesTitle": "{{client}} has no files yet",
-    "noFilesText": "Find skins, hilts, maps and mods on JKHub, then add the pk3 files here. You can also drop them straight onto this window.",
-    "filteredTitle": "Nothing matches",
-    "filteredText": "No file in this client matches the search and the filters. Clear them to see the whole library.",
-    "updatesTitle": "No updates yet",
-    "updatesText": "Once files carry a JKHub version, the ones with a newer release show up here."
+    "noClientsTitle": "Клієнтів {{game}} ще немає",
+    "noClientsText": "Файл бібліотеки встановлюється в клієнт. Створіть клієнт, і список почне заповнюватися.",
+    "newClient": "Новий клієнт",
+    "noFilesTitle": "У клієнті {{client}} ще немає файлів",
+    "noFilesText": "Знайдіть скіни, руків’я, карти та моди на JKHub, потім додайте файли pk3 сюди. Їх можна просто перетягнути в це вікно.",
+    "filteredTitle": "Нічого не знайдено",
+    "filteredText": "Жоден файл цього клієнта не підходить під пошук і фільтри. Очистіть їх, щоб побачити всю бібліотеку.",
+    "updatesTitle": "Оновлень поки немає",
+    "updatesText": "Щойно у файлів з’явиться версія JKHub, тут будуть ті, для яких вийшов свіжий випуск."
   },
   "fallback": {
-    "thisClient": "this client",
-    "theClient": "the client"
+    "thisClient": "цей клієнт",
+    "theClient": "клієнт"
   },
   "skipped": {
-    "rename": "Rename it to {{name}}.",
-    "title_one": "{{count}} file was not added",
-    "title_few": "{{count}} files were not added",
-    "title_many": "{{count}} files were not added",
-    "title_other": "{{count}} files were not added"
+    "title_one": "{{count}} файл не додано",
+    "title_few": "{{count}} файли не додано",
+    "title_many": "{{count}} файлів не додано",
+    "title_other": "{{count}} файла не додано",
+    "rename": "Перейменуйте його на {{name}}."
   },
   "drop": {
-    "title": "Drop pk3 files to install them into {{client}}"
+    "title": "Відпустіть файли pk3, щоб установити їх у {{client}}"
   },
   "conflicts": {
-    "notice": "{{count}} files change the same content. The engine loads the last one and ignores the rest.",
-    "see": "See what wins",
-    "title": "Files that change the same content",
-    "body": "{{files}} archives of {{client}} carry {{paths}} shared paths. The engine reads the last one it loads and ignores the rest.",
-    "wins": "Wins",
-    "hidden": "Hidden",
-    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the archives to see the rest."
+    "notice": "Файлів, що змінюють однаковий вміст: {{count}}. Рушій завантажує останній і не помічає решту.",
+    "see": "Подивитися, хто переможе",
+    "title": "Файли, які змінюють однаковий вміст",
+    "body": "Архіви клієнта {{client}} ({{files}} шт.) містять спільних шляхів: {{paths}}. Рушій читає той, який завантажив останнім, і не помічає решту.",
+    "wins": "Перемагає",
+    "hidden": "Прихований",
+    "truncated": "Показано шляхів: {{shown}} із {{total}}. Вимкніть один з архівів, щоб побачити решту."
   },
   "remove": {
-    "title": "Remove {{file}} from {{client}}?",
-    "body": "{{fileName}}, {{size}}. The file is deleted from the client's {{folder}} folder. Other clients keep their own copy.",
-    "confirm": "Remove file"
+    "title": "Видалити {{file}} з клієнта {{client}}?",
+    "body": "{{fileName}}, {{size}}. Файл видаляється з папки {{folder}} цього клієнта. В інших клієнтів залишається своя копія.",
+    "confirm": "Видалити файл"
   }
 }

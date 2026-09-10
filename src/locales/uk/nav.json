@@ -1,24 +1,24 @@
 {
   "groups": {
-    "play": "Play",
-    "manage": "Manage",
-    "community": "Community"
+    "play": "Гра",
+    "manage": "Керування",
+    "community": "Спільнота"
   },
   "items": {
-    "home": "Home",
-    "servers": "Servers",
-    "library": "Library",
-    "clients": "Clients",
-    "friends": "Friends",
-    "settings": "Settings"
+    "home": "Головна",
+    "servers": "Сервери",
+    "library": "Бібліотека",
+    "clients": "Клієнти",
+    "friends": "Друзі",
+    "settings": "Налаштування"
   },
   "user": {
-    "guest": "Guest",
-    "noClient": "No client yet",
-    "openAccount": "Account settings",
-    "signIn": "Sign in"
+    "guest": "Гість",
+    "noClient": "Клієнта ще немає",
+    "openAccount": "Налаштування облікового запису",
+    "signIn": "Увійти"
   },
   "gameSwitch": {
-    "label": "Game"
+    "label": "Гра"
   }
 }
