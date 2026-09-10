@@ -14,13 +14,14 @@
 //! Two rules of `codemp/qcommon/files.cpp` (OpenJK `master` @ `1a6a6434`)
 //! decide the whole design:
 //!
-//! * `FS_AddGameDirectory` (`files.cpp:3088`) lists only the `.pk3` extension,
+//! * `FS_AddGameDirectory` (`files.cpp:3089`) lists only the `.pk3` extension,
 //!   so a file renamed to `name.pk3.disabled` stays on disk and stops being
 //!   loaded. That rename is what the toggle on a card does.
 //! * The list is sorted by `paksort` (`files.cpp:3025`), a case-insensitive
 //!   path compare that pushes `dl_` names last, and every archive is prepended
-//!   to the search path. The archive that sorts last therefore answers first:
-//!   when two pk3 files carry the same internal path, the last one wins.
+//!   to the search path (`files.cpp:3152`). The archive that sorts last
+//!   therefore answers first: when two pk3 files carry the same internal
+//!   path, the last one wins.
 //!
 //! Disk is the source of truth. The sidecar only remembers what an archive
 //! cannot tell — the name the player gave a file and where it came from — and
