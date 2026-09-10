@@ -30,7 +30,7 @@
 //! it belongs to.
 
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{AppError, Result};
@@ -54,6 +54,27 @@ pub const ACCOUNT_CHANGED_EVENT: &str = "account:changed";
 #[serde(rename_all = "camelCase")]
 pub struct AccountChanged {
     pub signed_in: bool,
+    /// What moved the account. The background tasks read `signed_in` alone;
+    /// the window needs the difference between the two ways to end up signed
+    /// out, because only one of them is worth a message on screen.
+    pub reason: AccountChangeReason,
+}
+
+/// Why the account changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AccountChangeReason {
+    /// A sign-in finished.
+    SignedIn,
+    /// The player pressed **Sign out**.
+    SignedOut,
+    /// The display name changed; the account is the same one.
+    Renamed,
+    /// The player deleted the account on the hub.
+    Deleted,
+    /// The hub refused the stored token, so the launcher forgot it. Nobody
+    /// asked for this one, which is why the window says so out loud.
+    Expired,
 }
 
 /// What the frontend is allowed to know about the account.
@@ -162,7 +183,7 @@ pub async fn poll_sign_in(
     match (session.token, session.user) {
         (Some(token), Some(user)) => {
             store_account(&state, Some(token), Some(user.clone()))?;
-            announce(&app, true);
+            announce(&app, true, AccountChangeReason::SignedIn);
             log::info!("signed in as {} via {}", user.display_name, user.provider);
             Ok(SignInPoll {
                 status: "done".into(),
@@ -208,7 +229,7 @@ pub async fn sign_out(
     }
 
     store_account(&state, None, None)?;
-    announce(&app, false);
+    announce(&app, false, AccountChangeReason::SignedOut);
     log::info!("signed out");
     Ok(())
 }
@@ -238,7 +259,7 @@ pub async fn update_display_name(
     store_account(&state, ctx.token.clone(), Some(user.clone()))?;
     // Signed in either way; the payload exists so a listener knows to reread
     // the account rather than to work out what changed.
-    announce(&app, true);
+    announce(&app, true, AccountChangeReason::Renamed);
     Ok(user)
 }
 
@@ -257,7 +278,7 @@ pub async fn delete_account(
 
     hub.delete_me(&ctx).await?;
     store_account(&state, None, None)?;
-    announce(&app, false);
+    announce(&app, false, AccountChangeReason::Deleted);
     log::info!("the hub account was deleted");
     Ok(())
 }
@@ -327,10 +348,79 @@ fn store_account(
 /// A failed emit is logged and swallowed: the command it followed has already
 /// done its work, and turning "the sidebar did not refresh" into "signing out
 /// failed" would be a lie.
-fn announce(app: &tauri::AppHandle, signed_in: bool) {
-    if let Err(e) = app.emit(ACCOUNT_CHANGED_EVENT, AccountChanged { signed_in }) {
+fn announce(app: &tauri::AppHandle, signed_in: bool, reason: AccountChangeReason) {
+    let payload = AccountChanged { signed_in, reason };
+    if let Err(e) = app.emit(ACCOUNT_CHANGED_EVENT, payload) {
         log::warn!("cannot emit {ACCOUNT_CHANGED_EVENT}: {e}");
     }
+}
+
+// ---------------------------------------------------------------------------
+// An expired session
+// ---------------------------------------------------------------------------
+
+/// Forgets a token the hub no longer accepts.
+///
+/// Called from [`crate::hub::HubClient`] when a request that carried a token
+/// came back `401`, which is what an expired token — the contract gives one 90
+/// days — or one revoked on another machine looks like from here. Without this
+/// the sidebar keeps showing a name while every call and every heartbeat fails,
+/// until the player works out that **Sign out** is the cure.
+///
+/// The call comes into this module rather than the settings on purpose: the
+/// account is the one writer of `hub_token` and `hub_user`, so the transition
+/// lives next to every other write of those two fields, and one event name is
+/// emitted from one place.
+///
+/// A token that is already gone — the second `401` of a burst, or a player who
+/// signed out while the request was in flight — leaves everything alone and
+/// announces nothing.
+pub fn expire_session(app: &tauri::AppHandle, token: &str) {
+    let state = app.state::<AppState>();
+    let mut settings = match Settings::current(&state) {
+        Ok(settings) => settings,
+        Err(e) => {
+            log::warn!("cannot read the settings to forget a refused token: {e}");
+            return;
+        }
+    };
+    if !clear_session(&mut settings, token) {
+        return;
+    }
+
+    // The file first, then memory. A file that refuses the write is worth a
+    // line in the log and nothing more: the launcher still has to stop using a
+    // token the hub refuses, and every later call reads the copy in memory.
+    if let Err(e) = settings.save(&state) {
+        log::warn!("cannot write the settings after a refused token: {e}");
+    }
+    if let Err(e) = state.set_settings(settings) {
+        log::warn!("cannot forget a refused token: {e}");
+        return;
+    }
+
+    log::warn!("the hub refused the token: signed out");
+    announce(app, false, AccountChangeReason::Expired);
+}
+
+/// Clears the token and the cached account, if `token` is still the one in
+/// force.
+///
+/// Pure, and the whole state transition of an expired session: what it leaves
+/// behind is a signed-out document that still names its hub, so the Sign in
+/// button on the next screen talks to the same one.
+///
+/// The comparison is what makes a burst of refusals do the work once, and what
+/// keeps a `401` that belongs to a previous session from signing out the one
+/// the player has just started.
+fn clear_session(settings: &mut Settings, token: &str) -> bool {
+    let current = settings.hub_token.as_deref().map(str::trim);
+    if current != Some(token.trim()) {
+        return false;
+    }
+    settings.hub_token = None;
+    settings.hub_user = None;
+    true
 }
 
 #[cfg(test)]
@@ -381,6 +471,57 @@ mod tests {
         let state = account_state(&settings);
         assert!(!state.local_hub);
         assert_eq!(state.hub_url, "https://hub.jknet.gg");
+    }
+
+    #[test]
+    fn a_refused_token_leaves_a_signed_out_document_that_still_names_its_hub() {
+        let mut settings = signed_in_settings();
+        settings.hub_url = "https://hub.jknet.gg".into();
+        assert!(clear_session(&mut settings, "0123456789abcdef"));
+
+        assert_eq!(settings.hub_token, None);
+        assert_eq!(settings.hub_user, None);
+        assert!(!account_state(&settings).hub_signed_in);
+        // The address is not part of the session: signing in again has to go
+        // to the hub the player chose, not back to the development one.
+        assert_eq!(settings.hub_url, "https://hub.jknet.gg");
+    }
+
+    #[test]
+    fn a_burst_of_refusals_signs_the_player_out_once() {
+        // The Friends screen has four calls in flight at a time, and an expired
+        // token brings all four back as 401. Only the first of them may write
+        // the settings and announce the sign-out.
+        let mut settings = signed_in_settings();
+        assert!(clear_session(&mut settings, "0123456789abcdef"));
+        assert!(!clear_session(&mut settings, "0123456789abcdef"));
+    }
+
+    #[test]
+    fn a_refusal_that_belongs_to_an_older_session_is_ignored() {
+        // The player signed out and in again while a request was in flight.
+        // Acting on its answer would sign out the session they just started.
+        let mut settings = signed_in_settings();
+        assert!(!clear_session(&mut settings, "an-older-token"));
+        assert!(settings.hub_token.is_some());
+        assert!(settings.hub_user.is_some());
+    }
+
+    #[test]
+    fn the_reason_reaches_the_window_in_camel_case() {
+        // The window tells an expired session from a sign-out by this field,
+        // and it reads the payload as the JSON text it was emitted as.
+        let json = serde_json::to_string(&AccountChanged {
+            signed_in: false,
+            reason: AccountChangeReason::Expired,
+        })
+        .expect("the payload serializes");
+        assert_eq!(json, r#"{"signedIn":false,"reason":"expired"}"#);
+
+        let read: AccountChanged =
+            serde_json::from_str(&json).expect("the payload reads back");
+        assert!(!read.signed_in);
+        assert_eq!(read.reason, AccountChangeReason::Expired);
     }
 
     #[test]

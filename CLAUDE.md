@@ -37,7 +37,8 @@ src/
   components/            AppShell, TitleBar, Sidebar, PageHeader, NewClientDialog,
                          ClientSettingsDialog, GameEventsProvider,
                          AppUpdateProvider, AboutCard, MapPreview,
-                         MapPicturesCard, ToastsProvider, FriendsProvider
+                         MapPicturesCard, ToastsProvider, FriendsProvider,
+                         AccountProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
                          RadioCard, StepBadges, Toast, Avatar
   components/library/    экран Library: карточка, диалоги, категории, Select

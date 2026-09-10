@@ -6,7 +6,7 @@
 //! [`HubContext`] built from the settings at the moment of the call rather than
 //! being frozen into the client at startup.
 //!
-//! Three rules of the contract are implemented here and nowhere else:
+//! Four rules of the contract are implemented here and nowhere else:
 //!
 //! - a request takes at most 10 s;
 //! - a failed request is retried once, and only when the connection itself was
@@ -15,8 +15,13 @@
 //! - a refusal carries `{"error":{"code","message"}}`, and that code is what
 //!   [`AppError::Hub`] keeps, because the cure for `provider_error` (wait for
 //!   JKHub) has nothing in common with the cure for `conflict` (pick another
-//!   name).
+//!   name);
+//! - a `401` to a request that carried a token means the hub will not take that
+//!   token again, so the launcher forgets it. Every call to the hub passes
+//!   through [`HubClient::call`], which is why this lives here rather than in
+//!   each of the fourteen commands that could meet one.
 
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use reqwest::{Method, StatusCode};
@@ -205,12 +210,41 @@ pub fn path_segment(value: &str) -> Result<&str> {
 // Client
 // ---------------------------------------------------------------------------
 
+/// The path prefix of the sign-in endpoints.
+///
+/// A `401` from one of these is not an expired session to act on.
+/// `POST /v1/auth/logout` answers it for a token the hub has already forgotten,
+/// and the sign-out that made the call is clearing the same token anyway — so
+/// acting on it would tell a player who pressed **Sign out** that their session
+/// expired.
+const AUTH_PREFIX: &str = "/v1/auth/";
+
+/// What the client does about a token the hub refused.
+///
+/// A callback rather than an `AppHandle`, for two reasons. This module has no
+/// business knowing that "the hub refused the token" means "sign the launcher
+/// out": `lib.rs` wires the two together. And a handle in this struct would
+/// make the test binary of the crate link the whole window runtime for a handle
+/// no test ever sets — a binary that then fails to load before the first test
+/// runs, which is how this was found.
+type RefusalHook = Box<dyn Fn(&str) + Send + Sync + 'static>;
+
 /// The connection pool shared by every call to the hub.
 pub struct HubClient {
     /// `None` when `reqwest` could not start, which on Windows means the TLS
     /// backend failed. Every call then refuses instead of panicking: a broken
     /// hub client must not take the launcher's window with it.
     http: Option<reqwest::Client>,
+    /// Where a refused token is reported. Set once from `setup`; empty in the
+    /// tests, which have no launcher to sign out of.
+    on_refusal: OnceLock<RefusalHook>,
+    /// Holds that report to one caller at a time.
+    ///
+    /// The Friends screen has several calls in flight at once, and an expired
+    /// token brings every one of them back as `401`. The lock plus the check
+    /// the hook makes against the token in force turn that burst into one write
+    /// and one event. Nothing is awaited while it is held.
+    expiry: Mutex<()>,
 }
 
 impl Default for HubClient {
@@ -226,13 +260,39 @@ impl HubClient {
             .timeout(TIMEOUT)
             .gzip(true)
             .build();
-        match built {
-            Ok(http) => HubClient { http: Some(http) },
+        let http = match built {
+            Ok(http) => Some(http),
             Err(e) => {
                 log::error!("the hub client could not start: {e}");
-                HubClient { http: None }
+                None
             }
+        };
+        HubClient {
+            http,
+            on_refusal: OnceLock::new(),
+            expiry: Mutex::new(()),
         }
+    }
+
+    /// Says what to do with a token the hub refuses.
+    ///
+    /// Called once from `setup`. Until then, and in the tests, a refused token
+    /// is an error and nothing else.
+    pub fn report_refusals_to(&self, forget: impl Fn(&str) + Send + Sync + 'static) {
+        if self.on_refusal.set(Box::new(forget)).is_err() {
+            log::warn!("the hub client already knows where to report a refused token");
+        }
+    }
+
+    /// Reports a token the hub refused, one caller at a time.
+    fn note_refused_token(&self, token: &str) {
+        let Some(forget) = self.on_refusal.get() else {
+            return;
+        };
+        // Sync from start to finish, so no future holds this lock across an
+        // await point.
+        let _busy = self.expiry.lock().unwrap_or_else(|e| e.into_inner());
+        forget(token);
     }
 
     fn http(&self) -> Result<&reqwest::Client> {
@@ -469,6 +529,12 @@ impl HubClient {
         log::info!("hub {method} {path} -> {}", status.as_u16());
 
         if !status.is_success() {
+            // The token that just went out is the one the hub refused, so the
+            // launcher stops claiming to be signed in with it. Only a request
+            // that carried one, and never the sign-in endpoints.
+            if let Some(token) = token.filter(|_| refuses_the_token(status, path)) {
+                self.note_refused_token(token);
+            }
             return Err(hub_error(status, &body));
         }
         Ok(HubResponse { status, body })
@@ -536,6 +602,14 @@ fn hub_error(status: StatusCode, body: &[u8]) -> AppError {
         code: code_for_status(status).to_string(),
         message: format!("the hub answered {}", status.as_u16()),
     }
+}
+
+/// Whether this answer means the hub will not take the token again.
+///
+/// A `401` says so, and only a `401`: `403 forbidden` is a token the hub knows
+/// and an action it will not allow, which is not a reason to sign anybody out.
+fn refuses_the_token(status: StatusCode, path: &str) -> bool {
+    status == StatusCode::UNAUTHORIZED && !path.starts_with(AUTH_PREFIX)
 }
 
 /// The contract's code that matches an HTTP status.
@@ -761,6 +835,21 @@ mod tests {
             AppError::Hub { code, .. } => assert_eq!(code, "internal"),
             other => panic!("expected a hub error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn only_a_401_outside_the_sign_in_endpoints_forgets_the_token() {
+        assert!(refuses_the_token(StatusCode::UNAUTHORIZED, "/v1/friends"));
+        assert!(refuses_the_token(StatusCode::UNAUTHORIZED, "/v1/me"));
+
+        // The sign-out endpoint answers 401 for a token the hub has already
+        // forgotten. Acting on it would tell a player who pressed Sign out
+        // that their session expired.
+        assert!(!refuses_the_token(StatusCode::UNAUTHORIZED, "/v1/auth/logout"));
+        // A token the hub knows, doing something it will not allow.
+        assert!(!refuses_the_token(StatusCode::FORBIDDEN, "/v1/friends"));
+        assert!(!refuses_the_token(StatusCode::NOT_FOUND, "/v1/friends"));
+        assert!(!refuses_the_token(StatusCode::TOO_MANY_REQUESTS, "/v1/presence"));
     }
 
     #[test]
