@@ -19,6 +19,7 @@
 
 import { useCallback } from "react";
 
+import { GAMES } from "./ipc";
 import type { Client, Game, GameInfo, Settings } from "./ipc";
 import {
   useActiveGame,
@@ -45,6 +46,16 @@ export const PORT_SPAN = 10;
 /** The other of the two games. */
 export function otherGame(game: Game): Game {
   return game === "ja" ? "jo" : "ja";
+}
+
+/**
+ * Whether a string from outside the code names a game.
+ *
+ * A route parameter is written by whoever typed the address, so it is checked
+ * against the two ids rather than cast into `Game` and believed.
+ */
+export function isGame(value: string | null | undefined): value is Game {
+  return value != null && (GAMES as readonly string[]).includes(value);
 }
 
 /**

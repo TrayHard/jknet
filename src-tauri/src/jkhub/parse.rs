@@ -721,6 +721,10 @@ mod tests {
     const SABER: &str = include_str!("../../tests/fixtures/jkhub/gp-saber-page.html");
     const LUGORMOD: &str = include_str!("../../tests/fixtures/jkhub/file-2672-lugormod.html");
     const SAITO: &str = include_str!("../../tests/fixtures/jkhub/file-4234-saitohajime.html");
+    /// The same page with the two keys a file page may be missing taken out of
+    /// its JSON-LD, because no live page the research saved is missing either.
+    const BARE: &str =
+        include_str!("../../tests/fixtures/jkhub/file-4234-no-rating-no-shots.html");
 
     #[test]
     fn the_category_index_gives_the_four_roots_and_their_children() {
@@ -855,6 +859,28 @@ mod tests {
         let file = parse_file_page(SAITO, 4234, "saitohajime").expect("the page parses");
         assert_eq!(file.game, JkhubGame::Jo);
         assert!(file.category_name.is_some());
+    }
+
+    /// Review finding (Low): the tolerant reads of `aggregateRating` and
+    /// `screenshot` were right in the code and untested, because all three
+    /// saved file pages carry both keys.
+    #[test]
+    fn a_file_with_no_rating_and_no_screenshots_parses_all_the_same() {
+        let file = parse_file_page(BARE, 4234, "saitohajime").expect("the page parses");
+        assert_eq!(file.rating, None, "there is no aggregateRating to read");
+        assert!(file.screenshots.is_empty(), "there is no screenshot list");
+        // The counter is left as the site wrote it: a reader that decided
+        // there was a rating because the number of reviews is not zero would
+        // pass every other test and fail here.
+        assert_eq!(file.reviews, 1);
+        // Nothing else about the page is affected by the two absent keys.
+        assert_eq!(file.title, "SaitoHajime");
+        assert_eq!(file.game, JkhubGame::Jo);
+        assert_eq!(file.category_id, Some(67));
+        assert_eq!(file.category_name.as_deref(), Some("Skins"));
+        assert_eq!(file.version.as_deref(), Some("1.0"));
+        assert_eq!((file.views, file.downloads), (2985, 33));
+        assert!(file.description.contains("Saito Hajime model"));
     }
 
     #[test]

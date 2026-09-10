@@ -189,7 +189,7 @@ JKNet — лаунчер мультиплеера Star Wars Jedi Knight для W
 | `settings.json` | настройки лаунчера |
 | `clients\<slug>\` | клиент: `client.json`, `library.json`, папка `engine\`, папка `home\` |
 | `library\` | скачанные pk3-файлы |
-| `cache\` | список серверов `servers.json`, релизы движков, архивы сборок, каталог JKHub в `jkhub\` |
+| `cache\` | списки серверов `servers-ja.json` и `servers-jo.json`, релизы движков, архивы сборок, каталог JKHub в `jkhub\` |
 | `logs\` | журналы работы |
 
 Имя папки повторяет поле `identifier` из `src-tauri/tauri.conf.json`. Путь возвращает `app.path().app_local_data_dir()`, и ту же папку чистит деинсталлятор по флажку **Delete app data**. Программа установлена в соседнюю `%LOCALAPPDATA%\JKNet` и с данными не пересекается.
