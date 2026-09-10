@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { errorMessage, type Settings } from "../lib/ipc";
+import { errorMessage } from "../lib/ipc";
 import {
   useCreateClient,
   useEngines,
@@ -54,12 +54,10 @@ export function NewClientDialog({ onClose, onError }: NewClientDialogProps) {
       { name: name.trim(), engineId },
       {
         onSuccess: (client) => {
-          if (makeDefault && settings.data) {
-            const next: Settings = {
-              ...settings.data,
-              defaultClientId: client.id,
-            };
-            updateSettings.mutate(next);
+          // One field, one patch: the rest of the document stays as it is on
+          // disk, including anything edited outside the launcher.
+          if (makeDefault) {
+            updateSettings.mutate({ defaultClientId: client.id });
           }
           // The dialog closes first: the download takes a minute, and its
           // progress belongs on the card, not in a modal nobody can leave.
