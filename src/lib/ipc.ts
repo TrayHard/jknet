@@ -38,6 +38,8 @@ export interface Settings {
   closeOnLaunch: boolean;
   /** Absolute path that replaces the default data folder. */
   dataDirOverride: string | null;
+  /** Tokens appended to every command line, written as in a shortcut. */
+  extraLaunchArgs: string;
 }
 
 /** `src-tauri/src/paths.rs`: the folders JKNet writes into. */
@@ -80,6 +82,12 @@ export interface Engine {
   executable: string;
   repo: string;
   recommended: boolean;
+  /** False when the project publishes no archive JKNet can install. */
+  installable: boolean;
+  /** Why `installable` is false. */
+  notInstallableReason: string | null;
+  /** Mod folder the build needs as `+set fs_game`. jaMME runs in `mme`. */
+  defaultFsGame: string | null;
 }
 
 /** A named instance of an engine with its own files and settings. */
@@ -89,6 +97,12 @@ export interface Client {
   engineId: string;
   engineVersion: string | null;
   createdAt: string;
+  /** RFC 3339 time the engine was unpacked. */
+  engineInstalledAt: string | null;
+  /** RFC 3339 publication time of the installed release. */
+  enginePublishedAt: string | null;
+  /** Mod folder the client starts in, `+set fs_game`. */
+  fsGame: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -146,8 +160,7 @@ export const ipc = {
   listServers: () => call<Server[]>("list_servers"),
   refreshServers: () => call<Server[]>("refresh_servers"),
 
-  launchClient: (clientId: string, address?: string) =>
-    call<void>("launch_client", { clientId, address: address ?? null }),
+  // `launchClient` moved to `launchIpc` below when it stopped being a stub.
 
   listLibraryFiles: () => call<LibraryFile[]>("list_library_files"),
   installLibraryFile: (fileId: string, clientId: string) =>
@@ -167,3 +180,90 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Unexpected error";
 }
+
+// ---------------------------------------------------------------------------
+// --- slice: launch ---
+//
+// Installing an engine and starting a game. These live in their own object
+// rather than inside `ipc` so that two branches adding commands at the same
+// time do not collide on the same closing brace.
+// ---------------------------------------------------------------------------
+
+/** `src-tauri/src/engines.rs`: one release reduced to its Windows archive. */
+export interface EngineRelease {
+  /** Git tag, written into `client.json` as the installed version. */
+  tag: string;
+  name: string;
+  /** RFC 3339, empty when GitHub reports none. */
+  publishedAt: string;
+  prerelease: boolean;
+  assetName: string;
+  assetSize: number;
+  assetUrl: string;
+}
+
+/** `src-tauri/src/engines.rs`: the answer of `check_engine_update`. */
+export interface EngineUpdate {
+  installed: string | null;
+  latest: string | null;
+  latestPublishedAt: string | null;
+  updateAvailable: boolean;
+}
+
+/** `src-tauri/src/launch.rs`: the one game JKNet started. */
+export interface RunningGame {
+  clientId: string;
+  pid: number;
+  /** RFC 3339 start time. */
+  startedAt: string;
+}
+
+/** Phase of `launch:engine-install-progress`. */
+export type InstallPhase = "download" | "extract" | "done" | "error";
+
+/** Payload of `launch:engine-install-progress`. */
+export interface EngineInstallProgress {
+  clientId: string;
+  phase: InstallPhase;
+  downloaded: number;
+  /** Zero when the server sent no content length. */
+  total: number;
+  message: string;
+}
+
+/** Payload of `launch:game-started`. */
+export interface GameStarted {
+  clientId: string;
+  pid: number;
+}
+
+/** Payload of `launch:game-exited`. */
+export interface GameExited {
+  clientId: string;
+  exitCode: number | null;
+}
+
+/** Event names the launch slice emits. */
+export const launchEvents = {
+  installProgress: "launch:engine-install-progress",
+  gameStarted: "launch:game-started",
+  gameExited: "launch:game-exited",
+} as const;
+
+export const launchIpc = {
+  listEngineReleases: (engineId: string) =>
+    call<EngineRelease[]>("list_engine_releases", { engineId }),
+  installEngine: (clientId: string, tag?: string) =>
+    call<Client>("install_engine", { clientId, tag: tag ?? null }),
+  checkEngineUpdate: (clientId: string) =>
+    call<EngineUpdate>("check_engine_update", { clientId }),
+
+  launchClient: (clientId: string, connect?: string, extraArgs: string[] = []) =>
+    call<RunningGame>("launch_client", {
+      clientId,
+      connect: connect ?? null,
+      extraArgs,
+    }),
+  getRunningGame: () => call<RunningGame | null>("get_running_game"),
+  stopGame: () => call<void>("stop_game"),
+};

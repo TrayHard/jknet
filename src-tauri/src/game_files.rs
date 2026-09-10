@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::state::AppState;
 
 /// The four asset archives shipped with the retail game.
@@ -94,6 +94,28 @@ pub fn detect_game_files(state: tauri::State<'_, AppState>) -> Result<Vec<GameFi
 pub fn inspect_game_files(path: String) -> Result<GameFilesCandidate> {
     let dir = normalize_game_data_dir(Path::new(&path));
     Ok(inspect(&dir, GameFilesSource::Manual))
+}
+
+/// Refuses a folder that is not a usable `GameData`, naming what is missing.
+///
+/// The launch path calls this before it starts an engine: a game that opens
+/// and then dies on a missing archive is a worse answer than a sentence.
+pub(crate) fn validate(dir: &Path) -> Result<()> {
+    let candidate = inspect(dir, GameFilesSource::Configured);
+    if candidate.valid {
+        return Ok(());
+    }
+    let missing: Vec<&str> = candidate
+        .assets
+        .iter()
+        .filter(|asset| !asset.present)
+        .map(|asset| asset.name.as_str())
+        .collect();
+    Err(AppError::NotFound(format!(
+        "game files in {}: {} is missing from base",
+        candidate.path,
+        missing.join(", ")
+    )))
 }
 
 /// Adds a candidate unless the same path is already in the list.

@@ -14,10 +14,17 @@
 //! | `engines`     | static registry of engine builds                    |
 //! | `clients`     | named engine instances on disk                      |
 //! | `servers`     | server browser (stub)                               |
-//! | `launch`      | starting a client (stub)                            |
+//! | `launch`      | starting a client and watching it run               |
 //! | `library`     | pk3 library (stub)                                  |
+//!
+//! Added by the launch slice:
+//!
+//! | Module           | Responsibility                                   |
+//! | ---------------- | ------------------------------------------------ |
+//! | `engine_install` | GitHub releases, downloads and archive unpacking  |
 
 mod clients;
+mod engine_install;
 mod engines;
 mod error;
 mod game_files;
@@ -29,6 +36,7 @@ mod settings;
 mod state;
 mod timestamp;
 
+use launch::LaunchState;
 use state::AppState;
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -68,6 +76,10 @@ pub fn run() {
             Ok(())
         })
         .manage(app_state)
+        // --- slice: launch ---
+        // The running game lives in its own managed value: a process handle
+        // has no business sitting behind the settings lock.
+        .manage(LaunchState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -85,6 +97,12 @@ pub fn run() {
             library::list_library_files,
             library::install_library_file,
             library::remove_library_file,
+            // --- slice: launch ---
+            engines::list_engine_releases,
+            engines::install_engine,
+            engines::check_engine_update,
+            launch::get_running_game,
+            launch::stop_game,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
