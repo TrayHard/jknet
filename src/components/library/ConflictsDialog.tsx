@@ -1,8 +1,7 @@
 import { Crown } from "lucide-react";
 
 import type { ConflictReport, LibraryItem } from "../../lib/ipc";
-import { Badge, Button } from "../ui";
-import { LibraryDialog } from "./LibraryDialog";
+import { Badge, Button, Dialog } from "../ui";
 
 interface ConflictsDialogProps {
   report: ConflictReport;
@@ -32,7 +31,7 @@ export function ConflictsDialog({
   const name = (id: string) => items.find((item) => item.id === id)?.fileName ?? id;
 
   return (
-    <LibraryDialog
+    <Dialog
       wide
       title="Files that change the same content"
       body={`${report.files.length} archives of ${clientName} carry ${report.total} shared paths. The engine reads the last one it loads and ignores the rest.`}
@@ -85,6 +84,6 @@ export function ConflictsDialog({
           listed. Disable one of the archives to see the rest.
         </p>
       ) : null}
-    </LibraryDialog>
+    </Dialog>
   );
 }

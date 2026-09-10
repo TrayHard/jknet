@@ -40,11 +40,11 @@ src/
                          MapPicturesCard, ToastsProvider, FriendsProvider,
                          AccountProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
-                         RadioCard, StepBadges, Toast, Avatar
+                         RadioCard, StepBadges, Toast, Avatar, Dialog
   components/library/    экран Library: карточка, диалоги, категории, Select
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
   components/account/    учётная запись: карточка Settings, кнопки провайдеров,
-                         ожидание браузера, диалог
+                         ожидание браузера
   components/friends/    экран Friends: строка, панель друга, заявки, presence.ts
   pages/                 по одному файлу на маршрут
   pages/onboarding/      три шага первого запуска и защита маршрутов
