@@ -1,0 +1,61 @@
+name: CI
+
+# The five gates of CLAUDE.md, on the only platform the launcher supports.
+# Windows is not a preference here: `game_files.rs` reads the registry behind
+# `cfg(windows)`, so a Linux runner would compile a different program.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      # Keyed on the workspace lock file, so a run that changes no crate
+      # reuses the previous compilation.
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `npm run build` is `tsc && vite build`, so it typechecks too. The
+      # separate gate stays because it is the one a developer runs, and a
+      # difference between the two is worth seeing here rather than locally.
+      - name: Frontend build
+        run: npm run build
+
+      - name: Frontend typecheck
+        run: npm run typecheck
+
+      - name: Core compiles
+        run: cargo check --all-targets
+        working-directory: src-tauri
+
+      - name: Core lint
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+
+      - name: Core tests
+        run: cargo test
+        working-directory: src-tauri
