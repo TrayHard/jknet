@@ -35,7 +35,7 @@ use std::sync::Mutex;
 use std::time::{Instant, UNIX_EPOCH};
 
 use image::codecs::jpeg::JpegEncoder;
-use image::{ImageFormat, ImageReader};
+use image::{ImageFormat, ImageReader, Limits};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use zip::ZipArchive;
@@ -71,6 +71,23 @@ const JPEG_QUALITY: u8 = 85;
 /// Refuses an archive entry too large to be a picture, before it is read into
 /// memory. A 32 MB levelshot does not exist; a crafted pk3 does.
 const MAX_ENTRY_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Longest side the decoder is allowed to read.
+///
+/// The compressed bytes are already capped by [`MAX_ENTRY_BYTES`], and that is
+/// no protection at all against a decompression bomb: a few kilobytes of PNG
+/// header can declare 60000×60000 and cost gigabytes to decode. Eight times
+/// the largest levelshot anyone ships leaves the community HQ packs (2048) and
+/// even a 4K wallpaper mistaken for a levelshot alone.
+const MAX_DECODE_SIDE: u32 = 8192;
+
+/// What one picture may allocate while it is decoded, output buffer included.
+///
+/// The crate's own default is 512 MB, and it is a default: an upgrade that
+/// changed it would quietly change what this launcher lets a downloaded pk3
+/// do. 64 MB is a 4096×4096 picture with an alpha channel, which is already
+/// four times the size of anything the game ships.
+const MAX_DECODE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Longest key the cache accepts, before the extension.
 const MAX_KEY_LEN: usize = 120;
@@ -390,11 +407,44 @@ fn stamps(sources: &[Source]) -> Vec<SourceStamp> {
 // Pictures
 // ---------------------------------------------------------------------------
 
+/// The limits every decode in this module runs under.
+///
+/// Explicit rather than inherited: [`Limits::default`] leaves the dimensions
+/// unbounded and caps allocation alone, so the protection would be whatever
+/// the next version of the crate decides it is.
+fn decode_limits() -> Limits {
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(MAX_DECODE_SIDE);
+    limits.max_image_height = Some(MAX_DECODE_SIDE);
+    limits.max_alloc = Some(MAX_DECODE_BYTES);
+    limits
+}
+
+/// A reader over bytes that came out of somebody else's archive.
+///
+/// TGA carries no magic number, so the format comes from the entry name rather
+/// than from `with_guessed_format`.
+fn reader(bytes: &[u8], format: ImageFormat) -> ImageReader<Cursor<&[u8]>> {
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    reader.limits(decode_limits());
+    reader
+}
+
+/// Whether the picture was refused for being too big rather than broken.
+fn over_the_limit(e: &image::ImageError) -> bool {
+    matches!(e, image::ImageError::Limits(_))
+}
+
 /// Reads a picture, caps it and writes it into the cache folder.
 ///
 /// JPEG and PNG within [`MAX_SIDE`] are copied byte for byte: re-encoding
 /// a 512×512 retail levelshot only makes it worse. Anything larger is
 /// downscaled, and TGA is always converted because no browser reads it.
+///
+/// A picture that declares more than [`MAX_DECODE_SIDE`] or would cost more
+/// than [`MAX_DECODE_BYTES`] is skipped with a warning instead of failing the
+/// archive around it: the pk3 that carries it usually carries other maps, and
+/// the player is not the author of either.
 fn store_image(
     bytes: &[u8],
     key: &str,
@@ -408,9 +458,14 @@ fn store_image(
         "tga" => ImageFormat::Tga,
         _ => return Ok(None),
     };
-    // TGA carries no magic number, so the format comes from the entry name
-    // rather than from `with_guessed_format`.
-    let (width, height) = ImageReader::with_format(Cursor::new(bytes), format).into_dimensions()?;
+    let (width, height) = match reader(bytes, format).into_dimensions() {
+        Ok(size) => size,
+        Err(e) if over_the_limit(&e) => {
+            log::warn!("levelshot {key} in {source} is too large to decode: {e}");
+            return Ok(None);
+        }
+        Err(e) => return Err(e.into()),
+    };
     if width == 0 || height == 0 {
         return Ok(None);
     }
@@ -430,7 +485,16 @@ fn store_image(
     let (encoded, width, height) = if fits && format != ImageFormat::Tga {
         (bytes.to_vec(), width, height)
     } else {
-        let decoded = ImageReader::with_format(Cursor::new(bytes), format).decode()?;
+        let decoded = match reader(bytes, format).decode() {
+            Ok(decoded) => decoded,
+            // The dimensions passed and the pixels did not: a picture inside
+            // the side limit can still ask for more memory than the budget.
+            Err(e) if over_the_limit(&e) => {
+                log::warn!("levelshot {key} in {source} is too large to decode: {e}");
+                return Ok(None);
+            }
+            Err(e) => return Err(e.into()),
+        };
         let decoded = if fits {
             decoded
         } else {
@@ -1097,6 +1161,77 @@ mod tests {
             .into_dimensions()
             .expect("dimensions");
         assert_eq!(written, (MAX_SIDE, MAX_SIDE / 2));
+    }
+
+    /// The eighteen bytes a TGA begins with.
+    ///
+    /// TGA has neither a magic number nor a checksum, so a header alone is a
+    /// whole picture as far as the dimension read is concerned — which is what
+    /// makes it the cheapest way to write down a decompression bomb.
+    fn tga_header(width: u16, height: u16) -> Vec<u8> {
+        let mut header = vec![0u8; 18];
+        header[2] = 2; // uncompressed true colour
+        header[12..14].copy_from_slice(&width.to_le_bytes());
+        header[14..16].copy_from_slice(&height.to_le_bytes());
+        header[16] = 24; // bits per pixel
+        header
+    }
+
+    #[test]
+    fn a_picture_too_large_to_decode_costs_only_itself() {
+        let (_temp, paths, _settings) = workspace();
+        let dir = cache_dir(&paths);
+        paths::create_dir(&dir).expect("cache folder");
+
+        // 20000 × 20000 × 3 bytes is 1.2 GB of pixels out of 18 bytes of
+        // header. The launcher unpacks archives the player downloaded from
+        // anywhere, so this has to be a refusal rather than a memory spike.
+        let bomb = tga_header(20_000, 20_000);
+        assert!(bomb.len() < 32, "the whole bomb is a header");
+        assert!(
+            store_image(&bomb, "mp/huge", "tga", "crafted.pk3", &dir)
+                .expect("a picture over the limit is not an error")
+                .is_none(),
+            "the crafted picture was accepted"
+        );
+        assert_eq!(
+            fs::read_dir(&dir).expect("cache folder").count(),
+            0,
+            "nothing may be written for a refused picture"
+        );
+
+        // And the pk3 around it keeps its other maps: the refusal ends here,
+        // not in `scan_archive`.
+        let shot = store_image(
+            &picture(64, 32, ImageFormat::Jpeg),
+            "mp/ffa1",
+            "jpg",
+            "crafted.pk3",
+            &dir,
+        )
+        .expect("store")
+        .expect("a picture");
+        assert_eq!((shot.width, shot.height), (64, 32));
+    }
+
+    #[test]
+    fn the_decode_limits_are_the_launcher_s_own_and_not_the_crate_s() {
+        // The crate caps allocation and leaves the dimensions open, so an
+        // upgrade that changed its default would quietly change what a
+        // downloaded pk3 is allowed to do here.
+        let stock = Limits::default();
+        assert_eq!(stock.max_image_width, None);
+        assert_eq!(stock.max_image_height, None);
+
+        let ours = decode_limits();
+        assert_eq!(ours.max_image_width, Some(MAX_DECODE_SIDE));
+        assert_eq!(ours.max_image_height, Some(MAX_DECODE_SIDE));
+        assert_eq!(ours.max_alloc, Some(MAX_DECODE_BYTES));
+        // A decoder limit under the cache cap would refuse every picture the
+        // module exists to shrink.
+        const {
+            assert!(MAX_DECODE_SIDE >= MAX_SIDE);
+        }
     }
 
     #[test]
