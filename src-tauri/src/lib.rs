@@ -17,11 +17,13 @@
 //! | `servers`        | master server queries, ping and the server cache |
 //! | `launch`         | starting a client and watching it run           |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
+//! | `friends`        | the JKNet hub: friends, presence and invites    |
 
 mod clients;
 mod engine_install;
 mod engines;
 mod error;
+mod friends;
 mod game_files;
 mod launch;
 mod library;
@@ -34,6 +36,7 @@ mod timestamp;
 use std::path::PathBuf;
 
 use engine_install::InstallState;
+use friends::FriendsState;
 use launch::LaunchState;
 use state::AppState;
 use tauri::Manager;
@@ -133,6 +136,12 @@ pub fn run() {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
+            // --- slice: friends ---
+            // The heartbeat and the live socket. Both start signed out and
+            // cost nothing until a token appears, and neither of them touches
+            // the window, so nothing here can hold up the first frame.
+            friends::start(app.handle());
+
             log::info!("JKNet {} started", app.package_info().version);
             Ok(())
         })
@@ -142,6 +151,11 @@ pub fn run() {
         // with an install in flight is separate for the same reason.
         .manage(LaunchState::default())
         .manage(InstallState::default())
+        // --- slice: friends ---
+        // The presence the launcher reports and whether the live socket is
+        // up. Kept apart from `AppState` for the same reason as the two above:
+        // a background task must not queue behind a settings write.
+        .manage(FriendsState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -175,6 +189,15 @@ pub fn run() {
             servers::list_trusted_servers,
             servers::set_server_favorite,
             servers::add_server_history,
+            // --- slice: friends ---
+            friends::get_friends_state,
+            friends::send_friend_request,
+            friends::accept_friend_request,
+            friends::decline_friend_request,
+            friends::remove_friend,
+            friends::send_invite,
+            friends::dismiss_invite,
+            friends::join_friend,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

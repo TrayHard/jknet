@@ -1,0 +1,565 @@
+//! Friends, presence and invites.
+//!
+//! The launcher is one client of the JKNet hub, a small HTTPS service that
+//! knows who is signed in, who is friends with whom and where everybody is
+//! playing. This module holds the whole of that: the calls, the background
+//! reporter that says where the player is, and the socket that hears about
+//! everybody else.
+//!
+//! | File            | What it holds                                        |
+//! | --------------- | ---------------------------------------------------- |
+//! | `types.rs`      | the wire types of the contract, API v1                |
+//! | `hub_client.rs` | the [`HubApi`] seam and the client behind it          |
+//! | `presence.rs`   | the online/in_game state machine and the heartbeat    |
+//! | `live.rs`       | the WebSocket, its backoff and the fallback refresh   |
+//!
+//! ## Signed in, signed out
+//!
+//! One field decides: `settings.hub_token`. The account slice writes it; this
+//! module only ever reads it. Nothing here fails because nobody is signed in —
+//! [`get_friends_state`] answers `signedIn: false` and the two background
+//! tasks stay quiet — so the Friends screen can render its sign-in prompt
+//! without a special case in the frontend.
+//!
+//! ## Events
+//!
+//! | Event               | Payload                    | When                     |
+//! | ------------------- | -------------------------- | ------------------------ |
+//! | `friends:changed`   | none                       | any list may have moved  |
+//! | `friends:presence`  | `{ userId, presence }`     | one friend moved         |
+//! | `friends:invite`    | `Invite`                   | somebody invited me      |
+//!
+//! `friends:changed` is a nudge, not a payload: the window answers it by
+//! calling [`get_friends_state`], which keeps one writer for the three lists.
+
+pub mod hub_client;
+pub mod live;
+pub mod presence;
+pub mod types;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
+use serde::Serialize;
+use tauri::{AppHandle, Manager};
+
+use crate::error::{AppError, Result};
+use crate::launch::{self, LaunchState, RunningGame};
+use crate::state::AppState;
+
+use hub_client::{connect, ContractHubClient, HubApi};
+use types::{
+    Friend, FriendRequest, FriendsPayload, Invite, NewInvite, Presence, PresenceStatus,
+    RequestOutcome,
+};
+
+/// Emitted when any of the three lists may have changed.
+pub const EVENT_CHANGED: &str = "friends:changed";
+/// Emitted with `{ userId, presence }` when one friend moves.
+pub const EVENT_PRESENCE: &str = "friends:presence";
+/// Emitted with the whole `Invite` when one arrives.
+pub const EVENT_INVITE: &str = "friends:invite";
+
+/// Longest query the launcher will send to `POST /v1/friends/requests`.
+///
+/// A display name is 3–24 characters, `provider:name` adds a prefix and a user
+/// id is a ULID. Anything longer is a paste accident, and refusing it here
+/// spares the rate limit of ten requests a minute.
+const MAX_QUERY_LEN: usize = 96;
+
+/// What this module keeps between calls.
+///
+/// Only two things, and neither is a copy of the hub's data: the friends lists
+/// are fetched on demand, because a stale list on screen is worse than a
+/// spinner and the document is small.
+pub struct FriendsState {
+    /// The presence the launcher reports about the player.
+    presence: Mutex<Presence>,
+    /// Whether the live socket is up right now.
+    live: AtomicBool,
+}
+
+impl Default for FriendsState {
+    /// A launcher that has just opened is online. Starting at `Offline` would
+    /// make the first heartbeat skip itself: only two of the three statuses
+    /// are reportable.
+    fn default() -> Self {
+        FriendsState {
+            presence: Mutex::new(presence::online()),
+            live: AtomicBool::new(false),
+        }
+    }
+}
+
+impl FriendsState {
+    /// The presence as the launcher currently sees it.
+    ///
+    /// A poisoned lock answers with the value that was in it. This state is
+    /// two enums and three strings, so there is no half-written presence to
+    /// protect anyone from, and a launcher that stops reporting because an
+    /// unrelated thread panicked would be the worse failure.
+    pub fn presence(&self) -> Presence {
+        self.presence
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    pub fn set_presence(&self, presence: Presence) {
+        *self.presence.lock().unwrap_or_else(|e| e.into_inner()) = presence;
+    }
+
+    pub fn live(&self) -> bool {
+        self.live.load(Ordering::Relaxed)
+    }
+
+    pub fn set_live(&self, live: bool) {
+        self.live.store(live, Ordering::Relaxed);
+    }
+}
+
+/// Starts the two background tasks. Called once from `setup`.
+pub fn start(app: &AppHandle) {
+    presence::start(app);
+    live::start(app);
+}
+
+// ---------------------------------------------------------------------------
+// What the Friends screen renders
+// ---------------------------------------------------------------------------
+
+/// Everything the screen needs, in one answer.
+///
+/// One document rather than five queries: the four lists are drawn together,
+/// they change together, and a screen assembled from four separately-timed
+/// answers shows a friend in two groups at once while they settle.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendsView {
+    /// False when `settings.hub_token` is empty. The rest is then empty too.
+    pub signed_in: bool,
+    /// Whether the live socket is up. False means the lists refresh on a
+    /// timer instead of the moment something changes.
+    pub live: bool,
+    pub friends: Vec<Friend>,
+    /// Requests waiting for this player to accept.
+    pub incoming: Vec<FriendRequest>,
+    /// Requests this player sent and can still cancel.
+    pub outgoing: Vec<FriendRequest>,
+    /// Invites addressed to this player, newest first.
+    pub invites: Vec<Invite>,
+    /// The presence the launcher reports about this player.
+    pub presence: Presence,
+}
+
+/// The answer of [`send_friend_request`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendRequestResult {
+    /// `requested` when the other side has to accept, `accepted` when they had
+    /// already asked and the hub joined the two halves.
+    pub outcome: &'static str,
+    /// Who the request reached, for the line the screen prints.
+    pub display_name: String,
+    /// The lists as they are now, so the screen needs no second call.
+    pub state: FriendsView,
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+/// The lists, the invites and the player's own presence.
+#[tauri::command]
+pub async fn get_friends_state(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<FriendsView> {
+    match hub(&state)? {
+        None => Ok(signed_out(&app)),
+        Some(hub) => collect(&app, &hub).await,
+    }
+}
+
+/// Asks somebody to be friends.
+///
+/// `query` is a display name, `provider:providerName` such as `jkhub:kyle_k`,
+/// or a user id — the contract lets the hub decide which, so the launcher only
+/// checks that there is something to send.
+#[tauri::command]
+pub async fn send_friend_request(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    query: String,
+) -> Result<SendRequestResult> {
+    let hub = require_hub(&state)?;
+    let query = clean_query(&query)?;
+    let outcome = hub.send_friend_request(&query).await?;
+    let state = collect(&app, &hub).await?;
+
+    Ok(match outcome {
+        RequestOutcome::Requested { request } => SendRequestResult {
+            outcome: "requested",
+            display_name: request.to.display_name,
+            state,
+        },
+        // The other side had already asked, so the hub joined the two halves
+        // and answered with a friendship instead of a request.
+        RequestOutcome::Accepted { friend } => SendRequestResult {
+            outcome: "accepted",
+            display_name: friend.user.display_name,
+            state,
+        },
+    })
+}
+
+/// Accepts an incoming request and answers with the refreshed lists.
+#[tauri::command]
+pub async fn accept_friend_request(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<FriendsView> {
+    let hub = require_hub(&state)?;
+    hub.accept_request(&id).await?;
+    collect(&app, &hub).await
+}
+
+/// Declines an incoming request, or cancels one this player sent: the contract
+/// puts both behind the same call, because both mean "forget this request".
+#[tauri::command]
+pub async fn decline_friend_request(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<FriendsView> {
+    let hub = require_hub(&state)?;
+    hub.decline_request(&id).await?;
+    collect(&app, &hub).await
+}
+
+/// Ends a friendship.
+#[tauri::command]
+pub async fn remove_friend(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    user_id: String,
+) -> Result<FriendsView> {
+    let hub = require_hub(&state)?;
+    hub.remove_friend(&user_id).await?;
+    collect(&app, &hub).await
+}
+
+/// Invites one friend to the server this player is on.
+///
+/// The address comes from the caller rather than from the stored presence, so
+/// the Servers screen can invite somebody to a server before joining it.
+#[tauri::command]
+pub async fn send_invite(
+    state: tauri::State<'_, AppState>,
+    to_user_id: String,
+    server_address: String,
+    server_name: Option<String>,
+    message: Option<String>,
+) -> Result<Invite> {
+    let hub = require_hub(&state)?;
+    let server_address = server_address.trim();
+    if server_address.is_empty() {
+        return Err(AppError::InvalidInput(
+            "an invite needs a server address".into(),
+        ));
+    }
+    hub.create_invite(&NewInvite {
+        to_user_id,
+        server_address: server_address.to_string(),
+        server_name: blank_to_none(server_name),
+        message: blank_to_none(message),
+    })
+    .await
+}
+
+/// Drops an invite this player was sent.
+#[tauri::command]
+pub async fn dismiss_invite(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<FriendsView> {
+    let hub = require_hub(&state)?;
+    hub.dismiss_invite(&id).await?;
+    collect(&app, &hub).await
+}
+
+/// Starts the default client on the server a friend is playing on.
+///
+/// The friend list is fetched again rather than taken from what the screen
+/// last drew: a friend who changed servers a second ago would otherwise send
+/// the player to the address they left.
+#[tauri::command]
+pub async fn join_friend(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    launch: tauri::State<'_, LaunchState>,
+    user_id: String,
+) -> Result<RunningGame> {
+    let hub = require_hub(&state)?;
+    let payload = hub.get_friends().await?;
+    let address = joinable_address(&payload, &user_id)?;
+    let client_id = default_client(&state)?;
+
+    // The whole launch path, arguments included, belongs to `launch.rs`. A
+    // second copy of it here is how `+connect` ends up in the wrong place on
+    // one of the two screens that can start a game.
+    launch::start_client(&app, &state, &launch, &client_id, Some(&address), &[])
+}
+
+// ---------------------------------------------------------------------------
+// Shared pieces
+// ---------------------------------------------------------------------------
+
+/// The hub client for the current settings, or `None` while signed out.
+fn hub(state: &AppState) -> Result<Option<ContractHubClient>> {
+    Ok(connect(&state.settings()?))
+}
+
+/// The hub client, or the error that sends the player to the Account card.
+fn require_hub(state: &AppState) -> Result<ContractHubClient> {
+    hub(state)?.ok_or(AppError::SignedOut)
+}
+
+/// The view a signed-out launcher shows: empty lists and the local presence.
+fn signed_out(app: &AppHandle) -> FriendsView {
+    FriendsView {
+        signed_in: false,
+        presence: app.state::<FriendsState>().presence(),
+        ..FriendsView::default()
+    }
+}
+
+/// Fetches both documents the screen needs and puts them in one answer.
+///
+/// Written against [`HubApi`] rather than the concrete client, so the merge
+/// with the account slice changes [`hub`] and nothing else.
+async fn collect(app: &AppHandle, hub: &dyn HubApi) -> Result<FriendsView> {
+    // Two independent requests: waiting for them in turn would double the
+    // time the screen spends on its spinner for no reason.
+    let (payload, mut invites): (FriendsPayload, Vec<Invite>) =
+        tokio::try_join!(hub.get_friends(), hub.list_invites())?;
+
+    sort_invites(&mut invites);
+    let state = app.state::<FriendsState>();
+    Ok(FriendsView {
+        signed_in: true,
+        live: state.live(),
+        friends: payload.friends,
+        incoming: payload.incoming,
+        outgoing: payload.outgoing,
+        invites,
+        presence: state.presence(),
+    })
+}
+
+/// Newest invite first: the toast that matters is the one that just arrived.
+fn sort_invites(invites: &mut [Invite]) {
+    invites.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+}
+
+/// Trims a friend query and refuses the two shapes the hub cannot use.
+fn clean_query(query: &str) -> Result<String> {
+    let trimmed = query.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::InvalidInput(
+            "type a display name, a jkhub: name or a user id".into(),
+        ));
+    }
+    if trimmed.chars().count() > MAX_QUERY_LEN {
+        return Err(AppError::InvalidInput(format!(
+            "that name is longer than {MAX_QUERY_LEN} characters"
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
+/// The address a friend can be joined at, or the reason there is none.
+///
+/// Split out of [`join_friend`] because the three refusals are the whole
+/// behaviour worth testing, and the command around them needs a live hub.
+fn joinable_address(payload: &FriendsPayload, user_id: &str) -> Result<String> {
+    let friend = payload
+        .friends
+        .iter()
+        .find(|friend| friend.user.id == user_id)
+        .ok_or_else(|| AppError::NotFound(format!("friend {user_id}")))?;
+    let name = friend.user.display_name.as_str();
+
+    if friend.presence.status != PresenceStatus::InGame {
+        return Err(AppError::Launch(format!("{name} is not in a game")));
+    }
+    friend
+        .presence
+        .server_address
+        .as_deref()
+        .map(str::trim)
+        .filter(|address| !address.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            AppError::Launch(format!("{name} is playing, but not on a server you can join"))
+        })
+}
+
+/// The client the Play button starts, which is the one a join uses.
+fn default_client(state: &AppState) -> Result<String> {
+    state.settings()?.default_client_id.ok_or_else(|| {
+        AppError::Launch("pick a default client on the Clients screen first".into())
+    })
+}
+
+/// Turns a blank optional string into no string at all.
+fn blank_to_none(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.trim().is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use types::HubUser;
+
+    fn friend(id: &str, name: &str, presence: Presence) -> Friend {
+        Friend {
+            user: HubUser {
+                id: id.into(),
+                display_name: name.into(),
+                provider: "jkhub".into(),
+                provider_name: name.to_lowercase(),
+                ..HubUser::default()
+            },
+            presence,
+            friends_since: "2026-01-01T00:00:00Z".into(),
+        }
+    }
+
+    fn payload() -> FriendsPayload {
+        FriendsPayload {
+            friends: vec![
+                friend(
+                    "in-game",
+                    "Kyle",
+                    Presence {
+                        status: PresenceStatus::InGame,
+                        server_address: Some(" 203.0.113.10:29070 ".into()),
+                        server_name: Some("EU FFA".into()),
+                        ..Presence::default()
+                    },
+                ),
+                friend(
+                    "menu",
+                    "Jan",
+                    Presence {
+                        status: PresenceStatus::InGame,
+                        ..Presence::default()
+                    },
+                ),
+                friend(
+                    "idle",
+                    "Luke",
+                    Presence {
+                        status: PresenceStatus::Online,
+                        ..Presence::default()
+                    },
+                ),
+            ],
+            ..FriendsPayload::default()
+        }
+    }
+
+    #[test]
+    fn joining_takes_the_address_of_a_friend_who_is_on_a_server() {
+        assert_eq!(
+            joinable_address(&payload(), "in-game").expect("an address"),
+            "203.0.113.10:29070"
+        );
+    }
+
+    #[test]
+    fn joining_a_friend_in_the_main_menu_says_so_instead_of_launching() {
+        // `in_game` without an address is the Play button: the game is open on
+        // its menu. Launching with an empty `+connect` would drop the player
+        // into their own menu and look like a bug in the join.
+        let e = joinable_address(&payload(), "menu").expect_err("no address");
+        assert!(e.to_string().contains("Jan"), "{e}");
+        assert!(e.to_string().contains("not on a server"), "{e}");
+    }
+
+    #[test]
+    fn joining_a_friend_who_is_only_online_says_so() {
+        let e = joinable_address(&payload(), "idle").expect_err("not in a game");
+        assert!(e.to_string().contains("Luke"), "{e}");
+        assert!(e.to_string().contains("not in a game"), "{e}");
+    }
+
+    #[test]
+    fn joining_somebody_who_is_not_a_friend_is_a_not_found() {
+        let e = joinable_address(&payload(), "stranger").expect_err("not a friend");
+        assert!(matches!(e, AppError::NotFound(_)), "{e}");
+    }
+
+    #[test]
+    fn a_friend_query_is_trimmed_and_a_blank_one_is_refused() {
+        assert_eq!(clean_query("  kyle_k  ").expect("a query"), "kyle_k");
+        assert_eq!(
+            clean_query("jkhub:kyle_k").expect("a provider query"),
+            "jkhub:kyle_k"
+        );
+        assert!(clean_query("").is_err());
+        assert!(clean_query("   \n ").is_err());
+        // A paste of a whole profile page must not spend one of the ten
+        // friend requests the hub allows per minute.
+        assert!(clean_query(&"n".repeat(MAX_QUERY_LEN + 1)).is_err());
+        assert!(clean_query(&"n".repeat(MAX_QUERY_LEN)).is_ok());
+    }
+
+    #[test]
+    fn invites_are_newest_first() {
+        let mut invites = vec![
+            Invite {
+                id: "old".into(),
+                created_at: "2026-09-10T10:00:00Z".into(),
+                ..Invite::default()
+            },
+            Invite {
+                id: "new".into(),
+                created_at: "2026-09-10T12:00:00Z".into(),
+                ..Invite::default()
+            },
+        ];
+        sort_invites(&mut invites);
+        assert_eq!(invites[0].id, "new");
+    }
+
+    #[test]
+    fn a_blank_server_name_is_no_server_name() {
+        assert_eq!(blank_to_none(Some("  ".into())), None);
+        assert_eq!(blank_to_none(None), None);
+        assert_eq!(blank_to_none(Some("EU FFA".into())).as_deref(), Some("EU FFA"));
+    }
+
+    #[test]
+    fn a_signed_out_view_is_empty_and_says_so() {
+        // The frontend switches on one boolean, so the lists have to be empty
+        // rather than absent: a screen that reads `friends.length` on a signed
+        // out launcher must see zero, not a crash.
+        let view = FriendsView::default();
+        assert!(!view.signed_in);
+        assert!(!view.live);
+        assert!(view.friends.is_empty());
+        assert!(view.invites.is_empty());
+        assert_eq!(view.presence.status, PresenceStatus::Offline);
+    }
+
+    #[test]
+    fn the_view_reaches_the_frontend_in_camel_case() {
+        let json = serde_json::to_string(&FriendsView::default()).expect("serializes");
+        assert!(json.contains("\"signedIn\":false"), "{json}");
+        assert!(json.contains("\"incoming\":[]"), "{json}");
+    }
+}

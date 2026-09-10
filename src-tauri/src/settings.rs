@@ -52,6 +52,15 @@ pub struct Settings {
     /// seen the guided setup shows it, and the steps are derived from what is
     /// already configured, so nobody repeats work they have done.
     pub onboarding_completed: bool,
+
+    // --- slice: friends (temporary, replaced by hub module at merge) ---
+    /// Base address of the JKNet hub. `None` means the development default in
+    /// `friends::hub_client::DEFAULT_HUB_URL`.
+    pub hub_url: Option<String>,
+    /// Bearer token of the signed-in player, 64 hex characters. `None` is the
+    /// whole definition of "signed out" for this slice: the account slice owns
+    /// writing it, and every friends command checks it before reaching out.
+    pub hub_token: Option<String>,
 }
 
 /// One line of `server_history`.
@@ -126,6 +135,12 @@ pub struct SettingsPatch {
 
     // --- slice: onboarding ---
     pub onboarding_completed: Option<bool>,
+
+    // --- slice: friends (temporary, replaced by hub module at merge) ---
+    #[serde(deserialize_with = "sent")]
+    pub hub_url: Option<Option<String>>,
+    #[serde(deserialize_with = "sent")]
+    pub hub_token: Option<Option<String>>,
 }
 
 /// Reads a field and remembers that it was there, `null` included.
@@ -171,6 +186,13 @@ impl SettingsPatch {
         }
         if let Some(value) = self.onboarding_completed {
             settings.onboarding_completed = value;
+        }
+        // --- slice: friends (temporary, replaced by hub module at merge) ---
+        if let Some(value) = self.hub_url {
+            settings.hub_url = non_empty(value);
+        }
+        if let Some(value) = self.hub_token {
+            settings.hub_token = non_empty(value);
         }
     }
 }
@@ -223,6 +245,9 @@ mod tests {
                 last_connected: "2026-09-10T10:00:00Z".into(),
             }],
             onboarding_completed: true,
+            // --- slice: friends ---
+            hub_url: Some("http://127.0.0.1:8787".into()),
+            hub_token: Some("a".repeat(64)),
         }
     }
 
@@ -306,6 +331,21 @@ mod tests {
         let mut done = filled();
         patch(r#"{"defaultClientId":"duel"}"#).apply(&mut done);
         assert!(done.onboarding_completed);
+    }
+
+    // --- slice: friends ---
+    #[test]
+    fn signing_out_clears_the_hub_token_and_keeps_the_hub_address() {
+        // Sign-out is a patch of one field. The address is a setting the
+        // player may have pointed at a test hub, and it has to survive.
+        let mut settings = filled();
+        patch(r#"{"hubToken":null}"#).apply(&mut settings);
+        assert_eq!(settings.hub_token, None);
+        assert_eq!(settings.hub_url.as_deref(), Some("http://127.0.0.1:8787"));
+
+        // A blank address means "use the default", not "use an empty host".
+        patch(r#"{"hubUrl":"  "}"#).apply(&mut settings);
+        assert_eq!(settings.hub_url, None);
     }
 
     #[test]
