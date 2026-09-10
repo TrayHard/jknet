@@ -1,0 +1,231 @@
+//! The hub client against a hub, rather than against its own idea of one.
+//!
+//! The tests start `scripts/mock-hub.mjs` as a child process and walk the
+//! whole sign-in: open a session, poll it, read the account, rename it, list
+//! friends, sign out. What they prove is the half that unit tests cannot —
+//! that the paths, the bearer header, the status codes and the shapes of the
+//! contract line up with an implementation of it.
+//!
+//! They are `#[ignore]`d because they need Node on `PATH` and a free TCP port,
+//! and CI runs `cargo test` on a machine that has no hub. Run them by hand:
+//!
+//! ```text
+//! cargo test --lib -- --ignored --nocapture hub::mock_tests
+//! ```
+
+use std::net::TcpStream;
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
+
+use super::client::{HubClient, HubContext};
+
+/// Not 8787: a developer running these tests may well have the real hub, or
+/// another mock, on the stock port already. One port per test, because
+/// `cargo test` runs them at the same time and a shared port leaves the second
+/// mock dead of `EADDRINUSE`.
+const PORT_SIGN_IN: u16 = 8791;
+const PORT_PROVIDER: u16 = 8792;
+const PORT_CONFLICT: u16 = 8793;
+/// Nothing listens here, on purpose.
+const PORT_UNUSED: u16 = 8794;
+
+/// A running `mock-hub.mjs` that stops when the test does, however it ends.
+struct MockHub {
+    child: Child,
+    port: u16,
+}
+
+impl Drop for MockHub {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+impl MockHub {
+    /// Starts the mock and waits until it accepts a connection.
+    fn start(port: u16) -> MockHub {
+        let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("src-tauri has a parent")
+            .join("scripts")
+            .join("mock-hub.mjs");
+        assert!(script.is_file(), "{} is missing", script.display());
+
+        let child = Command::new("node")
+            .arg(&script)
+            .arg("--port")
+            .arg(port.to_string())
+            // The sign-in completes at once: the three-second wait of the
+            // default exists to show a real player a real "waiting" state.
+            .env("MOCK_HUB_DEV_DELAY_MS", "0")
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("node is on PATH and scripts/mock-hub.mjs starts");
+
+        let mock = MockHub { child, port };
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                return mock;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        panic!("the mock hub did not listen on {port} within 10 s");
+    }
+
+    fn context(&self) -> HubContext {
+        HubContext {
+            base_url: format!("http://127.0.0.1:{}", self.port),
+            token: None,
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-hub.mjs, so it needs Node and a free port"]
+async fn signs_in_reads_the_account_renames_it_and_signs_out() {
+    let mock = MockHub::start(PORT_SIGN_IN);
+    let client = HubClient::new();
+    let mut ctx = mock.context();
+
+    let session = client
+        .create_login_session(&ctx, "dev", Some("TESTBOX"))
+        .await
+        .expect("the dev provider opens a session");
+    assert_eq!(session.status, "pending");
+    assert!(
+        session
+            .url
+            .starts_with(&format!("http://127.0.0.1:{PORT_SIGN_IN}/v1/auth/dev/start")),
+        "{}",
+        session.url
+    );
+
+    // The launcher polls every 2 s; the mock is set to finish at once, so a
+    // handful of fast reads is the same walk in less time.
+    let mut done = None;
+    for _ in 0..40 {
+        let polled = client
+            .poll_login_session(&ctx, &session.id)
+            .await
+            .expect("the session can be read");
+        if polled.status == "done" {
+            done = Some(polled);
+            break;
+        }
+        assert_eq!(polled.status, "pending", "unexpected status");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let done = done.expect("the dev session completes");
+    let token = done.token.expect("the first read carries the token");
+    assert_eq!(token.len(), 64, "the contract says 64 hex characters");
+    let user = done.user.expect("the first read carries the user");
+    assert_eq!(user.provider, "dev");
+
+    // The token arrives exactly once: a second poll finds the session done and
+    // carries nothing, which is the case `poll_sign_in` has to survive.
+    let again = client
+        .poll_login_session(&ctx, &session.id)
+        .await
+        .expect("a second read works");
+    assert_eq!(again.status, "done");
+    assert!(again.token.is_none(), "the token was handed out twice");
+
+    ctx.token = Some(token);
+
+    let me = client.get_me(&ctx).await.expect("the account reads back");
+    assert_eq!(me.user.id, user.id);
+    assert_eq!(me.presence.status, "online");
+
+    let renamed = client
+        .patch_me(&ctx, "Kyle Katarn")
+        .await
+        .expect("the rename lands");
+    assert_eq!(renamed.display_name, "Kyle Katarn");
+
+    let friends = client.get_friends(&ctx).await.expect("the list reads back");
+    assert_eq!(friends.friends.len(), 2);
+    assert_eq!(friends.friends[0].presence.status, "in_game");
+    assert!(friends.incoming.is_empty());
+
+    client.logout(&ctx).await.expect("the sign-out lands");
+
+    // The token is dead, and the hub says so with the code the frontend reads.
+    match client.get_me(&ctx).await {
+        Err(crate::error::AppError::Hub { code, .. }) => assert_eq!(code, "unauthorized"),
+        other => panic!("expected an unauthorized refusal, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-hub.mjs, so it needs Node and a free port"]
+async fn a_provider_without_an_oauth_client_refuses_with_its_code() {
+    // This is the answer JKHub gives until its administrators issue a client,
+    // and the onboarding step keeps the guest button because of it.
+    let mock = MockHub::start(PORT_PROVIDER);
+    let client = HubClient::new();
+    let ctx = mock.context();
+
+    match client.create_login_session(&ctx, "jkhub", None).await {
+        Err(crate::error::AppError::Hub { code, message }) => {
+            assert_eq!(code, "provider_error");
+            assert!(message.contains("JKHub"), "{message}");
+        }
+        other => panic!("expected a provider error, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-hub.mjs, so it needs Node and a free port"]
+async fn a_taken_display_name_comes_back_as_a_conflict() {
+    let mock = MockHub::start(PORT_CONFLICT);
+    let client = HubClient::new();
+    let mut ctx = mock.context();
+
+    let session = client
+        .create_login_session(&ctx, "dev", None)
+        .await
+        .expect("the dev provider opens a session");
+    let mut token = None;
+    for _ in 0..40 {
+        let polled = client
+            .poll_login_session(&ctx, &session.id)
+            .await
+            .expect("the session can be read");
+        if let Some(found) = polled.token {
+            token = Some(found);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    ctx.token = Some(token.expect("the dev session completes"));
+
+    match client.patch_me(&ctx, "Taken").await {
+        Err(crate::error::AppError::Hub { code, .. }) => assert_eq!(code, "conflict"),
+        other => panic!("expected a conflict, got {other:?}"),
+    }
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-hub.mjs, so it needs Node and a free port"]
+async fn a_hub_that_is_not_there_fails_without_hanging() {
+    // Nothing listens on this port, which is what a launcher started before
+    // the hub sees. It has to fail fast rather than sit on the 10 s timeout.
+    let ctx = HubContext {
+        base_url: format!("http://127.0.0.1:{PORT_UNUSED}"),
+        token: None,
+    };
+    let client = HubClient::new();
+    let started = Instant::now();
+
+    match client.create_login_session(&ctx, "dev", None).await {
+        Err(crate::error::AppError::Network(message)) => assert!(message.contains("hub POST")),
+        other => panic!("expected a network error, got {other:?}"),
+    }
+    // One connect, one retry, both refused: still nowhere near the timeout.
+    assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+}
