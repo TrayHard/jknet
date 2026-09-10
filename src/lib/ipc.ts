@@ -92,7 +92,7 @@ export interface Client {
 }
 
 // ---------------------------------------------------------------------------
-// Servers and library
+// Servers
 // ---------------------------------------------------------------------------
 
 export interface Server {
@@ -106,18 +106,6 @@ export interface Server {
   ping: number | null;
   passwordProtected: boolean;
   trusted: boolean;
-}
-
-export type LibraryCategory = "skin" | "saber" | "map" | "mod" | "other";
-
-export interface LibraryFile {
-  id: string;
-  title: string;
-  fileName: string;
-  category: LibraryCategory;
-  size: number;
-  author: string | null;
-  installedIn: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +136,6 @@ export const ipc = {
 
   launchClient: (clientId: string, address?: string) =>
     call<void>("launch_client", { clientId, address: address ?? null }),
-
-  listLibraryFiles: () => call<LibraryFile[]>("list_library_files"),
-  installLibraryFile: (fileId: string, clientId: string) =>
-    call<void>("install_library_file", { fileId, clientId }),
-  removeLibraryFile: (fileId: string, clientId: string) =>
-    call<void>("remove_library_file", { fileId, clientId }),
 };
 
 /**
@@ -167,3 +149,112 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Unexpected error";
 }
+
+// --- slice: library ---------------------------------------------------------
+//
+// The pk3 files of one client, `src-tauri/src/library.rs`. Everything here is
+// scoped to a client id: a library file lives in `clients\<slug>\home\`, so
+// there is no launcher-wide list to ask for.
+
+/** What kind of content a pk3 holds. */
+export type LibraryCategory =
+  | "skin"
+  | "hilt"
+  | "map"
+  | "mod"
+  | "hud"
+  | "sound"
+  | "other";
+
+/** One pk3 in the home folder of one client. */
+export interface LibraryItem {
+  /** `<folder>/<file name>`, stable across the enable toggle. */
+  id: string;
+  /** `base` or the `fs_game` folder the file belongs to. */
+  folder: string;
+  /** File name with the `.pk3` extension, without `.disabled`. */
+  fileName: string;
+  displayName: string;
+  category: LibraryCategory;
+  size: number;
+  enabled: boolean;
+  addedAt: string;
+  /** `local` for a file added from disk, a JKHub reference later. */
+  source: string | null;
+  sha1: string | null;
+  notes: string | null;
+}
+
+/** What `inspect_pk3` reads out of an archive without installing it. */
+export interface Pk3Report {
+  path: string;
+  fileName: string;
+  category: LibraryCategory;
+  entryCount: number;
+  notableEntries: string[];
+  size: number;
+  sha1: string;
+  topLevel: string[];
+}
+
+/** A file `add_library_files` refused, with the reason to print. */
+export interface SkippedFile {
+  path: string;
+  fileName: string;
+  reason: string;
+  /** Free file name to retry with, set when the name was taken. */
+  suggestedName: string | null;
+  /** Id of the item that already holds the same bytes. */
+  existingId: string | null;
+}
+
+export interface AddResult {
+  added: LibraryItem[];
+  skipped: SkippedFile[];
+}
+
+/** One internal path that more than one enabled archive carries. */
+export interface LibraryConflict {
+  path: string;
+  folder: string;
+  /** Item ids in the engine's load order. */
+  files: string[];
+  /** The item the engine actually reads: the last one loaded. */
+  winner: string;
+}
+
+export interface ConflictReport {
+  conflicts: LibraryConflict[];
+  total: number;
+  truncated: boolean;
+  /** Ids of every item taking part in a conflict. */
+  files: string[];
+}
+
+/** Payload of the `library:changed` event. */
+export interface LibraryChanged {
+  clientId: string;
+}
+
+/** Emitted by the core after every change to a client's library. */
+export const LIBRARY_CHANGED_EVENT = "library:changed";
+
+export const libraryIpc = {
+  listLibrary: (clientId: string) =>
+    call<LibraryItem[]>("list_library", { clientId }),
+  inspectPk3: (path: string) => call<Pk3Report>("inspect_pk3", { path }),
+  addLibraryFiles: (clientId: string, paths: string[], folder?: string) =>
+    call<AddResult>("add_library_files", {
+      clientId,
+      paths,
+      folder: folder ?? null,
+    }),
+  setLibraryItemEnabled: (clientId: string, id: string, enabled: boolean) =>
+    call<LibraryItem>("set_library_item_enabled", { clientId, id, enabled }),
+  removeLibraryItem: (clientId: string, id: string) =>
+    call<void>("remove_library_item", { clientId, id }),
+  renameLibraryItem: (clientId: string, id: string, displayName: string) =>
+    call<LibraryItem>("rename_library_item", { clientId, id, displayName }),
+  findLibraryConflicts: (clientId: string) =>
+    call<ConflictReport>("find_library_conflicts", { clientId }),
+};
