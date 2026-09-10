@@ -36,7 +36,7 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 | Скрипт | Что переписывает | Чего стоит |
 | --- | --- | --- |
 | `refresh-jkhub-categories.ps1` | `categories-ja.json` и `categories-jo.json`: дерево категорий | около 40 запросов, 20 с |
-| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 193 запроса, 100 с |
+| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 193 запроса, около 25 с |
 
 Второй скрипт читает вшитое дерево, поэтому идёт после первого. В цикле их не запускают: jkhub.org — чужой сервер.
 
@@ -64,7 +64,7 @@ src/
                          EmptyState, RadioCard, StepBadges, Toast, Avatar, Dialog
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
-                         JkhubTree
+                         JkhubIndexing, JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
   components/account/    учётная запись: карточка Settings, кнопки провайдеров,
                          ожидание браузера
@@ -100,8 +100,8 @@ src-tauri/
   src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
                          снимок дерева категорий в сборке, разборщики страниц,
-                         индекс каталога и поиск по нему, скачивание и
-                         установка в клиента
+                         индекс каталога и поиск по нему, сборка индекса при
+                         старте, скачивание и установка в клиента
   resources/jkhub/       categories-*.json — дерево категорий, index-*.json —
                          каталог файлов; с них вкладка рисуется до обхода
   src/account.rs         вход через браузер и команды учётной записи

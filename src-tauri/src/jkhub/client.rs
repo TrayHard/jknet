@@ -7,10 +7,14 @@
 //! * one connection pool, one cookie jar. The jar is not optional — a guest
 //!   download needs the `csrfKey` of the page **and** the session cookie that
 //!   page was served with (report, section 4);
-//! * at most [`MAX_PARALLEL`] requests at a time and at least
-//!   [`MIN_GAP_MS`] between two of them. The research session held one request
-//!   per second across 54 requests without ever meeting a Cloudflare check,
-//!   and nothing here goes faster than twice that;
+//! * two budgets, and never more than [`MAX_PARALLEL_TOTAL`] requests in
+//!   flight whatever they are for. What a player is waiting on keeps the pace
+//!   the research session measured — [`MAX_PARALLEL`] at a time,
+//!   [`MIN_GAP_MS`] apart — and the catalogue crawl gets its own,
+//!   [`CRAWL_PARALLEL`] at a time [`CRAWL_MIN_GAP_MS`] apart. The research
+//!   session held one request per second across 54 requests without ever
+//!   meeting a Cloudflare check; the crawl is ten a second for a quarter of a
+//!   minute, once a week at most, and never while another crawl runs;
 //! * a `User-Agent` that names the program and where to complain about it;
 //! * redirects are followed by hand, in [`fetch_html`], because the download
 //!   step needs to read a `Location` instead of chasing it (report,
@@ -28,11 +32,119 @@ use tokio::sync::{Mutex, Semaphore};
 
 use crate::error::{AppError, Result};
 
-/// Requests in flight at once.
+/// Requests in flight at once, whatever they are for.
+///
+/// The two lanes below have their own allowances; this is the promise the site
+/// gets no matter how many of them are busy. A player who opens a file page
+/// while the catalogue is being crawled waits behind a crawl request rather
+/// than adding a fifth connection.
+pub const MAX_PARALLEL_TOTAL: usize = 4;
+
+/// Requests in flight at once for what a player is waiting on.
 pub const MAX_PARALLEL: usize = 2;
 
-/// Shortest gap between the starts of two requests, in milliseconds.
+/// Shortest gap between the starts of two of those, in milliseconds.
 pub const MIN_GAP_MS: u64 = 300;
+
+/// Requests in flight at once for the catalogue crawl.
+pub const CRAWL_PARALLEL: usize = 4;
+
+/// Shortest gap between the starts of two crawl requests, in milliseconds.
+///
+/// Four at a time a tenth of a second apart is ten requests a second at the
+/// most. The whole Jedi Academy catalogue is about 150 listing pages, so the
+/// crawl is over in a quarter of a minute — short enough that the launcher can
+/// pay for it before the player searches instead of under them.
+pub const CRAWL_MIN_GAP_MS: u64 = 100;
+
+/// How fast one kind of work may read the site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pace {
+    pub parallel: usize,
+    pub min_gap_ms: u64,
+}
+
+/// What a player is waiting for: a listing, a file page, a download.
+pub const INTERACTIVE: Pace = Pace {
+    parallel: MAX_PARALLEL,
+    min_gap_ms: MIN_GAP_MS,
+};
+
+/// The catalogue crawl, which nobody is watching a single request of.
+pub const CRAWL: Pace = Pace {
+    parallel: CRAWL_PARALLEL,
+    min_gap_ms: CRAWL_MIN_GAP_MS,
+};
+
+/// Which budget a request is spent from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Lane {
+    #[default]
+    Interactive,
+    Crawl,
+}
+
+impl Lane {
+    pub fn pace(self) -> Pace {
+        match self {
+            Lane::Interactive => INTERACTIVE,
+            Lane::Crawl => CRAWL,
+        }
+    }
+}
+
+/// One lane's allowance: how many at once, and how far apart.
+#[derive(Debug)]
+pub struct Limiter {
+    pace: Pace,
+    /// Caps how many requests of this lane are in flight.
+    permits: Semaphore,
+    /// When the last request of this lane was started. Behind an async lock
+    /// because it is held across the sleep that spaces requests out.
+    last: Mutex<Option<Instant>>,
+}
+
+impl Limiter {
+    pub fn new(pace: Pace) -> Self {
+        Limiter {
+            pace,
+            permits: Semaphore::new(pace.parallel),
+            last: Mutex::new(None),
+        }
+    }
+
+    /// The allowance this limiter hands out, for a caller that has to keep to
+    /// it on its own — the crawl reads its pages [`Pace::parallel`] at a time
+    /// so that it never queues more of them than the limiter would let
+    /// through.
+    pub fn pace(&self) -> Pace {
+        self.pace
+    }
+
+    /// Waits for a slot and for the gap, then hands out a permit.
+    ///
+    /// The permit is held for the length of the request, which is what makes
+    /// [`Pace::parallel`] mean requests rather than calls. The lock on `last`
+    /// is held across the sleep on purpose: it is what keeps two callers from
+    /// deciding at the same moment that the gap has passed.
+    async fn ticket(&self) -> Result<tokio::sync::SemaphorePermit<'_>> {
+        let permit = self
+            .permits
+            .acquire()
+            .await
+            .map_err(|_| AppError::State("the JKHub limiter is closed".into()))?;
+        let mut last = self.last.lock().await;
+        if let Some(previous) = *last {
+            let gap = Duration::from_millis(self.pace.min_gap_ms);
+            let elapsed = previous.elapsed();
+            if elapsed < gap {
+                tokio::time::sleep(gap - elapsed).await;
+            }
+        }
+        *last = Some(Instant::now());
+        Ok(permit)
+    }
+}
 
 /// Time allowed to open the connection.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -64,11 +176,12 @@ fn user_agent() -> String {
 #[derive(Debug)]
 pub struct JkhubClient {
     http: reqwest::Client,
-    /// Caps how many requests are in flight.
-    permits: Semaphore,
-    /// When the last request was started. Behind an async lock because it is
-    /// held across the sleep that spaces requests out.
-    last: Mutex<Option<Instant>>,
+    /// Every request in flight, whichever lane it belongs to.
+    all: Semaphore,
+    /// What a player is waiting on.
+    interactive: Limiter,
+    /// The catalogue crawl.
+    crawl: Limiter,
 }
 
 impl JkhubClient {
@@ -91,31 +204,18 @@ impl JkhubClient {
             .map_err(|e| AppError::Network(format!("cannot build the JKHub client: {e}")))?;
         Ok(JkhubClient {
             http,
-            permits: Semaphore::new(MAX_PARALLEL),
-            last: Mutex::new(None),
+            all: Semaphore::new(MAX_PARALLEL_TOTAL),
+            interactive: Limiter::new(Lane::Interactive.pace()),
+            crawl: Limiter::new(Lane::Crawl.pace()),
         })
     }
 
-    /// Waits for a slot and for the gap, then hands out a permit.
-    ///
-    /// The permit is held for the length of the request, which is what makes
-    /// [`MAX_PARALLEL`] mean requests rather than calls.
-    async fn ticket(&self) -> Result<tokio::sync::SemaphorePermit<'_>> {
-        let permit = self
-            .permits
-            .acquire()
-            .await
-            .map_err(|_| AppError::State("the JKHub limiter is closed".into()))?;
-        let mut last = self.last.lock().await;
-        if let Some(previous) = *last {
-            let gap = Duration::from_millis(MIN_GAP_MS);
-            let elapsed = previous.elapsed();
-            if elapsed < gap {
-                tokio::time::sleep(gap - elapsed).await;
-            }
+    /// The allowance one lane spends from.
+    pub fn limiter(&self, lane: Lane) -> &Limiter {
+        match lane {
+            Lane::Interactive => &self.interactive,
+            Lane::Crawl => &self.crawl,
         }
-        *last = Some(Instant::now());
-        Ok(permit)
     }
 
     /// One request, paced and logged.
@@ -124,7 +224,25 @@ impl JkhubClient {
     /// conversation at debug level and a report about "the launcher hammers
     /// JKHub" can be answered with evidence.
     pub async fn send(&self, request: reqwest::RequestBuilder) -> Result<Response> {
-        let _permit = self.ticket().await?;
+        self.send_in(Lane::Interactive, request).await
+    }
+
+    /// The same request, spent from the budget of one lane.
+    ///
+    /// Two permits, always in this order: the lane's first, the shared one
+    /// second. Nothing ever waits for a lane permit while holding a shared
+    /// one, so the pair cannot deadlock.
+    pub async fn send_in(
+        &self,
+        lane: Lane,
+        request: reqwest::RequestBuilder,
+    ) -> Result<Response> {
+        let _lane = self.limiter(lane).ticket().await?;
+        let _all = self
+            .all
+            .acquire()
+            .await
+            .map_err(|_| AppError::State("the JKHub limiter is closed".into()))?;
         let response = request.send().await.map_err(unreachable)?;
         log::debug!("jkhub {} {}", response.status().as_u16(), response.url());
         Ok(response)
@@ -137,7 +255,16 @@ impl JkhubClient {
     /// count is capped and the final address is returned with the body: a
     /// caller that ends up somewhere else can say so.
     pub async fn fetch_html(&self, url: &str) -> Result<Page> {
-        self.fetch(url, false)
+        self.fetch_html_in(url, Lane::Interactive).await
+    }
+
+    /// The same fetch, spent from the budget of one lane.
+    ///
+    /// The catalogue crawl reads its hundred and fifty listing pages through
+    /// [`Lane::Crawl`], which is four at a time rather than two and a tenth of
+    /// a second apart rather than three tenths.
+    pub async fn fetch_html_in(&self, url: &str, lane: Lane) -> Result<Page> {
+        self.fetch(url, false, lane)
             .await?
             .ok_or_else(|| AppError::JkhubUnavailable(format!("{url} answered 404")))
     }
@@ -149,14 +276,14 @@ impl JkhubClient {
     /// every other refusal means the site is having a bad minute and the entry
     /// stays.
     pub async fn fetch_html_opt(&self, url: &str) -> Result<Option<Page>> {
-        self.fetch(url, true).await
+        self.fetch(url, true, Lane::Interactive).await
     }
 
     /// The shared body of the two fetches.
-    async fn fetch(&self, url: &str, allow_missing: bool) -> Result<Option<Page>> {
+    async fn fetch(&self, url: &str, allow_missing: bool, lane: Lane) -> Result<Option<Page>> {
         let mut address = url.to_string();
         for _ in 0..MAX_HOPS {
-            let response = self.send(self.http.get(&address)).await?;
+            let response = self.send_in(lane, self.http.get(&address)).await?;
             let status = response.status();
             if status.is_redirection() {
                 let Some(next) = location(response.headers(), &address) else {
@@ -328,6 +455,53 @@ mod tests {
         headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache, no-store"));
         assert_eq!(max_age(&headers), None);
         assert_eq!(max_age(&HeaderMap::new()), None);
+    }
+
+    /// The numbers the politeness section of the architecture document
+    /// promises. A change here is a change to what jkhub.org sees.
+    #[test]
+    fn the_two_lanes_keep_their_own_pace() {
+        assert_eq!(Lane::Interactive.pace(), INTERACTIVE);
+        assert_eq!(INTERACTIVE.parallel, 2);
+        assert_eq!(INTERACTIVE.min_gap_ms, 300);
+
+        assert_eq!(Lane::Crawl.pace(), CRAWL);
+        assert_eq!(CRAWL.parallel, 4);
+        assert_eq!(CRAWL.min_gap_ms, 100);
+
+        assert_eq!(Limiter::new(CRAWL).pace(), CRAWL);
+        assert_eq!(Limiter::new(INTERACTIVE).pace(), INTERACTIVE);
+    }
+
+    /// Whatever the lanes allow on their own, the site never sees more than
+    /// four at once.
+    #[test]
+    fn the_shared_cap_is_never_smaller_than_a_lane_and_never_larger_than_four() {
+        assert_eq!(MAX_PARALLEL_TOTAL, 4);
+        let widest = [Lane::Interactive, Lane::Crawl]
+            .into_iter()
+            .map(|lane| lane.pace().parallel)
+            .max()
+            .expect("two lanes");
+        assert_eq!(
+            widest, MAX_PARALLEL_TOTAL,
+            "no lane may ask for more than the site is ever shown"
+        );
+        assert_eq!(
+            Lane::Crawl.pace().parallel,
+            widest,
+            "the crawl is the lane the wider allowance was added for"
+        );
+    }
+
+    /// The gap is what caps the rate: four at a time a tenth of a second apart
+    /// is ten requests a second, and about fifteen seconds for the hundred and
+    /// fifty pages of the Jedi Academy catalogue.
+    #[test]
+    fn the_crawl_pace_puts_a_full_catalogue_inside_twenty_seconds() {
+        let pages = 154_u64;
+        let seconds = (pages * CRAWL.min_gap_ms) as f64 / 1000.0;
+        assert!((15.0..=20.0).contains(&seconds), "{seconds} s");
     }
 
     #[test]

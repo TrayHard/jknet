@@ -17,6 +17,7 @@
 //! it did before this file existed.
 
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +28,15 @@ use super::types::JkhubCategory;
 
 /// Folder of the snapshots inside the bundle, as `tauri.conf.json` lists it.
 pub const RESOURCE_DIR: &str = "resources/jkhub";
+
+/// The same folder inside the repository.
+///
+/// Read only by a development build, and only when the folder next to the
+/// binary is missing a file: `tauri_build` copies `bundle.resources` when the
+/// build script runs, and a snapshot added afterwards is not a reason for
+/// cargo to run it again. `build.rs` now makes it one; this is the second half
+/// of the same fix, for a target folder that went stale before it did.
+pub const MANIFEST_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/jkhub");
 
 /// One game's tree, as the site had it on the day of the crawl.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,22 +95,143 @@ pub fn read(dir: &Path, game: Game) -> Option<Snapshot> {
     }
 }
 
+/// Every snapshot file a build is expected to carry: a category tree and a
+/// catalogue index per game.
+pub fn expected_files() -> Vec<String> {
+    let mut names = Vec::with_capacity(Game::ALL.len() * 2);
+    for game in Game::ALL {
+        names.push(file_name(game));
+        names.push(super::index::file_name(game));
+    }
+    names
+}
+
+/// The expected files this folder does not hold, in the order above.
+pub fn missing_in(dir: &Path) -> Vec<String> {
+    expected_files()
+        .into_iter()
+        .filter(|name| !dir.join(name).is_file())
+        .collect()
+}
+
+/// Which of the two folders serves the snapshots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Origin {
+    /// Next to the binary, where the installer and `tauri_build` put it.
+    Resource,
+    /// Inside the repository, for a development build whose target folder went
+    /// stale.
+    Manifest,
+}
+
+/// Picks the folder to read snapshots from.
+///
+/// Pure, because the three ways this goes are the part worth a test and none
+/// of them needs an app handle:
+///
+/// | Folder next to the binary | Repository folder | Build | Answer |
+/// | --- | --- | --- | --- |
+/// | complete | either | either | next to the binary |
+/// | incomplete | complete | debug | the repository |
+/// | incomplete | incomplete | debug | next to the binary |
+/// | incomplete | either | release | next to the binary |
+///
+/// The release build never reaches for the repository: the folder is not on
+/// the player's disk, and a launcher that silently read one would hide exactly
+/// the packaging mistake this check exists to report.
+pub fn choose(resource_complete: bool, manifest_complete: bool, debug: bool) -> Origin {
+    if resource_complete {
+        return Origin::Resource;
+    }
+    if debug && manifest_complete {
+        return Origin::Manifest;
+    }
+    Origin::Resource
+}
+
+/// Resolved once per run, so the line that says which folder served the
+/// snapshots is printed once rather than on every keystroke of the search.
+static FOLDER: OnceLock<Option<PathBuf>> = OnceLock::new();
+
 /// Where the bundled snapshots live in this installation.
 ///
 /// A resolver that finds nothing is logged and answers `None`: the reader then
 /// behaves as it did before the snapshots existed.
 pub fn bundled_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    FOLDER.get_or_init(|| locate(app)).clone()
+}
+
+/// The resolution behind [`bundled_dir`], run once.
+fn locate(app: &tauri::AppHandle) -> Option<PathBuf> {
     use tauri::Manager;
-    match app
+    let resolved = match app
         .path()
         .resolve(RESOURCE_DIR, tauri::path::BaseDirectory::Resource)
     {
-        Ok(dir) => Some(dir),
+        Ok(dir) => dir,
         Err(e) => {
-            log::warn!("jkhub: no bundled category snapshots, {e}");
-            None
+            log::warn!("jkhub: no bundled snapshots, {e}");
+            return None;
+        }
+    };
+
+    let missing = missing_in(&resolved);
+    let repository = PathBuf::from(MANIFEST_DIR);
+    let origin = choose(
+        missing.is_empty(),
+        missing_in(&repository).is_empty(),
+        cfg!(debug_assertions),
+    );
+    match origin {
+        Origin::Resource => {
+            if missing.is_empty() {
+                log::info!("jkhub: snapshots served from {}", resolved.display());
+            } else {
+                log::warn!(
+                    "jkhub: {} is missing {}. The tab falls back to crawling jkhub.org for what \
+                     the missing file would have held.",
+                    resolved.display(),
+                    missing.join(", ")
+                );
+            }
+            Some(resolved)
+        }
+        Origin::Manifest => {
+            log::warn!(
+                "jkhub: {} is missing {}, so this development build serves the snapshots from {} \
+                 instead. A release copies them next to the binary.",
+                resolved.display(),
+                missing.join(", "),
+                repository.display()
+            );
+            Some(repository)
         }
     }
+}
+
+/// Says in the log which folder serves the snapshots, and names whatever is
+/// missing from it.
+///
+/// Called at startup so a build that shipped without a snapshot says so once,
+/// in the first lines of the log, rather than being noticed as a crawl the day
+/// a player opens the tab.
+pub fn check(app: &tauri::AppHandle) {
+    let Some(dir) = bundled_dir(app) else {
+        log::warn!(
+            "jkhub: this build carries no snapshots, so the tab crawls jkhub.org before it can \
+             search"
+        );
+        return;
+    };
+    let missing = missing_in(&dir);
+    if missing.is_empty() {
+        return;
+    }
+    log::warn!(
+        "jkhub: the snapshot folder {} is missing {}",
+        dir.display(),
+        missing.join(", ")
+    );
 }
 
 #[cfg(test)]
@@ -208,6 +339,72 @@ mod tests {
                 file_name(game)
             );
         }
+    }
+
+    /// The four files a build is expected to carry, in the folder the build
+    /// script copies from.
+    ///
+    /// This is the regression the whole fix answers: the launcher shipped an
+    /// index nobody could read, because the folder it was copied into never
+    /// got the file. The copy is `build.rs`'s job; making sure the source
+    /// holds all four is this test's.
+    #[test]
+    fn the_repository_folder_holds_every_snapshot_and_all_of_them_parse() {
+        let dir = PathBuf::from(MANIFEST_DIR);
+        assert!(
+            missing_in(&dir).is_empty(),
+            "{} is missing {:?}",
+            dir.display(),
+            missing_in(&dir)
+        );
+        assert_eq!(expected_files().len(), 4, "two files per game");
+
+        for game in Game::ALL {
+            assert!(
+                read(&dir, game).is_some(),
+                "{} does not parse",
+                file_name(game)
+            );
+            let index = crate::jkhub::index::read_from(&dir, game)
+                .unwrap_or_else(|| panic!("{} does not parse", crate::jkhub::index::file_name(game)));
+            assert_eq!(index.game, game);
+        }
+    }
+
+    /// The fallback that keeps a development build off jkhub.org.
+    #[test]
+    fn a_development_build_falls_back_to_the_repository_folder() {
+        // The shipped case: what sits next to the binary is complete.
+        assert_eq!(choose(true, true, true), Origin::Resource);
+        assert_eq!(choose(true, false, true), Origin::Resource);
+        assert_eq!(choose(true, false, false), Origin::Resource);
+
+        // The reported case: a target folder that tauri-build never refreshed.
+        assert_eq!(choose(false, true, true), Origin::Manifest);
+
+        // A release never reads the repository, and neither does a debug build
+        // whose repository folder is missing the same file.
+        assert_eq!(choose(false, true, false), Origin::Resource);
+        assert_eq!(choose(false, false, true), Origin::Resource);
+    }
+
+    /// A folder short of one file is a folder the resolver has to name.
+    #[test]
+    fn a_missing_snapshot_is_named_rather_than_counted() {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        assert_eq!(missing_in(dir.path()).len(), 4);
+
+        std::fs::write(dir.path().join(file_name(Game::JediAcademy)), "{}").expect("it writes");
+        let missing = missing_in(dir.path());
+        assert_eq!(missing.len(), 3);
+        assert!(
+            !missing.contains(&file_name(Game::JediAcademy)),
+            "{missing:?}"
+        );
+        assert!(
+            missing.contains(&crate::jkhub::index::file_name(Game::JediAcademy)),
+            "the index of the same game is a separate file: {missing:?}"
+        );
     }
 
     /// A snapshot the installer leaves behind is a file nobody reads.
