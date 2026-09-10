@@ -1,6 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ACCOUNT_CHANGED_EVENT, type AccountChanged } from "../lib/ipc";
 import { accountKeys, friendsKeys, queryKeys } from "../lib/queries";
@@ -23,6 +24,7 @@ const EXPIRED_TOAST = "account:expired";
  * land while any screen is open.
  */
 export function AccountProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("account");
   const queryClient = useQueryClient();
   const toasts = useToasts();
   const { show } = toasts;
@@ -45,8 +47,8 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
           show(EXPIRED_TOAST, {
             variant: "error",
-            title: "Signed out: the session expired",
-            text: "Sign in again on the Settings screen to see your friends.",
+            title: t("session.expiredTitle"),
+            text: t("session.expiredText"),
           });
         },
       );
@@ -61,7 +63,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       disposed = true;
       stop?.();
     };
-  }, [queryClient, show]);
+  }, [queryClient, show, t]);
 
   return <>{children}</>;
 }

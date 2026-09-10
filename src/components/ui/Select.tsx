@@ -357,6 +357,11 @@ export function Select({
           open && activeIndex >= 0 ? optionId(activeIndex) : undefined
         }
         disabled={locked}
+        // --- slice: i18n --- the value truncates, and a translated option is
+        // often the one that no longer fits: German and Hungarian run about a
+        // third longer than English. The tooltip is what makes the cut half
+        // readable without widening every control in the design.
+        title={text}
         onClick={() => {
           if (open) closeAndReturn();
           else openList(selectedIndex >= 0 ? selectedIndex : edge(false));

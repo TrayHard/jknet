@@ -1,11 +1,8 @@
 import { AlertTriangle, Check, LogOut, Server, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import {
-  ONLINE_NOT_CONFIGURED_TEXT,
-  onlineErrorMessage,
-  type OnlineUser,
-} from "../../lib/ipc";
+import { onlineErrorMessage, type OnlineUser } from "../../lib/ipc";
 import {
   useAccountState,
   useDeleteAccount,
@@ -16,7 +13,7 @@ import {
   useUpdateSettings,
 } from "../../lib/queries";
 import { Avatar, Badge, Button, Dialog, Input } from "../ui";
-import { providerLabel, providerLine } from "./provider";
+import { useProviderNames } from "./provider";
 import { ProviderButtons } from "./ProviderButtons";
 import { WaitingForBrowser } from "./WaitingForBrowser";
 
@@ -42,6 +39,7 @@ export const ACCOUNT_SECTION_ID = "settings-account";
  * would every one of them end in a connection error.
  */
 export function AccountCard() {
+  const { t } = useTranslation("account");
   const account = useAccountState();
   const flow = useSignIn();
 
@@ -55,11 +53,9 @@ export function AccountCard() {
       id={ACCOUNT_SECTION_ID}
       className="rounded-lg border border-line bg-surface p-16 mb-24 scroll-mt-24"
     >
-      <h2 className="text-heading-sm text-fg pb-4">Account</h2>
+      <h2 className="text-heading-sm text-fg pb-4">{t("card.title")}</h2>
       <p className="text-body-sm text-fg-secondary">
-        {configured
-          ? "A JKNet account carries your friends list and your invites. It is not needed to play."
-          : ONLINE_NOT_CONFIGURED_TEXT}
+        {configured ? t("card.text") : t("notConfigured")}
       </p>
 
       {configured ? (
@@ -88,6 +84,9 @@ export function AccountCard() {
 // ---------------------------------------------------------------------------
 
 function SignedIn({ user }: { user: OnlineUser }) {
+  const { t } = useTranslation("account");
+  const providers = useProviderNames();
+
   return (
     <>
       <div className="flex items-center gap-12">
@@ -97,11 +96,11 @@ function SignedIn({ user }: { user: OnlineUser }) {
             {user.displayName}
           </span>
           <span className="text-body-sm text-fg-muted truncate">
-            {providerLine(user.provider, user.providerName)}
+            {providers.line(user.provider, user.providerName)}
           </span>
         </span>
         <Badge tone="success" icon={<Check size={12} />}>
-          {providerLabel(user.provider)} linked
+          {t("card.linked", { provider: providers.label(user.provider) })}
         </Badge>
       </div>
 
@@ -120,6 +119,8 @@ function SignedIn({ user }: { user: OnlineUser }) {
  * had moved on, so the button stays.
  */
 function DisplayNameField({ user }: { user: OnlineUser }) {
+  const { t } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
   const rename = useUpdateDisplayName();
   const [value, setValue] = useState(user.displayName);
   const [error, setError] = useState<string | null>(null);
@@ -149,7 +150,7 @@ function DisplayNameField({ user }: { user: OnlineUser }) {
         className="block text-label-xs text-fg-muted pb-8"
         htmlFor="account-display-name"
       >
-        Display name
+        {t("displayName.label")}
       </label>
       <div className="flex items-start gap-8">
         <Input
@@ -167,7 +168,7 @@ function DisplayNameField({ user }: { user: OnlineUser }) {
           }}
         />
         <Button disabled={!changed || rename.isPending} onClick={save}>
-          {rename.isPending ? "Saving…" : "Save"}
+          {rename.isPending ? tCommon("states.saving") : tCommon("actions.save")}
         </Button>
       </div>
       <p
@@ -178,9 +179,7 @@ function DisplayNameField({ user }: { user: OnlineUser }) {
         role={error ? "alert" : undefined}
       >
         {error ??
-          (saved && !changed
-            ? "Saved. Other players see this name."
-            : "3 to 24 characters: letters, digits, spaces, _ and -.")}
+          (saved && !changed ? t("displayName.saved") : t("displayName.rules"))}
       </p>
     </div>
   );
@@ -188,6 +187,8 @@ function DisplayNameField({ user }: { user: OnlineUser }) {
 
 /** Sign out and delete, kept together and kept last. */
 function DangerZone() {
+  const { t } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
   const signOut = useSignOut();
   const deleteAccount = useDeleteAccount();
   const [confirming, setConfirming] = useState(false);
@@ -197,7 +198,7 @@ function DangerZone() {
     <div className="rounded-md border border-line-danger bg-danger-subtle p-12 mt-16">
       <h3 className="flex items-center gap-8 text-body-md-medium text-fg">
         <AlertTriangle size={16} className="text-fg-danger" />
-        Danger zone
+        {t("danger.title")}
       </h3>
 
       {error ? (
@@ -208,9 +209,9 @@ function DangerZone() {
 
       <div className="flex items-start justify-between gap-16 pt-12">
         <span className="flex flex-col">
-          <span className="text-body-sm-medium text-fg">Sign out</span>
+          <span className="text-body-sm-medium text-fg">{t("danger.signOut")}</span>
           <span className="text-body-sm text-fg-muted">
-            Keeps the account. Your clients and library stay where they are.
+            {t("danger.signOutText")}
           </span>
         </span>
         <Button
@@ -223,17 +224,15 @@ function DangerZone() {
             });
           }}
         >
-          {signOut.isPending ? "Signing out…" : "Sign out"}
+          {signOut.isPending ? t("danger.signingOut") : t("danger.signOut")}
         </Button>
       </div>
 
       <div className="flex items-start justify-between gap-16 pt-12">
         <span className="flex flex-col">
-          <span className="text-body-sm-medium text-fg">
-            Delete account data
-          </span>
+          <span className="text-body-sm-medium text-fg">{t("danger.delete")}</span>
           <span className="text-body-sm text-fg-muted">
-            Removes the account, your friends and your invites from the service.
+            {t("danger.deleteText")}
           </span>
         </span>
         <Button
@@ -245,15 +244,15 @@ function DangerZone() {
             setConfirming(true);
           }}
         >
-          Delete account data
+          {t("danger.delete")}
         </Button>
       </div>
 
       {confirming ? (
         <Dialog
           variant="danger"
-          title="Delete your JKNet account?"
-          body="Your account, your friends list and your invites are removed from the service. Your clients, your library files and your settings stay on this machine. This cannot be undone."
+          title={t("danger.confirmTitle")}
+          body={t("danger.confirmBody")}
           onClose={() => setConfirming(false)}
           actions={
             <>
@@ -261,7 +260,7 @@ function DangerZone() {
                 onClick={() => setConfirming(false)}
                 disabled={deleteAccount.isPending}
               >
-                Cancel
+                {tCommon("actions.cancel")}
               </Button>
               <Button
                 variant="danger"
@@ -276,7 +275,9 @@ function DangerZone() {
                   })
                 }
               >
-                {deleteAccount.isPending ? "Deleting…" : "Delete account"}
+                {deleteAccount.isPending
+                  ? tCommon("states.deleting")
+                  : t("danger.confirm")}
               </Button>
             </>
           }
@@ -331,6 +332,8 @@ function SignedOut({
  * way a developer or a self-hoster switches it back on without a new build.
  */
 function OnlineUrlField({ configured }: { configured: boolean }) {
+  const { t } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
   const settings = useSettings();
   const account = useAccountState();
   const updateSettings = useUpdateSettings();
@@ -356,15 +359,15 @@ function OnlineUrlField({ configured }: { configured: boolean }) {
     <details className="border-t border-line-subtle mt-16 pt-16">
       <summary className="flex items-center gap-8 text-body-sm-medium text-fg-secondary cursor-pointer select-none">
         <Server size={16} />
-        JKNet Online address (advanced)
+        {t("url.summary")}
       </summary>
 
       <div className="flex items-start gap-8 pt-12">
         <Input
-          aria-label="JKNet Online address"
+          aria-label={t("url.label")}
           className="flex-1"
           value={value}
-          placeholder="http://127.0.0.1:8787"
+          placeholder={t("url.placeholder")}
           invalid={error !== null}
           disabled={signedIn || settings.data === undefined}
           onChange={(event) => setValue(event.target.value)}
@@ -376,7 +379,9 @@ function OnlineUrlField({ configured }: { configured: boolean }) {
           disabled={!changed || signedIn || updateSettings.isPending}
           onClick={save}
         >
-          {updateSettings.isPending ? "Saving…" : "Save"}
+          {updateSettings.isPending
+            ? tCommon("states.saving")
+            : tCommon("actions.save")}
         </Button>
       </div>
 
@@ -387,17 +392,13 @@ function OnlineUrlField({ configured }: { configured: boolean }) {
         ].join(" ")}
         role={error ? "alert" : undefined}
       >
-        {error ?? hint(signedIn, configured)}
+        {error ??
+          (signedIn
+            ? t("url.signedIn")
+            : configured
+              ? t("url.hint")
+              : t("url.notConfigured"))}
       </p>
     </details>
   );
-}
-
-/** What the line under the JKNet Online address field says, in its three states. */
-function hint(signedIn: boolean, configured: boolean): string {
-  if (signedIn) return "Sign out before pointing JKNet at another service.";
-  if (!configured) {
-    return "For developers and self-hosted instances: an http:// or https:// address switches accounts and friends on for this machine.";
-  }
-  return "An http:// or https:// address. Leave it empty to go back to the default.";
 }

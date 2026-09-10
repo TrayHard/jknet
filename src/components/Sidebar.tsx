@@ -1,4 +1,5 @@
 import { Library, Monitor, Server, Settings, Users } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 // --- slice: game switch ---
@@ -16,6 +17,7 @@ import { Avatar, NavItem } from "./ui";
  * the bottom. Group titles come from the design: Play, Manage, Community.
  */
 export function Sidebar() {
+  const { t } = useTranslation("nav");
   const navigate = useNavigate();
   const clients = useClients();
   // --- slice: account ---
@@ -41,26 +43,34 @@ export function Sidebar() {
             every route below it rather than being one of them. */}
         <GameSwitch />
 
-        <Group title="Play">
-          <NavItem to="/" end icon={<Monitor size={20} />} label="Home" />
-          <NavItem to="/servers" icon={<Server size={20} />} label="Servers" />
+        <Group title={t("groups.play")}>
+          <NavItem to="/" end icon={<Monitor size={20} />} label={t("items.home")} />
+          <NavItem
+            to="/servers"
+            icon={<Server size={20} />}
+            label={t("items.servers")}
+          />
         </Group>
 
-        <Group title="Manage">
-          <NavItem to="/library" icon={<Library size={20} />} label="Library" />
+        <Group title={t("groups.manage")}>
+          <NavItem
+            to="/library"
+            icon={<Library size={20} />}
+            label={t("items.library")}
+          />
           <NavItem
             to="/clients"
             icon={<Monitor size={20} />}
-            label="Clients"
+            label={t("items.clients")}
             count={clients.isSuccess ? gameClients.length : undefined}
           />
         </Group>
 
-        <Group title="Community">
+        <Group title={t("groups.community")}>
           <NavItem
             to="/friends"
             icon={<Users size={20} />}
-            label="Friends"
+            label={t("items.friends")}
             count={friendsOnline}
           />
         </Group>
@@ -71,24 +81,30 @@ export function Sidebar() {
             where signing in and out lives. */}
         <button
           type="button"
-          title={user ? "Account settings" : "Sign in"}
+          title={user ? t("user.openAccount") : t("user.signIn")}
           onClick={() => void navigate("/settings?section=account")}
           className="flex-1 min-w-0 flex items-center gap-8 rounded-sm p-4 -m-4 text-left hover:bg-hover-overlay transition-colors duration-150 cursor-pointer"
         >
           <Avatar name={user?.displayName ?? null} src={user?.avatarUrl} size="md" />
           <span className="flex-1 min-w-0">
             <span className="block text-body-sm-medium text-fg truncate">
-              {user ? user.displayName : "Guest"}
+              {user ? user.displayName : t("user.guest")}
             </span>
-            <span className="block text-mono-xs text-fg-muted truncate">
-              {defaultClient ? defaultClient.name : "No client yet"}
+            {/* --- slice: i18n --- the line under the name truncates in a
+                232 px column, and «Клиента ещё нет» is longer than «No client
+                yet». The tooltip carries what the column cuts. */}
+            <span
+              className="block text-mono-xs text-fg-muted truncate"
+              title={defaultClient ? defaultClient.name : t("user.noClient")}
+            >
+              {defaultClient ? defaultClient.name : t("user.noClient")}
             </span>
           </span>
         </button>
         <button
           type="button"
-          aria-label="Settings"
-          title="Settings"
+          aria-label={t("items.settings")}
+          title={t("items.settings")}
           onClick={() => void navigate("/settings")}
           className="flex items-center justify-center size-28 shrink-0 rounded-sm text-fg-secondary hover:bg-hover-overlay hover:text-fg transition-colors duration-150 cursor-pointer"
         >

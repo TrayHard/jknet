@@ -1,8 +1,12 @@
 import { ImageIcon, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import { useFormat } from "../i18n/useFormat";
 // --- slice: game switch ---
 import { levelshotCounts, useGameNames } from "../lib/game";
-import { errorMessage, GAMES } from "../lib/ipc";
+import { GAMES } from "../lib/ipc";
 import { useLevelshots, useRebuildLevelshots } from "../lib/queries";
 import { Button } from "./ui";
 
@@ -16,6 +20,9 @@ import { Button } from "./ui";
  * blank" faster than a log file does.
  */
 export function MapPicturesCard() {
+  const { t } = useTranslation("settings");
+  const errorText = useErrorText();
+  const format = useFormat();
   const levelshots = useLevelshots();
   const rebuild = useRebuildLevelshots();
   // --- slice: game switch ---
@@ -28,34 +35,39 @@ export function MapPicturesCard() {
 
   const count = levelshots.data?.length ?? null;
   const failure = levelshots.error
-    ? errorMessage(levelshots.error)
+    ? errorText(levelshots.error)
     : rebuild.error
-      ? errorMessage(rebuild.error)
+      ? errorText(rebuild.error)
       : null;
 
   return (
     <section className="rounded-lg border border-line bg-surface p-16 mb-24">
-      <h2 className="text-heading-sm text-fg pb-4">Cache</h2>
+      <h2 className="text-heading-sm text-fg pb-4">{t("cache.title")}</h2>
       <div className="flex items-start justify-between gap-16 pt-12">
         <span className="flex flex-col">
-          <span className="text-body-md-medium text-fg">Map pictures</span>
+          <span className="text-body-md-medium text-fg">
+            {t("cache.mapPictures")}
+          </span>
           <span className="text-body-sm text-fg-muted">
             {failure ??
-              (count === null
-                ? "Reading the index…"
-                : `${count} ${count === 1 ? "map has" : "maps have"} a picture, read from the pk3 files you already own. Nothing is downloaded.`)}
+              (count === null ? t("cache.reading") : t("cache.count", { count }))}
           </span>
           {/* --- slice: game switch --- one line per game, always both, so a
               zero is visible rather than absent. */}
           {failure === null && count !== null ? (
             <span className="text-body-sm text-fg-secondary pt-4">
-              {GAMES.map((game) => `${perGame[game]} ${label(game)}`).join(", ")}
+              {GAMES.map((game) =>
+                t("cache.perGame", { count: perGame[game], game: label(game) }),
+              ).join(", ")}
             </span>
           ) : null}
           {rebuild.data ? (
             <span className="text-body-sm text-fg-secondary pt-4">
-              Last rebuild: {rebuild.data.maps} pictures from{" "}
-              {rebuild.data.sources} files in {rebuild.data.elapsedMs} ms.
+              {t("cache.lastRebuild", {
+                maps: rebuild.data.maps,
+                sources: rebuild.data.sources,
+                elapsed: format.milliseconds(rebuild.data.elapsedMs),
+              })}
             </span>
           ) : null}
         </span>
@@ -64,7 +76,7 @@ export function MapPicturesCard() {
           disabled={rebuild.isPending}
           onClick={() => rebuild.mutate()}
         >
-          {rebuild.isPending ? "Rebuilding…" : "Rebuild"}
+          {rebuild.isPending ? t("cache.rebuilding") : t("cache.rebuild")}
         </Button>
       </div>
     </section>

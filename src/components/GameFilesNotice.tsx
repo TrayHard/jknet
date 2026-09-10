@@ -1,4 +1,5 @@
 import { FolderSearch } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { cn } from "../lib/format";
@@ -23,6 +24,7 @@ import { Button } from "./ui";
  * still loading: a notice that flashes on every navigation is worse than none.
  */
 export function GameFilesNotice({ className }: { className?: string }) {
+  const { t } = useTranslation("home");
   const navigate = useNavigate();
   const settings = useSettings();
   const game = useActiveGame();
@@ -44,16 +46,18 @@ export function GameFilesNotice({ className }: { className?: string }) {
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-body-md-medium text-fg">
-          JKNet does not know where your {label(game)} files are
+          {t("gameFiles.title", { game: label(game) })}
         </p>
         <p className="text-body-sm text-fg-secondary pt-2">
-          Point it at the <span className="text-mono-sm">GameData</span> folder of
-          your copy and the game is ready to start. Browsing servers works
-          without it.
+          <Trans
+            t={t}
+            i18nKey="gameFiles.text"
+            components={[<span className="text-mono-sm" />]}
+          />
         </p>
       </div>
       <Button className="shrink-0" onClick={() => void navigate("/settings")}>
-        Locate files
+        {t("gameFiles.locate")}
       </Button>
     </section>
   );

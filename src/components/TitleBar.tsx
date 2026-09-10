@@ -2,6 +2,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { getCurrentWindow, type Window as TauriWindow } from "@tauri-apps/api/window";
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "../lib/format";
 import { isTauri } from "../lib/runtime";
@@ -20,6 +21,7 @@ import { Logo } from "./Logo";
  * reviewed in a plain browser, but the buttons do nothing.
  */
 export function TitleBar() {
+  const { t } = useTranslation("common");
   const [version, setVersion] = useState("");
   const [maximized, setMaximized] = useState(false);
 
@@ -80,19 +82,19 @@ export function TitleBar() {
 
       <div className="flex items-center h-full">
         <WindowButton
-          label="Minimize"
+          label={t("window.minimize")}
           onClick={windowAction((appWindow) => appWindow.minimize())}
         >
           <Minus size={16} />
         </WindowButton>
         <WindowButton
-          label={maximized ? "Restore" : "Maximize"}
+          label={maximized ? t("window.restore") : t("window.maximize")}
           onClick={windowAction((appWindow) => appWindow.toggleMaximize())}
         >
           {maximized ? <Copy size={12} /> : <Square size={13} />}
         </WindowButton>
         <WindowButton
-          label="Close"
+          label={t("window.close")}
           danger
           onClick={windowAction((appWindow) => appWindow.close())}
         >

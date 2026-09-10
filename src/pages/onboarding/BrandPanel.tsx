@@ -1,27 +1,19 @@
 import { Layers, Radar, Rocket } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Logo } from "../../components/Logo";
 
-/** One product promise: an icon and a sentence. */
+/** One product promise: an icon and a key of the `onboarding` catalog. */
 interface ProductPromise {
   icon: ReactNode;
-  text: string;
+  key: "promiseLaunch" | "promiseClients" | "promiseServers";
 }
 
 const PROMISES: ProductPromise[] = [
-  {
-    icon: <Rocket size={20} />,
-    text: "Start any client in one click, with or without Steam.",
-  },
-  {
-    icon: <Layers size={20} />,
-    text: "Keep several clients side by side, each with its own mods.",
-  },
-  {
-    icon: <Radar size={20} />,
-    text: "Find a live server and join it from the launcher.",
-  },
+  { icon: <Rocket size={20} />, key: "promiseLaunch" },
+  { icon: <Layers size={20} />, key: "promiseClients" },
+  { icon: <Radar size={20} />, key: "promiseServers" },
 ];
 
 /**
@@ -33,6 +25,8 @@ const PROMISES: ProductPromise[] = [
  * happens on a display the launcher does not target.
  */
 export function BrandPanel() {
+  const { t } = useTranslation("onboarding");
+
   return (
     <aside className="hidden lg:flex flex-col justify-between w-480 shrink-0 bg-sidebar border-r border-line-subtle p-40">
       <div>
@@ -40,26 +34,23 @@ export function BrandPanel() {
           <Logo size={28} />
           <span className="text-display-nav text-fg tracking-[0.12em]">JKNET</span>
         </div>
-        <p className="text-display-md text-fg pt-32">
-          One launcher for Jedi Academy multiplayer.
-        </p>
+        <p className="text-display-md text-fg pt-32">{t("brand.tagline")}</p>
       </div>
 
       <ul className="flex flex-col gap-20">
         {PROMISES.map((promise) => (
-          <li key={promise.text} className="flex items-start gap-12">
+          <li key={promise.key} className="flex items-start gap-12">
             <span className="flex items-center justify-center size-36 shrink-0 rounded-md bg-surface text-fg-accent">
               {promise.icon}
             </span>
-            <span className="text-body-md text-fg-secondary pt-8">{promise.text}</span>
+            <span className="text-body-md text-fg-secondary pt-8">
+              {t(`brand.${promise.key}`)}
+            </span>
           </li>
         ))}
       </ul>
 
-      <p className="text-body-sm text-fg-muted">
-        JKNet reads the game files you already own. It never writes into the game
-        folder.
-      </p>
+      <p className="text-body-sm text-fg-muted">{t("brand.footer")}</p>
     </aside>
   );
 }

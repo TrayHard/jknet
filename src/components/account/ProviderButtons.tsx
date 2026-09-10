@@ -1,5 +1,6 @@
 import { MessageCircle, TerminalSquare, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { OnlineProvider } from "../../lib/ipc";
 
@@ -28,19 +29,21 @@ export function ProviderButtons({
   busy = false,
   localOnline = false,
 }: ProviderButtonsProps) {
+  const { t } = useTranslation("account");
+
   return (
     <div className="flex flex-col gap-8">
       <ProviderButton
         icon={<UserRound size={20} />}
-        label="Continue with JKHub"
-        note="The account most of the community already has."
+        label={t("providers.continueJkhub")}
+        note={t("providers.continueJkhubNote")}
         disabled={busy}
         onClick={() => onPick("jkhub")}
       />
       <ProviderButton
         icon={<MessageCircle size={20} />}
-        label="Continue with Discord"
-        note="Signs you in with the Discord you play with."
+        label={t("providers.continueDiscord")}
+        note={t("providers.continueDiscordNote")}
         disabled={busy}
         onClick={() => onPick("discord")}
       />
@@ -57,7 +60,7 @@ export function ProviderButtons({
           ].join(" ")}
         >
           <TerminalSquare size={16} />
-          Developer sign-in
+          {t("providers.developer")}
         </button>
       ) : null}
     </div>

@@ -13,6 +13,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
@@ -51,14 +52,12 @@ import {
   Toggle,
   type SelectOption,
 } from "../components/ui";
+// --- slice: i18n ---
+import { useErrorText } from "../i18n/errors";
+import { useFormat } from "../i18n/useFormat";
+import { useGametypeLabels } from "../i18n/useGameLabels";
 import { cn } from "../lib/format";
-import {
-  errorMessage,
-  type Game,
-  type GameInfo,
-  type ServerInfo,
-  type ServersDoneEvent,
-} from "../lib/ipc";
+import type { Game, GameInfo, ServerInfo, ServersDoneEvent } from "../lib/ipc";
 // --- slice: game switch ---
 import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
@@ -95,6 +94,10 @@ const lastAutoRefresh: Partial<Record<Game, number>> = {};
  * `components/servers/filter.ts`; this file only holds the state.
  */
 export function ServersPage() {
+  const { t } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
+  const format = useFormat();
   const settings = useSettings();
   const cached = useCachedServers();
   const refresh = useServerRefresh();
@@ -231,17 +234,17 @@ export function ServersPage() {
     addHistory.mutate(selected.address);
     launchClient.mutate(
       { clientId: defaultClient.id, connect: selected.address },
-      { onError: (e) => setConnectError(errorMessage(e)) },
+      { onError: (e) => setConnectError(errorText(e)) },
     );
   };
 
-  const listError = cached.error !== null ? errorMessage(cached.error) : null;
+  const listError = cached.error !== null ? errorText(cached.error) : null;
 
   return (
     <div className="flex flex-col h-full p-24">
       <PageHeader
-        title="Servers"
-        subtitle={describeCounts({
+        title={t("title")}
+        subtitle={describeCounts(t, {
           // --- slice: game switch --- the list is one game's, and the line
           // says which: two lists that look alike need naming apart.
           game: gameName(activeGame),
@@ -249,7 +252,7 @@ export function ServersPage() {
           total: all.length,
           players: playersOnline,
           bots: botsOnline,
-          secondsAgo,
+          age: secondsAgo === null ? null : format.age(secondsAgo),
           scanning: refresh.running,
           progress: refresh.progress,
         })}
@@ -257,7 +260,7 @@ export function ServersPage() {
           <>
             <Input
               icon={<Search size={16} />}
-              placeholder="Name, map or address"
+              placeholder={t("searchPlaceholder")}
               value={filters.search}
               onChange={(event) =>
                 setFilters({ ...filters, search: event.target.value })
@@ -274,7 +277,7 @@ export function ServersPage() {
               disabled={refresh.running}
               onClick={startRefresh}
             >
-              {refresh.running ? "Scanning" : "Refresh"}
+              {refresh.running ? t("scanning") : t("refresh")}
             </Button>
           </>
         }
@@ -291,27 +294,27 @@ export function ServersPage() {
         className="mt-16"
         value={tab}
         onChange={setTab}
-        tabs={buildTabs(all, historyAddresses)}
+        tabs={buildTabs(t, all, historyAddresses)}
       />
 
       {refresh.error !== null ? (
         <Alert
-          title="Could not reach the master servers"
+          title={t("alerts.masters")}
           detail={refresh.error}
           action={
             <Button size="sm" icon={<RefreshCw size={14} />} onClick={startRefresh}>
-              Retry
+              {tCommon("actions.retry")}
             </Button>
           }
         />
       ) : null}
 
       {listError !== null ? (
-        <Alert title="The server cache is unavailable" detail={listError} />
+        <Alert title={t("alerts.cache")} detail={listError} />
       ) : null}
 
       {connectError !== null ? (
-        <Alert title="Could not start the client" detail={connectError} />
+        <Alert title={t("alerts.connect")} detail={connectError} />
       ) : null}
 
       <div className="flex flex-1 min-h-0 gap-16 pt-12">
@@ -336,12 +339,12 @@ export function ServersPage() {
                 <EmptyState
                   className="mt-24"
                   icon={<ServerIcon size={24} />}
-                  title={emptyTitle(tab, all.length)}
-                  text={emptyText(tab, all.length, hiddenBotOnly)}
+                  title={emptyTitle(t, tab, all.length)}
+                  text={emptyText(t, tab, all.length, hiddenBotOnly)}
                   action={
                     tab === "all" && all.length === 0 ? (
                       <Button icon={<RefreshCw size={16} />} onClick={startRefresh}>
-                        Refresh
+                        {t("refresh")}
                       </Button>
                     ) : undefined
                   }
@@ -367,7 +370,13 @@ export function ServersPage() {
 
           {view.frozen ? (
             <ScanOverlay
-              label={scanLabel(respondedSoFar(live, held), refresh.progress)}
+              label={(() => {
+                const scan = scanLabel(respondedSoFar(live, held), refresh.progress);
+                return t(`scan.${scan.kind}`, {
+                  count: scan.count,
+                  total: scan.total,
+                });
+              })()}
             />
           ) : null}
         </div>
@@ -377,9 +386,7 @@ export function ServersPage() {
             <span className="flex items-center justify-center size-48 rounded-full bg-surface text-fg-muted">
               <ServerIcon size={24} />
             </span>
-            <p className="text-body-sm text-fg-muted">
-              Select a server to see its players and connect.
-            </p>
+            <p className="text-body-sm text-fg-muted">{t("empty.pickServer")}</p>
           </aside>
         ) : (
           <ServerDetails
@@ -389,7 +396,7 @@ export function ServersPage() {
             playersError={
               status.error === null
                 ? null
-                : `No player list: ${errorMessage(status.error)}`
+                : t("details.playersError", { message: errorText(status.error) })
             }
             // --- slice: game switch ---
             // Live even without a client: pressing it is how the player finds
@@ -474,6 +481,11 @@ function FilterRow({
   /** The active game, for its gametype table. `undefined` until it loads. */
   gameInfo: GameInfo | undefined;
 }) {
+  const { t } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
+  // --- slice: i18n --- the numbers come from the servers, the words from the
+  // catalog of the game they belong to.
+  const gametypes = useGametypeLabels();
   // --- slice: game switch ---
   // The game's own table first, then whatever numbers the rows carry that the
   // table does not know — a mod is free to invent one. Building the list from
@@ -482,76 +494,87 @@ function FilterRow({
   // seven. The table is the game's `bg_public.h`, so the labels are the ones
   // that game uses for those numbers.
   const modes = useMemo<SelectOption[]>(() => {
+    const game = gameInfo?.id;
     const labels = new Map<string, string>();
     (gameInfo?.gametypes ?? []).forEach((label, index) => {
-      labels.set(String(index), label);
+      labels.set(
+        String(index),
+        game === undefined ? label : gametypes.label(game, index, label),
+      );
     });
     for (const server of servers) {
       const key = String(server.gametype);
-      if (!labels.has(key)) labels.set(key, server.gametypeLabel);
+      if (!labels.has(key)) {
+        labels.set(
+          key,
+          gametypes.label(server.game, server.gametype, server.gametypeLabel),
+        );
+      }
     }
     return [
-      { value: "any", label: "Any" },
+      { value: "any", label: tCommon("select.any") },
       ...[...labels.entries()]
         .sort((a, b) => Number(a[0]) - Number(b[0]))
         .map(([value, label]) => ({ value, label })),
     ];
-  }, [servers, gameInfo]);
+  }, [servers, gameInfo, gametypes, tCommon]);
 
   const mods = useMemo<SelectOption[]>(
     () => [
-      { value: "any", label: "Any" },
+      { value: "any", label: tCommon("select.any") },
+      // A mod folder is what the operator typed into `fs_game`: data, and
+      // never translated.
       ...distinctValues(servers, "modName").map((value) => ({
         value,
         label: value,
       })),
     ],
-    [servers],
+    [servers, tCommon],
   );
 
   const versions = useMemo<SelectOption[]>(
     () => [
-      { value: "any", label: "Any" },
+      { value: "any", label: tCommon("select.any") },
       ...distinctValues(servers, "protocol").map((value) => ({
         value,
         label: value,
       })),
     ],
-    [servers],
+    [servers, tCommon],
   );
 
   return (
     <div className="flex flex-wrap items-center gap-8 pt-4">
       <Select
-        label="Mode"
-        ariaLabel="Mode"
+        label={t("filters.mode")}
+        ariaLabel={t("filters.mode")}
         value={filters.gametype}
         options={modes}
         onChange={(gametype) => onChange({ ...filters, gametype })}
       />
       <Select
-        label="Mod"
-        ariaLabel="Mod"
+        label={t("filters.mod")}
+        ariaLabel={t("filters.mod")}
         value={filters.modName}
         options={mods}
         onChange={(modName) => onChange({ ...filters, modName })}
       />
       <Select
-        label="Players"
-        ariaLabel="Players"
+        label={t("filters.players")}
+        ariaLabel={t("filters.players")}
         value={filters.players}
         options={[
-          { value: "any", label: "Any" },
-          { value: "not-empty", label: "Not empty" },
-          { value: "not-full", label: "Not full" },
+          { value: "any", label: t("filters.playersAny") },
+          { value: "not-empty", label: t("filters.playersNotEmpty") },
+          { value: "not-full", label: t("filters.playersNotFull") },
         ]}
         onChange={(value) =>
           onChange({ ...filters, players: value as ServerFilters["players"] })
         }
       />
       <Select
-        label="Version"
-        ariaLabel="Version"
+        label={t("filters.version")}
+        ariaLabel={t("filters.version")}
         value={filters.protocol}
         options={versions}
         onChange={(protocol) => onChange({ ...filters, protocol })}
@@ -559,12 +582,14 @@ function FilterRow({
       {/* The same shell as a Select, but the control inside is the switch.
           Nesting the Toggle in a clickable shell would nest two buttons. */}
       <div className="inline-flex items-center gap-8 h-36 pl-12 pr-8 rounded-md bg-input border border-line">
-        <span className="text-label-xs text-fg-muted shrink-0">Bots</span>
+        <span className="text-label-xs text-fg-muted shrink-0">
+          {t("filters.bots")}
+        </span>
         <span className="text-body-sm-medium text-fg shrink-0 whitespace-nowrap">
-          Hide bot-only
+          {t("filters.hideBotOnly")}
         </span>
         <Toggle
-          label="Hide servers where every player is a bot"
+          label={t("filters.hideBotOnlyHint")}
           checked={filters.hideBotOnly}
           onChange={(hideBotOnly) => onChange({ ...filters, hideBotOnly })}
         />
@@ -575,7 +600,7 @@ function FilterRow({
         disabled={filtersAreDefault(filters)}
         onClick={() => onChange(DEFAULT_FILTERS)}
       >
-        Reset filters
+        {t("filters.reset")}
       </Button>
     </div>
   );
@@ -591,18 +616,24 @@ function SortHeader({
   direction: SortDirection;
   onToggle: (column: SortColumn) => void;
 }) {
+  const { t } = useTranslation("servers");
   const cell = (id: SortColumn, label: string, align?: string) => (
     <button
       type="button"
       onClick={() => onToggle(id)}
+      // --- slice: i18n --- the columns are 56 to 116 px wide and the design
+      // sets those widths, so a heading that grows with the language has to
+      // give way rather than push the row out of the table. The tooltip is
+      // what keeps a cut heading readable.
+      title={label}
       className={cn(
-        "inline-flex items-center gap-4 text-label-xs cursor-pointer",
+        "inline-flex items-center gap-4 min-w-0 text-label-xs cursor-pointer",
         "transition-colors duration-150 hover:text-fg-secondary",
         column === id ? "text-fg-accent" : "text-fg-muted",
         align,
       )}
     >
-      {label}
+      <span className="truncate">{label}</span>
       {column === id ? (
         direction === "asc" ? (
           <ChevronUp size={12} />
@@ -619,13 +650,13 @@ function SortHeader({
       className="grid items-center gap-12 h-28 px-12 border-b border-line"
     >
       <span />
-      {cell("name", "SERVER")}
+      {cell("name", t("columns.server"))}
       <span />
-      {cell("map", "MAP")}
-      {cell("mode", "MODE")}
-      {cell("players", "PLR")}
-      {cell("ping", "PING")}
-      {cell("mod", "MOD")}
+      {cell("map", t("columns.map"))}
+      {cell("mode", t("columns.mode"))}
+      {cell("players", t("columns.players"))}
+      {cell("ping", t("columns.ping"))}
+      {cell("mod", t("columns.mod"))}
     </div>
   );
 }
@@ -657,118 +688,126 @@ function Alert({
 
 /** The tab strip with its counts. */
 function buildTabs(
+  t: ServersT,
   servers: ServerInfo[],
   historyAddresses: string[],
 ): TabDefinition<ServerTab>[] {
   const known = new Set(servers.map((server) => server.address));
   return [
-    { id: "all", label: "All", count: servers.length },
+    { id: "all", label: t("tabs.all"), count: servers.length },
     {
       id: "trusted",
-      label: "Trusted",
+      label: t("tabs.trusted"),
       count: servers.filter((server) => server.trusted).length,
     },
     {
       id: "favorites",
-      label: "Favorites",
+      label: t("tabs.favorites"),
       count: servers.filter((server) => server.favorite).length,
     },
     {
       id: "history",
-      label: "History",
+      label: t("tabs.history"),
       count: historyAddresses.filter((address) => known.has(address)).length,
     },
     {
       id: "lan",
-      label: "LAN",
+      label: t("tabs.lan"),
       disabled: true,
-      title: "Broadcast discovery arrives with the launch slice",
+      title: t("tabs.lanHint"),
     },
   ];
 }
+
+// --- slice: i18n ---
+/** The `t` of the `servers` namespace, as the builders below take it. */
+type ServersT = ReturnType<typeof useTranslation<"servers">>["t"];
+
+/** Punctuation between the parts of the subtitle, not a word. */
+const DOT = " · ";
 
 /**
  * The line under the title: what is shown, out of what, and how fresh.
  *
  * "Players" means people. The bots are named separately so the number nobody
  * can act on cannot be mistaken for the one they can.
+ *
+ * --- slice: i18n ---
+ * Each part is a whole message with its own placeholders and its own plural,
+ * and the middot between them is punctuation. Nothing here glues half-sentences
+ * together: «2 of 118 Jedi Academy servers» is one message, not «2», «of» and
+ * «servers».
  */
-function describeCounts(state: {
-  /** Name of the active game, which is whose list this is. */
-  game: string;
-  visible: number;
-  total: number;
-  players: number;
-  bots: number;
-  secondsAgo: number | null;
-  scanning: boolean;
-  progress: ServersDoneEvent | null;
-}): string {
-  const { game, visible, total, players, bots, secondsAgo, scanning, progress } =
-    state;
-  const head =
+function describeCounts(
+  t: ServersT,
+  state: {
+    /** Name of the active game, which is whose list this is. */
+    game: string;
+    visible: number;
+    total: number;
+    players: number;
+    bots: number;
+    /** How long ago the list was refreshed, already formatted, or `null`. */
+    age: string | null;
+    scanning: boolean;
+    progress: ServersDoneEvent | null;
+  },
+): string {
+  const { game, visible, total, players, bots, age, scanning, progress } = state;
+
+  const parts: string[] = [
     total === 0
-      ? `No ${game} servers yet`
+      ? t("subtitle.empty", { game })
       : visible === total
-        ? `${total} ${game} servers`
-        : `${visible} of ${total} ${game} servers`;
-  const middle = total === 0 ? "" : ` · ${players} players online`;
-  const botTail =
-    total === 0 || bots === 0 ? "" : ` · ${bots} bots hidden from counts`;
+        ? t("subtitle.all", { count: total, game })
+        : t("subtitle.some", { count: visible, total, game }),
+  ];
 
-  if (scanning) return `${head}${middle}${botTail} · asking the master servers`;
+  if (total > 0) parts.push(t("subtitle.players", { count: players }));
+  if (total > 0 && bots > 0) parts.push(t("subtitle.bots", { count: bots }));
 
-  const silent =
-    progress === null || progress.responded === progress.total
-      ? ""
-      : ` · ${progress.total - progress.responded} did not answer`;
-  const tail =
-    secondsAgo === null ? "" : ` · refreshed ${formatAge(secondsAgo)} ago`;
-  return `${head}${middle}${botTail}${tail}${silent}`;
+  if (scanning) {
+    parts.push(t("subtitle.asking"));
+    return parts.join(DOT);
+  }
+
+  if (age !== null) parts.push(t("subtitle.refreshed", { age }));
+  if (progress !== null && progress.responded !== progress.total) {
+    parts.push(t("subtitle.silent", { count: progress.total - progress.responded }));
+  }
+  return parts.join(DOT);
 }
 
-function formatAge(seconds: number): string {
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
-  return `${Math.floor(minutes / 60)} h`;
-}
-
-function emptyTitle(tab: ServerTab, total: number): string {
-  if (tab === "lan") return "LAN discovery is not built yet";
-  if (tab === "favorites") return "No favorites yet";
-  if (tab === "history") return "No connections yet";
-  if (tab === "trusted") return "No trusted servers in this list";
-  return total === 0 ? "No servers yet" : "Nothing matches the filters";
+function emptyTitle(t: ServersT, tab: ServerTab, total: number): string {
+  if (tab === "lan") return t("empty.lanTitle");
+  if (tab === "favorites") return t("empty.favoritesTitle");
+  if (tab === "history") return t("empty.historyTitle");
+  if (tab === "trusted") return t("empty.trustedTitle");
+  return total === 0 ? t("empty.noneTitle") : t("empty.filteredTitle");
 }
 
 function emptyText(
+  t: ServersT,
   tab: ServerTab,
   total: number,
   hiddenBotOnly: number,
 ): string {
   switch (tab) {
     case "lan":
-      return "Broadcast discovery on the local network arrives in a later task.";
+      return t("empty.lanText");
     case "favorites":
-      return "Press the star on a row to keep a server here.";
+      return t("empty.favoritesText");
     case "history":
-      return "Servers you connect to show up here, newest first.";
+      return t("empty.historyText");
     case "trusted":
-      return "The bundled list of vouched-for community servers is empty in this build.";
+      return t("empty.trustedText");
     default:
-      if (total === 0) {
-        return "Press Refresh to ask the master servers who is online.";
-      }
+      if (total === 0) return t("empty.noneText");
       // A player who filtered everything away deserves to know that the bot
       // switch is holding part of the list back.
       return hiddenBotOnly > 0
-        ? `Widen the filters, or clear the search box. ${hiddenBotOnly} ${
-            hiddenBotOnly === 1 ? "server has" : "servers have"
-          } bots and nobody else; turn off Hide bot-only to see ${
-            hiddenBotOnly === 1 ? "it" : "them"
-          }.`
-        : "Widen the filters, or clear the search box.";
+        ? t("empty.filteredBots", { count: hiddenBotOnly })
+        : t("empty.filteredText");
   }
 }
 

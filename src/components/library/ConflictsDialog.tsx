@@ -1,4 +1,5 @@
 import { Crown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { ConflictReport, LibraryItem } from "../../lib/ipc";
 import { Badge, Button, Dialog } from "../ui";
@@ -28,15 +29,21 @@ export function ConflictsDialog({
   onDisable,
   busy = false,
 }: ConflictsDialogProps) {
+  const { t } = useTranslation("library");
+  const { t: tCommon } = useTranslation("common");
   const name = (id: string) => items.find((item) => item.id === id)?.fileName ?? id;
 
   return (
     <Dialog
       wide
-      title="Files that change the same content"
-      body={`${report.files.length} archives of ${clientName} carry ${report.total} shared paths. The engine reads the last one it loads and ignores the rest.`}
+      title={t("conflicts.title")}
+      body={t("conflicts.body", {
+        files: report.files.length,
+        client: clientName,
+        paths: report.total,
+      })}
       onClose={onClose}
-      actions={<Button onClick={onClose}>Close</Button>}
+      actions={<Button onClick={onClose}>{tCommon("actions.close")}</Button>}
     >
       <ul className="flex flex-col gap-8 pt-16 max-h-[420px] overflow-y-auto">
         {report.conflicts.map((conflict) => (
@@ -54,10 +61,10 @@ export function ConflictsDialog({
                   <li key={id} className="flex items-center gap-8">
                     {winner ? (
                       <Badge tone="accent" icon={<Crown size={12} />}>
-                        Wins
+                        {t("conflicts.wins")}
                       </Badge>
                     ) : (
-                      <Badge tone="neutral">Hidden</Badge>
+                      <Badge tone="neutral">{t("conflicts.hidden")}</Badge>
                     )}
                     <span className="text-body-sm text-fg truncate flex-1" title={name(id)}>
                       {name(id)}
@@ -68,7 +75,7 @@ export function ConflictsDialog({
                       disabled={busy}
                       onClick={() => onDisable(id)}
                     >
-                      Disable
+                      {tCommon("actions.disable")}
                     </Button>
                   </li>
                 );
@@ -80,8 +87,10 @@ export function ConflictsDialog({
 
       {report.truncated ? (
         <p className="text-body-sm text-fg-muted pt-12">
-          Only the first {report.conflicts.length} of {report.total} paths are
-          listed. Disable one of the archives to see the rest.
+          {t("conflicts.truncated", {
+            shown: report.conflicts.length,
+            total: report.total,
+          })}
         </p>
       ) : null}
     </Dialog>

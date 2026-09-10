@@ -1,11 +1,13 @@
 import { AlertTriangle, Shield } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { providerLine } from "../../components/account/provider";
+import { useProviderNames } from "../../components/account/provider";
 import { ProviderButtons } from "../../components/account/ProviderButtons";
 import { WaitingForBrowser } from "../../components/account/WaitingForBrowser";
 import { Avatar, Button } from "../../components/ui";
-import { errorMessage, ONLINE_NOT_CONFIGURED_TEXT } from "../../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../../i18n/errors";
 import { useAccountState, useSignIn, useUpdateSettings } from "../../lib/queries";
 import { StepPanel } from "./StepPanel";
 
@@ -14,12 +16,9 @@ interface StepAccountProps {
   onDone: () => void;
 }
 
-/** What an account is good for. */
-const BENEFITS = [
-  "A friends list, with an invite that works without port forwarding.",
-  "Your library and your favourite servers on every machine you play from.",
-  "A name other players recognise, instead of one typed into each server.",
-];
+// --- slice: i18n ---
+/** What an account is good for, as keys of the `onboarding` catalog. */
+const BENEFITS = ["benefitFriends", "benefitSync", "benefitName"] as const;
 
 /**
  * Step 3: sign in, or do not.
@@ -36,6 +35,11 @@ const BENEFITS = [
  * than a step that says the feature is not open yet.
  */
 export function StepAccount({ onBack, onDone }: StepAccountProps) {
+  const { t } = useTranslation("onboarding");
+  const { t: tAccount } = useTranslation("account");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
+  const providers = useProviderNames();
   const account = useAccountState();
   const flow = useSignIn();
   const updateSettings = useUpdateSettings();
@@ -52,7 +56,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
     setError(null);
     updateSettings.mutate(
       { onboardingCompleted: true },
-      { onSuccess: () => onDone(), onError: (e) => setError(errorMessage(e)) },
+      { onSuccess: () => onDone(), onError: (e) => setError(errorText(e)) },
     );
   };
 
@@ -64,8 +68,8 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
     return (
       <StepPanel
         step={3}
-        heading="Accounts and friends come later"
-        text={ONLINE_NOT_CONFIGURED_TEXT}
+        heading={t("account.offHeading")}
+        text={tAccount("notConfigured")}
         error={error}
         onBack={onBack}
         footer={
@@ -75,16 +79,15 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
             disabled={updateSettings.isPending}
             onClick={finish}
           >
-            {updateSettings.isPending ? "Finishing…" : "Continue"}
+            {updateSettings.isPending
+              ? tCommon("states.finishing")
+              : tCommon("actions.continue")}
           </Button>
         }
       >
         <p className="flex items-start gap-8 text-body-sm text-fg-muted">
           <Shield size={16} className="shrink-0 mt-2" />
-          <span>
-            Everything you have set up so far works without an account. Your
-            game files, your settings and your saves stay on this machine.
-          </span>
+          <span>{t("account.offText")}</span>
         </p>
       </StepPanel>
     );
@@ -93,12 +96,8 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
   return (
     <StepPanel
       step={3}
-      heading={signedIn ? "You are signed in" : "Sign in, or play as a guest"}
-      text={
-        signedIn
-          ? "Your friends list and your invites follow this account from now on."
-          : "An account is optional. Everything you have set up so far works without one, and you can sign in later from Settings."
-      }
+      heading={signedIn ? t("account.signedInHeading") : t("account.heading")}
+      text={signedIn ? t("account.signedInText") : t("account.text")}
       error={error}
       onBack={waiting ? undefined : onBack}
       footer={
@@ -109,10 +108,10 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
           onClick={finish}
         >
           {updateSettings.isPending
-            ? "Finishing…"
+            ? tCommon("states.finishing")
             : signedIn
-              ? "Continue"
-              : "Skip, play as guest"}
+              ? tCommon("actions.continue")
+              : t("account.skip")}
         </Button>
       }
     >
@@ -124,7 +123,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
               {user.displayName}
             </span>
             <span className="text-body-sm text-fg-muted truncate">
-              {providerLine(user.provider, user.providerName)}
+              {providers.line(user.provider, user.providerName)}
             </span>
           </span>
         </section>
@@ -139,7 +138,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
             >
               <AlertTriangle size={16} className="text-fg-warm shrink-0 mt-2" />
               <span className="text-body-sm text-fg break-words">
-                {flow.error} You can play as a guest and sign in later.
+                {t("account.providerFailed", { message: flow.error })}
               </span>
             </div>
           ) : null}
@@ -153,12 +152,14 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
 
       {signedIn ? null : (
         <section className="rounded-lg border border-line bg-surface p-16 mt-24">
-          <h2 className="text-heading-sm text-fg">With an account</h2>
+          <h2 className="text-heading-sm text-fg">{t("account.benefitsTitle")}</h2>
           <ul className="flex flex-col gap-8 pt-12">
             {BENEFITS.map((benefit) => (
               <li key={benefit} className="flex items-start gap-8">
                 <span className="mt-8 size-6 shrink-0 rounded-full bg-accent" />
-                <span className="text-body-sm text-fg-secondary">{benefit}</span>
+                <span className="text-body-sm text-fg-secondary">
+                  {t(`account.${benefit}`)}
+                </span>
               </li>
             ))}
           </ul>
@@ -167,10 +168,7 @@ export function StepAccount({ onBack, onDone }: StepAccountProps) {
 
       <p className="flex items-start gap-8 text-body-sm text-fg-muted pt-16">
         <Shield size={16} className="shrink-0 mt-2" />
-        <span>
-          JKNet stores your account name and who your friends are. Your game
-          files, your settings and your saves stay on this machine.
-        </span>
+        <span>{t("account.privacy")}</span>
       </p>
     </StepPanel>
   );

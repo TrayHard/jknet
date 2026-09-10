@@ -10,10 +10,11 @@ import { GAMES, type Client, type Game, type Settings } from "../../lib/ipc";
 
 export type OnboardingStep = 1 | 2 | 3;
 
-/** Labels of the badge strip, in order. */
-export const STEP_LABELS = ["Game files", "Client", "Account"];
+// --- slice: i18n ---
+/** Keys of the badge strip under `onboarding.steps`, in order. */
+export const STEP_KEYS = ["gameFiles", "client", "account"] as const;
 
-export const STEP_COUNT = STEP_LABELS.length;
+export const STEP_COUNT = STEP_KEYS.length;
 
 /**
  * Where the setup picks up after the player closed the launcher halfway.
