@@ -1,33 +1,33 @@
 {
-  "title": "Home",
-  "subtitle": "{{game}} · jump back in, or pick a server from the browser.",
-  "launchError": "{{message}} <0>Open the Clients screen</0> to set the game folder or install the engine.",
+  "title": "Accueil",
+  "subtitle": "{{game}} · reprenez le jeu, ou choisissez un serveur dans la liste.",
+  "launchError": "{{message}} <0>Ouvrez l’écran Clients</0> pour indiquer le dossier du jeu ou installer le moteur.",
   "hero": {
-    "quickPlay": "Quick play",
-    "inGame": "In game",
-    "running": "Running: {{client}}",
-    "noClient": "No {{game}} client yet",
-    "runningText": "Started <0>{{age}}</0> ago, process {{pid}}. The launcher steps aside while you play.",
-    "readyText": "Start the default client and pick a server from the in-game menu.",
-    "noClientText": "A client is an engine build with its own files and settings. Make one and {{game}} is one press away.",
-    "createClient": "Create a {{game}} client",
-    "play": "Play",
-    "playHint": "Mark a client as the default one",
-    "stop": "Stop",
-    "manageClients": "Manage clients",
-    "aMoment": "a moment"
+    "quickPlay": "Partie rapide",
+    "inGame": "En jeu",
+    "running": "En cours : {{client}}",
+    "noClient": "Aucun client {{game}}",
+    "runningText": "Démarré il y a <0>{{age}}</0>, processus {{pid}}. Le lanceur s’efface pendant que vous jouez.",
+    "readyText": "Lancez le client par défaut et choisissez un serveur dans le menu du jeu.",
+    "noClientText": "Un client est une version d’un moteur avec ses propres fichiers et paramètres. Créez-en un et {{game}} démarre en un clic.",
+    "createClient": "Créer un client {{game}}",
+    "play": "Jouer",
+    "playHint": "Désignez un client comme client par défaut",
+    "stop": "Arrêter",
+    "manageClients": "Gérer les clients",
+    "aMoment": "un instant"
   },
   "gameFiles": {
-    "title": "JKNet does not know where your {{game}} files are",
-    "text": "Point it at the <0>GameData</0> folder of your copy and the game is ready to start. Browsing servers works without it.",
-    "locate": "Locate files"
+    "title": "JKNet ne sait pas où sont vos fichiers {{game}}",
+    "text": "Indiquez-lui le dossier <0>GameData</0> de votre copie et le jeu est prêt à démarrer. La liste des serveurs fonctionne sans lui.",
+    "locate": "Localiser les fichiers"
   },
   "topServers": {
-    "trusted": "Trusted servers",
-    "busiest": "Busiest servers",
-    "emptyTitle": "No servers in the cache yet",
-    "emptyText": "Open the Servers screen once and the busiest ones show up here.",
-    "openServers": "Open Servers",
-    "seeAll": "See all"
+    "trusted": "Serveurs de confiance",
+    "busiest": "Serveurs les plus remplis",
+    "emptyTitle": "Aucun serveur dans le cache",
+    "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",
+    "openServers": "Ouvrir Serveurs",
+    "seeAll": "Tout voir"
   }
 }
