@@ -41,7 +41,9 @@ src/
                          AccountProvider
   components/ui/         UI-кит: Button, Badge, Input, Toggle, NavItem, EmptyState,
                          RadioCard, StepBadges, Toast, Avatar, Dialog
-  components/library/    экран Library: карточка, диалоги, категории, Select
+  components/library/    экран Library: карточка, диалоги, категории, Select,
+                         вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
+                         JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
   components/account/    учётная запись: карточка Settings, кнопки провайдеров,
                          ожидание браузера
@@ -70,6 +72,8 @@ src-tauri/
   src/library.rs         файлы pk3 одного клиента в его папке home\
   src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
   src/hub/               клиент хаба JKNet: типы контракта, запросы, ошибки
+  src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
+                         разборщики страниц, скачивание и установка в клиента
   src/account.rs         вход через браузер и команды учётной записи
   src/friends/           друзья, присутствие, приглашения и живой сокет
   capabilities/          разрешения окна main

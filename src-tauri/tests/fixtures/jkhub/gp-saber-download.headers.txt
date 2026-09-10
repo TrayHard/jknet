@@ -1,0 +1,42 @@
+HTTP/1.1 301 Moved Permanently
+Date: Thu, 10 Sep 2026 11:55:52 GMT
+Content-Type: text/html;charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+Server: cloudflare
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+X-IPS-LoggedIn: 0
+Vary: Cookie
+X-XSS-Protection: 0
+Cross-Origin-Opener-Policy: same-origin
+X-Frame-Options: sameorigin
+Content-Security-Policy: frame-ancestors 'self'
+X-Content-Security-Policy: frame-ancestors 'self'
+Referrer-Policy: strict-origin-when-cross-origin
+Expires: 0
+Cache-Control: no-cache, no-store, must-revalidate, max-age=0, s-maxage=0
+Location: https://files.jkhub.org/jka/configs/SaberChanger.zip
+cf-cache-status: DYNAMIC
+Strict-Transport-Security: max-age=31536000; preload
+X-Content-Type-Options: nosniff
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=mmVbhlNxMzNjYtqtUzxAA1mzUSUwgw3HhsELXBN%2Fmdxfd%2BkxO0XhQvv59O%2Ba0Amj6KhZ7HKRK9F3%2Fkwd%2FZQp5GabKCxhXuBTGkjOG4Q402NEZ0eiL5T7wU9ydUQ%3D"}]}
+CF-RAY: a38e3f046a45da09-TBS
+alt-svc: h3=":443"; ma=86400
+
+HTTP/1.1 200 OK
+Date: Thu, 10 Sep 2026 11:55:53 GMT
+Content-Type: application/zip
+Content-Length: 1651
+Connection: keep-alive
+Accept-Ranges: bytes
+ETag: "c52c1f40cab4b076350b0fa8cdef7c2c"
+Last-Modified: Wed, 13 May 2026 21:52:41 GMT
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+Server: cloudflare
+Cache-Control: max-age=2678400
+cf-cache-status: MISS
+Strict-Transport-Security: max-age=31536000; preload
+X-Content-Type-Options: nosniff
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=HV5SJxVdYmD5Nq52zwsMfOmAyEnx%2BS5cCKdr39Dag0BGqiBw65wQT8Z3M%2F4GdIiI6eScotTTxtrws46inj%2BZIbfN7SAl1fAzIxBwujrbK0zSzDFfWMerGlB6y59GOdjuOtU%3D"}]}
+CF-RAY: a38e3f07bcf1ab93-TBS
+
