@@ -1,0 +1,66 @@
+{
+  "actions": {
+    "add": "Ajouter",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "continue": "Continuer",
+    "delete": "Supprimer",
+    "disable": "Désactiver",
+    "dismiss": "Masquer",
+    "loadMore": "Afficher plus",
+    "refresh": "Actualiser",
+    "remove": "Retirer",
+    "retry": "Réessayer",
+    "save": "Enregistrer",
+    "seeAll": "Tout voir",
+    "tryAgain": "Réessayer"
+  },
+  "states": {
+    "checking": "Vérification…",
+    "creating": "Création…",
+    "deleting": "Suppression…",
+    "finishing": "Finalisation…",
+    "installing": "Installation…",
+    "loading": "Chargement…",
+    "reading": "Lecture…",
+    "removing": "Retrait…",
+    "saving": "Enregistrement…",
+    "sending": "Envoi…",
+    "starting": "Démarrage…"
+  },
+  "values": {
+    "empty": "—",
+    "notSet": "Non défini",
+    "unknown": "Inconnu"
+  },
+  "units": {
+    "bytes": {
+      "b": "{{value}} o",
+      "kb": "{{value}} ko",
+      "mb": "{{value}} Mo",
+      "gb": "{{value}} Go"
+    },
+    "milliseconds": "{{value}} ms",
+    "seconds": "{{value}} s",
+    "minutes": "{{value}} min",
+    "hours": "{{value}} h",
+    "hoursMinutes": "{{hours}} h {{minutes}} min"
+  },
+  "window": {
+    "minimize": "Réduire",
+    "maximize": "Agrandir",
+    "restore": "Restaurer",
+    "close": "Fermer"
+  },
+  "select": {
+    "any": "Tout",
+    "nothingToChoose": "Rien à choisir"
+  },
+  "search": {
+    "nothingMatches": "Aucun résultat"
+  },
+  "runtime": {
+    "missing": "L’environnement Tauri n’est pas disponible"
+  }
+}

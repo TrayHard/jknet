@@ -1,5 +1,6 @@
 import { Gamepad2 } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { Invite } from "../lib/ipc";
 import {
@@ -33,6 +34,7 @@ import { Button } from "./ui";
  * below are read as none whatever the query cache still holds.
  */
 export function FriendsProvider({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("friends");
   useFriendsEvents();
   const configured = useOnlineConfigured();
   const friends = useFriendsState();
@@ -69,7 +71,10 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
     for (const invite of pending) {
       shown.current.add(invite.id);
       show(toastId(invite.id), {
-        title: `${invite.from.displayName} invites you to ${where(invite)}`,
+        title: t("invite.toast", {
+          name: invite.from.displayName,
+          server: where(invite),
+        }),
         text: invite.message ?? undefined,
         // Closing the toast drops the invitation on the service as well, or the
         // next refresh of the list would bring the same toast straight back.
@@ -82,10 +87,10 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
             disabled={defaultClientId === null || gameRunning}
             title={
               defaultClientId === null
-                ? "Pick a default client on the Clients screen first"
+                ? t("invite.noClient")
                 : gameRunning
-                  ? "A game is already running"
-                  : `Connect to ${invite.serverAddress}`
+                  ? t("invite.gameRunning")
+                  : t("invite.connectTo", { address: invite.serverAddress })
             }
             onClick={() => {
               if (defaultClientId === null) return;
@@ -99,12 +104,12 @@ export function FriendsProvider({ children }: { children: ReactNode }) {
               });
             }}
           >
-            Join
+            {t("invite.join")}
           </Button>
         ),
       });
     }
-  }, [invites, defaultClientId, gameRunning, show, hide, dismissInvite, launchClient]);
+  }, [invites, defaultClientId, gameRunning, show, hide, dismissInvite, launchClient, t]);
 
   return <>{children}</>;
 }

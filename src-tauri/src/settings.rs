@@ -17,6 +17,23 @@ use crate::online::{self, OnlineUser};
 use crate::paths;
 use crate::state::AppState;
 
+// --- slice: i18n ---
+/// The value of `language` that means «follow the operating system».
+pub const SYSTEM_LANGUAGE: &str = "system";
+
+// --- slice: i18n ---
+/// The languages the launcher ships a catalog for.
+///
+/// The same list as `LANGUAGES` in `src/i18n/languages.ts` and the same list as
+/// the folders under `src/locales/`. It lives here only to refuse a value the
+/// frontend could not load; the catalogs themselves are the frontend's.
+pub const LANGUAGES: &[&str] = &["en", "ru", "uk", "de", "fr", "es", "pl", "hu"];
+
+/// Whether a string may be stored in `language`.
+pub fn is_language_setting(value: &str) -> bool {
+    value == SYSTEM_LANGUAGE || LANGUAGES.contains(&value)
+}
+
 /// Everything the launcher remembers between runs, except window geometry
 /// (that belongs to `tauri-plugin-window-state`).
 ///
@@ -41,6 +58,20 @@ pub struct Settings {
     /// The game every screen works in until the player switches. The switcher
     /// itself arrives in the next slice; this field is what it will write.
     pub active_game: Game,
+
+    // --- slice: i18n ---
+    /// The language of the interface: `system`, or one of [`LANGUAGES`].
+    ///
+    /// A plain string rather than an enum on purpose. The catalogs live on the
+    /// frontend, and a build that grows a ninth language should not need a
+    /// migration of `settings.json` to store it. The value is validated where
+    /// it is written — see [`SettingsPatch::validate`] — so the document can
+    /// only ever hold a name the launcher knows.
+    ///
+    /// `system` means «ask the operating system», which is what a fresh
+    /// install does: `src/i18n/index.ts` reads the locale and maps its primary
+    /// subtag onto a catalog, falling back to English.
+    pub language: String,
     /// Read out of a `settings.json` written before 0.3 and then dropped. The
     /// value lands in `game_data_paths` under `ja`; nothing else reads it, and
     /// `skip_serializing` is what takes the key out of the file on the first
@@ -125,6 +156,8 @@ impl Default for Settings {
         Settings {
             game_data_paths: BTreeMap::new(),
             active_game: Game::default(),
+            // --- slice: i18n ---
+            language: SYSTEM_LANGUAGE.to_string(),
             legacy_game_data_path: None,
             default_client_id: None,
             default_client_ids: BTreeMap::new(),
@@ -282,6 +315,10 @@ pub struct SettingsPatch {
     pub game_data_paths: Option<BTreeMap<Game, Option<String>>>,
     /// The game every screen works in.
     pub active_game: Option<Game>,
+    // --- slice: i18n ---
+    /// The language of the interface: `system` or one of [`LANGUAGES`].
+    /// [`SettingsPatch::validate`] refuses anything else.
+    pub language: Option<String>,
     /// The one-game field, still accepted: it writes the `ja` entry of
     /// `game_data_paths`. Kept so a caller that has not been updated yet — the
     /// onboarding of an older frontend, a hand-edited call — lands somewhere
@@ -348,6 +385,10 @@ impl SettingsPatch {
         if let Some(value) = self.active_game {
             settings.active_game = value;
         }
+        // --- slice: i18n ---
+        if let Some(value) = self.language {
+            settings.language = value;
+        }
         // The one-game field lands on the Jedi Academy entry, before the map,
         // so a patch carrying both means what the map says. The map is the
         // form of 0.3 and the only one the launcher itself sends; the 0.2
@@ -397,11 +438,21 @@ impl SettingsPatch {
     // --- slice: account ---
     /// Refuses a patch the launcher would rather not write.
     ///
-    /// One field needs this. A service address without a scheme, or with one that
+    /// Two fields need this. A service address without a scheme, or with one that
     /// is not HTTP, would be stored and then rejected by every later call with
     /// a message about the address rather than about the typo — so it is
-    /// refused where the typo was made.
+    /// refused where the typo was made. A language the launcher has no catalog
+    /// for would leave the interface in English with a setting that says
+    /// otherwise, which is worse than a refusal.
     pub fn validate(&self) -> Result<()> {
+        // --- slice: i18n ---
+        if let Some(language) = self.language.as_deref() {
+            if !is_language_setting(language) {
+                return Err(AppError::InvalidInput(format!(
+                    "{language:?} is not a language JKNet speaks"
+                )));
+            }
+        }
         if let Some(url) = self.online_url.as_deref() {
             let url = url.trim();
             // Blank clears the field back to the default, so there is nothing
@@ -484,6 +535,8 @@ mod tests {
                 (Game::JediOutcast, "D:\\SteamLibrary\\JK2\\GameData".to_string()),
             ]),
             active_game: Game::JediAcademy,
+            // --- slice: i18n ---
+            language: "ru".into(),
             legacy_game_data_path: None,
             default_client_id: Some("everyday".into()),
             default_client_ids: BTreeMap::from([
@@ -913,6 +966,45 @@ mod tests {
         // Two games mean two folders to be wrong about, so the message says
         // which one is missing.
         assert!(refusal.to_string().contains("Jedi Outcast"), "{refusal}");
+    }
+
+    // --- slice: i18n ---
+    #[test]
+    fn a_fresh_launcher_follows_the_system_language() {
+        assert_eq!(Settings::default().language, SYSTEM_LANGUAGE);
+        // A `settings.json` written before the field existed reads the same
+        // way, so an installed launcher keeps following the system.
+        let older: Settings = serde_json::from_str("{}").expect("an empty document reads");
+        assert_eq!(older.language, SYSTEM_LANGUAGE);
+    }
+
+    // --- slice: i18n ---
+    #[test]
+    fn only_a_language_with_a_catalog_may_be_stored() {
+        for value in ["system", "en", "ru", "uk", "de", "fr", "es", "pl", "hu"] {
+            let patch = patch(&format!(r#"{{"language":{value:?}}}"#));
+            patch.validate().expect("a language with a catalog is accepted");
+        }
+
+        // A tag with a region, a language JKNet does not speak and an empty
+        // string all name no catalog, so all three are refused where they are
+        // written rather than silently leaving the interface in English.
+        for value in ["ru-RU", "pt", "", "System"] {
+            let patch = patch(&format!(r#"{{"language":{value:?}}}"#));
+            assert!(patch.validate().is_err(), "{value:?} should be refused");
+        }
+    }
+
+    // --- slice: i18n ---
+    #[test]
+    fn a_language_patch_touches_nothing_else() {
+        let mut settings = filled();
+        let before = settings.clone();
+        patch(r#"{"language":"ru"}"#).apply(&mut settings);
+        assert_eq!(settings.language, "ru");
+        assert_eq!(settings.online_url, before.online_url);
+        assert_eq!(settings.active_game, before.active_game);
+        assert_eq!(settings.favorite_servers, before.favorite_servers);
     }
 
     #[test]

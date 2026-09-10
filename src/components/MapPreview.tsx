@@ -1,5 +1,6 @@
 import { Map as MapIcon } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "../lib/format";
 import { levelshotUrl, type Game } from "../lib/ipc";
@@ -52,6 +53,7 @@ export function MapPreview({
   compact = false,
   className,
 }: MapPreviewProps) {
+  const { t } = useTranslation("games");
   const shot = useLevelshot(map, game);
   // A file that vanished between the index and the paint: the cache is
   // throwaway data and the placeholder is already the right answer.
@@ -118,8 +120,10 @@ export function MapPreview({
             {serverName}
           </span>
         ) : null}
+        {/* The map name itself is data: whatever the server put in `mapname`.
+            Only the stand-in for a server that named none is translated. */}
         <span className={cn("text-mono-sm text-fg truncate", CAPTION_SHADOW)}>
-          {map || "unknown map"}
+          {map || t("map.unknown")}
         </span>
       </div>
     </div>

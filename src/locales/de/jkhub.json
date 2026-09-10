@@ -1,0 +1,88 @@
+{
+  "sort": {
+    "label": "Sortieren nach",
+    "recentlyUpdated": "Zuletzt aktualisiert",
+    "newest": "Neueste",
+    "mostDownloaded": "Meistgeladen",
+    "topRated": "Bestbewertet",
+    "name": "Name"
+  },
+  "filterPlaceholder": "Geladene Dateien filtern",
+  "refresh": "Aktualisieren",
+  "fromCache": "Aus dem Cache",
+  "tree": {
+    "heading": "Kategorien",
+    "update": "Kategorien aktualisieren",
+    "updating": "Wird aktualisiert…",
+    "updateHint": "Den Kategoriebaum von JKHub erneut durchlaufen. Das kostet etwa zwanzig Anfragen.",
+    "expand": "{{category}} aufklappen",
+    "collapse": "{{category}} zuklappen",
+    "empty": "Noch keine Kategorien."
+  },
+  "scope": {
+    "category": "{{category}} · Installation in {{client}}",
+    "noCategory": "Kategorie wählen · Installation in {{client}}"
+  },
+  "loading": {
+    "categories": "Die Kategorien von JKHub werden gelesen…",
+    "files": "Dateien werden geladen…"
+  },
+  "empty": {
+    "browserTitle": "JKHub braucht das Fenster des Launchers",
+    "browserText": "Dieser Tab spricht über den Kern von JKNet mit jkhub.org, und den hat eine Vorschau im Browser nicht.",
+    "unreachableTitle": "JKHub hat nicht geantwortet",
+    "categoryTitle": "Diese Kategorie wurde nicht geladen",
+    "filteredTitle": "Keine Treffer",
+    "filteredText": "Keine geladene Datei passt zum Filter. Leeren Sie ihn, laden Sie weitere Seiten oder wählen Sie eine andere Kategorie."
+  },
+  "loaded": "{{shown}} von {{total}} Dateien geladen. Grenzen Sie die Kategorie ein oder ändern Sie die Reihenfolge, um den Rest zu sehen.",
+  "card": {
+    "open": "{{title}} öffnen",
+    "installed": "Installiert",
+    "install": "Installieren",
+    "reinstall": "Neu installieren",
+    "fallbackAuthor": "JKHub",
+    "updated": "Aktualisiert {{date}}",
+    "submitted": "Eingereicht {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Wird geladen…",
+    "fallbackTitle": "Datei",
+    "openOnSite": "Auf JKHub öffnen",
+    "installTo": "In {{client}} installieren",
+    "replaceAndInstall": "Ersetzen und installieren",
+    "openScreenshot": "Screenshot öffnen",
+    "screenshot": "Screenshot",
+    "screenshotMissing": "JKHub hat diesen Screenshot nicht geliefert.",
+    "author": "Autor",
+    "authorUnknown": "Unbekannt",
+    "updated": "Aktualisiert",
+    "submitted": "Eingereicht",
+    "rating": "Bewertung",
+    "ratingValue": "{{value}} von 5 · {{count}} Bewertungen",
+    "notRated": "Nicht bewertet",
+    "downloads": "{{count}} Downloads",
+    "views": "{{count}} Aufrufe",
+    "comments": "{{count}} Kommentare",
+    "versions": "Versionen",
+    "downloading": "Herunterladen… {{received}}",
+    "downloadingOf": "Herunterladen… {{received}} von {{total}}"
+  },
+  "install": {
+    "pickClient": "Wählen Sie zuerst oben einen Client: Eine Datei wird in einen Client installiert.",
+    "toastTitle": "In {{client}} installiert",
+    "failedTitle": "Installation fehlgeschlagen",
+    "categoriesTitle": "Kategorien aktualisiert",
+    "categoriesText": "{{count}} Kategorien von JKHub gelesen."
+  },
+  "outcome": {
+    "installed": "{{files}} in {{folder}} installiert.",
+    "conflicts_one": "{{files}} liegt bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben.",
+    "conflicts_other": "{{files}} liegen bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben.",
+    "external": "Dieser Eintrag verweist auf eine andere Website statt auf ein Archiv, es gibt also nichts zu installieren. Öffnen Sie ihn auf JKHub, um dem Link zu folgen.",
+    "unsupportedDownloaded": "Das Archiv ist eine .{{format}}-Datei, die JKNet noch nicht öffnen kann. Heruntergeladen ist sie bereits: Entpacken Sie sie von Hand in den Ordner des Clients.",
+    "unsupported": "Das Archiv ist eine .{{format}}-Datei, die JKNet noch nicht öffnen kann. Öffnen Sie die Datei auf JKHub und entpacken Sie sie von Hand.",
+    "noPk3": "Das Archiv enthält keine pk3-Datei, es gibt also nichts, was sich in einen Client installieren ließe. Darin liegen: {{entries}}",
+    "showArchive": "Archiv anzeigen"
+  }
+}

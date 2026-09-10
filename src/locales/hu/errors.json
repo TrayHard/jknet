@@ -1,0 +1,41 @@
+{
+  "io": "{{context}}: {{reason}}",
+  "json": "{{context}}: {{reason}}",
+  "path": "A JKNet egyik szükséges mappája nem érhető el: {{path}}",
+  "notFound": "Nem található: {{what}}",
+  "invalidInput": "A JKNet ezt nem tudja használni: {{reason}}",
+  "alreadyExists": "Ez már létezik: {{what}}",
+  "busy": "{{reason}}",
+  "state": "A JKNet elvesztette a saját állapotát: {{reason}}. Indítsa újra az alkalmazást.",
+  "network": "A hálózati hívás nem sikerült: {{reason}}",
+  "notImplemented": "Még nem készült el: {{what}}",
+  "rateLimited": "{{reason}}",
+  "archive": "Az archívumot nem sikerült beolvasni: {{reason}}",
+  "launch": "A játék nem indul el: {{reason}}",
+  "image": "A pálya képét nem sikerült beolvasni: {{reason}}",
+  "signedOut": "Jelentkezzen be a JKNet szolgáltatásba, hogy lássa a barátait",
+  "gameMismatch": "{{reason}}",
+  "gameDataMissing": "A {{game}} játékfájljai: {{reason}}",
+  "engineFile": "Ez a fájl a motor változatához tartozik, nem a könyvtárhoz, ezért a JKNet nem tudja kikapcsolni vagy eltávolítani: {{file}}",
+  "basepathOccupied": "A(z) {{path}} valódi mappa, nem az a hivatkozás, amelyet a JKNet tart ott. Helyezze át vagy törölje, majd indítsa el újra a játékot.",
+  "jkhubUnavailable": "A JKHub nem érhető el: {{reason}}",
+  "jkhubParse": "Egy JKHub-oldalt nem sikerült beolvasni: {{what}}. Az oldal valószínűleg megváltozott.",
+  "jkhubDownload": "A letöltés nem sikerült a JKHub oldaláról: {{reason}}",
+  "archiveUnsupported": "A JKNet még nem tudja megnyitni a .{{format}} archívumot.",
+  "noPk3Files": "Az archívum nem tartalmaz pk3-fájlt: {{entries}}",
+  "online": {
+    "notFound": "A JKNet Online nem ismeri ezt a fiókot.",
+    "unauthorized": "A JKNet Online elutasította a munkamenetet. Jelentkezzen be újra.",
+    "forbidden": "A JKNet Online ezt nem engedélyezi.",
+    "invalid": "A JKNet Online elutasította a kérést: {{message}}",
+    "conflict": "Ez a név foglalt. Írjon be másikat.",
+    "rateLimited": "Túl sok kérés a JKNet Online felé. Várjon egy kicsit, és próbálja újra.",
+    "providerError": "A bejelentkezési szolgáltató még nem érhető el: {{message}}",
+    "internal": "A JKNet Online oldalán hiba történt. Próbálja újra később.",
+    "notConfigured": "A JKNet Online még nem nyílt meg, ezért ebben a változatban a fiókok és a barátok ki vannak kapcsolva."
+  },
+  "frontend": {
+    "noRuntime": "A Tauri futtatókörnyezet nem érhető el",
+    "unexpected": "Váratlan hiba"
+  }
+}

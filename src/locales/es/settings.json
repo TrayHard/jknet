@@ -1,0 +1,65 @@
+{
+  "title": "Ajustes",
+  "subtitle": "Idioma, arranque, descargas, apariencia y cuenta.",
+  "dataFolder": {
+    "title": "Carpeta de datos",
+    "text": "Aquí viven los clientes, la biblioteca y los registros.",
+    "open": "Abrir la carpeta de JKNet"
+  },
+  "language": {
+    "title": "Idioma",
+    "text": "El lanzador habla el idioma que elija aquí. Los nombres de los servidores, los nombres de los mapas y los títulos de los archivos se quedan como los escribieron sus autores.",
+    "label": "Idioma de la interfaz",
+    "system": "Idioma del sistema",
+    "systemWith": "Idioma del sistema ({{language}})",
+    "needsTranslation": "Este idioma aún no está traducido y muestra el texto en inglés.",
+    "draft": "Este idioma es un borrador automático y espera la revisión de un hablante nativo."
+  },
+  "gameFiles": {
+    "title": "Archivos del juego",
+    "text": "JKNet lee los archivos comprimidos de estas carpetas y no escribe nada en ellas. Con un juego basta; configure el otro cuando quiera.",
+    "row": "Archivos de {{game}}",
+    "playStarts": "Jugar arranca {{client}}",
+    "noDefault": "Aún no hay cliente predeterminado",
+    "locate": "Localizar",
+    "change": "Cambiar",
+    "pickTitle": "Seleccione la carpeta GameData de {{game}}",
+    "invalid": "No hay archivos de {{game}} en {{path}}. Faltan: {{missing}}."
+  },
+  "launch": {
+    "title": "Arranque",
+    "label": "Argumentos de arranque adicionales",
+    "placeholder": "+set r_fullscreen 0 +set r_mode 4",
+    "hint": "Se agregan a cada cliente, tal cual, como en un acceso directo. Ejemplo: <0>+set r_fullscreen 0 +set r_mode 4</0>. Las comillas dobles mantienen unido un valor con espacios."
+  },
+  "onboarding": {
+    "title": "Configuración inicial",
+    "text": "Repasa de nuevo los archivos del juego, un cliente y una cuenta. No se elimina nada de lo que ya tenga configurado.",
+    "action": "Repetir la configuración inicial"
+  },
+  "cache": {
+    "title": "Caché",
+    "mapPictures": "Imágenes de los mapas",
+    "reading": "Leyendo el índice…",
+    "count_one": "{{count}} mapa tiene imagen, leída de los archivos pk3 que ya posee. No se descarga nada.",
+    "count_many": "{{count}} mapas tienen imagen, leída de los archivos pk3 que ya posee. No se descarga nada.",
+    "count_other": "{{count}} mapas tienen imagen, leída de los archivos pk3 que ya posee. No se descarga nada.",
+    "perGame": "{{count}} {{game}}",
+    "lastRebuild": "Última reconstrucción: {{maps}} imágenes de {{sources}} archivos en {{elapsed}}.",
+    "rebuild": "Reconstruir",
+    "rebuilding": "Reconstruyendo…"
+  },
+  "rest": {
+    "title": "El resto de los ajustes aún no está conectado",
+    "text": "Las secciones Descargas y Apariencia llegan junto con las funciones que controlan."
+  },
+  "about": {
+    "title": "Acerca de",
+    "text": "JKNet se actualiza desde GitHub Releases. Cada paquete va firmado, y uno sin firma se rechaza.",
+    "version": "Versión {{version}}",
+    "versionUnknown": "Versión desconocida",
+    "license": "GPL-3.0-or-later",
+    "check": "Buscar actualizaciones",
+    "install": "Instalar y reiniciar"
+  }
+}

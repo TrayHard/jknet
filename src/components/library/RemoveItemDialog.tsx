@@ -1,5 +1,8 @@
+import { useTranslation } from "react-i18next";
+
+// --- slice: i18n ---
+import { useFormat } from "../../i18n/useFormat";
 import type { LibraryItem } from "../../lib/ipc";
-import { formatBytes } from "../../lib/format";
 import { Button, Dialog } from "../ui";
 
 interface RemoveItemDialogProps {
@@ -24,19 +27,27 @@ export function RemoveItemDialog({
   onConfirm,
   busy = false,
 }: RemoveItemDialogProps) {
+  const { t } = useTranslation("library");
+  const { t: tCommon } = useTranslation("common");
+  const format = useFormat();
+
   return (
     <Dialog
       variant="danger"
-      title={`Remove ${item.displayName} from ${clientName}?`}
-      body={`${item.fileName}, ${formatBytes(item.size)}. The file is deleted from the client's ${item.folder} folder. Other clients keep their own copy.`}
+      title={t("remove.title", { file: item.displayName, client: clientName })}
+      body={t("remove.body", {
+        fileName: item.fileName,
+        size: format.bytes(item.size),
+        folder: item.folder,
+      })}
       onClose={onCancel}
       actions={
         <>
           <Button onClick={onCancel} disabled={busy}>
-            Cancel
+            {tCommon("actions.cancel")}
           </Button>
           <Button variant="danger" onClick={onConfirm} disabled={busy}>
-            {busy ? "Removing…" : "Remove file"}
+            {busy ? tCommon("states.removing") : t("remove.confirm")}
           </Button>
         </>
       }

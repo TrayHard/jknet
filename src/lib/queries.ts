@@ -14,6 +14,8 @@ import {
 } from "@tanstack/react-query";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+// --- slice: i18n ---
+import { useTranslation } from "react-i18next";
 
 import {
   accountIpc,
@@ -914,6 +916,9 @@ const POLL_BUDGET_MS = 10 * 60_000;
  * opened a port to hear about it would need a firewall prompt to sign in.
  */
 export function useSignIn(): SignInFlow {
+  // --- slice: i18n --- the four sentences this flow produces itself. Every
+  // other message it shows comes from the service and is printed as it came.
+  const { t } = useTranslation("account");
   const queryClient = useQueryClient();
   const [phase, setPhase] = useState<SignInPhase>("idle");
   const [provider, setProvider] = useState<OnlineProvider | null>(null);
@@ -963,7 +968,7 @@ export function useSignIn(): SignInFlow {
             if (Date.now() > deadline) {
               stopPolling();
               setPhase("error");
-              setError("The sign-in took too long. Try again.");
+              setError(t("session.timedOut"));
               return;
             }
             if (polling.current) return;
@@ -985,8 +990,8 @@ export function useSignIn(): SignInFlow {
                 setError(
                   answer.error ??
                     (answer.status === "expired"
-                      ? "The sign-in expired. Try again."
-                      : "The sign-in did not finish."),
+                      ? t("session.expired")
+                      : t("session.failed")),
                 );
               })
               .catch((e: unknown) => {
@@ -1005,21 +1010,19 @@ export function useSignIn(): SignInFlow {
           // answer rather than a failure, so it reads as one.
           setError(
             onlineErrorCode(e) === "provider_error"
-              ? providerUnavailable(chosen)
+              ? // A provider that has issued no OAuth client yet is answered by
+                // the same catalog key as any other `provider_error`.
+                t("providers.notAvailable", {
+                  provider: chosen === "discord" ? t("providers.discord") : t("providers.jkhub"),
+                })
               : onlineErrorMessage(e),
           );
         });
     },
-    [queryClient, stopPolling],
+    [queryClient, stopPolling, t],
   );
 
   return { phase, provider, user, error, url, start, cancel };
-}
-
-/** What a provider without an OAuth client yet reads as. */
-function providerUnavailable(provider: OnlineProvider): string {
-  const name = provider === "discord" ? "Discord" : "JKHub";
-  return `${name} sign-in is not available yet.`;
 }
 
 /** Invalidates everything that shows an account. */

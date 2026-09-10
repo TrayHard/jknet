@@ -12,11 +12,22 @@ export const GROUPS = ["in_game", "online", "offline"] as const;
 
 export type Group = (typeof GROUPS)[number];
 
-export const GROUP_TITLES: Record<Group, string> = {
-  in_game: "In game",
-  online: "Online",
-  offline: "Offline",
-};
+// --- slice: i18n ---
+/**
+ * What a status line should say, as a key of the `friends` catalog and the
+ * values that fill it.
+ *
+ * A descriptor rather than a sentence, so this module stays free of English
+ * and the decisions in it stay readable without a translation layer. The hook
+ * that turns one into words is `useStatusLine` in
+ * `src/components/friends/useStatusLine.ts`.
+ */
+export interface StatusLine {
+  key: string;
+  values?: Record<string, unknown>;
+  /** An RFC 3339 stamp the caller has to format as a date itself. */
+  date?: string;
+}
 
 /**
  * The status line of a row.
@@ -26,14 +37,21 @@ export const GROUP_TITLES: Record<Group, string> = {
  * no name — nobody has scanned it recently — falls back to its address rather
  * than to "Playing on undefined".
  */
-export function statusLine(presence: Presence): string {
+export function statusLine(presence: Presence): StatusLine {
   if (presence.status === "in_game") {
     const { serverName, serverAddress } = presence;
-    if (serverName && serverAddress) return `Playing on ${serverName} · ${serverAddress}`;
-    if (serverAddress) return `Playing on ${serverAddress}`;
-    return "In game";
+    if (serverName && serverAddress) {
+      return {
+        key: "status.playingOn",
+        values: { server: serverName, address: serverAddress },
+      };
+    }
+    if (serverAddress) {
+      return { key: "status.playingOnAddress", values: { address: serverAddress } };
+    }
+    return { key: "status.inGame" };
   }
-  if (presence.status === "online") return "Online";
+  if (presence.status === "online") return { key: "status.online" };
   return lastSeen(presence.since);
 }
 
@@ -44,24 +62,20 @@ export function statusLine(presence: Presence): string {
  * otherwise print a time in the future; a difference below a minute reads as
  * "just now" either way.
  */
-export function lastSeen(since: string): string {
+export function lastSeen(since: string): StatusLine {
   const at = Date.parse(since);
-  if (Number.isNaN(at)) return "Offline";
+  if (Number.isNaN(at)) return { key: "status.offline" };
 
   const minutes = Math.floor((Date.now() - at) / 60_000);
-  if (minutes < 1) return "Last seen just now";
-  if (minutes < 60) return `Last seen ${plural(minutes, "minute")} ago`;
+  if (minutes < 1) return { key: "status.lastSeenJustNow" };
+  if (minutes < 60) return { key: "status.lastSeenMinutes", values: { count: minutes } };
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `Last seen ${plural(hours, "hour")} ago`;
+  if (hours < 24) return { key: "status.lastSeenHours", values: { count: hours } };
 
   const days = Math.floor(hours / 24);
-  if (days < 7) return `Last seen ${plural(days, "day")} ago`;
-  return `Last seen on ${new Date(at).toLocaleDateString()}`;
-}
-
-function plural(count: number, unit: string): string {
-  return `${count} ${unit}${count === 1 ? "" : "s"}`;
+  if (days < 7) return { key: "status.lastSeenDays", values: { count: days } };
+  return { key: "status.lastSeenOn", date: since };
 }
 
 /** `jkhub:kyle_k`, the second line of the detail panel. */

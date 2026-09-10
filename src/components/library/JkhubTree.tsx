@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import type { JkhubCategory } from "../../lib/ipc";
@@ -38,6 +39,7 @@ export function JkhubTree({
   onUpdate,
   updating,
 }: JkhubTreeProps) {
+  const { t } = useTranslation("jkhub");
   const [open, setOpen] = useState<Set<number>>(() => new Set());
 
   const children = useMemo(() => {
@@ -69,7 +71,11 @@ export function JkhubTree({
           {expandable && depth > 0 ? (
             <button
               type="button"
-              aria-label={expanded ? `Collapse ${category.name}` : `Expand ${category.name}`}
+              aria-label={
+                expanded
+                  ? t("tree.collapse", { category: category.name })
+                  : t("tree.expand", { category: category.name })
+              }
               onClick={() => toggle(category.id)}
               className="inline-flex size-20 items-center justify-center rounded-sm text-fg-muted hover:text-fg cursor-pointer shrink-0"
             >
@@ -114,12 +120,12 @@ export function JkhubTree({
 
   const header = (
     <div className="flex items-center gap-8 pb-8">
-      <span className="text-label-xs text-fg-muted flex-1">Categories</span>
+      <span className="text-label-xs text-fg-muted flex-1">{t("tree.heading")}</span>
       <button
         type="button"
         onClick={onUpdate}
         disabled={updating}
-        title="Walk the JKHub category tree again. Takes about twenty requests."
+        title={t("tree.updateHint")}
         className={cn(
           "inline-flex items-center gap-4 rounded-sm text-label-xs",
           "transition-colors duration-150",
@@ -129,7 +135,7 @@ export function JkhubTree({
         )}
       >
         <RefreshCw size={12} className={updating ? "animate-spin" : undefined} />
-        {updating ? "Updating…" : "Update categories"}
+        {updating ? t("tree.updating") : t("tree.update")}
       </button>
     </div>
   );
@@ -138,7 +144,7 @@ export function JkhubTree({
     <>
       {header}
       {roots.length === 0 ? (
-        <p className="text-body-sm text-fg-muted">No categories yet.</p>
+        <p className="text-body-sm text-fg-muted">{t("tree.empty")}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {roots.map((root) => render(root, 0))}

@@ -1,0 +1,24 @@
+{
+  "groups": {
+    "play": "Гра",
+    "manage": "Керування",
+    "community": "Спільнота"
+  },
+  "items": {
+    "home": "Головна",
+    "servers": "Сервери",
+    "library": "Бібліотека",
+    "clients": "Клієнти",
+    "friends": "Друзі",
+    "settings": "Налаштування"
+  },
+  "user": {
+    "guest": "Гість",
+    "noClient": "Клієнта ще немає",
+    "openAccount": "Налаштування облікового запису",
+    "signIn": "Увійти"
+  },
+  "gameSwitch": {
+    "label": "Гра"
+  }
+}

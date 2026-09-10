@@ -9,6 +9,8 @@ import { AppUpdateProvider } from "./components/AppUpdateProvider";
 import { FriendsProvider } from "./components/FriendsProvider";
 import { GameEventsProvider } from "./components/GameEventsProvider";
 import { ToastsProvider } from "./components/ToastsProvider";
+// --- slice: i18n ---
+import { LanguageSync } from "./i18n/LanguageSync";
 import { ClientsPage } from "./pages/ClientsPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { HomePage } from "./pages/HomePage";
@@ -40,6 +42,10 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      {/* --- slice: i18n --- above the router and outside every screen: the
+          language follows the settings document, and switching it must not
+          unmount the screen the player is reading. */}
+      <LanguageSync />
       {/* Above the router: an engine install must survive a route change. */}
       <GameEventsProvider>
         {/* --- slice: friends --- */}

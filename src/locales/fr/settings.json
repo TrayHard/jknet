@@ -1,0 +1,65 @@
+{
+  "title": "Paramètres",
+  "subtitle": "Langue, lancement, téléchargements, apparence et compte.",
+  "dataFolder": {
+    "title": "Dossier de données",
+    "text": "Les clients, la bibliothèque et les journaux sont ici.",
+    "open": "Ouvrir le dossier JKNet"
+  },
+  "language": {
+    "title": "Langue",
+    "text": "Le lanceur parle la langue choisie ici. Les noms de serveurs, de cartes et de fichiers restent tels que leurs auteurs les ont écrits.",
+    "label": "Langue de l’interface",
+    "system": "Langue du système",
+    "systemWith": "Langue du système ({{language}})",
+    "needsTranslation": "Cette langue n’est pas encore traduite et affiche l’anglais.",
+    "draft": "Cette langue est une ébauche automatique et attend la relecture d’une personne dont c’est la langue maternelle."
+  },
+  "gameFiles": {
+    "title": "Fichiers du jeu",
+    "text": "JKNet lit les archives de ces dossiers et n’y écrit rien. Un seul jeu suffit ; configurez l’autre quand vous voulez.",
+    "row": "Fichiers {{game}}",
+    "playStarts": "Jouer lance {{client}}",
+    "noDefault": "Aucun client par défaut",
+    "locate": "Localiser",
+    "change": "Changer",
+    "pickTitle": "Choisissez le dossier GameData de {{game}}",
+    "invalid": "Aucun fichier {{game}} dans {{path}}. Manquants : {{missing}}."
+  },
+  "launch": {
+    "title": "Lancement",
+    "label": "Arguments de lancement supplémentaires",
+    "placeholder": "+set r_fullscreen 0 +set r_mode 4",
+    "hint": "Ajoutés à chaque client, exactement comme dans un raccourci. Exemple : <0>+set r_fullscreen 0 +set r_mode 4</0>. Les guillemets droits gardent ensemble une valeur qui contient un espace."
+  },
+  "onboarding": {
+    "title": "Configuration initiale",
+    "text": "Reprend les fichiers du jeu, un client et un compte. Rien de ce que vous avez configuré n’est supprimé.",
+    "action": "Relancer la configuration initiale"
+  },
+  "cache": {
+    "title": "Cache",
+    "mapPictures": "Images des cartes",
+    "reading": "Lecture de l’index…",
+    "count_one": "{{count}} carte a une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
+    "count_many": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
+    "count_other": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
+    "perGame": "{{count}} {{game}}",
+    "lastRebuild": "Dernière reconstruction : {{maps}} images depuis {{sources}} fichiers en {{elapsed}}.",
+    "rebuild": "Reconstruire",
+    "rebuilding": "Reconstruction…"
+  },
+  "rest": {
+    "title": "Le reste des paramètres n’est pas encore branché",
+    "text": "Les sections Téléchargements et Apparence arrivent avec les fonctions qu’elles pilotent."
+  },
+  "about": {
+    "title": "À propos",
+    "text": "JKNet se met à jour depuis GitHub Releases. Chaque paquet est signé, et un paquet non signé est refusé.",
+    "version": "Version {{version}}",
+    "versionUnknown": "Version inconnue",
+    "license": "GPL-3.0-or-later",
+    "check": "Vérifier les mises à jour",
+    "install": "Installer et redémarrer"
+  }
+}

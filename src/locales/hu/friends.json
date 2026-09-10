@@ -1,0 +1,81 @@
+{
+  "title": "Barátok",
+  "subtitle": "Nézze meg, ki van fenn, és egy kattintással csatlakozzon a szerveréhez.",
+  "subtitleCounts": "{{friends}} barát · {{online}} online",
+  "loading": "A barátok betöltése…",
+  "searchPlaceholder": "Keresés vagy név hozzáadáshoz",
+  "addFriend": "Barát hozzáadása",
+  "live": {
+    "on": "Élő",
+    "off": "Újracsatlakozás",
+    "onText": "A változások abban a pillanatban megérkeznek, amikor történnek.",
+    "offText": "A szolgáltatás nem érhető el; a lista 30 másodpercenként frissül."
+  },
+  "groups": {
+    "in_game": "Játékban",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "status": {
+    "playingOn": "Itt játszik: {{server}} · {{address}}",
+    "playingOnAddress": "Itt játszik: {{address}}",
+    "inGame": "Játékban",
+    "online": "Online",
+    "offline": "Offline",
+    "lastSeenJustNow": "Az imént volt aktív",
+    "lastSeenMinutes_one": "{{count}} perce volt aktív",
+    "lastSeenMinutes_other": "{{count}} perce volt aktív",
+    "lastSeenHours_one": "{{count}} órája volt aktív",
+    "lastSeenHours_other": "{{count}} órája volt aktív",
+    "lastSeenDays_one": "{{count}} napja volt aktív",
+    "lastSeenDays_other": "{{count}} napja volt aktív",
+    "lastSeenOn": "Utoljára ekkor volt aktív: {{date}}"
+  },
+  "empty": {
+    "offTitle": "A barátok még nincsenek bekapcsolva",
+    "signInTitle": "Jelentkezzen be, hogy lássa a barátait",
+    "signInText": "A JKNet a szolgáltatásban tartja a barátok listáját, így az elkíséri Önt minden gépre, ahol bejelentkezik.",
+    "signIn": "Bejelentkezés",
+    "noneTitle": "Még nincsenek barátok",
+    "noneText": "Írjon be egy megjelenített nevet, egy jkhub: nevet vagy egy felhasználói azonosítót a fenti mezőbe, majd nyomja meg a Barát hozzáadása gombot.",
+    "noMatchTitle": "Nincs találat erre: „{{query}}”",
+    "noMatchText": "Nyomja meg a Barát hozzáadása gombot, és küldjön neki kérelmet.",
+    "pickFriend": "Válasszon barátot, hogy csatlakozzon a játékához, vagy meghívja a sajátjába."
+  },
+  "requests": {
+    "incoming": "Barátkérelmek",
+    "outgoing": "Elküldött kérelmek",
+    "heading": "{{title}} · {{count}}",
+    "accept": "Elfogadás",
+    "decline": "Elutasítás",
+    "cancel": "Visszavonás",
+    "handle": "{{provider}}:{{name}}"
+  },
+  "notices": {
+    "nowFriends": "Ön és {{name}} mostantól barátok.",
+    "requestSent": "Kérelem elküldve neki: {{name}}.",
+    "inviteSent": "Meghívó elküldve neki: {{name}}."
+  },
+  "row": {
+    "join": "Csatlakozás",
+    "joining": "Indítás…"
+  },
+  "panel": {
+    "status": "Állapot",
+    "join": "Csatlakozás a játékához",
+    "joining": "A játék indítása…",
+    "invite": "Meghívás a saját játékba",
+    "inviteHintNoServer": "Előbb csatlakozzon egy szerverhez, majd hívja meg oda a barátait",
+    "inviteHint": "Meghívás ide: {{server}}",
+    "noServer": "Csatlakozzon egy szerverhez a Szerverek képernyőn, hogy oda bárkit meghívhasson.",
+    "removeConfirm": "Eltávolítja őt: {{name}}? Ahhoz, hogy újra barátok legyenek, mindkettőjüknek új kérelmet kell küldenie.",
+    "remove": "Barát eltávolítása"
+  },
+  "invite": {
+    "toast": "{{name}} meghívja Önt ide: {{server}}",
+    "join": "Csatlakozás",
+    "noClient": "Előbb válasszon alapértelmezett klienst a Kliensek képernyőn",
+    "gameRunning": "Már fut egy játék",
+    "connectTo": "Csatlakozás ide: {{address}}"
+  }
+}

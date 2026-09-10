@@ -1,0 +1,85 @@
+{
+  "title": "Clientes",
+  "subtitle": "Un cliente es una compilación del motor con sus propios archivos y ajustes. Póngale un nombre y será suyo.",
+  "newClient": "Nuevo cliente",
+  "gameFiles": {
+    "title": "Archivos de {{game}}",
+    "titleFallback": "Archivos del juego",
+    "ready": "Listo",
+    "notSet": "Sin definir",
+    "text": "JKNet lee <0>{{range}}</0> de esta carpeta y nunca escribe en ella.",
+    "searching": "Buscando copias de Steam y GOG…",
+    "noCopy": "No se encontró ninguna copia",
+    "foundThrough": "Encontrada mediante {{source}}. Confírmela para empezar a usarla.",
+    "changeFolder": "Cambiar carpeta",
+    "useThisFolder": "Usar esta carpeta",
+    "pickTitle": "Seleccione la carpeta GameData",
+    "invalid": "No hay archivos del juego en {{path}}. Faltan: {{missing}}."
+  },
+  "list": {
+    "heading": "Sus clientes",
+    "emptyTitle": "Aún no hay clientes de {{game}}",
+    "emptyText": "Un cliente es una compilación del motor con nombre propio, con sus mods y sus ajustes. Cree uno y aparecerá aquí.",
+    "otherGame_one": "{{count}} cliente de {{game}}: cambie de juego en la barra lateral para verlo.",
+    "otherGame_many": "{{count}} clientes de {{game}}: cambie de juego en la barra lateral para verlos.",
+    "otherGame_other": "{{count}} clientes de {{game}}: cambie de juego en la barra lateral para verlos."
+  },
+  "card": {
+    "default": "Predeterminado",
+    "makeDefault": "Hacer predeterminado",
+    "running": "En ejecución",
+    "engineNotInstalled": "Motor no instalado",
+    "meta": "{{id}} · creado el {{date}}",
+    "metaWithMod": "{{id}} · creado el {{date}} · fs_game {{mod}}",
+    "delete": "Eliminar",
+    "settingsOf": "Ajustes de {{client}}",
+    "settingsHint": "Nombre y carpeta del mod",
+    "installedOn": "instalado el {{date}}",
+    "manualInstall": "Esta compilación hay que instalarla a mano."
+  },
+  "engine": {
+    "launch": "Iniciar",
+    "stop": "Detener",
+    "otherRunning": "Ya hay otro cliente en ejecución",
+    "installFirst": "Instale primero el motor",
+    "checkUpdates": "Buscar actualizaciones",
+    "updateTo": "Actualizar a {{version}}",
+    "updateToNewest": "Actualizar a la compilación más reciente",
+    "upToDate": "Al día",
+    "install": "Instalar motor",
+    "installVersion": "Instalar el motor {{version}}"
+  },
+  "engines": {
+    "heading": "Motores de {{game}}",
+    "recommended": "Recomendado"
+  },
+  "newDialog": {
+    "title": "Nuevo cliente",
+    "text": "Un cliente es una compilación del motor con sus propios archivos y ajustes. Dele un nombre que reconozca en la lista de clientes.",
+    "game": "Juego",
+    "engine": "Motor",
+    "name": "Nombre",
+    "namePlaceholder": "Diario",
+    "makeDefault": "Hacer predeterminado",
+    "makeDefaultText": "El botón Jugar de Inicio arranca el cliente predeterminado del juego en el que está. Cada juego tiene el suyo.",
+    "makeDefaultSwitch": "Hacer que este cliente sea el predeterminado",
+    "download": "Descargar el motor ahora",
+    "downloadText": "Obtiene la compilación más reciente de GitHub. El progreso se muestra en la tarjeta del cliente.",
+    "downloadSwitch": "Descargar el motor justo después de crear el cliente",
+    "create": "Crear cliente"
+  },
+  "settingsDialog": {
+    "title": "Ajustes del cliente",
+    "text": "La carpeta del disco conserva su nombre <0>{{id}}</0>, así que cambiar el nombre no puede romper una ruta que el lanzador ya guardó.",
+    "name": "Nombre",
+    "namePlaceholder": "Diario",
+    "modFolder": "Carpeta del mod (fs_game)",
+    "modFolderHint": "El cliente arranca en esta carpeta de su directorio propio, que se pasa como <0>+set fs_game</0>. Solo letras, dígitos, <1>_</1>, <2>-</2> y <3>+</3>. Déjela vacía para <4>{{folder}}</4>, el valor predeterminado de {{engine}}.",
+    "engineFallback": "el motor"
+  },
+  "missingToast": {
+    "title": "Aún no hay clientes de {{game}}",
+    "text": "Cree uno y será el cliente con el que arranque este juego. Los clientes de {{game}} son independientes de los del otro juego.",
+    "action": "Crear cliente"
+  }
+}

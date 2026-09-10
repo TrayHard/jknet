@@ -1,0 +1,106 @@
+{
+  "title": "Szerverek",
+  "searchPlaceholder": "Név, pálya vagy cím",
+  "refresh": "Frissítés",
+  "scanning": "Keresés",
+  "subtitle": {
+    "empty": "{{game}}: még nincs szerver",
+    "all_one": "{{game}}: {{count}} szerver",
+    "all_other": "{{game}}: {{count}} szerver",
+    "some_one": "{{game}}: {{count}} / {{total}} szerver",
+    "some_other": "{{game}}: {{count}} / {{total}} szerver",
+    "players_one": "{{count}} játékos online",
+    "players_other": "{{count}} játékos online",
+    "bots_one": "{{count}} bot kimarad a számlálásból",
+    "bots_other": "{{count}} bot kimarad a számlálásból",
+    "asking": "a mesterszerverek lekérdezése",
+    "refreshed": "frissítés óta: {{age}}",
+    "silent_one": "{{count}} nem válaszolt",
+    "silent_other": "{{count}} nem válaszolt"
+  },
+  "filters": {
+    "mode": "Mód",
+    "mod": "Mod",
+    "players": "Játékosok",
+    "version": "Verzió",
+    "bots": "Botok",
+    "hideBotOnly": "Csak botosak rejtve",
+    "hideBotOnlyHint": "Azok a szerverek maradjanak rejtve, ahol minden játékos bot",
+    "playersAny": "Mindegy",
+    "playersNotEmpty": "Van játékos",
+    "playersNotFull": "Van szabad hely",
+    "reset": "Szűrők törlése"
+  },
+  "tabs": {
+    "all": "Mind",
+    "trusted": "Megbízható",
+    "favorites": "Kedvencek",
+    "history": "Előzmények",
+    "lan": "LAN",
+    "lanHint": "A helyi hálózat pásztázása egy későbbi fejlesztéssel érkezik"
+  },
+  "columns": {
+    "server": "SZERVER",
+    "map": "PÁLYA",
+    "mode": "MÓD",
+    "players": "FŐ",
+    "ping": "PING",
+    "mod": "MOD"
+  },
+  "row": {
+    "addFavorite": "Hozzáadás a kedvencekhez",
+    "removeFavorite": "Eltávolítás a kedvencekből",
+    "trusted": "Megbízható",
+    "passwordRequired": "Jelszó szükséges",
+    "countsTitle": "{{humans}} játékos, {{bots}} bot, {{slots}} hely",
+    "countsUnknownTitle": "Összesen {{clients}} van fenn; ez a szerver nem árulja el, hányan botok"
+  },
+  "scan": {
+    "label": "Szerverek keresése…",
+    "found": "Szerverek keresése… {{count}} találat",
+    "ofAbout": "Szerverek keresése… {{count}} a körülbelül {{total}} közül"
+  },
+  "alerts": {
+    "masters": "A mesterszerverek nem érhetők el",
+    "cache": "A szerverek gyorsítótára nem érhető el",
+    "connect": "A kliens nem indult el"
+  },
+  "empty": {
+    "pickServer": "Válasszon szervert, hogy lássa a játékosait és csatlakozhasson.",
+    "lanTitle": "A LAN-keresés még nem készült el",
+    "lanText": "A helyi hálózat pásztázása egy későbbi feladatban érkezik.",
+    "favoritesTitle": "Még nincs kedvenc",
+    "favoritesText": "Nyomja meg a csillagot a soron, és a szerver itt marad.",
+    "historyTitle": "Még nincs csatlakozás",
+    "historyText": "Amelyik szerverre csatlakozik, itt jelenik meg, a legfrissebb elöl.",
+    "trustedTitle": "Ebben a listában nincs megbízható szerver",
+    "trustedText": "A közösség által ajánlott szerverek listája üres ebben a változatban.",
+    "noneTitle": "Még nincs szerver",
+    "noneText": "Nyomja meg a Frissítés gombot, és a JKNet megkérdezi a mesterszervereket, ki van fenn.",
+    "filteredTitle": "Nincs a szűrőknek megfelelő szerver",
+    "filteredText": "Lazítson a szűrőkön, vagy törölje a keresőmezőt.",
+    "filteredBots_one": "Lazítson a szűrőkön, vagy törölje a keresőmezőt. {{count}} szerveren csak botok játszanak; kapcsolja ki a Csak botosak rejtve beállítást, hogy lássa.",
+    "filteredBots_other": "Lazítson a szűrőkön, vagy törölje a keresőmezőt. {{count}} szerveren csak botok játszanak; kapcsolja ki a Csak botosak rejtve beállítást, hogy lássa őket."
+  },
+  "details": {
+    "trusted": "MEGBÍZHATÓ",
+    "password": "JELSZÓ",
+    "copyAddress": "Cím másolása",
+    "bots_one": "+{{count}} bot",
+    "bots_other": "+{{count}} bot",
+    "botsUnknown": "botszám ismeretlen",
+    "botsUnknownTitle": "Ez a szerver nem közli a botok számát, és a getstatus kérdésre sem válaszolt",
+    "connect": "Csatlakozás",
+    "noPlayers": "Senki sem játszik.",
+    "onlyBots_one": "Senki sem játszik: {{count}} bot van csak itt.",
+    "onlyBots_other": "Senki sem játszik: {{count}} bot van csak itt.",
+    "botHeading_one": "{{count}} BOT",
+    "botHeading_other": "{{count}} BOT",
+    "botBadge": "BOT",
+    "playersError": "Nincs játékoslista: {{message}}"
+  },
+  "ping": {
+    "noAnswer": "Nincs válasz",
+    "value": "{{value}} ms"
+  }
+}

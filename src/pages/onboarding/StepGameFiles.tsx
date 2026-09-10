@@ -1,15 +1,12 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, Check, FolderOpen, Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Badge, Button, RadioCard } from "../../components/ui";
-import {
-  errorMessage,
-  ipc,
-  type Game,
-  type GameFilesCandidate,
-  type GameInfo,
-} from "../../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../../i18n/errors";
+import { ipc, type Game, type GameFilesCandidate, type GameInfo } from "../../lib/ipc";
 import { useGameFiles, useGames, useSettings, useUpdateSettings } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 import { StepPanel } from "./StepPanel";
@@ -32,6 +29,10 @@ interface StepGameFilesProps {
  * one, or the only message they get is that JKNet found nothing.
  */
 export function StepGameFiles({ onContinue }: StepGameFilesProps) {
+  const { t } = useTranslation("onboarding");
+  const { t: tGames } = useTranslation("games");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const settings = useSettings();
   const gameFiles = useGameFiles();
   const games = useGames();
@@ -53,7 +54,7 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
   const [browsing, setBrowsing] = useState<Game | null>(null);
 
   const queryError = gameFiles.error ?? settings.error ?? games.error ?? null;
-  const failure = error ?? (queryError ? errorMessage(queryError) : null);
+  const failure = error ?? (queryError ? errorText(queryError) : null);
 
   /** The rows of one game: what was detected, plus a folder chosen by hand. */
   const candidatesOf = (game: Game): GameFilesCandidate[] => {
@@ -93,7 +94,7 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
   const browse = async (game: GameInfo) => {
     setError(null);
     if (!isTauri()) {
-      setError("Tauri runtime is not available");
+      setError(tCommon("runtime.missing"));
       return;
     }
     setBrowsing(game.id);
@@ -101,7 +102,7 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
       const folder = await open({
         directory: true,
         multiple: false,
-        title: `Select the ${game.displayName} GameData folder`,
+        title: t("gameFiles.pickTitle", { game: game.displayName }),
       });
       if (typeof folder !== "string") return;
       const candidate = await ipc.validateGameData(game.id, folder);
@@ -109,11 +110,15 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
       setSelected((current) => ({ ...current, [game.id]: candidate.path }));
       if (!candidate.valid) {
         setError(
-          `${candidate.path} has no ${game.displayName} files. ${missingLine(candidate)}`,
+          t("gameFiles.invalid", {
+            path: candidate.path,
+            game: game.displayName,
+            detail: missingLine(candidate, t),
+          }),
         );
       }
     } catch (e) {
-      setError(errorMessage(e));
+      setError(errorText(e));
     } finally {
       setBrowsing(null);
     }
@@ -130,15 +135,15 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
     if (Object.keys(paths).length === 0) return;
     updateSettings.mutate(
       { gameDataPaths: paths },
-      { onSuccess: () => onContinue(), onError: (e) => setError(errorMessage(e)) },
+      { onSuccess: () => onContinue(), onError: (e) => setError(errorText(e)) },
     );
   };
 
   return (
     <StepPanel
       step={1}
-      heading="Where are the games installed?"
-      text="JKNet needs the folder that holds base\assets0.pk3. It reads those archives and writes nothing into the folder. One game is enough to carry on; add the other whenever you like."
+      heading={t("gameFiles.heading")}
+      text={t("gameFiles.text")}
       error={failure}
       footer={
         <Button
@@ -147,7 +152,9 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
           disabled={!ready || updateSettings.isPending}
           onClick={save}
         >
-          {updateSettings.isPending ? "Saving…" : "Continue"}
+          {updateSettings.isPending
+            ? tCommon("states.saving")
+            : tCommon("actions.continue")}
         </Button>
       }
     >
@@ -161,17 +168,17 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
                 <h3 className="text-heading-sm text-fg">{entry.displayName}</h3>
                 {chosen?.valid ? (
                   <Badge tone="success" icon={<Check size={12} />}>
-                    Ready
+                    {t("gameFiles.ready")}
                   </Badge>
                 ) : (
-                  <Badge tone="warm">Not found</Badge>
+                  <Badge tone="warm">{t("gameFiles.notFound")}</Badge>
                 )}
               </div>
 
               <div
                 className="flex flex-col gap-8"
                 role="radiogroup"
-                aria-label={`${entry.displayName} folder`}
+                aria-label={t("gameFiles.folderGroup", { game: entry.displayName })}
               >
                 {rows.map((candidate) => (
                   <RadioCard
@@ -184,14 +191,18 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
                         [entry.id]: candidate.path,
                       }))
                     }
-                    title={sourceName(candidate.source)}
+                    title={tGames(
+                      candidate.source === "configured"
+                        ? "sources.configuredEarlier"
+                        : `sources.${candidate.source}`,
+                    )}
                     aside={
                       candidate.valid ? (
                         <Badge tone="success" icon={<Check size={12} />}>
-                          {candidate.version ?? "Assets found"}
+                          {candidate.version ?? t("gameFiles.assetsFound")}
                         </Badge>
                       ) : (
-                        <Badge tone="danger">Assets missing</Badge>
+                        <Badge tone="danger">{t("gameFiles.assetsMissing")}</Badge>
                       )
                     }
                   >
@@ -200,7 +211,7 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
                     </span>
                     {candidate.valid ? null : (
                       <span className="block text-body-sm text-fg-danger pt-4">
-                        {missingLine(candidate)}
+                        {missingLine(candidate, t)}
                       </span>
                     )}
                     {/* A copy that works but is not the build the servers run:
@@ -218,8 +229,8 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
                   <p className="flex items-center gap-8 rounded-md border border-dashed border-line px-12 py-16 text-body-sm text-fg-muted">
                     <Search size={16} className="shrink-0" />
                     {gameFiles.isLoading
-                      ? "Looking through Steam and GOG…"
-                      : `No copy of ${entry.displayName} turned up in Steam or GOG. Point JKNet at the folder yourself, or skip this game.`}
+                      ? t("gameFiles.searching")
+                      : t("gameFiles.noCopy", { game: entry.displayName })}
                   </p>
                 ) : null}
 
@@ -238,11 +249,10 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
                   </span>
                   <span className="flex flex-col">
                     <span className="text-body-md-medium text-fg">
-                      Choose another folder
+                      {t("gameFiles.chooseAnother")}
                     </span>
                     <span className="text-body-sm text-fg-muted">
-                      Pick the GameData folder of any copy. JKNet checks it before
-                      you continue.
+                      {t("gameFiles.chooseAnotherText")}
                     </span>
                   </span>
                 </button>
@@ -252,34 +262,19 @@ export function StepGameFiles({ onContinue }: StepGameFilesProps) {
         })}
       </div>
 
-      <p className="text-body-sm text-fg-muted pt-24">
-        JKNet does not ship game files. You need a licensed copy of Star Wars Jedi
-        Knight: Jedi Academy or Jedi Knight II: Jedi Outcast from Steam, GOG or a
-        disc.
-      </p>
+      <p className="text-body-sm text-fg-muted pt-24">{t("gameFiles.license")}</p>
     </StepPanel>
   );
 }
 
 /** Names the archives that were not there, so the player can go look. */
-function missingLine(candidate: GameFilesCandidate): string {
+function missingLine(
+  candidate: GameFilesCandidate,
+  t: ReturnType<typeof useTranslation<"onboarding">>["t"],
+): string {
   const missing = candidate.assets
     .filter((asset) => asset.required && !asset.present)
     .map((asset) => asset.name);
-  if (missing.length === 0) return "The folder holds no readable archives.";
-  return `Missing: ${missing.join(", ")}.`;
-}
-
-/** Human name of a detection source, as on the Clients screen. */
-function sourceName(source: string): string {
-  switch (source) {
-    case "steam":
-      return "Steam";
-    case "gog":
-      return "GOG";
-    case "manual":
-      return "Chosen by hand";
-    default:
-      return "Saved earlier";
-  }
+  if (missing.length === 0) return t("gameFiles.unreadable");
+  return t("gameFiles.missing", { files: missing.join(", ") });
 }

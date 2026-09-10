@@ -1,0 +1,41 @@
+{
+  "io": "{{context}}: {{reason}}",
+  "json": "{{context}}: {{reason}}",
+  "path": "Папка, потрібна JKNet, недоступна: {{path}}",
+  "notFound": "Не знайдено: {{what}}",
+  "invalidInput": "JKNet не може це прийняти: {{reason}}",
+  "alreadyExists": "Це вже існує: {{what}}",
+  "busy": "{{reason}}",
+  "state": "JKNet втратив власний стан: {{reason}}. Перезапустіть лаунчер.",
+  "network": "Мережевий виклик не вдався: {{reason}}",
+  "notImplemented": "Ще не зроблено: {{what}}",
+  "rateLimited": "{{reason}}",
+  "archive": "Архів не прочитано: {{reason}}",
+  "launch": "Гра не запускається: {{reason}}",
+  "image": "Зображення карти не прочитано: {{reason}}",
+  "signedOut": "Увійдіть у JKNet, щоб побачити друзів",
+  "gameMismatch": "{{reason}}",
+  "gameDataMissing": "Файли гри {{game}}: {{reason}}",
+  "engineFile": "Файл {{file}} належить до збірки рушія, а не до бібліотеки, тому JKNet не вимикає й не видаляє його.",
+  "basepathOccupied": "За шляхом {{path}} лежить справжня папка, а не посилання, яке тримає там JKNet. Перенесіть або видаліть її та запустіть гру ще раз.",
+  "jkhubUnavailable": "JKHub недоступний: {{reason}}",
+  "jkhubParse": "Сторінку JKHub не вдалося розібрати: {{what}}. Найімовірніше, сайт змінився.",
+  "jkhubDownload": "Завантаження з JKHub не вдалося: {{reason}}",
+  "archiveUnsupported": "JKNet поки не відкриває архіви .{{format}}.",
+  "noPk3Files": "В архіві немає жодного файла pk3: {{entries}}",
+  "online": {
+    "notFound": "JKNet Online не знає такого облікового запису.",
+    "unauthorized": "JKNet Online відхилив сеанс. Увійдіть знову.",
+    "forbidden": "JKNet Online цього не дозволяє.",
+    "invalid": "JKNet Online відхилив запит: {{message}}",
+    "conflict": "Це ім’я зайняте. Введіть інше.",
+    "rateLimited": "Забагато запитів до JKNet Online. Зачекайте трохи й повторіть.",
+    "providerError": "Постачальник входу поки недоступний: {{message}}",
+    "internal": "У JKNet Online власна неполадка. Повторіть пізніше.",
+    "notConfigured": "Служба JKNet Online ще не відкрита, тому в цій версії облікові записи та друзі вимкнені."
+  },
+  "frontend": {
+    "noRuntime": "Середовище Tauri недоступне",
+    "unexpected": "Непередбачена помилка"
+  }
+}

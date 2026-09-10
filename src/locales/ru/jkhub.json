@@ -1,0 +1,90 @@
+{
+  "sort": {
+    "label": "Сортировка",
+    "recentlyUpdated": "Недавно обновлённые",
+    "newest": "Самые свежие",
+    "mostDownloaded": "Самые скачиваемые",
+    "topRated": "С высшей оценкой",
+    "name": "По имени"
+  },
+  "filterPlaceholder": "Фильтр по загруженным файлам",
+  "refresh": "Обновить",
+  "fromCache": "Из кеша",
+  "tree": {
+    "heading": "Категории",
+    "update": "Обновить категории",
+    "updating": "Обновление…",
+    "updateHint": "Обойти дерево категорий JKHub заново. Стоит примерно двадцати запросов.",
+    "expand": "Развернуть {{category}}",
+    "collapse": "Свернуть {{category}}",
+    "empty": "Категорий пока нет."
+  },
+  "scope": {
+    "category": "{{category}} · установка в клиент {{client}}",
+    "noCategory": "Выберите категорию · установка в клиент {{client}}"
+  },
+  "loading": {
+    "categories": "Читаем категории JKHub…",
+    "files": "Загружаем файлы…"
+  },
+  "empty": {
+    "browserTitle": "Каталогу JKHub нужно окно лаунчера",
+    "browserText": "Эта вкладка обращается к jkhub.org через ядро JKNet, а в предпросмотре браузера ядра нет.",
+    "unreachableTitle": "JKHub не ответил",
+    "categoryTitle": "Категория не загрузилась",
+    "filteredTitle": "Ничего не найдено",
+    "filteredText": "Ни один загруженный файл не подходит под фильтр. Очистите его, загрузите больше страниц или выберите другую категорию."
+  },
+  "loaded": "Загружено {{shown}} файлов из {{total}}. Сузьте категорию или смените порядок, чтобы увидеть остальные.",
+  "card": {
+    "open": "Открыть {{title}}",
+    "installed": "Установлен",
+    "install": "Установить",
+    "reinstall": "Переустановить",
+    "fallbackAuthor": "JKHub",
+    "updated": "Обновлён {{date}}",
+    "submitted": "Выложен {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Загрузка…",
+    "fallbackTitle": "Файл",
+    "openOnSite": "Открыть на JKHub",
+    "installTo": "Установить в клиент {{client}}",
+    "replaceAndInstall": "Заменить и установить",
+    "openScreenshot": "Открыть снимок экрана",
+    "screenshot": "Снимок экрана",
+    "screenshotMissing": "JKHub не отдал этот снимок экрана.",
+    "author": "Автор",
+    "authorUnknown": "Неизвестен",
+    "updated": "Обновлён",
+    "submitted": "Выложен",
+    "rating": "Оценка",
+    "ratingValue": "{{value}} из 5 · отзывов: {{count}}",
+    "notRated": "Без оценок",
+    "downloads": "скачиваний: {{count}}",
+    "views": "просмотров: {{count}}",
+    "comments": "комментариев: {{count}}",
+    "versions": "Версии",
+    "downloading": "Загрузка… {{received}}",
+    "downloadingOf": "Загрузка… {{received}} из {{total}}"
+  },
+  "install": {
+    "pickClient": "Сначала выберите клиент: файл ставится в клиент.",
+    "toastTitle": "Установлено в клиент {{client}}",
+    "failedTitle": "Установка не удалась",
+    "categoriesTitle": "Категории обновлены",
+    "categoriesText": "С JKHub прочитано категорий: {{count}}."
+  },
+  "outcome": {
+    "installed": "Установлено: {{files}} в папку {{folder}}.",
+    "conflicts_one": "Файл {{files}} уже лежит в папке {{folder}}. Нажмите «Заменить и установить», чтобы перезаписать.",
+    "conflicts_few": "Файлы {{files}} уже лежат в папке {{folder}}. Нажмите «Заменить и установить», чтобы перезаписать.",
+    "conflicts_many": "Файлы {{files}} уже лежат в папке {{folder}}. Нажмите «Заменить и установить», чтобы перезаписать.",
+    "conflicts_other": "Файлы {{files}} уже лежат в папке {{folder}}. Нажмите «Заменить и установить», чтобы перезаписать.",
+    "external": "Эта запись ведёт на другой сайт, а не на архив, поэтому устанавливать нечего. Откройте её на JKHub, чтобы перейти по ссылке.",
+    "unsupportedDownloaded": "Архив в формате .{{format}}, а JKNet пока такие не открывает. Архив уже скачан: распакуйте его вручную в папку клиента.",
+    "unsupported": "Архив в формате .{{format}}, а JKNet пока такие не открывает. Откройте файл на JKHub и распакуйте вручную.",
+    "noPk3": "В архиве нет ни одного файла pk3, поэтому устанавливать в клиент нечего. Внутри: {{entries}}",
+    "showArchive": "Показать архив"
+  }
+}

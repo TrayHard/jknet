@@ -1,5 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertTriangle, Check, Download, RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { isTauri } from "../lib/runtime";
 import { useAppUpdateContext } from "./AppUpdateProvider";
@@ -18,6 +19,7 @@ const LICENSE_URL = "https://github.com/TrayHard/jknet/blob/main/LICENSE";
  * and is owed an answer.
  */
 export function AboutCard() {
+  const { t } = useTranslation("settings");
   const update = useAppUpdateContext();
 
   const version = update?.currentVersion ?? null;
@@ -33,15 +35,16 @@ export function AboutCard() {
 
   return (
     <section className="rounded-lg border border-line bg-surface p-16 mb-24">
-      <h2 className="text-heading-sm text-fg pb-4">About</h2>
+      <h2 className="text-heading-sm text-fg pb-4">{t("about.title")}</h2>
       <div className="flex items-start gap-16">
         <div className="flex-1 min-w-0">
-          <p className="text-body-sm text-fg-secondary pb-8">
-            JKNet updates itself from GitHub Releases. Every package is signed,
-            and an unsigned one is refused.
-          </p>
+          <p className="text-body-sm text-fg-secondary pb-8">{t("about.text")}</p>
           <p className="text-mono-sm text-fg">
-            Version {version ?? (supported ? "…" : "unknown")}
+            {version !== null
+              ? t("about.version", { version })
+              : supported
+                ? t("about.version", { version: "…" })
+                : t("about.versionUnknown")}
           </p>
           <UpdateLine />
           <p className="text-body-sm text-fg-muted pt-8">
@@ -50,7 +53,7 @@ export function AboutCard() {
               onClick={openLicense}
               className="cursor-pointer hover:text-fg-accent hover:underline"
             >
-              GPL-3.0-or-later
+              {t("about.license")}
             </button>
           </p>
         </div>
@@ -61,7 +64,7 @@ export function AboutCard() {
             disabled={update?.busy ?? true}
             onClick={update?.install}
           >
-            Install and restart
+            {t("about.install")}
           </Button>
         ) : (
           <Button
@@ -74,7 +77,7 @@ export function AboutCard() {
             disabled={!supported || (update?.busy ?? true)}
             onClick={update?.check}
           >
-            Check for updates
+            {t("about.check")}
           </Button>
         )}
       </div>
@@ -84,15 +87,12 @@ export function AboutCard() {
 
 /** The one line under the version: what the last check said. */
 function UpdateLine() {
+  const { t } = useTranslation("update");
   const update = useAppUpdateContext();
   if (!update) return null;
 
   if (!update.supported) {
-    return (
-      <p className="text-body-sm text-fg-muted pt-8">
-        Updates work in the installed launcher, not in a browser tab.
-      </p>
-    );
+    return <p className="text-body-sm text-fg-muted pt-8">{t("unsupported")}</p>;
   }
 
   if (update.stage === "error" && update.error !== null) {
@@ -107,15 +107,13 @@ function UpdateLine() {
   if (update.newVersion !== null) {
     return (
       <p className="text-body-sm text-fg-accent pt-8">
-        JKNet {update.newVersion} is available.
+        {t("available", { version: update.newVersion })}
       </p>
     );
   }
 
   if (update.stage === "checking") {
-    return (
-      <p className="text-body-sm text-fg-muted pt-8">Checking for updates…</p>
-    );
+    return <p className="text-body-sm text-fg-muted pt-8">{t("checking")}</p>;
   }
 
   // Before the first answer comes back the card says nothing. "You are up to
@@ -125,7 +123,7 @@ function UpdateLine() {
   return (
     <p className="flex items-center gap-6 text-body-sm text-fg-muted pt-8">
       <Check size={14} className="text-fg-success shrink-0" />
-      <span>This is the latest version.</span>
+      <span>{t("upToDate")}</span>
     </p>
   );
 }

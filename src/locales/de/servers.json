@@ -1,0 +1,106 @@
+{
+  "title": "Server",
+  "searchPlaceholder": "Name, Map oder Adresse",
+  "refresh": "Aktualisieren",
+  "scanning": "Suche läuft",
+  "subtitle": {
+    "empty": "Noch keine Server für {{game}}",
+    "all_one": "{{count}} Server für {{game}}",
+    "all_other": "{{count}} Server für {{game}}",
+    "some_one": "{{count}} von {{total}} Servern für {{game}}",
+    "some_other": "{{count}} von {{total}} Servern für {{game}}",
+    "players_one": "{{count}} Spieler online",
+    "players_other": "{{count}} Spieler online",
+    "bots_one": "{{count}} Bot aus den Zahlen ausgeblendet",
+    "bots_other": "{{count}} Bots aus den Zahlen ausgeblendet",
+    "asking": "die Master-Server werden gefragt",
+    "refreshed": "vor {{age}} aktualisiert",
+    "silent_one": "{{count}} hat nicht geantwortet",
+    "silent_other": "{{count}} haben nicht geantwortet"
+  },
+  "filters": {
+    "mode": "Modus",
+    "mod": "Mod",
+    "players": "Spieler",
+    "version": "Version",
+    "bots": "Bots",
+    "hideBotOnly": "Nur Bots ausblenden",
+    "hideBotOnlyHint": "Server ausblenden, auf denen nur Bots spielen",
+    "playersAny": "Beliebig",
+    "playersNotEmpty": "Nicht leer",
+    "playersNotFull": "Nicht voll",
+    "reset": "Filter zurücksetzen"
+  },
+  "tabs": {
+    "all": "Alle",
+    "trusted": "Geprüft",
+    "favorites": "Favoriten",
+    "history": "Verlauf",
+    "lan": "LAN",
+    "lanHint": "Die Suche per Broadcast kommt mit dem Schritt zum Spielstart"
+  },
+  "columns": {
+    "server": "SERVER",
+    "map": "MAP",
+    "mode": "MODUS",
+    "players": "SPIELER",
+    "ping": "PING",
+    "mod": "MOD"
+  },
+  "row": {
+    "addFavorite": "Zu Favoriten hinzufügen",
+    "removeFavorite": "Aus Favoriten entfernen",
+    "trusted": "Geprüft",
+    "passwordRequired": "Passwort erforderlich",
+    "countsTitle": "{{humans}} Spieler, {{bots}} Bots, {{slots}} Plätze",
+    "countsUnknownTitle": "{{clients}} Teilnehmer; dieser Server nennt nicht, wie viele davon Bots sind"
+  },
+  "scan": {
+    "label": "Server werden gesucht…",
+    "found": "Server werden gesucht… {{count}} gefunden",
+    "ofAbout": "Server werden gesucht… {{count}} von etwa {{total}}"
+  },
+  "alerts": {
+    "masters": "Die Master-Server sind nicht erreichbar",
+    "cache": "Der Server-Cache ist nicht verfügbar",
+    "connect": "Der Client konnte nicht gestartet werden"
+  },
+  "empty": {
+    "pickServer": "Wählen Sie einen Server aus, um seine Spieler zu sehen und beizutreten.",
+    "lanTitle": "Die LAN-Suche ist noch nicht gebaut",
+    "lanText": "Die Suche per Broadcast im lokalen Netz kommt in einer späteren Aufgabe.",
+    "favoritesTitle": "Noch keine Favoriten",
+    "favoritesText": "Drücken Sie den Stern in einer Zeile, um einen Server hier zu behalten.",
+    "historyTitle": "Noch keine Verbindungen",
+    "historyText": "Server, mit denen Sie sich verbinden, erscheinen hier, die neuesten zuerst.",
+    "trustedTitle": "Keine geprüften Server in dieser Liste",
+    "trustedText": "Die mitgelieferte Liste empfohlener Server der Community ist in diesem Build leer.",
+    "noneTitle": "Noch keine Server",
+    "noneText": "Drücken Sie Aktualisieren, um die Master-Server zu fragen, wer online ist.",
+    "filteredTitle": "Keine Treffer für die Filter",
+    "filteredText": "Erweitern Sie die Filter oder leeren Sie das Suchfeld.",
+    "filteredBots_one": "Erweitern Sie die Filter oder leeren Sie das Suchfeld. Auf {{count}} Server spielen nur Bots; schalten Sie Nur Bots ausblenden aus, um ihn zu sehen.",
+    "filteredBots_other": "Erweitern Sie die Filter oder leeren Sie das Suchfeld. Auf {{count}} Servern spielen nur Bots; schalten Sie Nur Bots ausblenden aus, um sie zu sehen."
+  },
+  "details": {
+    "trusted": "GEPRÜFT",
+    "password": "PASSWORT",
+    "copyAddress": "Adresse kopieren",
+    "bots_one": "+{{count}} Bot",
+    "bots_other": "+{{count}} Bots",
+    "botsUnknown": "Bots unbekannt",
+    "botsUnknownTitle": "Dieser Server nennt keine Zahl der Bots und hat auf getstatus nicht geantwortet",
+    "connect": "Verbinden",
+    "noPlayers": "Es spielt niemand.",
+    "onlyBots_one": "Es spielt niemand: {{count}} Bot ist allein hier.",
+    "onlyBots_other": "Es spielt niemand: {{count}} Bots sind allein hier.",
+    "botHeading_one": "{{count}} BOT",
+    "botHeading_other": "{{count}} BOTS",
+    "botBadge": "BOT",
+    "playersError": "Keine Spielerliste: {{message}}"
+  },
+  "ping": {
+    "noAnswer": "Keine Antwort",
+    "value": "{{value}} ms"
+  }
+}

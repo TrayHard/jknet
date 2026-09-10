@@ -1,0 +1,87 @@
+{
+  "title": "Друзья",
+  "subtitle": "Смотрите, кто в сети, и подключайтесь к их серверу одним нажатием.",
+  "subtitleCounts": "друзей: {{friends}} · в сети: {{online}}",
+  "loading": "Загружаем список друзей…",
+  "searchPlaceholder": "Поиск или имя, чтобы добавить",
+  "addFriend": "Добавить друга",
+  "live": {
+    "on": "Онлайн",
+    "off": "Переподключение",
+    "onText": "Изменения приходят в тот же момент, когда происходят.",
+    "offText": "Служба недоступна, список обновляется раз в 30 секунд."
+  },
+  "groups": {
+    "in_game": "В игре",
+    "online": "В сети",
+    "offline": "Не в сети"
+  },
+  "status": {
+    "playingOn": "Играет на {{server}} · {{address}}",
+    "playingOnAddress": "Играет на {{address}}",
+    "inGame": "В игре",
+    "online": "В сети",
+    "offline": "Не в сети",
+    "lastSeenJustNow": "Был в сети только что",
+    "lastSeenMinutes_one": "Был в сети {{count}} минуту назад",
+    "lastSeenMinutes_few": "Был в сети {{count}} минуты назад",
+    "lastSeenMinutes_many": "Был в сети {{count}} минут назад",
+    "lastSeenMinutes_other": "Был в сети {{count}} минут назад",
+    "lastSeenHours_one": "Был в сети {{count}} час назад",
+    "lastSeenHours_few": "Был в сети {{count}} часа назад",
+    "lastSeenHours_many": "Был в сети {{count}} часов назад",
+    "lastSeenHours_other": "Был в сети {{count}} часов назад",
+    "lastSeenDays_one": "Был в сети {{count}} день назад",
+    "lastSeenDays_few": "Был в сети {{count}} дня назад",
+    "lastSeenDays_many": "Был в сети {{count}} дней назад",
+    "lastSeenDays_other": "Был в сети {{count}} дней назад",
+    "lastSeenOn": "Был в сети {{date}}"
+  },
+  "empty": {
+    "offTitle": "Друзья ещё не включены",
+    "signInTitle": "Войдите, чтобы увидеть друзей",
+    "signInText": "JKNet хранит список друзей в службе, поэтому он следует за вами на любую машину, где вы вошли.",
+    "signIn": "Войти",
+    "noneTitle": "Друзей пока нет",
+    "noneText": "Введите отображаемое имя, имя вида jkhub: или идентификатор пользователя в поле выше и нажмите «Добавить друга».",
+    "noMatchTitle": "Никто не подходит под «{{query}}»",
+    "noMatchText": "Нажмите «Добавить друга», чтобы отправить заявку.",
+    "pickFriend": "Выберите друга, чтобы присоединиться к его игре или позвать его в свою."
+  },
+  "requests": {
+    "incoming": "Заявки в друзья",
+    "outgoing": "Отправленные заявки",
+    "heading": "{{title}} · {{count}}",
+    "accept": "Принять",
+    "decline": "Отклонить",
+    "cancel": "Отменить",
+    "handle": "{{provider}}:{{name}}"
+  },
+  "notices": {
+    "nowFriends": "Теперь вы друзья с {{name}}.",
+    "requestSent": "Заявка отправлена: {{name}}.",
+    "inviteSent": "Приглашение отправлено: {{name}}."
+  },
+  "row": {
+    "join": "Присоединиться",
+    "joining": "Запуск…"
+  },
+  "panel": {
+    "status": "Состояние",
+    "join": "Присоединиться к игре",
+    "joining": "Запускаем игру…",
+    "invite": "Позвать в свою игру",
+    "inviteHintNoServer": "Сначала зайдите на сервер, потом зовите друзей",
+    "inviteHint": "Позвать на {{server}}",
+    "noServer": "Зайдите на сервер с экрана Servers, чтобы позвать туда друзей.",
+    "removeConfirm": "Удалить {{name}} из друзей? Чтобы снова стать друзьями, кому-то придётся отправить новую заявку.",
+    "remove": "Удалить из друзей"
+  },
+  "invite": {
+    "toast": "{{name}} зовёт вас на {{server}}",
+    "join": "Присоединиться",
+    "noClient": "Сначала выберите основной клиент на экране Clients",
+    "gameRunning": "Игра уже запущена",
+    "connectTo": "Подключиться к {{address}}"
+  }
+}

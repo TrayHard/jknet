@@ -1,9 +1,11 @@
 import { Gamepad2, Send, UserMinus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { Friend, Presence } from "../../lib/ipc";
 import { Avatar, Badge, Button } from "../ui";
-import { canJoin, myServer, providerHandle, statusLine } from "./presence";
+import { canJoin, myServer, providerHandle } from "./presence";
+import { useStatusLine } from "./useStatusLine";
 
 interface FriendPanelProps {
   friend: Friend;
@@ -40,6 +42,9 @@ export function FriendPanel({
   removing,
   inviteNote,
 }: FriendPanelProps) {
+  const { t } = useTranslation("friends");
+  const { t: tCommon } = useTranslation("common");
+  const statusLine = useStatusLine();
   const [confirming, setConfirming] = useState(false);
   const server = myServer(mine);
   const joinable = canJoin(friend);
@@ -68,7 +73,7 @@ export function FriendPanel({
       </div>
 
       <div className="flex flex-col gap-8">
-        <span className="text-label-xs text-fg-muted">Status</span>
+        <span className="text-label-xs text-fg-muted">{t("panel.status")}</span>
         <div className="flex flex-wrap items-center gap-8">
           <Badge
             tone={
@@ -79,11 +84,7 @@ export function FriendPanel({
                   : "neutral"
             }
           >
-            {friend.presence.status === "in_game"
-              ? "In game"
-              : friend.presence.status === "online"
-                ? "Online"
-                : "Offline"}
+            {t(`groups.${friend.presence.status}`)}
           </Badge>
           {friend.presence.clientName ? (
             <Badge>{friend.presence.clientName}</Badge>
@@ -102,7 +103,7 @@ export function FriendPanel({
           disabled={!joinable || joining}
           onClick={onJoin}
         >
-          {joining ? "Starting the game…" : "Join game"}
+          {joining ? t("panel.joining") : t("panel.join")}
         </Button>
         <Button
           block
@@ -111,19 +112,17 @@ export function FriendPanel({
           onClick={onInvite}
           title={
             server === null
-              ? "Join a server first, then invite your friends to it"
-              : `Invite to ${server.name ?? server.address}`
+              ? t("panel.inviteHintNoServer")
+              : t("panel.inviteHint", { server: server.name ?? server.address })
           }
         >
-          {inviting ? "Sending…" : "Invite to my game"}
+          {inviting ? tCommon("states.sending") : t("panel.invite")}
         </Button>
         {inviteNote ? (
           <p className="text-body-sm text-fg-muted">{inviteNote}</p>
         ) : null}
         {server === null && friend.presence.status !== "offline" ? (
-          <p className="text-body-sm text-fg-muted">
-            Join a server from the Servers screen to invite anyone to it.
-          </p>
+          <p className="text-body-sm text-fg-muted">{t("panel.noServer")}</p>
         ) : null}
       </div>
 
@@ -131,8 +130,7 @@ export function FriendPanel({
         {confirming ? (
           <>
             <p className="text-body-sm text-fg-secondary">
-              Remove {friend.user.displayName}? You will both have to send a new
-              request to be friends again.
+              {t("panel.removeConfirm", { name: friend.user.displayName })}
             </p>
             <div className="flex items-center gap-8">
               <Button
@@ -141,14 +139,14 @@ export function FriendPanel({
                 disabled={removing}
                 onClick={onRemove}
               >
-                {removing ? "Removing…" : "Remove"}
+                {removing ? tCommon("states.removing") : tCommon("actions.remove")}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setConfirming(false)}
               >
-                Cancel
+                {tCommon("actions.cancel")}
               </Button>
             </div>
           </>
@@ -159,7 +157,7 @@ export function FriendPanel({
             icon={<UserMinus size={14} />}
             onClick={() => setConfirming(true)}
           >
-            Remove friend
+            {t("panel.remove")}
           </Button>
         )}
       </div>

@@ -1,0 +1,92 @@
+{
+  "title": "Könyvtár",
+  "subtitle": "Skinek, markolatok, pályák és modok, a kiválasztott kliensbe telepítve.",
+  "subtitleClient": "{{client}} · {{engine}} · {{files}} fájl · {{enabled}} bekapcsolva · {{size}}",
+  "noEngine": "nincs motor",
+  "searchPlaceholder": "Fájlok keresése",
+  "browseJkhub": "JKHub böngészése",
+  "addFiles": "Fájlok hozzáadása",
+  "pickTitle": "pk3-fájlok hozzáadása",
+  "pickFilter": "Jedi Academy archívumok",
+  "clientBar": {
+    "label": "Kliens",
+    "hint": "A fájlok csak ebbe a kliensbe kerülnek. Egy másik kliens ugyanazzal a motorral saját készletet tart. Itt a {{game}} kliensei szerepelnek; a többiért váltson játékot az oldalsávban."
+  },
+  "tabs": {
+    "installed": "Telepítve",
+    "jkhub": "JKHub böngészése",
+    "updates": "Frissítések"
+  },
+  "sort": {
+    "label": "Rendezés",
+    "recent": "Legutóbbi",
+    "name": "Név",
+    "size": "Méret"
+  },
+  "categories": {
+    "all": "Mind",
+    "skin": "Skinek",
+    "hilt": "Markolatok",
+    "map": "Pályák",
+    "mod": "Modok",
+    "hud": "HUD és UI",
+    "sound": "Hangok",
+    "other": "Egyéb"
+  },
+  "categoryOne": {
+    "skin": "Skin",
+    "hilt": "Markolat",
+    "map": "Pálya",
+    "mod": "Mod",
+    "hud": "HUD",
+    "sound": "Hang",
+    "other": "Egyéb"
+  },
+  "onlyEnabled": "Csak a bekapcsoltak",
+  "onlyEnabledSwitch": "Csak a bekapcsolt fájlok mutatása",
+  "card": {
+    "addedByHand": "Kézzel hozzáadva",
+    "sourceWithFolder": "{{source}} · {{folder}}",
+    "conflict": "Ütközés",
+    "enable": "{{file}} bekapcsolása",
+    "remove": "{{file}} eltávolítása",
+    "removeHint": "Eltávolítás ebből a kliensből"
+  },
+  "empty": {
+    "noClientsTitle": "Még nincs kliens a {{game}} játékhoz",
+    "noClientsText": "A könyvtár fájljai mindig egy kliensbe kerülnek. Hozzon létre egyet, és ez a lista megtelik.",
+    "newClient": "Új kliens",
+    "noFilesTitle": "{{client}} még nem tartalmaz fájlt",
+    "noFilesText": "Keressen skineket, markolatokat, pályákat és modokat a JKHub oldalán, majd adja hozzá itt a pk3-fájlokat. Rá is húzhatja őket erre az ablakra.",
+    "filteredTitle": "Nincs találat",
+    "filteredText": "Ebben a kliensben egy fájl sem felel meg a keresésnek és a szűrőknek. Törölje őket, és a teljes könyvtár látszik.",
+    "updatesTitle": "Még nincs frissítés",
+    "updatesText": "Ha a fájlok JKHub-verziót kapnak, itt jelennek meg azok, amelyekhez újabb kiadás jött ki."
+  },
+  "fallback": {
+    "thisClient": "ez a kliens",
+    "theClient": "a kliens"
+  },
+  "skipped": {
+    "title_one": "{{count}} fájlt nem sikerült hozzáadni",
+    "title_other": "{{count}} fájlt nem sikerült hozzáadni",
+    "rename": "Nevezze át erre: {{name}}."
+  },
+  "drop": {
+    "title": "Engedje el itt a pk3-fájlokat, és ebbe a kliensbe kerülnek: {{client}}"
+  },
+  "conflicts": {
+    "notice": "{{count}} fájl ugyanazt a tartalmat módosítja. A motor az utolsót tölti be, a többit figyelmen kívül hagyja.",
+    "see": "Ütközések megtekintése",
+    "title": "Ugyanazt a tartalmat módosító fájlok",
+    "body": "{{files}} archívum {{paths}} közös útvonalat tartalmaz ebben: {{client}}. A motor az utoljára betöltöttet olvassa, a többit figyelmen kívül hagyja.",
+    "wins": "Nyer",
+    "hidden": "Rejtve",
+    "truncated": "{{total}} útvonalból csak az első {{shown}} látszik. Kapcsolja ki az egyik archívumot, hogy lássa a többit."
+  },
+  "remove": {
+    "title": "{{file}} eltávolítása innen: {{client}}?",
+    "body": "{{fileName}}, {{size}}. A JKNet törli a fájlt a kliens {{folder}} mappájából. A többi kliens megtartja a saját példányát.",
+    "confirm": "Fájl eltávolítása"
+  }
+}

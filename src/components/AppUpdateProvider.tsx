@@ -1,7 +1,9 @@
 import { Download, RefreshCw } from "lucide-react";
 import { createContext, use, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
-import { formatBytes } from "../lib/format";
+// --- slice: i18n ---
+import { useFormat } from "../i18n/useFormat";
 import { useAppUpdate, type AppUpdate } from "../lib/useAppUpdate";
 // --- slice: friends ---
 import { ToastSlot } from "./ToastsProvider";
@@ -46,6 +48,8 @@ export function useAppUpdateContext(): AppUpdate | null {
  * the same reason: its button is in this toast.
  */
 function UpdateToastHost({ update }: { update: AppUpdate }) {
+  const { t } = useTranslation("update");
+  const { t: tCommon } = useTranslation("common");
   if (update.newVersion === null || update.dismissed) return null;
 
   const downloading =
@@ -63,8 +67,8 @@ function UpdateToastHost({ update }: { update: AppUpdate }) {
         variant={failed ? "error" : "info"}
         title={
           failed
-            ? `Updating to JKNet ${update.newVersion} failed`
-            : `JKNet ${update.newVersion} is available`
+            ? t("failedTitle", { version: update.newVersion })
+            : t("available", { version: update.newVersion })
         }
         text={
           downloading ? (
@@ -81,7 +85,7 @@ function UpdateToastHost({ update }: { update: AppUpdate }) {
               icon={<Download size={14} />}
               onClick={update.install}
             >
-              {failed ? "Try again" : "Install and restart"}
+              {failed ? tCommon("actions.tryAgain") : t("install")}
             </Button>
           )
         }
@@ -96,6 +100,8 @@ function UpdateToastHost({ update }: { update: AppUpdate }) {
 
 /** The bar and the byte counter inside the toast. */
 function DownloadProgress({ update }: { update: AppUpdate }) {
+  const { t } = useTranslation("update");
+  const format = useFormat();
   const { downloaded, total } = update.progress ?? {
     downloaded: 0,
     total: null,
@@ -119,12 +125,15 @@ function DownloadProgress({ update }: { update: AppUpdate }) {
         {update.stage === "installing" ? (
           <span className="inline-flex items-center gap-4">
             <RefreshCw size={12} className="animate-spin" />
-            Starting the installer…
+            {t("installing")}
           </span>
         ) : total === null ? (
-          `Downloading… ${formatBytes(downloaded)}`
+          t("downloading", { received: format.bytes(downloaded) })
         ) : (
-          `Downloading… ${formatBytes(downloaded)} of ${formatBytes(total)}`
+          t("downloadingOf", {
+            received: format.bytes(downloaded),
+            total: format.bytes(total),
+          })
         )}
       </span>
     </div>

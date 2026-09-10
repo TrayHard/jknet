@@ -1,0 +1,56 @@
+{
+  "notConfigured": "Konta i znajomi w JKNet wymagają JKNet Online. Usługa nie jest jeszcze otwarta, więc ta wersja trzyma tę funkcję wyłączoną. Późniejsza aktualizacja włączy ją sama.",
+  "card": {
+    "title": "Konto",
+    "text": "Konto JKNet przechowuje listę znajomych i zaproszenia. Do gry nie jest potrzebne.",
+    "linked": "Połączono: {{provider}}"
+  },
+  "providers": {
+    "jkhub": "JKHub",
+    "discord": "Discord",
+    "dev": "dostawcę deweloperskiego",
+    "devLabel": "Deweloperski",
+    "signedInAs": "Zalogowano przez {{provider}} jako {{name}}",
+    "continueJkhub": "Kontynuuj przez JKHub",
+    "continueJkhubNote": "Konto, które ma już większość społeczności.",
+    "continueDiscord": "Kontynuuj przez Discord",
+    "continueDiscordNote": "Loguje przez to konto Discord, z którym grasz.",
+    "developer": "Logowanie deweloperskie",
+    "notAvailable": "Logowanie przez {{provider}} nie jest jeszcze dostępne."
+  },
+  "waiting": {
+    "title": "Czekanie na przeglądarkę…",
+    "text": "Dokończ logowanie w przeglądarce, a potem wróć do JKNet."
+  },
+  "displayName": {
+    "label": "Nazwa wyświetlana",
+    "saved": "Zapisano. Inni gracze widzą tę nazwę.",
+    "rules": "Od 3 do 24 znaków: litery, cyfry, spacje, _ i -."
+  },
+  "danger": {
+    "title": "Strefa niebezpieczna",
+    "signOut": "Wyloguj się",
+    "signOutText": "Konto zostaje. Klienci i biblioteka zostają na swoim miejscu.",
+    "signingOut": "Wylogowywanie…",
+    "delete": "Usuń dane konta",
+    "deleteText": "Usuwa z usługi konto, listę znajomych i zaproszenia.",
+    "confirmTitle": "Usunąć konto JKNet?",
+    "confirmBody": "Konto, lista znajomych i zaproszenia zostaną usunięte z usługi. Klienci, pliki biblioteki i ustawienia zostają na tym komputerze. Tej operacji nie da się cofnąć.",
+    "confirm": "Usuń konto"
+  },
+  "url": {
+    "summary": "Adres JKNet Online (zaawansowane)",
+    "label": "Adres JKNet Online",
+    "placeholder": "http://127.0.0.1:8787",
+    "signedIn": "Wyloguj się, zanim wskażesz JKNet inną usługę.",
+    "notConfigured": "Dla deweloperów i własnych instancji: adres http:// lub https:// włącza konta i znajomych na tym komputerze.",
+    "hint": "Adres http:// lub https://. Zostaw puste, aby wrócić do domyślnego."
+  },
+  "session": {
+    "expiredTitle": "Wylogowano: sesja wygasła",
+    "expiredText": "Zaloguj się ponownie na ekranie Ustawienia, aby zobaczyć znajomych.",
+    "timedOut": "Logowanie trwało zbyt długo. Spróbuj ponownie.",
+    "expired": "Logowanie wygasło. Spróbuj ponownie.",
+    "failed": "Logowanie nie zostało dokończone."
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "sort": {
+    "label": "Ordenar por",
+    "recentlyUpdated": "Actualizados hace poco",
+    "newest": "Más nuevos",
+    "mostDownloaded": "Más descargados",
+    "topRated": "Mejor valorados",
+    "name": "Nombre"
+  },
+  "filterPlaceholder": "Filtrar archivos cargados",
+  "refresh": "Actualizar",
+  "fromCache": "De la caché",
+  "tree": {
+    "heading": "Categorías",
+    "update": "Actualizar categorías",
+    "updating": "Actualizando…",
+    "updateHint": "Recorre otra vez el árbol de categorías de JKHub. Cuesta unas veinte solicitudes.",
+    "expand": "Desplegar {{category}}",
+    "collapse": "Plegar {{category}}",
+    "empty": "Aún no hay categorías."
+  },
+  "scope": {
+    "category": "{{category}} · se instala en {{client}}",
+    "noCategory": "Elija una categoría · se instala en {{client}}"
+  },
+  "loading": {
+    "categories": "Leyendo las categorías de JKHub…",
+    "files": "Cargando archivos…"
+  },
+  "empty": {
+    "browserTitle": "JKHub necesita la ventana del lanzador",
+    "browserText": "Esta pestaña habla con jkhub.org a través del núcleo de JKNet, del que una vista previa en el navegador no dispone.",
+    "unreachableTitle": "JKHub no respondió",
+    "categoryTitle": "Esta categoría no se cargó",
+    "filteredTitle": "Nada coincide",
+    "filteredText": "Ningún archivo cargado coincide con el filtro. Bórrelo, cargue más páginas o elija otra categoría."
+  },
+  "loaded": "{{shown}} de {{total}} archivos cargados. Acote la categoría o cambie el orden para ver el resto.",
+  "card": {
+    "open": "Abrir {{title}}",
+    "installed": "Instalado",
+    "install": "Instalar",
+    "reinstall": "Reinstalar",
+    "fallbackAuthor": "JKHub",
+    "updated": "Actualizado el {{date}}",
+    "submitted": "Enviado el {{date}}"
+  },
+  "details": {
+    "loadingTitle": "Cargando…",
+    "fallbackTitle": "Archivo",
+    "openOnSite": "Abrir en JKHub",
+    "installTo": "Instalar en {{client}}",
+    "replaceAndInstall": "Reemplazar e instalar",
+    "openScreenshot": "Abrir la captura",
+    "screenshot": "Captura",
+    "screenshotMissing": "JKHub no entregó esta captura.",
+    "author": "Autor",
+    "authorUnknown": "Desconocido",
+    "updated": "Actualizado",
+    "submitted": "Enviado",
+    "rating": "Valoración",
+    "ratingValue": "{{value}} de 5 · {{count}} reseñas",
+    "notRated": "Sin valoración",
+    "downloads": "{{count}} descargas",
+    "views": "{{count}} visitas",
+    "comments": "{{count}} comentarios",
+    "versions": "Versiones",
+    "downloading": "Descargando… {{received}}",
+    "downloadingOf": "Descargando… {{received}} de {{total}}"
+  },
+  "install": {
+    "pickClient": "Elija antes un cliente arriba: un archivo se instala en un cliente.",
+    "toastTitle": "Instalado en {{client}}",
+    "failedTitle": "La instalación falló",
+    "categoriesTitle": "Categorías actualizadas",
+    "categoriesText": "{{count}} categorías leídas de JKHub."
+  },
+  "outcome": {
+    "installed": "Instalado en {{folder}}: {{files}}.",
+    "conflicts_one": "{{files}} ya está en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlo.",
+    "conflicts_many": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
+    "conflicts_other": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
+    "external": "Esta entrada enlaza a otro sitio en vez de a un archivo comprimido, así que no hay nada que instalar. Ábrala en JKHub para seguir el enlace.",
+    "unsupportedDownloaded": "El archivo comprimido es un .{{format}}, que JKNet aún no sabe abrir. Ya está descargado: descomprímalo a mano en la carpeta del cliente.",
+    "unsupported": "El archivo comprimido es un .{{format}}, que JKNet aún no sabe abrir. Abra el archivo en JKHub y descomprímalo a mano.",
+    "noPk3": "El archivo comprimido no contiene ningún archivo pk3, así que no hay nada que instalar en un cliente. Dentro tiene: {{entries}}",
+    "showArchive": "Mostrar el archivo comprimido"
+  }
+}

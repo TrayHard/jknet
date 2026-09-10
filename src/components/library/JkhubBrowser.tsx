@@ -1,6 +1,7 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { AlertTriangle, ExternalLink, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useToasts } from "../ToastsProvider";
 import {
@@ -14,8 +15,10 @@ import {
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
 import { JkhubTree } from "./JkhubTree";
+// --- slice: i18n ---
+import { useErrorText } from "../../i18n/errors";
 import { useActiveGame } from "../../lib/game";
-import { errorMessage, type JkhubCategory, type JkhubInstallResult, type JkhubSort, type LibraryItem } from "../../lib/ipc";
+import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
   useJkhubCategories,
@@ -28,12 +31,13 @@ import {
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 
-const SORTS: SelectOption[] = [
-  { value: "recentlyUpdated", label: "Recently updated" },
-  { value: "newest", label: "Newest" },
-  { value: "mostDownloaded", label: "Most downloaded" },
-  { value: "topRated", label: "Top rated" },
-  { value: "name", label: "Name" },
+// --- slice: i18n --- the ids go to the site, the labels come from the catalog.
+const SORT_IDS: JkhubSort[] = [
+  "recentlyUpdated",
+  "newest",
+  "mostDownloaded",
+  "topRated",
+  "name",
 ];
 
 interface JkhubBrowserProps {
@@ -54,6 +58,9 @@ interface JkhubBrowserProps {
  * rather than a second picker that could disagree with it.
  */
 export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserProps) {
+  const { t } = useTranslation("jkhub");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
   const [category, setCategory] = useState<JkhubCategory | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
   const [pages, setPages] = useState(1);
@@ -146,7 +153,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
 
   const runInstall = (id: number, replace: boolean) => {
     if (!clientId) {
-      setFailure("Pick a client above first: a file is installed into a client.");
+      setFailure(t("install.pickClient"));
       return;
     }
     setFailure(null);
@@ -159,7 +166,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
           if (answer.kind === "installed") {
             toasts.show(`jkhub:${id}`, {
               variant: "success",
-              title: `Installed into ${clientName}`,
+              title: t("install.toastTitle", { client: clientName }),
               text: answer.files.join(", "),
             });
             return;
@@ -169,11 +176,11 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
           setOpenFile(id);
         },
         onError: (error) => {
-          const message = errorMessage(error);
+          const message = errorText(error);
           setFailure(message);
           toasts.show(`jkhub:${id}`, {
             variant: "error",
-            title: "Install failed",
+            title: t("install.failedTitle"),
             text: message,
           });
         },
@@ -183,12 +190,12 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
 
   const openSite = (id: number) => {
     if (!isTauri()) return;
-    void jkhubIpc.open(id).catch((e: unknown) => setFailure(errorMessage(e)));
+    void jkhubIpc.open(id).catch((e: unknown) => setFailure(errorText(e)));
   };
 
   const reveal = (path: string) => {
     if (!isTauri()) return;
-    void revealItemInDir(path).catch((e: unknown) => setFailure(errorMessage(e)));
+    void revealItemInDir(path).catch((e: unknown) => setFailure(errorText(e)));
   };
 
   // **Refresh** reads what is on screen: the pages of the open listing and the
@@ -205,7 +212,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
       pages,
       fileId: openFile,
     })
-      .catch((e: unknown) => setFailure(errorMessage(e)))
+      .catch((e: unknown) => setFailure(errorText(e)))
       .finally(() => setRefreshing(false));
   };
 
@@ -216,11 +223,11 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
       .then((answer) => {
         toasts.show("jkhub:categories", {
           variant: "success",
-          title: "Categories updated",
-          text: `${answer.categories.length} categories read from JKHub.`,
+          title: t("install.categoriesTitle"),
+          text: t("install.categoriesText", { count: answer.categories.length }),
         });
       })
-      .catch((e: unknown) => setFailure(errorMessage(e)))
+      .catch((e: unknown) => setFailure(errorText(e)))
       .finally(() => setUpdatingTree(false));
   };
 
@@ -228,22 +235,22 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     return (
       <EmptyState
         icon={<ExternalLink size={24} />}
-        title="JKHub needs the launcher window"
-        text="This tab talks to jkhub.org through the JKNet core, which a browser preview does not have."
+        title={t("empty.browserTitle")}
+        text={t("empty.browserText")}
       />
     );
   }
 
   if (categories.isLoading) {
-    return <p className="text-body-sm text-fg-muted">Reading the JKHub categories…</p>;
+    return <p className="text-body-sm text-fg-muted">{t("loading.categories")}</p>;
   }
 
   if (categories.error) {
     return (
       <EmptyState
         icon={<AlertTriangle size={24} />}
-        title="JKHub did not answer"
-        text={errorMessage(categories.error)}
+        title={t("empty.unreachableTitle")}
+        text={errorText(categories.error)}
         action={
           // Nothing else on the tab works without a tree, so this one walks it.
           <Button
@@ -251,7 +258,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             disabled={updatingTree}
             onClick={runUpdateCategories}
           >
-            Try again
+            {tCommon("actions.tryAgain")}
           </Button>
         }
       />
@@ -285,7 +292,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
           <div className="flex items-center gap-12 pb-12">
             <Input
               icon={<Search size={16} />}
-              placeholder="Filter loaded files"
+              placeholder={t("filterPlaceholder")}
               value={filter}
               className="w-232"
               onChange={(event) => setFilter(event.target.value)}
@@ -293,13 +300,16 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             <span className="flex-1" />
             {stale ? (
               <Badge tone="warm" icon={<AlertTriangle size={12} />}>
-                From cache
+                {t("fromCache")}
               </Badge>
             ) : null}
-            <span className="text-label-xs text-fg-muted">Sort by</span>
+            <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
             <Select
-              ariaLabel="Sort by"
-              options={SORTS}
+              ariaLabel={t("sort.label")}
+              options={SORT_IDS.map<SelectOption>((id) => ({
+                value: id,
+                label: t(`sort.${id}`),
+              }))}
               value={sort}
               onChange={(value) => setSort(value as JkhubSort)}
               className="w-176"
@@ -309,29 +319,30 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
               disabled={refreshing}
               onClick={runRefresh}
             >
-              Refresh
+              {t("refresh")}
             </Button>
           </div>
 
           <p className="text-body-sm text-fg-muted pb-12">
+            {/* The category name comes from jkhub.org: data, not copy. */}
             {category
-              ? `${category.name} · installs into ${clientName}`
-              : `Pick a category · installs into ${clientName}`}
+              ? t("scope.category", { category: category.name, client: clientName })
+              : t("scope.noCategory", { client: clientName })}
           </p>
 
           {page1.isLoading ? (
-            <p className="text-body-sm text-fg-muted">Loading files…</p>
+            <p className="text-body-sm text-fg-muted">{t("loading.files")}</p>
           ) : page1.error ? (
             <EmptyState
               icon={<AlertTriangle size={24} />}
-              title="This category did not load"
-              text={errorMessage(page1.error)}
+              title={t("empty.categoryTitle")}
+              text={errorText(page1.error)}
             />
           ) : shown.length === 0 ? (
             <EmptyState
               icon={<Search size={24} />}
-              title="Nothing matches"
-              text="No loaded file matches the filter. Clear it, load more pages, or pick another category."
+              title={t("empty.filteredTitle")}
+              text={t("empty.filteredText")}
             />
           ) : (
             <>
@@ -358,13 +369,14 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
               <div className="flex justify-center pt-16">
                 {canLoadMore ? (
                   <Button onClick={() => setPages((count) => count + 1)}>
-                    Load more
+                    {tCommon("actions.loadMore")}
                   </Button>
                 ) : (
                   <span className="text-body-sm text-fg-muted">
-                    {cards.length} of {totalPages * (page1.data?.perPage ?? 25)}{" "}
-                    files loaded. Narrow the category or change the order to see
-                    the rest.
+                    {t("loaded", {
+                      shown: cards.length,
+                      total: totalPages * (page1.data?.perPage ?? 25),
+                    })}
                   </span>
                 )}
               </div>
@@ -377,7 +389,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
         <JkhubDetails
           file={details.data}
           loading={details.isLoading}
-          error={details.error ? errorMessage(details.error) : null}
+          error={details.error ? errorText(details.error) : null}
           clientName={clientName}
           installed={installedIds.has(openFile)}
           busy={install.isPending}

@@ -1,0 +1,66 @@
+{
+  "actions": {
+    "add": "Hozzáadás",
+    "back": "Vissza",
+    "cancel": "Mégse",
+    "close": "Bezárás",
+    "continue": "Tovább",
+    "delete": "Törlés",
+    "disable": "Kikapcsolás",
+    "dismiss": "Elvetés",
+    "loadMore": "Több betöltése",
+    "refresh": "Frissítés",
+    "remove": "Eltávolítás",
+    "retry": "Újra",
+    "save": "Mentés",
+    "seeAll": "Összes",
+    "tryAgain": "Próbálja újra"
+  },
+  "states": {
+    "checking": "Ellenőrzés…",
+    "creating": "Létrehozás…",
+    "deleting": "Törlés…",
+    "finishing": "Befejezés…",
+    "installing": "Telepítés…",
+    "loading": "Betöltés…",
+    "reading": "Beolvasás…",
+    "removing": "Eltávolítás…",
+    "saving": "Mentés…",
+    "sending": "Küldés…",
+    "starting": "Indítás…"
+  },
+  "values": {
+    "empty": "—",
+    "notSet": "Nincs megadva",
+    "unknown": "Ismeretlen"
+  },
+  "units": {
+    "bytes": {
+      "b": "{{value}} B",
+      "kb": "{{value}} KB",
+      "mb": "{{value}} MB",
+      "gb": "{{value}} GB"
+    },
+    "milliseconds": "{{value}} ms",
+    "seconds": "{{value}} mp",
+    "minutes": "{{value}} perc",
+    "hours": "{{value}} óra",
+    "hoursMinutes": "{{hours}} óra {{minutes}} perc"
+  },
+  "window": {
+    "minimize": "Kis méret",
+    "maximize": "Teljes méret",
+    "restore": "Előző méret",
+    "close": "Bezárás"
+  },
+  "select": {
+    "any": "Mindegy",
+    "nothingToChoose": "Nincs miből választani"
+  },
+  "search": {
+    "nothingMatches": "Nincs találat"
+  },
+  "runtime": {
+    "missing": "A Tauri futtatókörnyezet nem érhető el"
+  }
+}

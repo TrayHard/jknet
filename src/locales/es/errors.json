@@ -1,0 +1,41 @@
+{
+  "io": "{{context}}: {{reason}}",
+  "json": "{{context}}: {{reason}}",
+  "path": "Una carpeta que JKNet necesita no está disponible: {{path}}",
+  "notFound": "No se encontró: {{what}}",
+  "invalidInput": "JKNet no puede usar eso: {{reason}}",
+  "alreadyExists": "Eso ya existe: {{what}}",
+  "busy": "{{reason}}",
+  "state": "JKNet perdió el hilo de su propio estado: {{reason}}. Reinicie el lanzador.",
+  "network": "La llamada de red falló: {{reason}}",
+  "notImplemented": "Todavía no está hecho: {{what}}",
+  "rateLimited": "{{reason}}",
+  "archive": "No se pudo leer el archivo comprimido: {{reason}}",
+  "launch": "El juego no puede arrancar: {{reason}}",
+  "image": "No se pudo leer la imagen del mapa: {{reason}}",
+  "signedOut": "Inicie sesión en JKNet para ver a sus amigos",
+  "gameMismatch": "{{reason}}",
+  "gameDataMissing": "Archivos de {{game}}: {{reason}}",
+  "engineFile": "{{file}} pertenece a la compilación del motor, no a la biblioteca, así que JKNet no puede desactivarlo ni quitarlo.",
+  "basepathOccupied": "{{path}} es una carpeta real, no el enlace que JKNet mantiene ahí. Muévela o elimínala y vuelve a iniciar el juego.",
+  "jkhubUnavailable": "JKHub no está accesible: {{reason}}",
+  "jkhubParse": "No se pudo leer una página de JKHub: {{what}}. Lo más probable es que el sitio haya cambiado.",
+  "jkhubDownload": "La descarga desde JKHub falló: {{reason}}",
+  "archiveUnsupported": "JKNet todavía no sabe abrir un archivo .{{format}}.",
+  "noPk3Files": "El archivo comprimido no contiene ningún archivo pk3: {{entries}}",
+  "online": {
+    "notFound": "JKNet Online no conoce esa cuenta.",
+    "unauthorized": "JKNet Online rechazó la sesión. Vuelva a iniciar sesión.",
+    "forbidden": "JKNet Online no permite eso.",
+    "invalid": "JKNet Online rechazó la solicitud: {{message}}",
+    "conflict": "Ese nombre está ocupado. Escriba otro.",
+    "rateLimited": "Demasiadas solicitudes a JKNet Online. Espere un momento e inténtelo de nuevo.",
+    "providerError": "El proveedor de inicio de sesión aún no está disponible: {{message}}",
+    "internal": "JKNet Online tiene un problema propio. Inténtelo más tarde.",
+    "notConfigured": "JKNet Online todavía no está abierto, así que esta versión mantiene desactivadas las cuentas y los amigos."
+  },
+  "frontend": {
+    "noRuntime": "El entorno de Tauri no está disponible",
+    "unexpected": "Error inesperado"
+  }
+}

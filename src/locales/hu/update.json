@@ -1,0 +1,11 @@
+{
+  "available": "Elérhető a JKNet {{version}} verziója",
+  "failedTitle": "A JKNet {{version}} verziójára való frissítés nem sikerült",
+  "install": "Telepítés és újraindítás",
+  "downloading": "Letöltés… {{received}}",
+  "downloadingOf": "Letöltés… {{received}} / {{total}}",
+  "installing": "A telepítő indítása…",
+  "checking": "Frissítés keresése…",
+  "unsupported": "A frissítés a telepített programban működik, nem böngészőfülön.",
+  "upToDate": "Ez a legfrissebb verzió."
+}

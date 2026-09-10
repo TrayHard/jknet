@@ -1,0 +1,33 @@
+{
+  "title": "Start",
+  "subtitle": "{{game}} · steigen Sie wieder ein oder wählen Sie einen Server im Browser.",
+  "launchError": "{{message}} <0>Öffnen Sie den Bereich Clients</0>, um den Spielordner festzulegen oder die Engine zu installieren.",
+  "hero": {
+    "quickPlay": "Schnellstart",
+    "inGame": "Im Spiel",
+    "running": "Läuft: {{client}}",
+    "noClient": "Noch kein Client für {{game}}",
+    "runningText": "Vor <0>{{age}}</0> gestartet, Prozess {{pid}}. Der Launcher hält sich zurück, solange Sie spielen.",
+    "readyText": "Starten Sie den Standard-Client und wählen Sie im Spielmenü einen Server.",
+    "noClientText": "Ein Client ist ein Engine-Build mit eigenen Dateien und Einstellungen. Legen Sie einen an, dann ist {{game}} nur einen Klick entfernt.",
+    "createClient": "Client für {{game}} erstellen",
+    "play": "Spielen",
+    "playHint": "Markieren Sie einen Client als Standard",
+    "stop": "Beenden",
+    "manageClients": "Clients verwalten",
+    "aMoment": "einem Moment"
+  },
+  "gameFiles": {
+    "title": "JKNet weiß nicht, wo Ihre Dateien von {{game}} liegen",
+    "text": "Zeigen Sie ihm den Ordner <0>GameData</0> Ihrer Kopie, dann ist das Spiel startbereit. Der Serverbrowser läuft auch ohne ihn.",
+    "locate": "Dateien suchen"
+  },
+  "topServers": {
+    "trusted": "Geprüfte Server",
+    "busiest": "Meistbesuchte Server",
+    "emptyTitle": "Noch keine Server im Cache",
+    "emptyText": "Öffnen Sie den Bereich Server einmal, dann erscheinen die meistbesuchten hier.",
+    "openServers": "Server öffnen",
+    "seeAll": "Alle anzeigen"
+  }
+}

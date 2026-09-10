@@ -1,4 +1,5 @@
 import { useRef, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "../lib/format";
 import { gameLabel, useSetActiveGame } from "../lib/game";
@@ -24,6 +25,7 @@ import { useGames } from "../lib/queries";
  * about what «this one» looks like.
  */
 export function GameSwitch({ className }: { className?: string }) {
+  const { t } = useTranslation("nav");
   const { game, setGame } = useSetActiveGame();
   const games = useGames().data;
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
@@ -61,7 +63,7 @@ export function GameSwitch({ className }: { className?: string }) {
   return (
     <div
       role="radiogroup"
-      aria-label="Game"
+      aria-label={t("gameSwitch.label")}
       className={cn(
         "flex items-center gap-2 h-32 p-2 rounded-xs bg-input border border-line",
         className,

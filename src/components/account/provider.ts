@@ -1,27 +1,51 @@
-/** Naming the sign-in providers the same way on every screen. */
-
-/** The provider as a player would name it. */
-export function providerName(provider: string): string {
-  if (provider === "jkhub") return "JKHub";
-  if (provider === "discord") return "Discord";
-  if (provider === "dev") return "the developer provider";
-  // A provider the service grew after this build shipped. Its own name is a
-  // better answer than "unknown".
-  return provider;
-}
-
 /**
- * The provider as a label, where a sentence has no room.
+ * Naming the sign-in providers the same way on every screen.
  *
- * `providerName` reads as a sentence ("signed in with the developer
- * provider"), and a badge that pasted that in would say "the developer
- * provider linked".
+ * --- slice: i18n ---
+ * JKHub and Discord are proper nouns and stay as they are in every language;
+ * `dev` is not one, so its two forms come from the `account` catalog. The hook
+ * is what binds the three together — a component never spells a provider name
+ * itself.
  */
-export function providerLabel(provider: string): string {
-  return provider === "dev" ? "Developer" : providerName(provider);
+
+import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
+
+export interface ProviderNames {
+  /** The provider inside a sentence: «signed in with the developer provider». */
+  name: (provider: string) => string;
+  /** The provider as a badge, where a sentence has no room: «Developer». */
+  label: (provider: string) => string;
+  /** The line under a name on the account card. */
+  line: (provider: string, accountName: string) => string;
 }
 
-/** The line under a name on the account card: where the account comes from. */
-export function providerLine(provider: string, accountName: string): string {
-  return `Signed in with ${providerName(provider)} as ${accountName}`;
+export function useProviderNames(): ProviderNames {
+  const { t } = useTranslation("account");
+
+  const name = useCallback(
+    (provider: string) => {
+      if (provider === "jkhub") return t("providers.jkhub");
+      if (provider === "discord") return t("providers.discord");
+      if (provider === "dev") return t("providers.dev");
+      // A provider the service grew after this build shipped. Its own name is
+      // a better answer than "unknown".
+      return provider;
+    },
+    [t],
+  );
+
+  const label = useCallback(
+    (provider: string) =>
+      provider === "dev" ? t("providers.devLabel") : name(provider),
+    [name, t],
+  );
+
+  const line = useCallback(
+    (provider: string, accountName: string) =>
+      t("providers.signedInAs", { provider: name(provider), name: accountName }),
+    [name, t],
+  );
+
+  return { name, label, line };
 }

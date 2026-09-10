@@ -1,0 +1,84 @@
+{
+  "title": "Clients",
+  "subtitle": "Ein Client ist ein Engine-Build mit eigenen Dateien und Einstellungen. Geben Sie ihm einen Namen, und er gehört Ihnen.",
+  "newClient": "Neuer Client",
+  "gameFiles": {
+    "title": "Dateien von {{game}}",
+    "titleFallback": "Spieldateien",
+    "ready": "Bereit",
+    "notSet": "Nicht festgelegt",
+    "text": "JKNet liest <0>{{range}}</0> aus diesem Ordner und schreibt nie hinein.",
+    "searching": "Suche nach Kopien in Steam und GOG…",
+    "noCopy": "Keine Kopie gefunden",
+    "foundThrough": "Quelle: {{source}}. Bestätigen Sie den Ordner, um ihn zu nutzen.",
+    "changeFolder": "Ordner ändern",
+    "useThisFolder": "Diesen Ordner nutzen",
+    "pickTitle": "Ordner GameData auswählen",
+    "invalid": "Keine Spieldateien in {{path}}. Es fehlen: {{missing}}."
+  },
+  "list": {
+    "heading": "Ihre Clients",
+    "emptyTitle": "Noch keine Clients für {{game}}",
+    "emptyText": "Ein Client ist ein benannter Engine-Build mit eigenen Mods und Einstellungen. Legen Sie einen an, dann erscheint er hier.",
+    "otherGame_one": "{{count}} Client für {{game}} — wechseln Sie das Spiel in der Seitenleiste, um ihn zu sehen.",
+    "otherGame_other": "{{count}} Clients für {{game}} — wechseln Sie das Spiel in der Seitenleiste, um sie zu sehen."
+  },
+  "card": {
+    "default": "Standard",
+    "makeDefault": "Als Standard festlegen",
+    "running": "Läuft",
+    "engineNotInstalled": "Engine nicht installiert",
+    "meta": "{{id}} · erstellt {{date}}",
+    "metaWithMod": "{{id}} · erstellt {{date}} · fs_game {{mod}}",
+    "delete": "Löschen",
+    "settingsOf": "Einstellungen von {{client}}",
+    "settingsHint": "Name und Mod-Ordner",
+    "installedOn": "installiert {{date}}",
+    "manualInstall": "Dieser Build muss von Hand installiert werden."
+  },
+  "engine": {
+    "launch": "Starten",
+    "stop": "Beenden",
+    "otherRunning": "Ein anderer Client läuft bereits",
+    "installFirst": "Installieren Sie zuerst die Engine",
+    "checkUpdates": "Updates prüfen",
+    "updateTo": "Auf {{version}} aktualisieren",
+    "updateToNewest": "Auf den neuesten Build aktualisieren",
+    "upToDate": "Aktuell",
+    "install": "Engine installieren",
+    "installVersion": "Engine {{version}} installieren"
+  },
+  "engines": {
+    "heading": "Engines für {{game}}",
+    "recommended": "Empfohlen"
+  },
+  "newDialog": {
+    "title": "Neuer Client",
+    "text": "Ein Client ist ein Engine-Build mit eigenen Dateien und Einstellungen. Geben Sie ihm einen Namen, den Sie in der Liste der Clients wiedererkennen.",
+    "game": "Spiel",
+    "engine": "Engine",
+    "name": "Name",
+    "namePlaceholder": "Alltag",
+    "makeDefault": "Zum Standard machen",
+    "makeDefaultText": "Die Schaltfläche Spielen im Bereich Start startet den Standard-Client des Spiels, auf dem sie steht. Jedes Spiel hat seinen eigenen.",
+    "makeDefaultSwitch": "Diesen Client zum Standard machen",
+    "download": "Engine jetzt herunterladen",
+    "downloadText": "Holt den neuesten Build von GitHub. Der Fortschritt erscheint auf der Karte des Clients.",
+    "downloadSwitch": "Engine gleich nach dem Anlegen des Clients herunterladen",
+    "create": "Client erstellen"
+  },
+  "settingsDialog": {
+    "title": "Einstellungen des Clients",
+    "text": "Der Ordner auf der Festplatte behält seinen Namen <0>{{id}}</0>, damit ein neuer Name keinen Pfad zerstört, den der Launcher schon gespeichert hat.",
+    "name": "Name",
+    "namePlaceholder": "Alltag",
+    "modFolder": "Mod-Ordner (fs_game)",
+    "modFolderHint": "Der Client startet in diesem Ordner seines Home-Verzeichnisses, übergeben als <0>+set fs_game</0>. Nur Buchstaben, Ziffern, <1>_</1>, <2>-</2> und <3>+</3>. Lassen Sie ihn leer für <4>{{folder}}</4>, den Standardordner für {{engine}}.",
+    "engineFallback": "die Engine"
+  },
+  "missingToast": {
+    "title": "Noch kein Client für {{game}}",
+    "text": "Legen Sie einen an, dann startet dieses Spiel damit. Clients für {{game}} sind von denen des anderen Spiels getrennt.",
+    "action": "Client erstellen"
+  }
+}

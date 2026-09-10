@@ -1,0 +1,66 @@
+{
+  "title": "Ustawienia",
+  "subtitle": "Język, uruchamianie, pobieranie, wygląd i konto.",
+  "dataFolder": {
+    "title": "Folder danych",
+    "text": "Tu leżą klienci, biblioteka i dzienniki.",
+    "open": "Otwórz folder JKNet"
+  },
+  "language": {
+    "title": "Język",
+    "text": "Launcher mówi w języku, który tu wybierzesz. Nazwy serwerów, nazwy map i tytuły plików zostają takie, jakie napisali ich autorzy.",
+    "label": "Język interfejsu",
+    "system": "Język systemu",
+    "systemWith": "Język systemu ({{language}})",
+    "needsTranslation": "Ten język nie jest jeszcze przetłumaczony i pokazuje angielski.",
+    "draft": "Ten język to szkic maszynowy i czeka na sprawdzenie przez rodzimego użytkownika języka."
+  },
+  "gameFiles": {
+    "title": "Pliki gry",
+    "text": "JKNet czyta archiwa w tych folderach i nic do nich nie zapisuje. Jedna gra wystarczy; drugą skonfigurujesz, kiedy zechcesz.",
+    "row": "Pliki gry {{game}}",
+    "playStarts": "Graj uruchamia: {{client}}",
+    "noDefault": "Brak domyślnego klienta",
+    "locate": "Wskaż",
+    "change": "Zmień",
+    "pickTitle": "Wybierz folder GameData gry {{game}}",
+    "invalid": "Brak plików gry {{game}} w {{path}}. Brakuje: {{missing}}."
+  },
+  "launch": {
+    "title": "Uruchamianie",
+    "label": "Dodatkowe argumenty uruchamiania",
+    "placeholder": "+set r_fullscreen 0 +set r_mode 4",
+    "hint": "Dopisywane do każdego klienta, dokładnie jak w skrócie. Przykład: <0>+set r_fullscreen 0 +set r_mode 4</0>. Podwójny cudzysłów trzyma razem wartość ze spacją."
+  },
+  "onboarding": {
+    "title": "Konfiguracja początkowa",
+    "text": "Prowadzi jeszcze raz przez pliki gry, klienta i konto. Nic z tego, co już ustawiono, nie znika.",
+    "action": "Uruchom konfigurację początkową ponownie"
+  },
+  "cache": {
+    "title": "Pamięć podręczna",
+    "mapPictures": "Obrazki map",
+    "reading": "Odczytywanie indeksu…",
+    "count_one": "{{count}} mapa ma obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "count_few": "{{count}} mapy mają obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "count_many": "{{count}} map ma obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "count_other": "{{count}} mapy ma obrazek, odczytany z plików pk3, które już masz. Nic nie jest pobierane.",
+    "perGame": "{{count}} {{game}}",
+    "lastRebuild": "Ostatnia przebudowa: {{maps}} obrazków z {{sources}} plików w {{elapsed}}.",
+    "rebuild": "Przebuduj",
+    "rebuilding": "Przebudowywanie…"
+  },
+  "rest": {
+    "title": "Reszta ustawień nie jest jeszcze podłączona",
+    "text": "Sekcje Pobieranie i Wygląd pojawią się razem z funkcjami, którymi sterują."
+  },
+  "about": {
+    "title": "O programie",
+    "text": "JKNet aktualizuje się z GitHub Releases. Każdy pakiet jest podpisany, a niepodpisany zostaje odrzucony.",
+    "version": "Wersja {{version}}",
+    "versionUnknown": "Wersja nieznana",
+    "license": "GPL-3.0-or-later",
+    "check": "Sprawdź aktualizacje",
+    "install": "Zainstaluj i uruchom ponownie"
+  }
+}

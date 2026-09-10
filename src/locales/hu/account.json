@@ -1,0 +1,56 @@
+{
+  "notConfigured": "A JKNet-fiókokhoz és a barátokhoz a JKNet Online szükséges. Ez még nem nyílt meg, ezért ebben a változatban a funkció ki van kapcsolva. Egy későbbi frissítés magától bekapcsolja.",
+  "card": {
+    "title": "Fiók",
+    "text": "A JKNet-fiók viszi magával a barátok listáját és a meghívásokat. A játékhoz nem szükséges.",
+    "linked": "{{provider}} összekapcsolva"
+  },
+  "providers": {
+    "jkhub": "JKHub",
+    "discord": "Discord",
+    "dev": "a fejlesztői szolgáltató",
+    "devLabel": "Fejlesztői",
+    "signedInAs": "Bejelentkezve ezzel: {{provider}}. Név: {{name}}",
+    "continueJkhub": "Folytatás JKHub-fiókkal",
+    "continueJkhubNote": "A közösség többségének már van ilyen fiókja.",
+    "continueDiscord": "Folytatás Discord-fiókkal",
+    "continueDiscordNote": "Azzal a Discord-fiókkal lép be, amellyel játszani szokott.",
+    "developer": "Fejlesztői bejelentkezés",
+    "notAvailable": "Ez a bejelentkezés még nem érhető el: {{provider}}."
+  },
+  "waiting": {
+    "title": "Várakozás a böngészőre…",
+    "text": "Fejezze be ott a bejelentkezést, majd térjen vissza a JKNet ablakába."
+  },
+  "displayName": {
+    "label": "Megjelenített név",
+    "saved": "Mentve. A többi játékos ezt a nevet látja.",
+    "rules": "3–24 karakter: betűk, számjegyek, szóköz, _ és -."
+  },
+  "danger": {
+    "title": "Veszélyes műveletek",
+    "signOut": "Kijelentkezés",
+    "signOutText": "A fiók megmarad. A kliensek és a könyvtár a helyükön maradnak.",
+    "signingOut": "Kijelentkezés…",
+    "delete": "A fiók adatainak törlése",
+    "deleteText": "Törli a fiókot, a barátokat és a meghívásokat a szolgáltatásból.",
+    "confirmTitle": "Törli a JKNet-fiókját?",
+    "confirmBody": "A szolgáltatás törli a fiókot, a barátok listáját és a meghívásokat. A kliensek, a könyvtár fájljai és a beállítások ezen a gépen maradnak. A művelet nem vonható vissza.",
+    "confirm": "Fiók törlése"
+  },
+  "url": {
+    "summary": "JKNet Online cím (haladóknak)",
+    "label": "JKNet Online cím",
+    "placeholder": "http://127.0.0.1:8787",
+    "signedIn": "Jelentkezzen ki, mielőtt másik szolgáltatásra állítja a JKNet alkalmazást.",
+    "notConfigured": "Fejlesztőknek és saját üzemeltetésű példányokhoz: egy http:// vagy https:// cím bekapcsolja ezen a gépen a fiókokat és a barátokat.",
+    "hint": "Egy http:// vagy https:// cím. Hagyja üresen, ha vissza szeretne térni az alapértelmezetthez."
+  },
+  "session": {
+    "expiredTitle": "Kijelentkezés: lejárt a munkamenet",
+    "expiredText": "Jelentkezzen be újra a Beállítások képernyőn, hogy lássa a barátait.",
+    "timedOut": "A bejelentkezés túl sokáig tartott. Próbálja újra.",
+    "expired": "A bejelentkezés lejárt. Próbálja újra.",
+    "failed": "A bejelentkezés nem fejeződött be."
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "io": "{{context}} : {{reason}}",
+  "json": "{{context}} : {{reason}}",
+  "path": "Un dossier dont JKNet a besoin n’est pas disponible : {{path}}",
+  "notFound": "Introuvable : {{what}}",
+  "invalidInput": "JKNet ne peut pas utiliser cela : {{reason}}",
+  "alreadyExists": "Cela existe déjà : {{what}}",
+  "busy": "{{reason}}",
+  "state": "JKNet a perdu la trace de son propre état : {{reason}}. Redémarrez le lanceur.",
+  "network": "L’appel réseau a échoué : {{reason}}",
+  "notImplemented": "Pas encore réalisé : {{what}}",
+  "rateLimited": "{{reason}}",
+  "archive": "L’archive n’a pas pu être lue : {{reason}}",
+  "launch": "Le jeu ne peut pas démarrer : {{reason}}",
+  "image": "L’image de la carte n’a pas pu être lue : {{reason}}",
+  "signedOut": "Connectez-vous à JKNet pour voir vos amis",
+  "gameMismatch": "{{reason}}",
+  "gameDataMissing": "Fichiers du jeu {{game}} : {{reason}}",
+  "engineFile": "{{file}} appartient à la version du moteur, pas à la bibliothèque : JKNet ne peut ni le désactiver ni le retirer.",
+  "basepathOccupied": "{{path}} est un vrai dossier, et non le lien que JKNet y conserve. Déplacez-le ou supprimez-le, puis relancez le jeu.",
+  "jkhubUnavailable": "JKHub est injoignable : {{reason}}",
+  "jkhubParse": "Une page JKHub n’a pas pu être lue : {{what}}. Le site a probablement changé.",
+  "jkhubDownload": "Le téléchargement depuis JKHub a échoué : {{reason}}",
+  "archiveUnsupported": "JKNet ne sait pas encore ouvrir une archive .{{format}}.",
+  "noPk3Files": "L’archive ne contient aucun fichier pk3 : {{entries}}",
+  "online": {
+    "notFound": "JKNet Online ne connaît pas ce compte.",
+    "unauthorized": "JKNet Online a refusé la session. Reconnectez-vous.",
+    "forbidden": "JKNet Online ne l’autorise pas.",
+    "invalid": "JKNet Online a refusé la requête : {{message}}",
+    "conflict": "Ce nom est déjà pris. Saisissez-en un autre.",
+    "rateLimited": "Trop de requêtes vers JKNet Online. Patientez un instant et réessayez.",
+    "providerError": "Le fournisseur de connexion n’est pas encore disponible : {{message}}",
+    "internal": "JKNet Online rencontre un problème de son côté. Réessayez plus tard.",
+    "notConfigured": "JKNet Online n’est pas encore ouvert : cette version garde les comptes et les amis désactivés."
+  },
+  "frontend": {
+    "noRuntime": "L’environnement Tauri n’est pas disponible",
+    "unexpected": "Erreur inattendue"
+  }
+}

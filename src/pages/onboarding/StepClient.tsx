@@ -1,10 +1,13 @@
 import { Check, Download } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 
 import { useGameEventsContext } from "../../components/GameEventsProvider";
 import { Badge, Button, Input, RadioCard } from "../../components/ui";
-import { formatBytes } from "../../lib/format";
-import { errorMessage, type Engine, type EngineInstallProgress } from "../../lib/ipc";
+// --- slice: i18n ---
+import { useErrorText } from "../../i18n/errors";
+import { useFormat } from "../../i18n/useFormat";
+import type { Engine, EngineInstallProgress } from "../../lib/ipc";
 import {
   useClients,
   useCreateClient,
@@ -36,6 +39,11 @@ interface StepClientProps {
  * button on another screen is what finishes it.
  */
 export function StepClient({ onBack, onContinue }: StepClientProps) {
+  const { t } = useTranslation("onboarding");
+  const { t: tCommon } = useTranslation("common");
+  const { t: tClients } = useTranslation("clients");
+  const errorText = useErrorText();
+  const format = useFormat();
   const settings = useSettings();
   const clients = useClients();
   const engines = useEngines();
@@ -45,7 +53,9 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
   const { installs, clearInstall } = useGameEventsContext();
 
   const [choice, setChoice] = useState<ClientChoice | null>(null);
-  const [name, setName] = useState("Everyday");
+  // --- slice: i18n --- the first client's name is a suggestion the player
+  // reads and edits, so it comes from the catalog rather than from the code.
+  const [name, setName] = useState(() => t("client.nameDefault"));
   /** Set once the client exists, so Retry never creates a second one. */
   const [clientId, setClientId] = useState<string | null>(null);
   const [working, setWorking] = useState(false);
@@ -82,7 +92,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
     ? installs[clientId]
     : undefined;
   const queryError = settings.error ?? clients.error ?? engines.error ?? null;
-  const failure = error ?? (queryError ? errorMessage(queryError) : null);
+  const failure = error ?? (queryError ? errorText(queryError) : null);
 
   const chosenEngine =
     choice?.kind === "engine"
@@ -161,7 +171,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
       await installEngine.mutateAsync({ clientId: target });
       leave();
     } catch (e) {
-      if (!left.current) setError(errorMessage(e));
+      if (!left.current) setError(errorText(e));
     } finally {
       if (!left.current) setWorking(false);
     }
@@ -173,15 +183,15 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
   return (
     <StepPanel
       step={2}
-      heading="Create your first client"
-      text="A client is an engine build with its own files and settings. JKNet downloads the engine for you, and you can add more clients later."
+      heading={t("client.heading")}
+      text={t("client.text")}
       error={failure}
       onBack={working ? undefined : onBack}
       footer={
         installFailed ? (
           <>
             <Button variant="ghost" onClick={leave}>
-              Skip download
+              {t("client.skipDownload")}
             </Button>
             <Button
               variant="primary"
@@ -189,7 +199,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
               icon={<Download size={16} />}
               onClick={() => void start()}
             >
-              Retry
+              {tCommon("actions.retry")}
             </Button>
           </>
         ) : (
@@ -199,7 +209,11 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
             disabled={!canStart || working}
             onClick={() => void start()}
           >
-            {downloading ? "Installing…" : working ? "Creating…" : "Continue"}
+            {downloading
+              ? tCommon("states.installing")
+              : working
+                ? tCommon("states.creating")
+                : tCommon("actions.continue")}
           </Button>
         )
       }
@@ -210,28 +224,40 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
         <FailedPanel clientId={clientId} />
       ) : (
         <>
-          <div className="flex flex-col gap-8" role="radiogroup" aria-label="Client">
+          <div
+            className="flex flex-col gap-8"
+            role="radiogroup"
+            aria-label={t("client.group")}
+          >
             {existing.map((client) => (
               <RadioCard
                 key={client.id}
                 name="onboarding-client"
                 selected={choice?.kind === "existing" && choice.clientId === client.id}
                 onSelect={() => setChoice({ kind: "existing", clientId: client.id })}
-                title={`Use existing client ${client.name}`}
+                title={t("client.useExisting", { client: client.name })}
                 aside={
                   client.engineVersion ? (
                     <Badge tone="success" icon={<Check size={12} />}>
-                      Engine ready
+                      {t("client.engineReady")}
                     </Badge>
                   ) : (
-                    <Badge tone="warm">No engine yet</Badge>
+                    <Badge tone="warm">{t("client.noEngine")}</Badge>
                   )
                 }
               >
                 <span className="block text-body-sm text-fg-muted">
-                  {engineName(engineList, client.engineId)}
-                  {client.engineVersion ? ` ${client.engineVersion}` : ""} · folder{" "}
-                  <span className="text-mono-xs">clients\{client.id}</span>
+                  <Trans
+                    t={t}
+                    i18nKey="client.existingMeta"
+                    values={{
+                      engine:
+                        engineName(engineList, client.engineId) +
+                        (client.engineVersion ? ` ${client.engineVersion}` : ""),
+                      folder: client.id,
+                    }}
+                    components={[<span className="text-mono-xs" />]}
+                  />
                 </span>
               </RadioCard>
             ))}
@@ -248,10 +274,12 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
                   title={engine.name}
                   aside={
                     <>
-                      {engine.recommended ? <Badge tone="accent">Recommended</Badge> : null}
+                      {engine.recommended ? (
+                        <Badge tone="accent">{tClients("engines.recommended")}</Badge>
+                      ) : null}
                       <span className="text-mono-xs text-fg-muted">
-                        {version?.tag ?? "latest"}
-                        {version ? ` · ${formatBytes(version.assetSize)}` : ""}
+                        {version?.tag ?? t("client.latest")}
+                        {version ? ` · ${format.bytes(version.assetSize)}` : ""}
                       </span>
                     </>
                   }
@@ -260,7 +288,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
                     {engine.installable
                       ? engine.description
                       : (engine.notInstallableReason ??
-                        "This build has to be installed by hand.")}
+                        t("client.manualInstall"))}
                   </span>
                 </RadioCard>
               );
@@ -273,19 +301,22 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
                 className="block text-label-xs text-fg-muted pb-8"
                 htmlFor="onboarding-client-name"
               >
-                Client name
+                {t("client.nameLabel")}
               </label>
               <Input
                 id="onboarding-client-name"
                 value={name}
                 maxLength={48}
-                placeholder="Everyday"
+                placeholder={t("client.namePlaceholder")}
                 onChange={(event) => setName(event.target.value)}
               />
               <p className="text-body-sm text-fg-muted pt-8">
-                Its files go into{" "}
-                <span className="text-mono-sm">clients\{folderSlug(name)}</span> inside
-                the JKNet data folder. Renaming the client later keeps that folder.
+                <Trans
+                  t={t}
+                  i18nKey="client.nameHint"
+                  values={{ folder: folderSlug(name) }}
+                  components={[<span className="text-mono-sm" />]}
+                />
               </p>
             </div>
           ) : null}
@@ -309,11 +340,15 @@ function InstallPanel({
   progress: EngineInstallProgress | undefined;
   onSkip: () => void;
 }) {
+  const { t } = useTranslation("onboarding");
+  const format = useFormat();
   const ratio =
     progress && progress.total > 0
       ? Math.min(1, progress.downloaded / progress.total)
       : null;
-  const message = progress?.message ?? "Asking GitHub for the newest build…";
+  // The core writes this line and it arrives rendered; the stand-in before the
+  // first event is the launcher's own.
+  const message = progress?.message ?? t("client.askingGithub");
 
   return (
     <div className="rounded-lg border border-line bg-surface p-16">
@@ -322,8 +357,8 @@ function InstallPanel({
         {progress ? (
           <span className="text-mono-xs text-fg-muted shrink-0">
             {ratio === null
-              ? formatBytes(progress.downloaded)
-              : `${formatBytes(progress.downloaded)} / ${formatBytes(progress.total)}`}
+              ? format.bytes(progress.downloaded)
+              : `${format.bytes(progress.downloaded)} / ${format.bytes(progress.total)}`}
           </span>
         ) : null}
       </div>
@@ -340,12 +375,9 @@ function InstallPanel({
           style={{ width: ratio === null ? "100%" : `${ratio * 100}%` }}
         />
       </div>
-      <p className="text-body-sm text-fg-muted pt-12">
-        The archive lands in the JKNet cache, so a second client on the same
-        engine installs without another download.
-      </p>
+      <p className="text-body-sm text-fg-muted pt-12">{t("client.cacheNote")}</p>
       <Button variant="ghost" size="sm" className="mt-8 -ml-12" onClick={onSkip}>
-        Continue without waiting
+        {t("client.continueWithoutWaiting")}
       </Button>
     </div>
   );
@@ -353,14 +385,18 @@ function InstallPanel({
 
 /** What is left standing after a failed download, so Retry is not a guess. */
 function FailedPanel({ clientId }: { clientId: string }) {
+  const { t } = useTranslation("onboarding");
+
   return (
     <div className="rounded-lg border border-line bg-surface p-16">
-      <p className="text-body-md-medium text-fg">
-        The client is created. Its engine is not installed yet.
-      </p>
+      <p className="text-body-md-medium text-fg">{t("client.failedTitle")}</p>
       <p className="text-body-sm text-fg-secondary pt-8">
-        Folder <span className="text-mono-sm">clients\{clientId}</span>. Retry the
-        download, or skip it and install the engine later from the Clients screen.
+        <Trans
+          t={t}
+          i18nKey="client.failedText"
+          values={{ folder: clientId }}
+          components={[<span className="text-mono-sm" />]}
+        />
       </p>
     </div>
   );

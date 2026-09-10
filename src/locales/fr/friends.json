@@ -1,0 +1,84 @@
+{
+  "title": "Amis",
+  "subtitle": "Voyez qui est en ligne et rejoignez son serveur en un clic.",
+  "subtitleCounts": "{{friends}} amis · {{online}} en ligne",
+  "loading": "Chargement de vos amis…",
+  "searchPlaceholder": "Rechercher ou ajouter un nom",
+  "addFriend": "Ajouter un ami",
+  "live": {
+    "on": "En direct",
+    "off": "Reconnexion",
+    "onText": "Les changements arrivent au moment où ils se produisent.",
+    "offText": "Le service est injoignable ; la liste s’actualise toutes les 30 secondes."
+  },
+  "groups": {
+    "in_game": "En jeu",
+    "online": "En ligne",
+    "offline": "Hors ligne"
+  },
+  "status": {
+    "playingOn": "Joue sur {{server}} · {{address}}",
+    "playingOnAddress": "Joue sur {{address}}",
+    "inGame": "En jeu",
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "lastSeenJustNow": "Vu à l’instant",
+    "lastSeenMinutes_one": "Vu il y a {{count}} minute",
+    "lastSeenMinutes_many": "Vu il y a {{count}} minutes",
+    "lastSeenMinutes_other": "Vu il y a {{count}} minutes",
+    "lastSeenHours_one": "Vu il y a {{count}} heure",
+    "lastSeenHours_many": "Vu il y a {{count}} heures",
+    "lastSeenHours_other": "Vu il y a {{count}} heures",
+    "lastSeenDays_one": "Vu il y a {{count}} jour",
+    "lastSeenDays_many": "Vu il y a {{count}} jours",
+    "lastSeenDays_other": "Vu il y a {{count}} jours",
+    "lastSeenOn": "Vu le {{date}}"
+  },
+  "empty": {
+    "offTitle": "Les amis ne sont pas encore activés",
+    "signInTitle": "Connectez-vous pour voir vos amis",
+    "signInText": "JKNet garde votre liste d’amis sur le service : elle vous suit sur chaque machine où vous vous connectez.",
+    "signIn": "Se connecter",
+    "noneTitle": "Aucun ami",
+    "noneText": "Saisissez un nom affiché, un nom jkhub: ou un identifiant dans le champ ci-dessus, puis appuyez sur Ajouter un ami.",
+    "noMatchTitle": "Personne ne correspond à « {{query}} »",
+    "noMatchText": "Appuyez sur Ajouter un ami pour lui envoyer une demande.",
+    "pickFriend": "Choisissez un ami pour rejoindre sa partie ou l’inviter dans la vôtre."
+  },
+  "requests": {
+    "incoming": "Demandes d’amis",
+    "outgoing": "Demandes envoyées",
+    "heading": "{{title}} · {{count}}",
+    "accept": "Accepter",
+    "decline": "Refuser",
+    "cancel": "Annuler",
+    "handle": "{{provider}}:{{name}}"
+  },
+  "notices": {
+    "nowFriends": "{{name}} et vous êtes désormais amis.",
+    "requestSent": "Demande envoyée à {{name}}.",
+    "inviteSent": "Invitation envoyée à {{name}}."
+  },
+  "row": {
+    "join": "Rejoindre",
+    "joining": "Démarrage…"
+  },
+  "panel": {
+    "status": "Statut",
+    "join": "Rejoindre la partie",
+    "joining": "Démarrage du jeu…",
+    "invite": "Inviter dans ma partie",
+    "inviteHintNoServer": "Rejoignez d’abord un serveur, puis invitez-y vos amis",
+    "inviteHint": "Inviter sur {{server}}",
+    "noServer": "Rejoignez un serveur depuis l’écran Serveurs pour y inviter quelqu’un.",
+    "removeConfirm": "Retirer {{name}} ? Vous devrez tous les deux envoyer une nouvelle demande pour redevenir amis.",
+    "remove": "Retirer l’ami"
+  },
+  "invite": {
+    "toast": "{{name}} vous invite sur {{server}}",
+    "join": "Rejoindre",
+    "noClient": "Choisissez d’abord un client par défaut sur l’écran Clients",
+    "gameRunning": "Une partie est déjà en cours",
+    "connectTo": "Se connecter à {{address}}"
+  }
+}

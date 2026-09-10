@@ -1,0 +1,85 @@
+{
+  "title": "Clients",
+  "subtitle": "Un client est une version d’un moteur avec ses propres fichiers et paramètres. Donnez-lui un nom et il est à vous.",
+  "newClient": "Nouveau client",
+  "gameFiles": {
+    "title": "Fichiers {{game}}",
+    "titleFallback": "Fichiers du jeu",
+    "ready": "Prêt",
+    "notSet": "Non défini",
+    "text": "JKNet lit <0>{{range}}</0> dans ce dossier et n’y écrit jamais.",
+    "searching": "Recherche des copies Steam et GOG…",
+    "noCopy": "Aucune copie trouvée",
+    "foundThrough": "Source : {{source}}. Confirmez ce dossier pour l’utiliser.",
+    "changeFolder": "Changer de dossier",
+    "useThisFolder": "Utiliser ce dossier",
+    "pickTitle": "Choisissez le dossier GameData",
+    "invalid": "Aucun fichier du jeu dans {{path}}. Manquants : {{missing}}."
+  },
+  "list": {
+    "heading": "Vos clients",
+    "emptyTitle": "Aucun client {{game}}",
+    "emptyText": "Un client est une version nommée d’un moteur avec ses propres mods et paramètres. Créez-en un et il apparaît ici.",
+    "otherGame_one": "{{count}} client {{game}} — changez de jeu dans la barre latérale pour le voir.",
+    "otherGame_many": "{{count}} clients {{game}} — changez de jeu dans la barre latérale pour les voir.",
+    "otherGame_other": "{{count}} clients {{game}} — changez de jeu dans la barre latérale pour les voir."
+  },
+  "card": {
+    "default": "Par défaut",
+    "makeDefault": "Définir par défaut",
+    "running": "En cours",
+    "engineNotInstalled": "Moteur non installé",
+    "meta": "{{id}} · créé le {{date}}",
+    "metaWithMod": "{{id}} · créé le {{date}} · fs_game {{mod}}",
+    "delete": "Supprimer",
+    "settingsOf": "Paramètres de {{client}}",
+    "settingsHint": "Nom et dossier du mod",
+    "installedOn": "installé le {{date}}",
+    "manualInstall": "Cette version doit être installée à la main."
+  },
+  "engine": {
+    "launch": "Lancer",
+    "stop": "Arrêter",
+    "otherRunning": "Un autre client est déjà en cours",
+    "installFirst": "Installez d’abord le moteur",
+    "checkUpdates": "Vérifier les mises à jour",
+    "updateTo": "Mettre à jour vers {{version}}",
+    "updateToNewest": "Mettre à jour vers la dernière version",
+    "upToDate": "À jour",
+    "install": "Installer le moteur",
+    "installVersion": "Installer le moteur {{version}}"
+  },
+  "engines": {
+    "heading": "Moteurs {{game}}",
+    "recommended": "Recommandé"
+  },
+  "newDialog": {
+    "title": "Nouveau client",
+    "text": "Un client est une version d’un moteur avec ses propres fichiers et paramètres. Donnez-lui un nom que vous reconnaîtrez dans la liste des clients.",
+    "game": "Jeu",
+    "engine": "Moteur",
+    "name": "Nom",
+    "namePlaceholder": "Quotidien",
+    "makeDefault": "En faire le client par défaut",
+    "makeDefaultText": "Le bouton Jouer de l’écran Accueil lance le client par défaut du jeu affiché. Chaque jeu a le sien.",
+    "makeDefaultSwitch": "Faire de ce client le client par défaut",
+    "download": "Télécharger le moteur tout de suite",
+    "downloadText": "Récupère la dernière version depuis GitHub. La progression s’affiche sur la carte du client.",
+    "downloadSwitch": "Télécharger le moteur juste après la création du client",
+    "create": "Créer le client"
+  },
+  "settingsDialog": {
+    "title": "Paramètres du client",
+    "text": "Le dossier sur le disque garde son nom <0>{{id}}</0> : un changement de nom ne casse aucun chemin déjà enregistré par le lanceur.",
+    "name": "Nom",
+    "namePlaceholder": "Quotidien",
+    "modFolder": "Dossier du mod (fs_game)",
+    "modFolderHint": "Le client démarre dans ce dossier de son répertoire personnel, passé en <0>+set fs_game</0>. Lettres, chiffres, <1>_</1>, <2>-</2> et <3>+</3> uniquement. Laissez vide pour <4>{{folder}}</4>, le dossier par défaut de {{engine}}.",
+    "engineFallback": "le moteur"
+  },
+  "missingToast": {
+    "title": "Aucun client {{game}}",
+    "text": "Créez-en un et il devient le client que ce jeu lance. Les clients {{game}} sont séparés de ceux de l’autre jeu.",
+    "action": "Créer un client"
+  }
+}
