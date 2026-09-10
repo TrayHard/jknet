@@ -551,11 +551,14 @@ pub fn list_trusted_servers(app: tauri::AppHandle) -> Result<Vec<TrustedServer>>
 }
 
 /// Applies a change to the settings and writes them.
+///
+/// The change lands on the document as it is on disk, not on the copy the
+/// launcher started with: a star must not undo a field edited elsewhere.
 fn edit_settings(
     state: &tauri::State<'_, AppState>,
     edit: impl FnOnce(&mut Settings),
 ) -> Result<Settings> {
-    let mut settings = state.settings()?;
+    let mut settings = Settings::current(state)?;
     edit(&mut settings);
     settings.save(state)?;
     state.set_settings(settings.clone())?;

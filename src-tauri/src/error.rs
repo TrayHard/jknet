@@ -50,6 +50,12 @@ pub enum AppError {
     #[error("already exists: {0}")]
     AlreadyExists(String),
 
+    /// The same job is already running for the same target, so the second
+    /// caller is refused instead of queued. The message is a whole sentence:
+    /// it goes straight onto a card the player is looking at.
+    #[error("{0}")]
+    Busy(String),
+
     /// Shared state could not be locked because another thread panicked while
     /// holding it.
     #[error("internal state is unavailable: {0}")]
