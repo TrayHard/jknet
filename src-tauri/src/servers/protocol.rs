@@ -14,6 +14,8 @@
 //! | `getserversResponse` record layout | `codemp/client/cl_main.cpp:1723`, `CL_ServersResponsePacket` |
 //! | `infoResponse\n<infostring>` | `codemp/server/sv_main.cpp:553`, `SVC_Info` |
 //! | `statusResponse\n<infostring>\n<players>` | `codemp/server/sv_main.cpp:465`, `SVC_Status` |
+//! | `g_humanplayers` counts the clients that are not `NA_BOT` | `codemp/server/sv_main.cpp:503`, `SVC_Info` |
+//! | A bot's ping is `0`, a client not yet in the game gets `999` | `codemp/server/sv_main.cpp:868`, `SV_CalcPings` |
 //! | `gametype_t` order | `codemp/game/bg_public.h:234` |
 //! | Colour codes `^0`..`^9` | `shared/qcommon/q_color.h:15` |
 
@@ -193,6 +195,37 @@ pub struct StatusPlayer {
     pub name_raw: String,
     pub score: i32,
     pub ping: i32,
+}
+
+impl StatusPlayer {
+    /// True when this line describes a bot.
+    ///
+    /// `SV_CalcPings` in `codemp/server/sv_main.cpp:868` writes `cl->ping = 0`
+    /// for every client whose entity carries `SVF_BOT`, and that is the only
+    /// way a client reaches zero: a player who is connected but not yet in the
+    /// game gets 999, and a measured round trip is at least one millisecond.
+    /// A human on the same machine as the server would still be routed through
+    /// the network stack, so zero over the internet does not happen.
+    ///
+    /// The rule is exact on OpenJK and on every engine that kept this loop —
+    /// which is all of them, since it is Quake 3 code — and remains a
+    /// heuristic on a closed mod that rewrites `cl->ping` by hand.
+    pub fn is_bot(&self) -> bool {
+        self.ping == 0
+    }
+}
+
+/// Splits a player list into humans and bots.
+///
+/// Counts saturate at [`u16::MAX`], which no server can reach: `sv_maxclients`
+/// is a byte in the protocol.
+pub fn count_humans_and_bots(players: &[StatusPlayer]) -> (u16, u16) {
+    let bots = players.iter().filter(|player| player.is_bot()).count();
+    let humans = players.len() - bots;
+    (
+        u16::try_from(humans).unwrap_or(u16::MAX),
+        u16::try_from(bots).unwrap_or(u16::MAX),
+    )
 }
 
 /// Parses the player lines of a `statusResponse` body.
@@ -412,6 +445,40 @@ mod tests {
     fn skips_lines_that_are_not_players() {
         let players = parse_status_players("\n\\sv_hostname\\Blue\\g_gametype\\0\nnot a player\n");
         assert!(players.is_empty());
+    }
+
+    #[test]
+    fn a_player_with_zero_ping_is_a_bot() {
+        let players = parse_status_players(
+            "12 45 \"Kyle\"\n5 0 \"Reborn\"\n0 999 \"Connecting\"\n7 1 \"Lag free\"\n",
+        );
+        let flags: Vec<bool> = players.iter().map(StatusPlayer::is_bot).collect();
+        // 999 is what a client gets before it is in the game, not a bot; 1 ms
+        // is what a player on the same LAN as the server gets.
+        assert_eq!(flags, vec![false, true, false, false]);
+    }
+
+    #[test]
+    fn counts_humans_and_bots_of_a_player_list() {
+        let players = parse_status_players("1 30 \"a\"\n2 0 \"b\"\n3 0 \"c\"\n4 120 \"d\"\n");
+        assert_eq!(count_humans_and_bots(&players), (2, 2));
+    }
+
+    #[test]
+    fn counts_the_edges_of_a_player_list() {
+        assert_eq!(count_humans_and_bots(&[]), (0, 0));
+        let all_bots = parse_status_players("0 0 \"b1\"\n0 0 \"b2\"\n0 0 \"b3\"\n");
+        assert_eq!(count_humans_and_bots(&all_bots), (0, 3));
+        let all_humans = parse_status_players("0 24 \"h1\"\n0 500 \"h2\"\n");
+        assert_eq!(count_humans_and_bots(&all_humans), (2, 0));
+    }
+
+    #[test]
+    fn a_negative_ping_is_not_a_bot() {
+        // No engine writes one, but a mod that does must not turn a player
+        // into a bot by accident: the rule is equality with zero, not a range.
+        let players = parse_status_players("0 -5 \"weird\"\n");
+        assert!(!players[0].is_bot());
     }
 
     #[test]

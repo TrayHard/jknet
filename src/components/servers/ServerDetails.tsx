@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { cn } from "../../lib/format";
 import type { ServerInfo, ServerPlayer } from "../../lib/ipc";
 import { Badge, Button } from "../ui";
+import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
 import { ServerName } from "./ServerName";
 
@@ -96,9 +97,19 @@ export function ServerDetails({
       <div className="flex items-center justify-between text-body-sm text-fg-muted">
         <span className="inline-flex items-center gap-6">
           <Users size={14} />
-          {server.clients}/{server.maxClients}
-          {server.humans !== null && server.humans !== server.clients ? (
-            <span className="text-fg-disabled">({server.humans} human)</span>
+          <span className="text-fg-secondary">
+            {realPlayers(server)}/{server.maxClients}
+          </span>
+          {botCount(server) > 0 ? (
+            <span className="text-fg-disabled">+{botCount(server)} bots</span>
+          ) : null}
+          {server.playersSource === "unknown" ? (
+            <span
+              className="text-fg-disabled"
+              title="This server publishes no bot count and did not answer getstatus"
+            >
+              bots unknown
+            </span>
           ) : null}
         </span>
         <Ping ms={server.pingMs} />
@@ -159,25 +170,77 @@ function PlayerList({
     return <p className="text-body-sm text-fg-muted">Nobody is playing.</p>;
   }
 
+  // People first, bots after them, each half keeping the server's own order,
+  // which is the slot order and therefore the scoreboard order.
+  const humans = players.filter((player) => !player.isBot);
+  const bots = players.filter((player) => player.isBot);
+
+  if (humans.length === 0) {
+    return (
+      <div className="flex flex-col gap-6">
+        <p className="text-body-sm text-fg-muted">
+          Nobody is playing: {bots.length} {bots.length === 1 ? "bot" : "bots"}{" "}
+          {bots.length === 1 ? "is" : "are"} alone here.
+        </p>
+        <PlayerRows players={bots} />
+      </div>
+    );
+  }
+
   return (
-    <ul className="flex flex-col gap-2 max-h-200 overflow-y-auto -mx-4">
+    <div className="flex flex-col gap-6 max-h-200 overflow-y-auto -mx-4">
+      <PlayerRows players={humans} />
+      {bots.length > 0 ? (
+        <>
+          <p className="px-4 text-label-xs text-fg-disabled">
+            {bots.length} {bots.length === 1 ? "BOT" : "BOTS"}
+          </p>
+          <PlayerRows players={bots} />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One block of the player list.
+ *
+ * A bot is drawn a step quieter than a person and carries a neutral `BOT`
+ * badge in place of its ping, which is the zero the badge is derived from and
+ * says nothing to a reader.
+ */
+function PlayerRows({ players }: { players: ServerPlayer[] }) {
+  return (
+    <ul className="flex flex-col gap-2">
       {players.map((player, index) => (
         <li
           key={`${index}-${player.nameRaw}`}
           className={cn(
             "grid items-center gap-8 h-24 px-4 rounded-sm",
-            "grid-cols-[minmax(0,1fr)_32px_40px]",
+            "grid-cols-[minmax(0,1fr)_32px_44px]",
           )}
         >
           <ServerName
             raw={player.nameRaw}
             clean={player.nameClean}
-            className="text-body-sm text-fg-secondary"
+            className={cn(
+              "text-body-sm",
+              player.isBot ? "text-fg-disabled" : "text-fg-secondary",
+            )}
           />
-          <span className="text-mono-xs tabular-nums text-fg-muted text-right">
+          <span
+            className={cn(
+              "text-mono-xs tabular-nums text-right",
+              player.isBot ? "text-fg-disabled" : "text-fg-muted",
+            )}
+          >
             {player.score}
           </span>
-          <Ping ms={player.ping} className="justify-end" />
+          {player.isBot ? (
+            <Badge className="justify-self-end">BOT</Badge>
+          ) : (
+            <Ping ms={player.ping} className="justify-end" />
+          )}
         </li>
       ))}
     </ul>

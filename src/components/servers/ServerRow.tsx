@@ -3,16 +3,22 @@ import { Lock, ShieldCheck, Star } from "lucide-react";
 import { cn } from "../../lib/format";
 import type { ServerInfo } from "../../lib/ipc";
 import { Badge, type BadgeTone } from "../ui";
+import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
 import { ServerName } from "./ServerName";
 
 /**
  * Column widths of the design: star 16, name fills the rest, the trust and
- * lock marks 40, map 116, mode 60, players 52, ping 56, mod 60. One constant
+ * lock marks 40, map 116, mode 60, players 76, ping 56, mod 60. One constant
  * so the header, the rows and the skeleton cannot drift apart.
+ *
+ * The design gives the players column 52 px, which holds `12/32` and nothing
+ * else. The bot suffix needs the rest; the name column gives it up, because
+ * it is the only flexible one and a name loses less by being 24 px shorter
+ * than a count does by being cut off.
  */
 export const ROW_COLUMNS =
-  "16px minmax(0, 1fr) 40px 116px 60px 52px 56px 60px";
+  "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px";
 
 /** Which badge tone a game type gets, so the modes stay apart at a glance. */
 const MODE_TONE: Record<number, BadgeTone> = {
@@ -117,12 +123,7 @@ export function ServerRow({
         {MODE_SHORT[server.gametype] ?? String(server.gametype)}
       </Badge>
 
-      <span className="text-mono-xs tabular-nums text-fg-secondary">
-        <span className={server.clients > 0 ? "text-fg" : undefined}>
-          {server.clients}
-        </span>
-        <span className="text-fg-disabled">/{server.maxClients}</span>
-      </span>
+      <PlayerCount server={server} />
 
       <Ping ms={server.pingMs} />
 
@@ -130,5 +131,34 @@ export function ServerRow({
         {server.game}
       </span>
     </div>
+  );
+}
+
+/**
+ * Real players over the slot count, and the bots beside it.
+ *
+ * The bots are muted and marked `b` rather than folded into the total: a
+ * player scanning the column is looking for people, and a server showing `0/32
+ * +12b` says in one glance what `12/32` used to hide.
+ */
+function PlayerCount({ server }: { server: ServerInfo }) {
+  const humans = realPlayers(server);
+  const bots = botCount(server);
+  const unknown = server.playersSource === "unknown";
+
+  return (
+    <span
+      className="text-mono-xs tabular-nums text-fg-secondary truncate"
+      title={
+        unknown
+          ? `${server.clients} clients; this server does not say how many are bots`
+          : `${humans} players, ${bots} bots, ${server.maxClients} slots`
+      }
+    >
+      <span className={humans > 0 ? "text-fg" : undefined}>{humans}</span>
+      <span className="text-fg-disabled">/{server.maxClients}</span>
+      {bots > 0 ? <span className="text-fg-muted"> +{bots}b</span> : null}
+      {unknown ? <span className="text-fg-disabled" aria-hidden="true"> ?</span> : null}
+    </span>
   );
 }
