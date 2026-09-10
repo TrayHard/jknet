@@ -44,6 +44,7 @@
   --color-danger-subtle: var(--color-bg-danger-subtle);
   --color-purple-subtle: var(--color-bg-purple-subtle);
   --color-overlay: var(--color-bg-overlay);
+  --color-scrim: var(--color-bg-scrim);
   --color-hover-overlay: var(--color-bg-hover-overlay);
   --color-selected-overlay: var(--color-bg-selected-overlay);
   --color-accent-glow: var(--color-bg-accent-glow);
