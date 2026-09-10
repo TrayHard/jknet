@@ -92,6 +92,12 @@ pub enum AppError {
     /// game already running.
     #[error("cannot launch: {0}")]
     Launch(String),
+
+    // --- slice: maps ---
+    /// A map picture could not be read, converted or written. Separate from
+    /// `Archive`, because the pk3 around a broken levelshot is usually fine.
+    #[error("image error: {0}")]
+    Image(String),
 }
 
 impl From<reqwest::Error> for AppError {
@@ -103,6 +109,13 @@ impl From<reqwest::Error> for AppError {
 impl From<zip::result::ZipError> for AppError {
     fn from(source: zip::result::ZipError) -> Self {
         AppError::Archive(source.to_string())
+    }
+}
+
+// --- slice: maps ---
+impl From<image::ImageError> for AppError {
+    fn from(source: image::ImageError) -> Self {
+        AppError::Image(source.to_string())
     }
 }
 

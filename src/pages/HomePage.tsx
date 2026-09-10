@@ -2,11 +2,13 @@ import { AlertTriangle, Play, Plus, Square } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
+import { MapPreview } from "../components/MapPreview";
 import { Page, PageHeader } from "../components/PageHeader";
 import { TopServers } from "../components/servers/TopServers";
 import { Badge, Button } from "../components/ui";
 import { errorMessage } from "../lib/ipc";
 import {
+  useCachedServers,
   useClients,
   useLaunchClient,
   useRunningGame,
@@ -34,6 +36,17 @@ export function HomePage() {
   const defaultClient = clients.data?.find(
     (client) => client.id === settings.data?.defaultClientId,
   );
+  // --- slice: maps ---
+  // The map of the server Connect was last pressed on, when the browser still
+  // has that row. History is the launcher's, not the client's, so this follows
+  // the last connection of any client. Nothing is fetched for it: both the
+  // history and the cached list are already on screen elsewhere.
+  const lastAddress = settings.data?.serverHistory[0]?.address ?? null;
+  const cachedServers = useCachedServers();
+  const lastServer =
+    lastAddress === null
+      ? undefined
+      : cachedServers.data?.find((row) => row.address === lastAddress);
   const running = runningGame.data ?? null;
   const runningClient = clients.data?.find((client) => client.id === running?.clientId);
   const canPlay =
@@ -76,67 +89,78 @@ export function HomePage() {
           aria-hidden="true"
           className="absolute -top-40 -right-24 size-240 rounded-full bg-accent-glow blur-3xl"
         />
-        <div className="relative flex flex-col gap-24">
-          <div className="flex flex-col gap-8">
-            <span className="text-label-xs text-fg-muted">
-              {running ? "In game" : "Quick play"}
-            </span>
-            <h2 className="text-display-xl text-fg">
-              {running
-                ? `Running: ${runningClient?.name ?? running.clientId}`
-                : (defaultClient?.name ?? "No default client")}
-            </h2>
-            <p className="text-body-md text-fg-secondary max-w-[560px]">
+        <div className="relative flex items-start gap-24">
+          <div className="flex flex-col gap-24 flex-1 min-w-0">
+            <div className="flex flex-col gap-8">
+              <span className="text-label-xs text-fg-muted">
+                {running ? "In game" : "Quick play"}
+              </span>
+              <h2 className="text-display-xl text-fg">
+                {running
+                  ? `Running: ${runningClient?.name ?? running.clientId}`
+                  : (defaultClient?.name ?? "No default client")}
+              </h2>
+              <p className="text-body-md text-fg-secondary max-w-[560px]">
+                {running ? (
+                  <>
+                    Started <Elapsed startedAt={running.startedAt} /> ago, process{" "}
+                    {running.pid}. The launcher steps aside while you play.
+                  </>
+                ) : defaultClient ? (
+                  "Start the default client and pick a server from the in-game menu."
+                ) : (
+                  "Create a client on the Clients screen, then mark it as the default one."
+                )}
+              </p>
+            </div>
+  
+            <div className="flex items-center gap-12">
               {running ? (
-                <>
-                  Started <Elapsed startedAt={running.startedAt} /> ago, process{" "}
-                  {running.pid}. The launcher steps aside while you play.
-                </>
-              ) : defaultClient ? (
-                "Start the default client and pick a server from the in-game menu."
+                <Button
+                  variant="danger"
+                  size="lg"
+                  icon={<Square size={20} />}
+                  onClick={() =>
+                    stopGame.mutate(undefined, {
+                      onError: (e) => setError(errorMessage(e)),
+                    })
+                  }
+                >
+                  Stop
+                </Button>
               ) : (
-                "Create a client on the Clients screen, then mark it as the default one."
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={<Play size={20} />}
+                  disabled={!canPlay}
+                  onClick={play}
+                  title={defaultClient ? undefined : "Mark a client as the default one"}
+                >
+                  {launchClient.isPending ? "Starting…" : "Play"}
+                </Button>
               )}
-            </p>
+              <Button
+                size="lg"
+                icon={<Plus size={20} />}
+                onClick={() => void navigate("/clients")}
+              >
+                Manage clients
+              </Button>
+              {defaultClient ? (
+                <Badge tone="accent">{defaultClient.engineId}</Badge>
+              ) : null}
+            </div>
           </div>
 
-          <div className="flex items-center gap-12">
-            {running ? (
-              <Button
-                variant="danger"
-                size="lg"
-                icon={<Square size={20} />}
-                onClick={() =>
-                  stopGame.mutate(undefined, {
-                    onError: (e) => setError(errorMessage(e)),
-                  })
-                }
-              >
-                Stop
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="lg"
-                icon={<Play size={20} />}
-                disabled={!canPlay}
-                onClick={play}
-                title={defaultClient ? undefined : "Mark a client as the default one"}
-              >
-                {launchClient.isPending ? "Starting…" : "Play"}
-              </Button>
-            )}
-            <Button
-              size="lg"
-              icon={<Plus size={20} />}
-              onClick={() => void navigate("/clients")}
-            >
-              Manage clients
-            </Button>
-            {defaultClient ? (
-              <Badge tone="accent">{defaultClient.engineId}</Badge>
-            ) : null}
-          </div>
+          {/* --- slice: maps --- */}
+          {lastServer ? (
+            <MapPreview
+              map={lastServer.map}
+              serverName={lastServer.hostnameClean}
+              className="w-240 h-140 shrink-0"
+            />
+          ) : null}
         </div>
       </section>
 

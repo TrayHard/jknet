@@ -3,6 +3,7 @@ import { useState, type ReactNode } from "react";
 
 import { cn } from "../../lib/format";
 import type { ServerInfo, ServerPlayer } from "../../lib/ipc";
+import { MapPreview } from "../MapPreview";
 import { Badge, Button } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
@@ -46,17 +47,8 @@ export function ServerDetails({
 
   return (
     <aside className="flex flex-col gap-16 w-320 shrink-0 rounded-lg border border-line bg-surface p-16">
-      {/* The design puts a map image here; the launcher has no map art yet,
-          so the same block carries the map name over a gradient. */}
-      <div className="relative h-96 rounded-md overflow-hidden bg-app border border-line-subtle">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-br from-accent-subtle to-purple-subtle opacity-60"
-        />
-        <span className="absolute left-12 bottom-10 text-mono-sm text-fg">
-          {server.map || "unknown map"}
-        </span>
-      </div>
+      {/* --- slice: maps --- */}
+      <MapPreview map={server.map} className="h-96" />
 
       <div className="flex flex-col gap-8">
         <ServerName
