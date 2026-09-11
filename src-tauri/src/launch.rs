@@ -420,11 +420,20 @@ fn is_zero(token: &str) -> bool {
 // What the engine will actually read
 // ---------------------------------------------------------------------------
 
-/// Most `+` segments `Com_ParseCommandLine` keeps, `MAX_CONSOLE_LINES` in
-/// `codemp/qcommon/common.cpp:371` of OpenJK `1a6a6434`. The parser stops at
-/// the limit without a word, so the 33rd segment and everything after it never
-/// reaches the engine.
+/// Console lines `Com_ParseCommandLine` has room for, `MAX_CONSOLE_LINES` in
+/// `codemp/qcommon/common.cpp:371` of OpenJK `1a6a6434`.
 const MAX_CONSOLE_LINES: usize = 32;
+
+/// Most `+` segments the engine reads: one less than the lines it holds.
+///
+/// `Com_ParseCommandLine` (`codemp/qcommon/common.cpp:382-403` of OpenJK
+/// `1a6a6434`) opens with `com_numConsoleLines = 1`. Entry zero is already
+/// taken by the head of the line — whatever stands before the first `+` —
+/// and every `+` after that fills one more entry. The parser returns the
+/// moment the count reaches `MAX_CONSOLE_LINES`, without a word and before
+/// storing, so 31 `+` segments fit and the 32nd and everything after it never
+/// reaches the engine.
+const MAX_PLUS_SEGMENTS: usize = MAX_CONSOLE_LINES - 1;
 
 /// Longest command line the platform `main()` hands to `Com_Init`,
 /// `MAX_STRING_CHARS` in `codemp/qcommon/q_shared.h:178` of OpenJK `1a6a6434`.
@@ -433,12 +442,19 @@ const MAX_CONSOLE_LINES: usize = 32;
 const MAX_STRING_CHARS: usize = 1024;
 
 /// Counts the command line the way the engine will: `+` segments, and the
-/// length of the single string the platform `main()` rebuilds from `argv[]`.
+/// size in bytes of the single string the platform `main()` rebuilds from
+/// `argv[]`.
 ///
 /// Both numbers are taken from that assembled string rather than from the
 /// tokens, because both engine rules are written against the string and read
 /// differently on the tokens: the separator after the last argument is easy to
 /// lose, and a `+` means one thing inside quotes and another outside them.
+///
+/// The size is bytes, not characters. The buffer the line has to fit is
+/// `char commandLine[MAX_STRING_CHARS]` (`shared/sys/sys_main.cpp:746` of
+/// OpenJK `1a6a6434`), and `Q_strcat` fills it byte by byte. A Cyrillic player
+/// name spends two bytes per letter, so a line that looks short by character
+/// count can already be past the only count the engine keeps.
 ///
 /// Neither limit is enforced. A player who writes a long line gets the line
 /// they wrote, and a launcher that silently dropped a token would be the
@@ -446,7 +462,7 @@ const MAX_STRING_CHARS: usize = 1024;
 /// passed when a `+exec` at the end of a long line turns out to do nothing.
 fn command_line_size(args: &[String]) -> (usize, usize) {
     let line = engine_command_line(args);
-    (console_segments(&line), line.chars().count())
+    (console_segments(&line), line.len())
 }
 
 /// Rebuilds the one string the platform `main()` hands to `Com_Init`.
@@ -496,15 +512,15 @@ fn console_segments(line: &str) -> usize {
 /// Writes a WARN when the assembled line is past what the engine reads.
 fn warn_past_engine_limits(client_id: &str, args: &[String]) {
     let (segments, length) = command_line_size(args);
-    if segments > MAX_CONSOLE_LINES {
+    if segments > MAX_PLUS_SEGMENTS {
         log::warn!(
             "{client_id}: {segments} '+' segments on the command line, \
-             the engine reads the first {MAX_CONSOLE_LINES} and drops the rest"
+             the engine reads the first {MAX_PLUS_SEGMENTS} and drops the rest"
         );
     }
     if length > MAX_STRING_CHARS {
         log::warn!(
-            "{client_id}: the command line is {length} characters, \
+            "{client_id}: the command line is {length} bytes, \
              the engine reads the first {MAX_STRING_CHARS}"
         );
     }
@@ -1258,8 +1274,8 @@ mod tests {
             command_line_size(&split_args("+connect 127.0.0.1:29070")),
             (1, 25)
         );
-        // `+set name "Ben Kenobi"`: eleven characters of value plus the two
-        // quotes the platform layer puts back.
+        // `+set name "Ben Kenobi"`: eleven bytes of value plus the two quotes
+        // the platform layer puts back.
         assert_eq!(
             command_line_size(&split_args("+set name \"Ben Kenobi\"")),
             (1, 23)
@@ -1269,8 +1285,42 @@ mod tests {
             .flat_map(|n| ["+set".to_string(), format!("cg_x{n}"), "1".to_string()])
             .collect();
         let (segments, length) = command_line_size(&long);
-        assert!(segments > MAX_CONSOLE_LINES, "{segments}");
+        assert!(segments > MAX_PLUS_SEGMENTS, "{segments}");
         assert!(length < MAX_STRING_CHARS, "one limit at a time: {length}");
+    }
+
+    #[test]
+    fn the_length_is_bytes_because_the_engine_buffer_is_bytes() {
+        // `char commandLine[MAX_STRING_CHARS]` holds bytes, and `Q_strcat`
+        // fills it byte by byte, so a Cyrillic value costs twice what its
+        // letters suggest. Counting characters would let a line past the
+        // engine buffer leave the log silent.
+        let cyrillic = split_args("+set name \"Оби Ван\"");
+        let line = engine_command_line(&cyrillic);
+        assert_eq!(line, "+set name \"Оби Ван\" ");
+        // 20 characters, 26 bytes: six Cyrillic letters spend two bytes each.
+        assert_eq!(line.chars().count(), 20);
+        assert_eq!(command_line_size(&cyrillic), (1, 26));
+
+        // The same name repeated fills the buffer long before the character
+        // count says it is full: 860 characters, 1220 bytes.
+        let many: Vec<String> = (0..30)
+            .flat_map(|n| {
+                [
+                    "+set".to_string(),
+                    format!("name{n}"),
+                    "Оби Ван Кеноби".to_string(),
+                ]
+            })
+            .collect();
+        let line = engine_command_line(&many);
+        assert!(
+            line.chars().count() < MAX_STRING_CHARS,
+            "characters stay inside the limit: {}",
+            line.chars().count()
+        );
+        let (_, length) = command_line_size(&many);
+        assert!(length > MAX_STRING_CHARS, "bytes do not: {length}");
     }
 
     #[test]
@@ -1288,9 +1338,11 @@ mod tests {
     }
 
     #[test]
-    fn the_thirty_third_segment_is_the_one_past_the_limit() {
-        // `warn_past_engine_limits` writes its WARN on `segments >
-        // MAX_CONSOLE_LINES`, so the line to catch is the 33rd segment.
+    fn the_thirty_second_segment_is_the_one_past_the_limit() {
+        // `Com_ParseCommandLine` starts at `com_numConsoleLines = 1`, because
+        // entry zero holds the head of the line, and quits when the count
+        // reaches `MAX_CONSOLE_LINES`. Thirty-one `+` segments fit; the 32nd is
+        // the first one the engine throws away, and the first to warn.
         let segments_of = |count: usize| {
             let args: Vec<String> = (0..count)
                 .flat_map(|n| ["+set".to_string(), format!("cg_x{n}"), "1".to_string()])
@@ -1299,8 +1351,9 @@ mod tests {
             assert!(length < MAX_STRING_CHARS, "one limit at a time: {length}");
             segments
         };
-        assert!(segments_of(33) > MAX_CONSOLE_LINES, "33 segments warn");
-        assert!(segments_of(32) <= MAX_CONSOLE_LINES, "32 segments do not");
+        assert_eq!(MAX_PLUS_SEGMENTS, 31);
+        assert!(segments_of(32) > MAX_PLUS_SEGMENTS, "32 segments warn");
+        assert!(segments_of(31) <= MAX_PLUS_SEGMENTS, "31 segments do not");
     }
 
     #[test]
