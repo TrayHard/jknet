@@ -1,12 +1,30 @@
 //! The server browser.
 //!
-//! One refresh is three stages. First both master servers are asked for their
-//! address lists over UDP; the lists are merged and deduplicated. Then every
-//! address is sent a `getinfo` with a bounded number of requests in flight,
-//! and the round trip time of that request is the ping the browser shows.
-//! Last, the servers that did not publish `g_humanplayers` get a `getstatus`,
-//! because their player list is the only place a bot can be told from a
-//! person — see [`ServerInfo::apply_status`].
+//! Three operations fill the browser, and every one of them ends in the same
+//! probe of a list of addresses — [`probe_addresses`]:
+//!
+//! - [`refresh_servers`] asks the master servers for their address lists, then
+//!   probes what they returned. This is **Get new list**.
+//! - [`refresh_addresses`] probes the addresses the caller already has, with no
+//!   master server in it at all. This is **Refresh**, and it is also how the
+//!   Favorites and History tabs ask about the addresses the player saved.
+//! - [`refresh_lan`] broadcasts one `getinfo` across the local network and
+//!   builds rows out of whoever answers.
+//!
+//! Nothing starts by itself. The engine's own browser has no timer either —
+//! `UI_DoServerRefresh` returns at once unless a player pressed something
+//! (`codemp/ui/ui_main.c:10457`, OpenJK `1a6a6434`) — and a scan of two hundred
+//! hosts is not something to do behind the player's back.
+//!
+//! The probe is two stages. Every address is sent a `getinfo` with a bounded
+//! number of requests in flight, and the round trip time of that request is the
+//! ping the browser shows. Then the servers that did not publish
+//! `g_humanplayers` get a `getstatus`, because their player list is the only
+//! place a bot can be told from a person — see [`ServerInfo::apply_status`].
+//!
+//! Each operation runs under a [`RefreshScope`], which every event carries: the
+//! screen keeps a loader per tab, and a scan of the Favorites tab must not
+//! freeze the All tab. Two scopes may run at once; the same scope may not.
 //!
 //! Everything the launcher calls a player count is a count of people. Bots are
 //! carried alongside in [`ServerInfo::bots`] and shown as a suffix, never
@@ -29,9 +47,9 @@ mod protocol;
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
-use std::net::SocketAddrV4;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -74,6 +92,14 @@ const MAX_STATUS_QUERIES: usize = 150;
 /// How often the collected rows are pushed to the window during a refresh.
 const BATCH_INTERVAL: Duration = Duration::from_millis(100);
 
+// --- slice: servers browser ---
+/// How long a LAN sweep listens after its broadcasts have gone out.
+///
+/// The same budget a `getstatus` gets. A server on the same switch answers in
+/// single-digit milliseconds; the rest of the budget is there for a wireless
+/// hop and for a machine that was busy loading a map.
+const LAN_TIMEOUT: Duration = Duration::from_millis(1_500);
+
 /// How many addresses `server_history` keeps.
 const HISTORY_LIMIT: usize = 50;
 
@@ -99,6 +125,83 @@ pub enum PlayersSource {
     /// Neither answered the question.
     #[default]
     Unknown,
+}
+
+// --- slice: servers browser ---
+/// Which list of the browser one operation is filling.
+///
+/// The Servers screen keeps a loader, a counter and a "refreshed N s ago" line
+/// per tab, so every event of an operation says whose tab it belongs to: a
+/// scan of the Favorites tab must leave the All tab alone, and the two may be
+/// in flight at the same time.
+///
+/// The scope is also the key of [`RefreshState`], which is what stops a second
+/// press of the same button from starting a second scan of the same list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RefreshScope {
+    /// The whole list: the master servers, or every address already on it.
+    #[default]
+    All,
+    /// The addresses in `favorite_servers`.
+    Favorites,
+    /// The addresses in `server_history`.
+    History,
+    /// The broadcast sweep of the local network.
+    Lan,
+}
+
+// --- slice: servers browser ---
+/// The scopes an operation is running for right now.
+///
+/// Long work is guarded in the core and not merely by a disabled button, the
+/// way `InstallState` guards an engine install: a second `invoke` from a
+/// reloaded window would otherwise put two scans of the same list on the wire.
+/// The key carries the game as well, because the two lists come from different
+/// master servers and have nothing to do with each other.
+#[derive(Debug, Default)]
+pub struct RefreshState {
+    busy: Mutex<HashSet<(Game, RefreshScope)>>,
+}
+
+impl RefreshState {
+    /// Claims one scope of one game, or refuses because it is already running.
+    fn claim(&self, game: Game, scope: RefreshScope) -> Result<RefreshGuard<'_>> {
+        let mut busy = self
+            .busy
+            .lock()
+            .map_err(|_| AppError::State("the server refresh lock is poisoned".into()))?;
+        if !busy.insert((game, scope)) {
+            return Err(AppError::Busy(format!(
+                "a {scope:?} refresh of {} is already running. Wait for it to finish.",
+                game.display_name()
+            )));
+        }
+        Ok(RefreshGuard {
+            state: self,
+            key: (game, scope),
+        })
+    }
+}
+
+/// Releases the claim when the operation ends, however it ends.
+#[derive(Debug)]
+struct RefreshGuard<'a> {
+    state: &'a RefreshState,
+    key: (Game, RefreshScope),
+}
+
+impl Drop for RefreshGuard<'_> {
+    fn drop(&mut self) {
+        match self.state.busy.lock() {
+            Ok(mut busy) => {
+                busy.remove(&self.key);
+            }
+            // A poisoned lock would leave the tab's button dead until the
+            // launcher restarts, which is worse than the panic behind it.
+            Err(e) => log::error!("cannot release the refresh claim of {:?}: {e}", self.key),
+        }
+    }
 }
 
 /// One row of the browser.
@@ -158,6 +261,21 @@ pub struct ServerInfo {
     pub ping_ms: u32,
     /// Starred by the player, from `favorite_servers` in the settings.
     pub favorite: bool,
+    // --- slice: servers browser ---
+    /// False when the last direct probe of this address got nothing back.
+    ///
+    /// The Favorites and History tabs are lists of addresses the player saved,
+    /// so a server that is switched off still has to be a row: one that
+    /// silently disappears reads as a launcher that lost it. Such a row carries
+    /// whatever the last successful scan knew and the screen draws it muted,
+    /// with a mark where the ping goes.
+    ///
+    /// True everywhere else, including on every row read off the cache: the
+    /// cache only ever holds servers that answered, and a document written
+    /// before the field existed has to read as answered rather than as a list
+    /// of ghosts.
+    #[serde(default = "answered")]
+    pub responded: bool,
     /// When this row was last confirmed, RFC 3339 in UTC.
     pub last_seen: String,
 }
@@ -219,8 +337,23 @@ impl ServerInfo {
                 .unwrap_or_else(|| default_protocol(game)),
             ping_ms,
             favorite: false,
+            responded: true,
             last_seen: last_seen.to_string(),
         }
+    }
+
+    // --- slice: servers browser ---
+    /// A row for an address that has never answered anything.
+    ///
+    /// The empty info string put through the ordinary constructor, so the
+    /// fallbacks are the ones a very terse server would get: the address as the
+    /// name, no map, no players, the newest protocol of the game. The row
+    /// exists so a favourite the player saved before the launcher ever saw it
+    /// online is still on the tab.
+    fn unseen(game: Game, address: SocketAddrV4) -> ServerInfo {
+        let mut row = ServerInfo::from_infostring(game, address, "", 0, "");
+        row.responded = false;
+        row
     }
 
     /// Applies the flag that comes from the launcher, not from the server.
@@ -314,6 +447,12 @@ fn base_mod() -> String {
     "base".to_string()
 }
 
+// --- slice: servers browser ---
+/// What [`ServerInfo::responded`] reads as when a document does not say.
+fn answered() -> bool {
+    true
+}
+
 /// Reads the game of a cached row, tolerating what 0.2 put in that key.
 ///
 /// Until 0.3 the key `game` held the mod folder — `base`, `japlus`, `mb2` — so
@@ -389,6 +528,10 @@ struct BatchEvent {
     /// The game being refreshed. The event names keep their names, so a screen
     /// showing one game reads this to know whether the batch is for it.
     game: Game,
+    // --- slice: servers browser ---
+    /// Which tab asked. A `lan` batch holds rows that never enter the master
+    /// list; every other scope holds rows of it.
+    scope: RefreshScope,
     servers: Vec<ServerInfo>,
 }
 
@@ -398,7 +541,12 @@ struct BatchEvent {
 struct DoneEvent {
     // --- slice: game core ---
     game: Game,
-    /// Addresses the masters returned.
+    // --- slice: servers browser ---
+    /// Which tab asked, so one tab's indicator is not closed by another's.
+    scope: RefreshScope,
+    /// Addresses that were asked: what the masters returned, what the caller
+    /// sent, or — on a LAN sweep, where nobody knows who is out there — the
+    /// number that answered.
     total: usize,
     /// How many of them answered `getinfo`.
     responded: usize,
@@ -554,7 +702,14 @@ fn sort_rows(servers: &mut [ServerInfo]) {
 ///
 /// The only way `emit` fails is a window that is already gone, and a refresh
 /// that outlives its window has nothing left to report.
-fn emit<T: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: T) {
+///
+/// --- slice: servers browser ---
+/// `None` means there is no window at all, which is how a test drives the probe
+/// without a running application.
+fn emit<T: Serialize + Clone>(app: Option<&tauri::AppHandle>, event: &str, payload: T) {
+    let Some(app) = app else {
+        return;
+    };
     if let Err(e) = app.emit(event, payload) {
         log::warn!("cannot emit {event}: {e}");
     }
@@ -598,7 +753,12 @@ pub fn get_cached_servers(
     Ok(servers)
 }
 
-/// Queries the master servers, pings every address and refreshes the cache.
+/// Queries the master servers, pings every address and rewrites the cache.
+///
+/// This is the **Get new list** button: the only operation that asks a master
+/// server, and the only one that replaces the cache document instead of
+/// merging into it — a server the masters no longer list has left, and that is
+/// what takes its row off the screen.
 ///
 /// `masters` overrides the stock master servers of the game, which is what a
 /// test or a player behind a blocked DNS needs. An empty list falls back to the
@@ -615,6 +775,7 @@ pub fn get_cached_servers(
 pub async fn refresh_servers(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
+    refreshes: tauri::State<'_, RefreshState>,
     game: Option<Game>,
     masters: Option<Vec<String>>,
 ) -> Result<Vec<ServerInfo>> {
@@ -626,6 +787,10 @@ pub async fn refresh_servers(
     let spec = game.spec();
     let file = cache_file(&state, game)?;
     let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    // --- slice: servers browser ---
+    // Held for the whole refresh, so the second press of a button the window
+    // failed to disable is refused here instead of on the wire.
+    let _claim = refreshes.claim(game, RefreshScope::All)?;
 
     let masters: Vec<String> = masters
         .map(|list| {
@@ -645,7 +810,252 @@ pub async fn refresh_servers(
         game.display_name()
     );
 
+    let collected = probe_addresses(
+        Some(&app),
+        game,
+        RefreshScope::All,
+        addresses,
+        &favorites,
+        &timestamp::now_rfc3339(),
+    )
+    .await;
+    write_cache(&file, &collected);
+
+    let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    let real_players: u32 = collected
+        .iter()
+        .map(|server| u32::from(server.real_players()))
+        .sum();
+    log::info!(
+        "refresh ({}): {} of {total} servers answered in {elapsed_ms} ms, \
+         {real_players} real players, {} servers running bots only",
+        game.display_name(),
+        collected.len(),
+        collected
+            .iter()
+            .filter(|server| server.is_bots_only())
+            .count()
+    );
+    emit(
+        Some(&app),
+        "servers:done",
+        DoneEvent {
+            game,
+            scope: RefreshScope::All,
+            total,
+            responded: collected.len(),
+            elapsed_ms,
+        },
+    );
+    Ok(collected)
+}
+
+// --- slice: servers browser ---
+/// Probes the addresses the caller already knows, without a master server.
+///
+/// This is the **Refresh** button and the two tabs built out of the player's
+/// own lists. The engine draws the same line: `RefreshServers` asks the master
+/// for a new list, `RefreshFilter` only pings the addresses already on screen
+/// (`UI_StartServerRefresh`, `codemp/ui/ui_main.c:10500`, OpenJK `1a6a6434`).
+///
+/// The answers are merged into the cache by address — the rest of the document
+/// is untouched, because this operation knows nothing about it. An address that
+/// stays silent is returned all the same, carrying whatever the last successful
+/// scan knew and with [`ServerInfo::responded`] false, so a favourite that is
+/// switched off is a muted row rather than a row that vanished.
+///
+/// `scope` says which tab asked; it travels on both events and is what keeps
+/// that tab's loader separate from the others.
+#[tauri::command]
+pub async fn refresh_addresses(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    refreshes: tauri::State<'_, RefreshState>,
+    game: Option<Game>,
+    addresses: Vec<String>,
+    scope: RefreshScope,
+) -> Result<Vec<ServerInfo>> {
+    let started = Instant::now();
+    let settings = state.settings()?;
+    let game = settings.game_or_active(game);
+    let file = cache_file(&state, game)?;
+    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    let _claim = refreshes.claim(game, scope)?;
+
+    // Deduplicated but kept in the caller's order, and an address that does not
+    // parse is dropped with a line in the log rather than failing the press:
+    // the list comes off the screen, and one bad entry must not cost the rest.
+    let mut seen: HashSet<SocketAddrV4> = HashSet::new();
+    let mut wanted: Vec<SocketAddrV4> = Vec::with_capacity(addresses.len());
+    for address in &addresses {
+        match parse_address(game, address) {
+            Ok(peer) if seen.insert(peer) => wanted.push(peer),
+            Ok(_) => {}
+            Err(e) => log::warn!("skipping {address} in a {scope:?} refresh: {e}"),
+        }
+    }
+    let total = wanted.len();
+
+    let answered = probe_addresses(
+        Some(&app),
+        game,
+        scope,
+        wanted.clone(),
+        &favorites,
+        &timestamp::now_rfc3339(),
+    )
+    .await;
+    let document = merge_into_cache(&file, &answered);
+
+    let mut rows = answered;
+    rows.extend(silent_rows(game, &document, &wanted, &rows, &favorites));
+    sort_rows(&mut rows);
+
+    let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    let responded = rows.iter().filter(|row| row.responded).count();
+    log::info!(
+        "{scope:?} refresh ({}): {responded} of {total} servers answered in {elapsed_ms} ms",
+        game.display_name()
+    );
+    emit(
+        Some(&app),
+        "servers:done",
+        DoneEvent {
+            game,
+            scope,
+            total,
+            responded,
+            elapsed_ms,
+        },
+    );
+    Ok(rows)
+}
+
+// --- slice: servers browser ---
+/// Broadcasts one `getinfo` across the local network and lists who answers.
+///
+/// The **LAN** tab. `CL_LocalServers_f` does exactly this
+/// (`codemp/client/cl_main.cpp:3337`, OpenJK `1a6a6434`): the same request goes
+/// to [`crate::game::LAN_PORT_COUNT`] consecutive ports of the broadcast
+/// address, twice, and every server on the segment answers from its own
+/// address.
+///
+/// The rows never reach `cache\servers-<game>.json`. A machine on this network
+/// is not a server the master list knows about, and a cached LAN row would come
+/// back on the All tab of a player sitting somewhere else entirely.
+#[tauri::command]
+pub async fn refresh_lan(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    refreshes: tauri::State<'_, RefreshState>,
+    game: Option<Game>,
+) -> Result<Vec<ServerInfo>> {
+    let settings = state.settings()?;
+    let game = settings.game_or_active(game);
+    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    let _claim = refreshes.claim(game, RefreshScope::Lan)?;
+    scan_lan(Some(&app), game, &broadcast_targets(game), &favorites).await
+}
+
+// --- slice: servers browser ---
+/// The addresses a LAN sweep sends to: the broadcast address on the game's
+/// server port and the three above it.
+fn broadcast_targets(game: Game) -> Vec<SocketAddrV4> {
+    let port = game.spec().server_port;
+    (0..crate::game::LAN_PORT_COUNT)
+        .map(|offset| SocketAddrV4::new(Ipv4Addr::BROADCAST, port + offset))
+        .collect()
+}
+
+// --- slice: servers browser ---
+/// The sweep itself, with the targets as an argument.
+///
+/// Split from the command so a test can aim it at four localhost ports and stay
+/// off the network entirely.
+async fn scan_lan(
+    app: Option<&tauri::AppHandle>,
+    game: Game,
+    targets: &[SocketAddrV4],
+    favorites: &HashSet<String>,
+) -> Result<Vec<ServerInfo>> {
+    let started = Instant::now();
     let last_seen = timestamp::now_rfc3339();
+    let answers = net::scan_lan(targets, LAN_TIMEOUT).await?;
+
+    let mut rows: Vec<ServerInfo> = answers
+        .into_iter()
+        .map(|(address, reply)| {
+            let mut row = ServerInfo::from_infostring(
+                game,
+                address,
+                &reply.infostring,
+                reply.ping_ms,
+                &last_seen,
+            );
+            row.decorate(favorites);
+            row
+        })
+        .filter(|row| !is_hidden_mod(&row.mod_name))
+        .collect();
+
+    // The same second pass as a refresh: a server on the desk next to the
+    // player hides `g_humanplayers` as readily as one on the internet.
+    resolve_bots_by_status(app, game, RefreshScope::Lan, &mut rows).await;
+    sort_rows(&mut rows);
+
+    let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    log::info!(
+        "LAN sweep ({}): {} servers answered on {} ports in {elapsed_ms} ms",
+        game.display_name(),
+        rows.len(),
+        targets.len()
+    );
+    if !rows.is_empty() {
+        emit(
+            app,
+            "servers:batch",
+            BatchEvent {
+                game,
+                scope: RefreshScope::Lan,
+                servers: rows.clone(),
+            },
+        );
+    }
+    // Nobody knows how many servers are out there, so the two counts are the
+    // same number: a sweep cannot report anybody as silent.
+    emit(
+        app,
+        "servers:done",
+        DoneEvent {
+            game,
+            scope: RefreshScope::Lan,
+            total: rows.len(),
+            responded: rows.len(),
+            elapsed_ms,
+        },
+    );
+    Ok(rows)
+}
+
+// --- slice: servers browser ---
+/// Sends `getinfo` to every address and streams the answers to the window.
+///
+/// The loop that used to live inside `refresh_servers`, now the one place that
+/// talks to a list of servers: at most [`MAX_IN_FLIGHT`] sockets open, one
+/// `servers:batch` every [`BATCH_INTERVAL`], then the `getstatus` pass for the
+/// rows that hide their human count. Where the addresses came from — a master
+/// server or the player's own favourites — makes no difference to any of it.
+///
+/// `app` is `None` in tests, where there is no window to emit to.
+async fn probe_addresses(
+    app: Option<&tauri::AppHandle>,
+    game: Game,
+    scope: RefreshScope,
+    addresses: Vec<SocketAddrV4>,
+    favorites: &HashSet<String>,
+    last_seen: &str,
+) -> Vec<ServerInfo> {
+    let total = addresses.len();
     let semaphore = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut probes = JoinSet::new();
     for address in addresses {
@@ -667,28 +1077,24 @@ pub async fn refresh_servers(
         let Ok(Some((address, reply))) = joined else {
             continue;
         };
-        let mut server = ServerInfo::from_infostring(
-            game,
-            address,
-            &reply.infostring,
-            reply.ping_ms,
-            &last_seen,
-        );
+        let mut server =
+            ServerInfo::from_infostring(game, address, &reply.infostring, reply.ping_ms, last_seen);
         // Dropped before the batch and before `collected`, so a hidden mod
         // reaches neither the window nor the cache this refresh writes.
         if is_hidden_mod(&server.mod_name) {
             continue;
         }
-        server.decorate(&favorites);
+        server.decorate(favorites);
         batch.push(server.clone());
         collected.push(server);
 
         if flushed_at.elapsed() >= BATCH_INTERVAL {
             emit(
-                &app,
+                app,
                 "servers:batch",
                 BatchEvent {
                     game,
+                    scope,
                     servers: std::mem::take(&mut batch),
                 },
             );
@@ -696,40 +1102,95 @@ pub async fn refresh_servers(
         }
     }
     if !batch.is_empty() {
-        emit(&app, "servers:batch", BatchEvent { game, servers: batch });
+        emit(
+            app,
+            "servers:batch",
+            BatchEvent {
+                game,
+                scope,
+                servers: batch,
+            },
+        );
     }
 
-    resolve_bots_by_status(&app, game, &mut collected).await;
-
+    resolve_bots_by_status(app, game, scope, &mut collected).await;
     sort_rows(&mut collected);
-    write_cache(&file, &collected);
+    collected
+}
 
-    let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
-    let real_players: u32 = collected
+// --- slice: servers browser ---
+/// Replaces the rows of `incoming` by address and appends the ones that are new.
+fn merge_rows(document: &mut Vec<ServerInfo>, incoming: &[ServerInfo]) {
+    let mut index: BTreeMap<String, usize> = document
         .iter()
-        .map(|server| u32::from(server.real_players()))
-        .sum();
-    log::info!(
-        "refresh ({}): {} of {total} servers answered in {elapsed_ms} ms, \
-         {real_players} real players, {} servers running bots only",
-        game.display_name(),
-        collected.len(),
-        collected
+        .enumerate()
+        .map(|(at, row)| (row.address.clone(), at))
+        .collect();
+    for row in incoming {
+        match index.get(&row.address) {
+            Some(&at) => document[at] = row.clone(),
+            None => {
+                index.insert(row.address.clone(), document.len());
+                document.push(row.clone());
+            }
+        }
+    }
+}
+
+// --- slice: servers browser ---
+/// Folds the answers of a direct probe into the cache and returns the result.
+///
+/// A direct probe knows about the addresses it was given and nothing else, so
+/// the document is read, the rows of those addresses replaced or appended, and
+/// every other row left exactly as it was. Writing the probe's own list instead
+/// would leave a Favorites refresh with a cache of three servers.
+///
+/// Only rows that answered are folded in. A silent address keeps the row it
+/// already had, and an address nobody has ever seen does not become one: the
+/// cache is the record of servers that were there, not of addresses that were
+/// asked.
+fn merge_into_cache(file: &PathBuf, answered: &[ServerInfo]) -> Vec<ServerInfo> {
+    let mut document = read_cache(file);
+    merge_rows(&mut document, answered);
+    sort_rows(&mut document);
+    write_cache(file, &document);
+    document
+}
+
+// --- slice: servers browser ---
+/// One row per asked address that did not answer.
+///
+/// The row carries the name, map and counts of the last successful scan and
+/// says so through [`ServerInfo::responded`]; an address nobody has ever
+/// scanned gets a row of its address alone. A row of a hidden mod is left out,
+/// the same way the cache reader leaves it out.
+fn silent_rows(
+    game: Game,
+    document: &[ServerInfo],
+    wanted: &[SocketAddrV4],
+    answered: &[ServerInfo],
+    favorites: &HashSet<String>,
+) -> Vec<ServerInfo> {
+    let replied: HashSet<&str> = answered.iter().map(|row| row.address.as_str()).collect();
+    let mut silent = Vec::new();
+    for address in wanted {
+        let key = address.to_string();
+        if replied.contains(key.as_str()) {
+            continue;
+        }
+        let mut row = document
             .iter()
-            .filter(|server| server.is_bots_only())
-            .count()
-    );
-    emit(
-        &app,
-        "servers:done",
-        DoneEvent {
-            game,
-            total,
-            responded: collected.len(),
-            elapsed_ms,
-        },
-    );
-    Ok(collected)
+            .find(|kept| kept.address == key)
+            .cloned()
+            .unwrap_or_else(|| ServerInfo::unseen(game, *address));
+        if is_hidden_mod(&row.mod_name) {
+            continue;
+        }
+        row.responded = false;
+        row.decorate(favorites);
+        silent.push(row);
+    }
+    silent
 }
 
 /// Picks the rows a refresh asks for a player list, busiest first.
@@ -772,8 +1233,10 @@ fn status_candidates(servers: &[ServerInfo], cap: usize) -> Vec<usize> {
 /// has no `g_humanplayers` key at all, so every populated Jedi Outcast server
 /// arrives here.
 async fn resolve_bots_by_status(
-    app: &tauri::AppHandle,
+    app: Option<&tauri::AppHandle>,
     game: Game,
+    // --- slice: servers browser --- travels on the batch this pass emits.
+    scope: RefreshScope,
     servers: &mut [ServerInfo],
 ) -> usize {
     let candidates = status_candidates(servers, MAX_STATUS_QUERIES);
@@ -816,6 +1279,7 @@ async fn resolve_bots_by_status(
             "servers:batch",
             BatchEvent {
                 game,
+                scope,
                 servers: updated,
             },
         );
@@ -1445,6 +1909,11 @@ mod tests {
         assert_eq!(read[0].hostname_clean, "Blue");
         assert_eq!(read[0].mod_name, "japlus");
         assert_eq!(read[0].humans, Some(4));
+        // --- slice: servers browser ---
+        // And it reads as a server that answered: the cache only ever holds
+        // rows that were seen, so a document without the field is not a list
+        // of ghosts.
+        assert!(read[0].responded);
         let _ = fs::remove_file(&file);
     }
 
@@ -1574,6 +2043,234 @@ mod tests {
         // Both questions are named, so a log line says which one went where.
         assert!(text.contains("protocol 15"), "{text}");
         assert!(text.contains("protocol 16"), "{text}");
+    }
+
+    // --- slice: servers browser ---
+
+    /// A server on localhost that answers `getinfo` with one info string.
+    ///
+    /// Local only, so every check below runs without a network. The stub echoes
+    /// the challenge it was sent, which is what `query_info` matches its answer
+    /// on, and keeps answering until the test that owns the runtime goes away.
+    async fn stub_server(infostring: &'static str) -> SocketAddrV4 {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+            .await
+            .expect("a socket");
+        let address = match socket.local_addr().expect("an address") {
+            std::net::SocketAddr::V4(v4) => v4,
+            other => panic!("expected IPv4, got {other}"),
+        };
+        tokio::spawn(async move {
+            let mut buffer = vec![0u8; 2048];
+            while let Ok(Ok((read, from))) = tokio::time::timeout(
+                Duration::from_millis(2_500),
+                socket.recv_from(&mut buffer),
+            )
+            .await
+            {
+                let Some(payload) = protocol::oob_payload(&buffer[..read]) else {
+                    continue;
+                };
+                let (command, argument) = protocol::split_command(payload);
+                if command != b"getinfo" {
+                    continue;
+                }
+                let challenge = String::from_utf8_lossy(argument).trim().to_string();
+                let reply = protocol::oob_packet(&format!(
+                    "infoResponse\n\\challenge\\{challenge}{infostring}"
+                ));
+                let _ = socket.send_to(&reply, from).await;
+            }
+        });
+        address
+    }
+
+    /// An address with nothing behind it, for the silent half of a probe.
+    fn nowhere() -> SocketAddrV4 {
+        "127.0.0.1:1".parse().expect("an address")
+    }
+
+    #[tokio::test]
+    async fn a_direct_probe_asks_the_addresses_it_is_given_and_nothing_else() {
+        // The Favorites tab: two saved addresses, one of them switched off. No
+        // master server takes part, which is the whole point of the operation.
+        let live = stub_server(
+            "\\hostname\\^4Nearby\\mapname\\MP/FFA3\\clients\\2\\g_humanplayers\\2\\sv_maxclients\\16",
+        )
+        .await;
+        let silent = nowhere();
+        let favorites: HashSet<String> = [live.to_string(), silent.to_string()]
+            .into_iter()
+            .collect();
+
+        let answered = probe_addresses(
+            None,
+            Game::JediAcademy,
+            RefreshScope::Favorites,
+            vec![live, silent],
+            &favorites,
+            "2026-09-11T00:00:00Z",
+        )
+        .await;
+
+        assert_eq!(answered.len(), 1, "only the server that answered");
+        assert_eq!(answered[0].hostname_clean, "Nearby");
+        assert_eq!(answered[0].map, "mp/ffa3");
+        assert_eq!(answered[0].humans, Some(2));
+        assert!(answered[0].responded);
+        // The star comes from the settings, not from the wire, exactly as it
+        // does on a master-driven refresh.
+        assert!(answered[0].favorite);
+    }
+
+    #[tokio::test]
+    async fn an_address_that_said_nothing_keeps_what_was_last_known_about_it() {
+        let silent = nowhere();
+        let favorites: HashSet<String> = [silent.to_string()].into_iter().collect();
+        let known = vec![game_row(
+            Game::JediAcademy,
+            &silent.to_string(),
+            "\\hostname\\Was here\\mapname\\mp/ffa3\\clients\\4\\g_humanplayers\\4",
+        )];
+
+        let missing = silent_rows(Game::JediAcademy, &known, &[silent], &[], &favorites);
+        assert_eq!(missing.len(), 1, "a favourite that vanishes looks like a bug");
+        assert_eq!(missing[0].address, silent.to_string());
+        assert!(!missing[0].responded, "the screen mutes it and drops the ping");
+        assert_eq!(missing[0].hostname_clean, "Was here");
+        assert_eq!(missing[0].map, "mp/ffa3");
+        assert!(missing[0].favorite);
+
+        // An address nobody has ever scanned has nothing to carry, so it names
+        // itself and claims nothing else.
+        let unseen = silent_rows(Game::JediAcademy, &[], &[silent], &[], &favorites);
+        assert_eq!(unseen[0].hostname_clean, silent.to_string());
+        assert_eq!(unseen[0].clients, 0);
+        assert_eq!(unseen[0].last_seen, "");
+        assert!(!unseen[0].responded);
+
+        // A row that answered is not reported silent as well.
+        let answered = vec![game_row(
+            Game::JediAcademy,
+            &silent.to_string(),
+            "\\hostname\\Back up\\clients\\1\\g_humanplayers\\1",
+        )];
+        assert!(silent_rows(Game::JediAcademy, &known, &[silent], &answered, &favorites).is_empty());
+    }
+
+    #[test]
+    fn a_direct_probe_merges_into_the_cache_instead_of_rewriting_it() {
+        // What a Favorites refresh must not do: leave the player with a cache
+        // of three servers because that is all it asked about.
+        let file = std::env::temp_dir()
+            .join("jknet-test-merge-cache")
+            .join("servers-ja.json");
+        let _ = fs::remove_file(&file);
+        write_cache(
+            &file,
+            &[
+                game_row(Game::JediAcademy, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
+                game_row(Game::JediAcademy, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
+            ],
+        );
+
+        let merged = merge_into_cache(
+            &file,
+            &[
+                game_row(Game::JediAcademy, "10.0.0.2:29070", "\\hostname\\Bravo renamed\\clients\\5\\g_humanplayers\\5"),
+                game_row(Game::JediAcademy, "10.0.0.9:29070", "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2"),
+            ],
+        );
+
+        let names: BTreeMap<String, String> = merged
+            .iter()
+            .map(|row| (row.address.clone(), row.hostname_clean.clone()))
+            .collect();
+        assert_eq!(names.len(), 3, "the row nobody asked about is still there");
+        assert_eq!(names["10.0.0.1:29070"], "Alpha", "untouched");
+        assert_eq!(names["10.0.0.2:29070"], "Bravo renamed", "replaced by address");
+        assert_eq!(names["10.0.0.9:29070"], "Charlie", "appended");
+        // And the document on disk says the same, not only the value returned.
+        assert_eq!(read_cache(&file).len(), 3);
+        let _ = fs::remove_file(&file);
+    }
+
+    #[tokio::test]
+    async fn a_lan_sweep_lists_the_servers_of_the_ports_it_is_given() {
+        // Four ports of the broadcast address in the launcher; four stubs on
+        // localhost here, because a test must not put a datagram on the real
+        // network. Everything between the send and the row is the same code.
+        let busy = stub_server(
+            "\\hostname\\Desk\\mapname\\mp/ffa1\\clients\\1\\g_humanplayers\\1\\sv_maxclients\\8",
+        )
+        .await;
+        let quiet = stub_server("\\hostname\\Laptop\\mapname\\mp/duel1\\clients\\0\\game\\japlus")
+            .await;
+
+        let rows = scan_lan(
+            None,
+            Game::JediAcademy,
+            &[busy, quiet, nowhere()],
+            &HashSet::new(),
+        )
+        .await
+        .expect("the sweep runs");
+
+        let names: Vec<&str> = rows.iter().map(|row| row.hostname_clean.as_str()).collect();
+        assert_eq!(names, vec!["Desk", "Laptop"], "busiest first, nobody invented");
+        assert!(rows.iter().all(|row| row.responded));
+        assert_eq!(rows[1].mod_name, "japlus");
+        // A sweep answers with rows and never with the cache, so nothing here
+        // can reach `cache\servers-ja.json`.
+        assert_eq!(rows[0].game, Game::JediAcademy);
+    }
+
+    #[test]
+    fn a_lan_sweep_asks_four_ports_of_the_game_it_is_for() {
+        let ja: Vec<String> = broadcast_targets(Game::JediAcademy)
+            .iter()
+            .map(SocketAddrV4::to_string)
+            .collect();
+        assert_eq!(
+            ja,
+            vec![
+                "255.255.255.255:29070",
+                "255.255.255.255:29071",
+                "255.255.255.255:29072",
+                "255.255.255.255:29073",
+            ]
+        );
+        let jo = broadcast_targets(Game::JediOutcast);
+        assert_eq!(jo.len(), usize::from(crate::game::LAN_PORT_COUNT));
+        assert_eq!(jo[0].port(), 28070);
+        assert_eq!(jo[3].port(), 28073);
+    }
+
+    #[test]
+    fn one_tab_of_one_game_scans_once_at_a_time() {
+        let state = RefreshState::default();
+        let claim = state
+            .claim(Game::JediAcademy, RefreshScope::Favorites)
+            .expect("the first claim");
+        // The same tab twice is the second press the window failed to swallow.
+        let refused = state
+            .claim(Game::JediAcademy, RefreshScope::Favorites)
+            .expect_err("the same scope is busy");
+        assert!(refused.to_string().contains("already running"));
+
+        // Another tab, and the other game, are separate jobs: both start.
+        let _all = state
+            .claim(Game::JediAcademy, RefreshScope::All)
+            .expect("another tab of the same game");
+        let _other = state
+            .claim(Game::JediOutcast, RefreshScope::Favorites)
+            .expect("the same tab of the other game");
+
+        drop(claim);
+        assert!(
+            state.claim(Game::JediAcademy, RefreshScope::Favorites).is_ok(),
+            "the guard releases the tab however the refresh ended"
+        );
     }
 
     #[test]
