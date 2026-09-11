@@ -1,10 +1,7 @@
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   Check,
   Download,
-  FolderOpen,
-  HardDrive,
   Play,
   Plus,
   RefreshCw,
@@ -13,11 +10,12 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Trans, useTranslation } from "react-i18next";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 
 // --- slice: client window ---
 import { InstallProgressBar } from "../components/client/InstallProgressBar";
+import { GameFilesNotice } from "../components/GameFilesNotice";
 import { useGameEventsContext } from "../components/GameEventsProvider";
 // --- slice: game switch ---
 import {
@@ -32,7 +30,6 @@ import { useErrorText } from "../i18n/errors";
 import { useEngineNote } from "../i18n/useEngineNote";
 import { useFormat } from "../i18n/useFormat";
 import {
-  ipc,
   type Client,
   type Engine,
   type EngineInstallProgress,
@@ -40,7 +37,6 @@ import {
   type RunningGame,
   type SettingsPatch,
 } from "../lib/ipc";
-import { shortenPath } from "../lib/format";
 // --- slice: client window ---
 import { useOpenClientWindow } from "../lib/clientWindow";
 // --- slice: game switch ---
@@ -59,8 +55,6 @@ import {
   useEngineReleases,
   useEnginesOfGame,
   useEngineUpdate,
-  useGameFiles,
-  useGameInfo,
   useInstallEngine,
   useLaunchClient,
   usePendingInstalls,
@@ -71,30 +65,31 @@ import {
 } from "../lib/queries";
 
 /**
- * Clients: the game folder, the clients of the active game, and nothing else.
+ * Clients: the clients of the active game, and nothing else.
  *
- * The registry of engines it used to end with is gone. A build gets a page of
- * its own at `#/engines/<id>`, which the New client dialog and every client
- * card link to: a list of five builds nobody asked for was the last thing a
- * player met on the way down this screen.
+ * The game folder is asked for once during the first run and lives on the
+ * Settings screen afterwards, so all that is left of it here is the one line
+ * that says it is missing — the same notice, and the same button, as on Home.
+ * A player whose Launch button does nothing still has somewhere to look.
+ *
+ * The registry of engines that used to close the screen is gone too. A build
+ * has a page of its own at `#/engines/<id>`, which the New client dialog and
+ * every client card link to.
  */
 export function ClientsPage() {
   const { t } = useTranslation("clients");
-  const { t: tGames } = useTranslation("games");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const settings = useSettings();
   const clients = useClients();
   // --- slice: game core ---
   const activeGame = useActiveGame();
-  const gameInfo = useGameInfo(activeGame);
   // --- slice: game switch ---
-  // Everything on this screen is the active game: its folder, its clients, the
-  // builds that play it. The other game is one press of the switcher away, and
-  // the line under the list says how many clients are waiting there.
+  // Everything on this screen is the active game: its clients and the builds
+  // that play it. The other game is one press of the switcher away, and the
+  // line under the list says how many clients are waiting there.
   const engines = useEnginesOfGame(activeGame);
   const { label: gameName } = useGameNames();
-  const gameFiles = useGameFiles();
   const updateSettings = useUpdateSettings();
   const deleteClient = useDeleteClient();
   const installEngine = useInstallEngine();
@@ -148,50 +143,11 @@ export function ClientsPage() {
     });
   };
 
-  /** Opens the folder picker and saves the folder when it holds the assets. */
-  const chooseGameFolder = async () => {
-    setError(null);
-    try {
-      const picked = await open({
-        directory: true,
-        multiple: false,
-        title: t("gameFiles.pickTitle"),
-      });
-      if (typeof picked !== "string") return;
-      // --- slice: game core --- checked against the game this card shows.
-      const candidate = await ipc.validateGameData(activeGame, picked);
-      if (!candidate.valid) {
-        const missing = candidate.assets
-          .filter((asset) => asset.required && !asset.present)
-          .map((asset) => asset.name)
-          .join(", ");
-        setError(t("gameFiles.invalid", { path: candidate.path, missing }));
-        return;
-      }
-      patchSettings({ gameDataPaths: { [activeGame]: candidate.path } });
-    } catch (e) {
-      setError(errorText(e));
-    }
-  };
-
   // A command that never answered is as much of a failure as one that said
   // no, and outside the Tauri runtime it is the only thing to report.
-  const queryError = settings.error ?? clients.error ?? gameFiles.error ?? null;
+  const queryError = settings.error ?? clients.error ?? null;
   const failure = error ?? (queryError ? errorText(queryError) : null);
 
-  // --- slice: game core ---
-  // The card shows the folder of the active game. Both games get a row of
-  // their own on the Settings screen; the sidebar switcher of the next slice
-  // is what makes this card follow the player.
-  const configuredPath = settings.data?.gameDataPaths[activeGame] ?? null;
-  const detected = gameFiles.data?.[activeGame] ?? [];
-  const activeCandidate =
-    detected.find((candidate) => candidate.path === configuredPath) ??
-    detected.find((candidate) => candidate.valid) ??
-    null;
-  const assetRange = gameInfo
-    ? `${gameInfo.requiredAssets[0]}–${gameInfo.requiredAssets[gameInfo.requiredAssets.length - 1]}`
-    : "assets0.pk3–assets3.pk3";
   // --- slice: game switch ---
   // No game badge on a card any more: every card in the list below plays the
   // game named in the switcher, so the badge would repeat the sidebar on every
@@ -226,87 +182,11 @@ export function ClientsPage() {
         </div>
       ) : null}
 
-      {/* Game files ------------------------------------------------------ */}
-      <section className="rounded-lg border border-line bg-surface p-16 mb-24">
-        <div className="flex items-start gap-12">
-          <span className="flex items-center justify-center size-36 rounded-md bg-elevated text-fg-secondary shrink-0">
-            <HardDrive size={20} />
-          </span>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-8">
-              <h2 className="text-heading-sm text-fg">
-                {gameInfo
-                  ? t("gameFiles.title", { game: gameInfo.displayName })
-                  : t("gameFiles.titleFallback")}
-              </h2>
-              {configuredPath ? (
-                <Badge tone="success" icon={<Check size={12} />}>
-                  {t("gameFiles.ready")}
-                </Badge>
-              ) : (
-                <Badge tone="warm">{t("gameFiles.notSet")}</Badge>
-              )}
-            </div>
-            <p className="text-body-sm text-fg-secondary pt-4">
-              <Trans
-                t={t}
-                i18nKey="gameFiles.text"
-                values={{ range: assetRange }}
-                components={[<span className="text-mono-sm" />]}
-              />
-            </p>
-            <p className="text-mono-sm text-fg-accent pt-8 break-all">
-              {configuredPath ??
-                activeCandidate?.path ??
-                (gameFiles.isLoading
-                  ? t("gameFiles.searching")
-                  : t("gameFiles.noCopy"))}
-            </p>
-            {activeCandidate && !configuredPath ? (
-              <p className="text-body-sm text-fg-muted pt-4">
-                {t("gameFiles.foundThrough", {
-                  source: tGames(`sources.${activeCandidate.source}`),
-                })}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-col gap-8 shrink-0">
-            <Button icon={<FolderOpen size={16} />} onClick={() => void chooseGameFolder()}>
-              {t("gameFiles.changeFolder")}
-            </Button>
-            {activeCandidate && activeCandidate.path !== configuredPath ? (
-              <Button
-                variant="primary"
-                onClick={() =>
-                  patchSettings({
-                    gameDataPaths: { [activeGame]: activeCandidate.path },
-                  })
-                }
-              >
-                {t("gameFiles.useThisFolder")}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        {detected.length > 1 ? (
-          <ul className="flex flex-col gap-4 pt-16">
-            {detected.map((candidate) => (
-              <li
-                key={candidate.path}
-                className="flex items-center gap-8 text-body-sm text-fg-muted"
-              >
-                <Badge tone={candidate.valid ? "neutral" : "danger"}>
-                  {tGames(`sources.${candidate.source}`)}
-                </Badge>
-                <span className="text-mono-xs truncate" title={candidate.path}>
-                  {shortenPath(candidate.path, 64)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
+      {/* The folder of the game is a Settings row and a first-run step, not a
+          card of this screen. What stays here is the one line that says it is
+          missing — without it a player whose Launch button does nothing has
+          nowhere to look. The same notice, the same button, as on Home. */}
+      <GameFilesNotice className="mb-24" />
 
       {/* Clients --------------------------------------------------------- */}
       <section className="flex flex-col gap-12">

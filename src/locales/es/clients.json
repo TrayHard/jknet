@@ -2,20 +2,6 @@
   "title": "Clientes",
   "subtitle": "Un cliente es una compilación del motor con sus propios archivos y ajustes. Póngale un nombre y será suyo.",
   "newClient": "Nuevo cliente",
-  "gameFiles": {
-    "title": "Archivos de {{game}}",
-    "titleFallback": "Archivos del juego",
-    "ready": "Listo",
-    "notSet": "Sin definir",
-    "text": "JKNet lee <0>{{range}}</0> de esta carpeta y nunca escribe en ella.",
-    "searching": "Buscando copias de Steam y GOG…",
-    "noCopy": "No se encontró ninguna copia",
-    "foundThrough": "Encontrada mediante {{source}}. Confírmela para empezar a usarla.",
-    "changeFolder": "Cambiar carpeta",
-    "useThisFolder": "Usar esta carpeta",
-    "pickTitle": "Seleccione la carpeta GameData",
-    "invalid": "No hay archivos del juego en {{path}}. Faltan: {{missing}}."
-  },
   "list": {
     "heading": "Sus clientes",
     "emptyTitle": "Aún no hay clientes de {{game}}",

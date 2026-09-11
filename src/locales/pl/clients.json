@@ -2,20 +2,6 @@
   "title": "Klienci",
   "subtitle": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Nadaj mu nazwę i gotowe.",
   "newClient": "Nowy klient",
-  "gameFiles": {
-    "title": "Pliki gry {{game}}",
-    "titleFallback": "Pliki gry",
-    "ready": "Gotowe",
-    "notSet": "Nie ustawiono",
-    "text": "JKNet czyta <0>{{range}}</0> z tego folderu i nigdy do niego nie zapisuje.",
-    "searching": "Szukanie kopii w Steam i GOG…",
-    "noCopy": "Nie znaleziono kopii",
-    "foundThrough": "Znaleziono przez {{source}}. Potwierdź, aby zacząć z niej korzystać.",
-    "changeFolder": "Zmień folder",
-    "useThisFolder": "Użyj tego folderu",
-    "pickTitle": "Wybierz folder GameData",
-    "invalid": "Brak plików gry w {{path}}. Brakuje: {{missing}}."
-  },
   "list": {
     "heading": "Lista klientów",
     "emptyTitle": "Brak klientów {{game}}",

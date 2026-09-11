@@ -2,20 +2,6 @@
   "title": "Kliensek",
   "subtitle": "A kliens a játékmotor egy változata saját fájlokkal és beállításokkal. Adjon neki nevet, és a sajátja lesz.",
   "newClient": "Új kliens",
-  "gameFiles": {
-    "title": "A {{game}} fájljai",
-    "titleFallback": "Játékfájlok",
-    "ready": "Kész",
-    "notSet": "Nincs megadva",
-    "text": "A JKNet ebből a mappából olvassa a következőket: <0>{{range}}</0>. Soha nem ír bele.",
-    "searching": "Steam- és GOG-példányok keresése…",
-    "noCopy": "Nem található példány",
-    "foundThrough": "Forrás: {{source}}. Erősítse meg, hogy a JKNet használni kezdje.",
-    "changeFolder": "Mappa módosítása",
-    "useThisFolder": "Ezt a mappát használom",
-    "pickTitle": "Válassza ki a GameData mappát",
-    "invalid": "Nincs játékfájl itt: {{path}}. Hiányzik: {{missing}}."
-  },
   "list": {
     "heading": "Az Ön kliensei",
     "emptyTitle": "Még nincs kliens a {{game}} játékhoz",

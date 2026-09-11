@@ -2,20 +2,6 @@
   "title": "Clients",
   "subtitle": "A client is an engine build with its own files and settings. Name it and it is yours.",
   "newClient": "New client",
-  "gameFiles": {
-    "title": "{{game}} files",
-    "titleFallback": "Game files",
-    "ready": "Ready",
-    "notSet": "Not set",
-    "text": "JKNet reads <0>{{range}}</0> from this folder and never writes into it.",
-    "searching": "Looking for Steam and GOG copies…",
-    "noCopy": "No copy found",
-    "foundThrough": "Found through {{source}}. Confirm it to start using it.",
-    "changeFolder": "Change folder",
-    "useThisFolder": "Use this folder",
-    "pickTitle": "Select the GameData folder",
-    "invalid": "No game files in {{path}}. Missing: {{missing}}."
-  },
   "list": {
     "heading": "Your clients",
     "emptyTitle": "No {{game}} clients yet",
