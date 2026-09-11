@@ -400,7 +400,11 @@ fn disables_sound(args: &[String]) -> bool {
 }
 
 /// True when the token is the cvar name, with or without the console `+`.
-fn names_cvar(token: &str, cvar: &str) -> bool {
+///
+/// --- slice: client window ---
+/// Shared with [`crate::launch_tokens`], so the control that edits `r_mode`
+/// recognises exactly the spellings the warning above does.
+pub(crate) fn names_cvar(token: &str, cvar: &str) -> bool {
     token
         .trim()
         .trim_start_matches('+')
@@ -813,6 +817,100 @@ fn same_folder(a: &Path, b: &Path) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// --- slice: client window ---
+// What a launch is made of, read once
+// ---------------------------------------------------------------------------
+
+/// Everything [`build_launch_args`] needs, owned and read from disk.
+///
+/// Two callers build the same command line: [`start_client`], which then runs
+/// it, and [`preview_launch_args`], which prints it into the client window. A
+/// preview assembled by a second copy of this code would be a preview that
+/// slowly stops describing the launch.
+struct LaunchInputs {
+    client: clients::Client,
+    engine: &'static engines::Engine,
+    game_data: PathBuf,
+    client_dir: PathBuf,
+    engine_dir: PathBuf,
+    /// `clients\<slug>\basepath`, whether or not it exists yet. Only the
+    /// [`LaunchLayout::OwnBasepath`] games send it to the engine, and
+    /// [`prepare_basepath`] is what fills it in before a real launch.
+    base_dir: PathBuf,
+    home_dir: PathBuf,
+    settings_args: Vec<String>,
+    client_args: Vec<String>,
+    fs_game: Option<String>,
+}
+
+impl LaunchInputs {
+    /// The plan for one launch: everything above, plus what belongs to this
+    /// run alone.
+    fn plan<'a>(&'a self, extra_args: &'a [String], connect: Option<&'a str>) -> LaunchPlan<'a> {
+        LaunchPlan {
+            game: self.client.game,
+            game_data: &self.game_data,
+            engine_dir: &self.engine_dir,
+            base_dir: &self.base_dir,
+            home_dir: &self.home_dir,
+            fs_game: self.fs_game.as_deref(),
+            settings_args: &self.settings_args,
+            client_args: &self.client_args,
+            extra_args,
+            connect,
+        }
+    }
+}
+
+/// Reads a client, its engine, its folders and both argument fields.
+///
+/// Touches nothing: no folder is created, no junction is drawn and the
+/// executable is not looked for. Those belong to a launch, and the preview has
+/// to answer for a client whose engine is not installed yet.
+fn resolve_launch(state: &AppState, client_id: &str) -> Result<LaunchInputs> {
+    let settings = state.settings()?;
+    let paths = state.paths()?;
+    let client = clients::read_record(&paths, client_id)?;
+    // --- slice: game core ---
+    // The engine of a record whose game was edited by hand is refused here
+    // rather than started against the wrong archives.
+    let engine = engines::require_for_game(&client.engine_id, client.game)?;
+    let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
+    let fs_game = client
+        .fs_game
+        .clone()
+        .or_else(|| engine.default_fs_game.map(str::to_string));
+
+    Ok(LaunchInputs {
+        client_dir: paths.client_dir(&client.id),
+        engine_dir: paths.client_engine_dir(&client.id),
+        base_dir: paths.client_basepath_dir(&client.id),
+        home_dir: paths.client_home_dir(&client.id),
+        settings_args: split_args(&settings.extra_launch_args),
+        // --- slice: client launch args ---
+        // Split the same way the settings field is: one rule for both, so what
+        // a player learns about quoting in one place holds in the other.
+        client_args: split_args(&client.launch_args),
+        fs_game,
+        game_data,
+        engine,
+        client,
+    })
+}
+
+/// The command line of a client, and what the core makes of it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchPreview {
+    /// Tokens in the order [`build_launch_args`] puts them, one per argument
+    /// of the process.
+    pub args: Vec<String>,
+    /// Code of the warning these arguments carry, or `null`. The same codes
+    /// the `launch:warning` event uses.
+    pub warning: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
 
@@ -857,21 +955,15 @@ pub(crate) fn start_client(
         )));
     }
 
-    let settings = state.settings()?;
-    let paths = state.paths()?;
-    let client = clients::read_record(&paths, client_id)?;
-    // --- slice: game core ---
-    // The engine of a record whose game was edited by hand is refused here
-    // rather than started against the wrong archives.
-    let engine = engines::require_for_game(&client.engine_id, client.game)?;
+    // --- slice: client window ---
+    // Read once, here and in the preview command, so the command line the
+    // window shows and the one the process gets cannot drift apart.
+    let inputs = resolve_launch(state, client_id)?;
+    let client = &inputs.client;
+    let engine = inputs.engine;
+    game_files::validate(client.game, &inputs.game_data)?;
 
-    let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
-    game_files::validate(client.game, &game_data)?;
-
-    let client_dir = paths.client_dir(&client.id);
-    let engine_dir = paths.client_engine_dir(&client.id);
-    let home_dir = paths.client_home_dir(&client.id);
-    let executable = engine_dir.join(engine.executable);
+    let executable = inputs.engine_dir.join(engine.executable);
     if !executable.is_file() {
         return Err(AppError::Launch(format!(
             "{} is not installed for {}. Install the engine on the Clients screen.",
@@ -879,7 +971,7 @@ pub(crate) fn start_client(
         )));
     }
     // The engine creates the rest itself, but it will not create its root.
-    crate::paths::create_dir(&home_dir)?;
+    crate::paths::create_dir(&inputs.home_dir)?;
 
     // --- slice: game core ---
     // Jedi Outcast leaves the unpacked build off the search path, so its own
@@ -890,40 +982,19 @@ pub(crate) fn start_client(
     // link redrawn.
     let layout = client.game.spec().launch_layout;
     if !layout.engine_dir_on_search_path() {
-        engine_install::sync_engine_archives(&engine_dir, &home_dir)?;
+        engine_install::sync_engine_archives(&inputs.engine_dir, &inputs.home_dir)?;
     }
-    let base_dir = if layout.needs_own_basepath() {
-        prepare_basepath(client.game, &client_dir, &game_data)?
-    } else {
-        paths.client_basepath_dir(&client.id)
-    };
+    if layout.needs_own_basepath() {
+        // Builds what `inputs.base_dir` already names: the same
+        // `clients\<slug>\basepath` either way, filled in here and only here.
+        prepare_basepath(client.game, &inputs.client_dir, &inputs.game_data)?;
+    }
 
     let connect = match connect {
         Some(address) => Some(validate_address(address)?),
         None => None,
     };
-    let settings_args = split_args(&settings.extra_launch_args);
-    // --- slice: client launch args ---
-    // Split the same way the settings field is: one rule for both, so what a
-    // player learns about quoting in one place holds in the other.
-    let client_args = split_args(&client.launch_args);
-    let fs_game = client
-        .fs_game
-        .as_deref()
-        .or(engine.default_fs_game);
-
-    let args = build_launch_args(&LaunchPlan {
-        game: client.game,
-        game_data: &game_data,
-        engine_dir: &engine_dir,
-        base_dir: &base_dir,
-        home_dir: &home_dir,
-        fs_game,
-        settings_args: &settings_args,
-        client_args: &client_args,
-        extra_args,
-        connect,
-    });
+    let args = build_launch_args(&inputs.plan(extra_args, connect));
 
     log::info!(
         "launching {} ({}): {} {}",
@@ -956,7 +1027,7 @@ pub(crate) fn start_client(
         }
     }
 
-    let child = spawn(&executable, &engine_dir, &args)?;
+    let child = spawn(&executable, &inputs.engine_dir, &args)?;
     let view = RunningGame {
         client_id: client.id.clone(),
         pid: child.id(),
@@ -989,6 +1060,26 @@ pub(crate) fn start_client(
 #[tauri::command]
 pub fn get_running_game(launch: tauri::State<'_, LaunchState>) -> Result<Option<RunningGame>> {
     launch.current()
+}
+
+// --- slice: client window ---
+
+/// The command line this client would be started with, without starting it.
+///
+/// The same roots, the same `fs_game` and the same two argument fields as a
+/// real launch, in the same order, and no `+connect`: the preview stands for
+/// the **Play** button, and joining a server is a different command line every
+/// time. Nothing is created on disk, so a client whose engine has not been
+/// downloaded yet still shows what it would run.
+#[tauri::command]
+pub fn preview_launch_args(
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+) -> Result<LaunchPreview> {
+    let inputs = resolve_launch(&state, &client_id)?;
+    let args = build_launch_args(&inputs.plan(&[], None));
+    let warning = launch_warning(inputs.engine.id, &args).map(str::to_string);
+    Ok(LaunchPreview { args, warning })
 }
 
 /// Kills the running game. Doing nothing is not an error: the button exists to
