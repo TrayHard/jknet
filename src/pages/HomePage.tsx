@@ -87,6 +87,8 @@ export function HomePage() {
   // with, and the default client only when there is no such record.
   const connectClient = useConnectClient();
   const missingClientToast = useMissingClientToast();
+  // --- slice: server actions --- «2 h ago» under a row of the History block.
+  const format = useFormat();
   // Home draws server rows from the cache alone: no refresh of its own, no
   // command of its own. Both pools below are the cached list read two ways.
   const cachedServers = useCachedServers();
@@ -123,22 +125,29 @@ export function HomePage() {
    */
   const history = useMemo(() => {
     const rows = visibleServers(cachedServers.data ?? []);
-    if (rows.length === 0) return [];
     const byAddress = new Map(rows.map((row) => [row.address, row]));
     const picked: ServerInfo[] = [];
+    // --- slice: server actions ---
+    // When the player was last on each of them, kept beside the rows rather
+    // than folded into them: a row is a `ServerInfo`, and the last time this
+    // player was somewhere is not something a server publishes.
+    const at = new Map<string, string>();
     for (const entry of settings.data?.serverHistory ?? []) {
       const row = byAddress.get(entry.address);
-      if (row !== undefined) picked.push(row);
+      if (row !== undefined) {
+        picked.push(row);
+        at.set(row.address, entry.lastConnected);
+      }
       if (picked.length === BLOCK_COUNT) break;
     }
-    return picked;
+    return { rows: picked, at };
   }, [cachedServers.data, settings.data?.serverHistory]);
 
   // --- slice: maps ---
   // The server Connect was last pressed on, when the browser still has that
   // row: the head of the history block, by the same rule. Written out because
   // an index into an empty array is `undefined` and the type does not say so.
-  const lastServer: ServerInfo | undefined = history[0];
+  const lastServer: ServerInfo | undefined = history.rows[0];
   const running = runningGame.data ?? null;
   const runningClient = clients.data?.find((client) => client.id === running?.clientId);
   const canPlay =
@@ -251,6 +260,28 @@ export function HomePage() {
       <ServerMenu server={server} size="sm" />
     </>
   );
+
+  // --- slice: server actions ---
+  /**
+   * How long ago the player was last on one server of the History block.
+   *
+   * The block answers «take me back», and «yesterday» is half of that answer:
+   * a server the player left ten minutes ago and one they played on in March
+   * are two different offers, and the order alone does not say which is which.
+   *
+   * `null` for a row with no entry and for a timestamp that does not parse: a
+   * caption cannot say «some unknown time ago», so the row goes without one
+   * rather than with a wrong one.
+   */
+  const lastConnected = (server: ServerInfo) => {
+    const at = history.at.get(server.address);
+    if (at === undefined) return null;
+    const when = Date.parse(at);
+    if (Number.isNaN(when)) return null;
+    return t("topServers.lastConnected", {
+      age: format.age(Math.max(0, Math.floor((Date.now() - when) / 1_000))),
+    });
+  };
 
   return (
     <Page>
@@ -443,10 +474,11 @@ export function HomePage() {
         />
         <ServerListBlock
           title={t("topServers.history")}
-          servers={history}
+          servers={history.rows}
           selectedAddress={selectedAddress}
           onSelect={setSelectedAddress}
           actions={rowActions}
+          caption={lastConnected}
         />
         <TopServers
           selectedAddress={selectedAddress}

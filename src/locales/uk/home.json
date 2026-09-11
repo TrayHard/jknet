@@ -34,6 +34,7 @@
     "emptyText": "Відкрийте екран «Сервери» один раз, і найлюдніші з’являться тут.",
     "openServers": "Відкрити «Сервери»",
     "seeAll": "Усі сервери",
-    "connect": "Connect"
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }
