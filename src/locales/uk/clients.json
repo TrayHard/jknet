@@ -70,17 +70,62 @@
     "downloadSwitch": "Завантажити рушій одразу після створення клієнта",
     "create": "Створити клієнт"
   },
-  "settingsDialog": {
-    "title": "Налаштування клієнта",
-    "text": "Папка на диску зберігає ім’я <0>{{id}}</0>, тому перейменування не зламає шлях, який лаунчер уже запам’ятав.",
-    "name": "Ім’я",
-    "namePlaceholder": "Щоденний",
-    "modFolder": "Папка мода (fs_game)",
-    "modFolderHint": "Клієнт запускається в цій папці свого домашнього каталогу, вона передається як <0>+set fs_game</0>. Дозволені літери, цифри, <1>_</1>, <2>-</2> та <3>+</3>. Залиште поле порожнім, щоб отримати <4>{{folder}}</4> — типову папку {{engine}}.",
-    "engineFallback": "рушія",
-    "launchArgs": "Launch arguments",
-    "launchArgsPlaceholder": "+set r_mode 4 +exec duel.cfg",
-    "launchArgsHint": "This client adds these after the arguments of the Settings screen: a repeated <0>+set</0> of the same cvar wins, while commands such as <1>+exec</1> add up and run in the order they stand. Double quotes keep a value with a space together."
+  "clientWindow": {
+    "loading": "Client",
+    "notFound": "There is no client with this id. It may have been deleted.",
+    "intro": "These controls write into the launch arguments of this client. A control left empty writes nothing, and the engine keeps its own value.",
+    "notSet": "Not set",
+    "clear": "Clear {{setting}}",
+    "client": {
+      "heading": "Client",
+      "name": "Name",
+      "namePlaceholder": "Everyday",
+      "idHint": "The folder on disk keeps its name <0>{{id}}</0>, so a rename cannot break a path the launcher already stored.",
+      "engine": "Engine",
+      "engineFallback": "the engine",
+      "modFolder": "Mod folder (fs_game)",
+      "modFolderHint": "Letters, digits, _, - and + only, and no path. Leave it empty for {{folder}}, the folder {{engine}} starts in."
+    },
+    "video": {
+      "heading": "Video",
+      "mode": "Resolution (r_mode)",
+      "modeCustom": "Custom size",
+      "width": "Width (r_customwidth)",
+      "height": "Height (r_customheight)",
+      "sizeHint": "The engine reads the width and the height in the Custom size mode only.",
+      "fullscreen": "Fullscreen (r_fullscreen)",
+      "fullscreenOn": "Fullscreen",
+      "fullscreenOff": "Windowed"
+    },
+    "audio": {
+      "heading": "Audio",
+      "sound": "Sound (s_volume)",
+      "music": "Music (s_musicvolume)"
+    },
+    "player": {
+      "heading": "Player",
+      "name": "Player name (name)",
+      "namePlaceholder": "Padawan",
+      "hint": "The name other players see. A server may refuse a name it already has."
+    },
+    "performance": {
+      "heading": "Performance and network",
+      "maxFps": "Frame limit (com_maxfps)",
+      "rate": "Rate (rate)",
+      "snaps": "Snapshots (snaps)",
+      "hint": "Rate is bytes per second, snapshots is server updates per second."
+    },
+    "extra": {
+      "heading": "Extra arguments",
+      "label": "Launch arguments",
+      "placeholder": "+set r_mode 4 +exec duel.cfg",
+      "hint": "The whole command line of this client, the way a shortcut is written. The controls above edit this same line and leave everything else in it alone. Double quotes keep a value with a space together."
+    },
+    "preview": {
+      "heading": "Command line preview",
+      "text": "What the engine gets when this client starts: the folders of the launcher, then the arguments of the Settings screen, then the ones above. A server address is added at connect time and is not shown here.",
+      "empty": "Nothing yet."
+    }
   },
   "missingToast": {
     "title": "Клієнта {{game}} ще немає",
