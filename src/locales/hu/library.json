@@ -1,16 +1,12 @@
 {
   "title": "Könyvtár",
-  "subtitle": "Skinek, markolatok, pályák és modok, a kiválasztott kliensbe telepítve.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} fájl · {{enabled}} bekapcsolva · {{size}}",
-  "noEngine": "nincs motor",
   "searchPlaceholder": "Fájlok keresése",
   "browseJkhub": "JKHub böngészése",
   "addFiles": "Fájlok hozzáadása",
   "pickTitle": "pk3-fájlok hozzáadása",
   "pickFilter": "Jedi Academy archívumok",
   "clientBar": {
-    "label": "Kliens",
-    "hint": "A fájlok csak ebbe a kliensbe kerülnek. Egy másik kliens ugyanazzal a motorral saját készletet tart. Itt a {{game}} kliensei szerepelnek; a többiért váltson játékot az oldalsávban."
+    "label": "Kliens"
   },
   "tabs": {
     "installed": "Telepítve",

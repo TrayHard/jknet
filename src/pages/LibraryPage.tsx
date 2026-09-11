@@ -35,7 +35,6 @@ import {
 } from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
-import { useFormat } from "../i18n/useFormat";
 import { cn } from "../lib/format";
 import {
   LIBRARY_CHANGED_EVENT,
@@ -55,7 +54,6 @@ import {
   libraryKeys,
   useAddLibraryFiles,
   useClients,
-  useEngines,
   useJkhubIndexStatus,
   useLibrary,
   useLibraryConflicts,
@@ -90,10 +88,8 @@ export function LibraryPage() {
   // the reason it can be off belongs to the JKHub catalogue.
   const { t: tJkhub } = useTranslation("jkhub");
   const errorText = useErrorText();
-  const format = useFormat();
   const clients = useClients();
   const settings = useSettings();
-  const engines = useEngines();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   // --- slice: game switch ---
@@ -278,23 +274,6 @@ export function LibraryPage() {
     [conflictReport],
   );
 
-  const enabledCount = all.filter((item) => item.enabled).length;
-  const totalSize = all.reduce((sum, item) => sum + item.size, 0);
-  const engineName =
-    engines.data?.find((engine) => engine.id === client?.engineId)?.name ??
-    client?.engineId ??
-    t("noEngine");
-
-  const subtitle = client
-    ? t("subtitleClient", {
-        client: client.name,
-        engine: engineName,
-        files: all.length,
-        enabled: enabledCount,
-        size: format.bytes(totalSize),
-      })
-    : t("subtitle");
-
   // --- slice: library cleanup ---
   // The box in the header is the only search on the screen: it filters the
   // installed files, queries the JKHub catalogue and filters the updates,
@@ -321,7 +300,6 @@ export function LibraryPage() {
     <Page>
       <PageHeader
         title={t("title")}
-        subtitle={subtitle}
         actions={
           <>
             <Input
@@ -358,7 +336,9 @@ export function LibraryPage() {
         </div>
       ) : null}
 
-      {/* Client bar ------------------------------------------------------ */}
+      {/* Client bar ------------------------------------------------------
+          --- slice: library cleanup --- the picker and its label, nothing
+          else: which client a file goes into is a choice, not a paragraph. */}
       <section className="flex items-center gap-12 rounded-lg border border-line bg-surface p-12 mb-16">
         <span className="text-label-xs text-fg-muted">{t("clientBar.label")}</span>
         <Select
@@ -369,9 +349,6 @@ export function LibraryPage() {
           onChange={setClientId}
           className="w-200"
         />
-        <p className="text-body-sm text-fg-muted flex-1 min-w-0">
-          {t("clientBar.hint", { game: gameName(activeGame) })}
-        </p>
       </section>
 
       {/* Tabs ------------------------------------------------------------ */}

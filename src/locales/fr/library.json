@@ -1,16 +1,12 @@
 {
   "title": "Bibliothèque",
-  "subtitle": "Skins, manches, cartes et mods, installés dans le client de votre choix.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} fichiers · {{enabled}} activés · {{size}}",
-  "noEngine": "aucun moteur",
   "searchPlaceholder": "Rechercher un fichier",
   "browseJkhub": "Parcourir JKHub",
   "addFiles": "Ajouter des fichiers",
   "pickTitle": "Ajouter des fichiers pk3",
   "pickFilter": "Archives Jedi Academy",
   "clientBar": {
-    "label": "Client",
-    "hint": "Les fichiers sont installés dans ce client seulement. Un autre client sur le même moteur garde son propre jeu de fichiers. Les clients {{game}} sont listés ici ; changez de jeu dans la barre latérale pour voir les autres."
+    "label": "Client"
   },
   "tabs": {
     "installed": "Installés",

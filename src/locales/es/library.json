@@ -1,16 +1,12 @@
 {
   "title": "Biblioteca",
-  "subtitle": "Skins, empuñaduras, mapas y mods, instalados en el cliente que elija.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} archivos · {{enabled}} activados · {{size}}",
-  "noEngine": "sin motor",
   "searchPlaceholder": "Buscar archivos",
   "browseJkhub": "Explorar JKHub",
   "addFiles": "Agregar archivos",
   "pickTitle": "Agregar archivos pk3",
   "pickFilter": "Archivos de Jedi Academy",
   "clientBar": {
-    "label": "Cliente",
-    "hint": "Los archivos se instalan solo en este cliente. Otro cliente con el mismo motor mantiene su propio conjunto. Aquí se listan los clientes de {{game}}; cambie de juego en la barra lateral para ver los demás."
+    "label": "Cliente"
   },
   "tabs": {
     "installed": "Instalados",

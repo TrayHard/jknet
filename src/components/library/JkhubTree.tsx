@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -10,10 +10,6 @@ interface JkhubTreeProps {
   categories: JkhubCategory[];
   selected: number | null;
   onSelect: (category: JkhubCategory) => void;
-  /** Walks the tree again. Twenty requests, so it asks before it is used. */
-  onUpdate: () => void;
-  /** True while that walk is running. */
-  updating: boolean;
   /**
    * Matches per category while a query is active, `null` while none is.
    *
@@ -60,19 +56,13 @@ export function shows(
  * it is a temporary category that is usually empty (research report,
  * section 2).
  *
- * The header carries **Update categories** rather than the toolbar next to the
- * cards. Walking the tree costs about twenty requests to jkhub.org and the
- * tree changes a few times a year, so it is deliberately the quietest control
- * on the tab: **Refresh** above the cards reads the catalogue, not this.
+ * --- slice: library cleanup ---
+ * The header is a heading and nothing else. Walking the tree again costs about
+ * twenty requests to jkhub.org and the tree changes a few times a year, so the
+ * action for it sits on the Settings screen, next to the other caches, rather
+ * than above a list the player reads every visit.
  */
-export function JkhubTree({
-  categories,
-  selected,
-  onSelect,
-  onUpdate,
-  updating,
-  counts,
-}: JkhubTreeProps) {
+export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeProps) {
   const { t } = useTranslation("jkhub");
   const [open, setOpen] = useState<Set<number>>(() => new Set());
 
@@ -173,22 +163,6 @@ export function JkhubTree({
   const header = (
     <div className="flex items-center gap-8 pb-8">
       <span className="text-label-xs text-fg-muted flex-1">{t("tree.heading")}</span>
-      <button
-        type="button"
-        onClick={onUpdate}
-        disabled={updating}
-        title={t("tree.updateHint")}
-        className={cn(
-          "inline-flex items-center gap-4 rounded-sm text-label-xs",
-          "transition-colors duration-150",
-          updating
-            ? "text-fg-muted cursor-default"
-            : "text-fg-muted hover:text-fg cursor-pointer",
-        )}
-      >
-        <RefreshCw size={12} className={updating ? "animate-spin" : undefined} />
-        {updating ? t("tree.updating") : t("tree.update")}
-      </button>
     </div>
   );
 
