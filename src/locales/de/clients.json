@@ -49,7 +49,6 @@
     "installVersion": "Engine {{version}} installieren"
   },
   "engines": {
-    "heading": "Engines für {{game}}",
     "recommended": "Empfohlen",
     "legacy": "Legacy"
   },

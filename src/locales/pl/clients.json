@@ -51,7 +51,6 @@
     "installVersion": "Zainstaluj silnik {{version}}"
   },
   "engines": {
-    "heading": "Silniki {{game}}",
     "recommended": "Zalecany",
     "legacy": "Legacy"
   },

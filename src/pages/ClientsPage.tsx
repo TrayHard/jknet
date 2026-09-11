@@ -36,7 +36,6 @@ import {
   type Client,
   type Engine,
   type EngineInstallProgress,
-  type EngineStatus,
   type Game,
   type RunningGame,
   type SettingsPatch,
@@ -72,10 +71,12 @@ import {
 } from "../lib/queries";
 
 /**
- * Clients: the only screen of the skeleton that is fully wired to the core.
+ * Clients: the game folder, the clients of the active game, and nothing else.
  *
- * Two blocks, as in the design: the game files card on top, the list of
- * clients below it, and the engine row with New client at the bottom.
+ * The registry of engines it used to end with is gone. A build gets a page of
+ * its own at `#/engines/<id>`, which the New client dialog and every client
+ * card link to: a list of five builds nobody asked for was the last thing a
+ * player met on the way down this screen.
  */
 export function ClientsPage() {
   const { t } = useTranslation("clients");
@@ -389,41 +390,6 @@ export function ClientsPage() {
         ) : null}
       </section>
 
-      {/* Engines --------------------------------------------------------- */}
-      <section className="flex flex-col gap-12 pt-24">
-        {/* --- slice: game switch --- the builds that play the active game.
-            An engine of the other game cannot be picked in the dialog below
-            anyway, so listing it here would only be a card to be puzzled by. */}
-        <h2 className="text-label-xs text-fg-muted">
-          {t("engines.heading", { game: gameName(activeGame) })}
-        </h2>
-        <ul className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-          {engines.map((engine) => (
-            <li
-              key={engine.id}
-              className="flex flex-col gap-4 rounded-lg border border-line bg-surface p-16"
-            >
-              <div className="flex items-center gap-8">
-                <span className="text-heading-sm text-fg">{engine.name}</span>
-                {engine.status.kind === "recommended" ? (
-                  <Badge tone="accent">{t("engines.recommended")}</Badge>
-                ) : null}
-                {engine.status.kind === "legacy" ? (
-                  <Badge tone="warm">{t("engines.legacy")}</Badge>
-                ) : null}
-              </div>
-              {/* The engine name and its one-line description come from the
-                  registry in the core and name a project: data, not copy. The
-                  note is the opposite: the registry names a catalog key and
-                  the sentence itself is translated. */}
-              <p className="text-body-sm text-fg-secondary">{engine.description}</p>
-              <EngineNoteText status={engine.status} />
-              <p className="text-mono-xs text-fg-muted">{engine.repo}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
       {dialogOpen ? (
         <NewClientDialog
           game={newClientGame}
@@ -442,19 +408,6 @@ export function ClientsPage() {
 // --- slice: i18n ---
 // `sourceName` is gone: the four detection sources are `games.sources.*` in the
 // catalogs, and both this screen and the first run read them from there.
-
-/**
- * The warning a legacy build carries, or nothing at all.
- *
- * The registry card in the section above states the fact and stops there: the
- * offer to make a client on the successor belongs on a client's own card,
- * where the player has one to replace.
- */
-function EngineNoteText({ status }: { status: EngineStatus }) {
-  const note = useEngineNote()(status);
-  if (note === null) return null;
-  return <p className="text-body-sm text-fg-muted">{note.text}</p>;
-}
 
 interface ClientCardProps {
   client: Client;
