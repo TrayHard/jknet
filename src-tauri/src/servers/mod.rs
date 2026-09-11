@@ -31,11 +31,11 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
@@ -156,8 +156,6 @@ pub struct ServerInfo {
     pub protocol: u16,
     /// Round trip time of the `getinfo` that was answered.
     pub ping_ms: u32,
-    /// Listed in the bundled `trusted_servers.json`.
-    pub trusted: bool,
     /// Starred by the player, from `favorite_servers` in the settings.
     pub favorite: bool,
     /// When this row was last confirmed, RFC 3339 in UTC.
@@ -168,9 +166,9 @@ impl ServerInfo {
     /// Builds a row out of one `infoResponse`.
     ///
     /// Every key is optional: a mod may drop any of them, and a missing key
-    /// must cost that one field rather than the whole row. `trusted` and
-    /// `favorite` are left off here and set by [`ServerInfo::decorate`], which
-    /// is what lets a cached row pick up a star the player added since.
+    /// must cost that one field rather than the whole row. `favorite` is left
+    /// off here and set by [`ServerInfo::decorate`], which is what lets a
+    /// cached row pick up a star the player added since.
     pub fn from_infostring(
         game: Game,
         address: SocketAddrV4,
@@ -220,15 +218,13 @@ impl ServerInfo {
             protocol: number(&info, "protocol")
                 .unwrap_or_else(|| default_protocol(game)),
             ping_ms,
-            trusted: false,
             favorite: false,
             last_seen: last_seen.to_string(),
         }
     }
 
-    /// Applies the two flags that come from the launcher, not from the server.
-    pub fn decorate(&mut self, trusted: &HashSet<String>, favorites: &HashSet<String>) {
-        self.trusted = trusted.contains(&self.address);
+    /// Applies the flag that comes from the launcher, not from the server.
+    pub fn decorate(&mut self, favorites: &HashSet<String>) {
         self.favorite = favorites.contains(&self.address);
     }
 
@@ -295,9 +291,9 @@ impl ServerInfo {
 /// server that does not send the key leaves the split open unless it also
 /// reports nobody, because zero players cannot hide a bot.
 ///
-/// A mod that reports more humans than clients is clamped rather than trusted:
-/// the two keys come from one loop in the engine, so a disagreement means the
-/// mod rewrote one of them.
+/// A mod that reports more humans than clients is clamped rather than taken at
+/// its word: the two keys come from one loop in the engine, so a disagreement
+/// means the mod rewrote one of them.
 fn derive_players(
     clients: u16,
     humans: Option<u16>,
@@ -353,66 +349,6 @@ fn default_protocol(game: Game) -> u16 {
 /// or is not a number at all.
 fn number<T: std::str::FromStr>(info: &BTreeMap<String, String>, key: &str) -> Option<T> {
     info.get(key)?.trim().parse().ok()
-}
-
-/// A community server the launcher vouches for.
-///
-/// The list is bundled in `resources/trusted_servers.json` and ships empty:
-/// JSON has no comments, so the shape is documented here and in
-/// `docs/architecture.md` instead of in the file. One entry looks like
-/// `{"address": "1.2.3.4:29070", "name": "EU FFA", "community": "JKHub",
-/// "url": "https://jkhub.org"}`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct TrustedServer {
-    /// `ip:port`, matched against [`ServerInfo::address`] exactly.
-    pub address: String,
-    pub name: String,
-    /// Who runs it: `JKHub`, `JACoders`, a clan tag.
-    pub community: String,
-    /// Page a player can read before connecting. Empty when there is none.
-    pub url: String,
-}
-
-/// The bundled list, read once per run.
-static TRUSTED: OnceLock<Vec<TrustedServer>> = OnceLock::new();
-
-/// Returns the bundled trusted servers.
-///
-/// A missing or broken resource yields an empty list and a warning in the log.
-/// The browser must open even when the launcher's own resource folder is
-/// damaged, because every other tab still works without this file.
-fn trusted_servers(app: &tauri::AppHandle) -> &'static [TrustedServer] {
-    TRUSTED
-        .get_or_init(|| match read_trusted(app) {
-            Ok(list) => list,
-            Err(e) => {
-                log::warn!("trusted server list is unavailable: {e}");
-                Vec::new()
-            }
-        })
-        .as_slice()
-}
-
-/// Reads `resources/trusted_servers.json` out of the bundle.
-fn read_trusted(app: &tauri::AppHandle) -> Result<Vec<TrustedServer>> {
-    let file = app
-        .path()
-        .resolve(
-            "resources/trusted_servers.json",
-            tauri::path::BaseDirectory::Resource,
-        )
-        .map_err(|e| AppError::Path(format!("trusted server list: {e}")))?;
-    let text = fs::read_to_string(&file).map_err(|e| AppError::io_path("cannot read", &file, e))?;
-    serde_json::from_str(&text).map_err(|e| AppError::json("cannot parse trusted_servers.json", e))
-}
-
-/// Addresses of the trusted servers, ready for a lookup.
-fn trusted_index(app: &tauri::AppHandle) -> HashSet<String> {
-    trusted_servers(app)
-        .iter()
-        .map(|server| server.address.clone())
-        .collect()
 }
 
 /// What `cache\servers.json` holds.
@@ -603,8 +539,8 @@ fn emit<T: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: T) {
     }
 }
 
-/// Returns the last list written by a refresh, with the stars and shields of
-/// the current settings applied.
+/// Returns the last list written by a refresh, with the stars of the current
+/// settings applied.
 ///
 /// This is what the Servers screen renders on its first frame, before the
 /// network answers anything. Declared `async` so the read of a list a thousand
@@ -614,14 +550,12 @@ fn emit<T: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: T) {
 /// its own cache document, so the two never overwrite each other.
 #[tauri::command(async)]
 pub fn get_cached_servers(
-    app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     game: Option<Game>,
 ) -> Result<Vec<ServerInfo>> {
     let settings = state.settings()?;
     let game = settings.game_or_active(game);
     let file = cache_file(&state, game)?;
-    let trusted = trusted_index(&app);
     let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
 
     let mut servers = read_cache(&file);
@@ -635,7 +569,7 @@ pub fn get_cached_servers(
         // And the label is read from that game's table, so a 0.2 row keeps
         // saying Siege rather than being relabelled by whatever it decoded to.
         server.gametype_label = game.spec().gametype_label(server.gametype);
-        server.decorate(&trusted, &favorites);
+        server.decorate(&favorites);
     }
     sort_rows(&mut servers);
     Ok(servers)
@@ -668,7 +602,6 @@ pub async fn refresh_servers(
     let game = settings.game_or_active(game);
     let spec = game.spec();
     let file = cache_file(&state, game)?;
-    let trusted = trusted_index(&app);
     let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
 
     let masters: Vec<String> = masters
@@ -718,7 +651,7 @@ pub async fn refresh_servers(
             reply.ping_ms,
             &last_seen,
         );
-        server.decorate(&trusted, &favorites);
+        server.decorate(&favorites);
         batch.push(server.clone());
         collected.push(server);
 
@@ -956,12 +889,6 @@ pub async fn get_server_status(
     })
 }
 
-/// Returns the bundled list of trusted community servers.
-#[tauri::command]
-pub fn list_trusted_servers(app: tauri::AppHandle) -> Result<Vec<TrustedServer>> {
-    Ok(trusted_servers(&app).to_vec())
-}
-
 /// Applies a change to the settings and writes them.
 ///
 /// The change lands on the document as it is on disk, not on the copy the
@@ -1073,7 +1000,6 @@ mod tests {
         assert_eq!(server.game, Game::JediAcademy);
         assert_eq!(server.protocol, 26);
         assert_eq!(server.ping_ms, 42);
-        assert!(!server.trusted);
         assert!(!server.favorite);
     }
 
@@ -1121,13 +1047,17 @@ mod tests {
     }
 
     #[test]
-    fn decorating_applies_both_flags() {
-        let mut server = row(FULL_INFO);
-        let trusted: HashSet<String> = ["81.19.210.136:29070".to_string()].into_iter().collect();
-        let favorites: HashSet<String> = ["1.2.3.4:29070".to_string()].into_iter().collect();
-        server.decorate(&trusted, &favorites);
-        assert!(server.trusted);
-        assert!(!server.favorite);
+    fn decorating_stars_the_addresses_the_player_saved() {
+        let mut starred = row(FULL_INFO);
+        let mut plain = row(FULL_INFO);
+        let favorites: HashSet<String> = ["81.19.210.136:29070".to_string()]
+            .into_iter()
+            .collect();
+        starred.decorate(&favorites);
+        plain.address = "1.2.3.4:29070".to_string();
+        plain.decorate(&favorites);
+        assert!(starred.favorite);
+        assert!(!plain.favorite);
     }
 
     #[test]
@@ -1286,7 +1216,7 @@ mod tests {
             \"hostnameClean\":\"Blue\",\"map\":\"mp/ffa3\",\"gametype\":0,\
             \"gametypeLabel\":\"FFA\",\"clients\":6,\"humans\":4,\
             \"maxClients\":32,\"needpass\":false,\"game\":\"base\",\
-            \"protocol\":26,\"pingMs\":40,\"trusted\":false,\"favorite\":false,\
+            \"protocol\":26,\"pingMs\":40,\"favorite\":false,\
             \"lastSeen\":\"2026-09-10T00:00:00Z\"}]}";
         let file = std::env::temp_dir().join("jknet-test-old-cache.json");
         fs::write(&file, old).unwrap();
@@ -1407,7 +1337,7 @@ mod tests {
             \"hostnameClean\":\"Blue\",\"map\":\"mp/ffa3\",\"gametype\":0,\
             \"gametypeLabel\":\"FFA\",\"clients\":6,\"humans\":4,\
             \"maxClients\":32,\"needpass\":false,\"game\":\"japlus\",\
-            \"protocol\":26,\"pingMs\":40,\"trusted\":false,\"favorite\":false,\
+            \"protocol\":26,\"pingMs\":40,\"favorite\":false,\
             \"lastSeen\":\"2026-09-10T00:00:00Z\"}]}";
         let file = std::env::temp_dir().join("jknet-test-0-2-cache.json");
         fs::write(&file, old).unwrap();
@@ -1419,6 +1349,33 @@ mod tests {
         // a wrong badge rather than an empty screen.
         assert_eq!(read[0].mod_name, "base");
         assert_eq!(read[0].hostname_clean, "Blue");
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_row_written_before_0_4_survives_the_field_that_was_dropped() {
+        // Until 0.4 every row carried a flag for the bundled list of
+        // vouched-for servers. The status is gone and the field with it, but
+        // the documents on disk still hold the key. `ServerInfo` declares no
+        // `deny_unknown_fields`, so serde walks past a key nothing reads any
+        // more instead of failing the row — and with it the whole list.
+        let old = "{\"updatedAt\":\"2026-09-10T00:00:00Z\",\"servers\":[{\
+            \"game\":\"ja\",\"address\":\"81.19.210.136:29070\",\
+            \"hostnameRaw\":\"Blue\",\"hostnameClean\":\"Blue\",\
+            \"map\":\"mp/ffa3\",\"gametype\":0,\"gametypeLabel\":\"FFA\",\
+            \"clients\":6,\"humans\":4,\"bots\":2,\"playersSource\":\"info\",\
+            \"maxClients\":32,\"needpass\":false,\"modName\":\"japlus\",\
+            \"protocol\":26,\"pingMs\":40,\"trusted\":true,\"favorite\":true,\
+            \"lastSeen\":\"2026-09-10T00:00:00Z\"}]}";
+        let file = std::env::temp_dir().join("jknet-test-0-3-cache.json");
+        fs::write(&file, old).unwrap();
+
+        let read = read_cache(&file);
+        assert_eq!(read.len(), 1, "the whole list must survive");
+        assert_eq!(read[0].game, Game::JediAcademy);
+        assert_eq!(read[0].hostname_clean, "Blue");
+        assert_eq!(read[0].mod_name, "japlus");
+        assert_eq!(read[0].humans, Some(4));
         let _ = fs::remove_file(&file);
     }
 

@@ -23,7 +23,6 @@
     "locate": "Localizar archivos"
   },
   "topServers": {
-    "trusted": "Servidores de confianza",
     "busiest": "Servidores más concurridos",
     "emptyTitle": "Todavía no hay servidores en la caché",
     "emptyText": "Abra la pantalla Servidores una vez y los más concurridos aparecerán aquí.",

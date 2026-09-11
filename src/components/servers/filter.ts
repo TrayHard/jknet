@@ -7,7 +7,7 @@
 
 import type { ServerInfo } from "../../lib/ipc";
 
-export type ServerTab = "all" | "trusted" | "favorites" | "history" | "lan";
+export type ServerTab = "all" | "favorites" | "history" | "lan";
 
 export type PlayersFilter = "any" | "not-empty" | "not-full";
 
@@ -164,8 +164,6 @@ export function applyTab(
   historyAddresses: string[],
 ): ServerInfo[] {
   switch (tab) {
-    case "trusted":
-      return servers.filter((server) => server.trusted);
     case "favorites":
       return servers.filter((server) => server.favorite);
     case "history": {

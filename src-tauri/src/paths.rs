@@ -414,7 +414,7 @@ mod tests {
         write(&old_root.join("cache").join("servers.json"), "[]");
         write(&old_root.join("logs").join("jknet.log"), "line");
         write(&old_root.join("JKNet.exe"), "MZ");
-        write(&old_root.join("resources").join("trusted_servers.json"), "[]");
+        write(&old_root.join("resources").join("extra-file.txt"), "text");
 
         let report = migrate_legacy_root(&old_root, &new_root);
 
@@ -435,7 +435,7 @@ mod tests {
         assert!(old_root.join("JKNet.exe").is_file());
         assert!(old_root
             .join("resources")
-            .join("trusted_servers.json")
+            .join("extra-file.txt")
             .is_file());
         assert!(!old_root.join("clients").exists());
         assert!(!old_root.join("settings.json").exists());

@@ -1,4 +1,4 @@
-import { Check, Copy, Lock, Play, ShieldCheck, Users } from "lucide-react";
+import { Check, Copy, Lock, Play, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -63,11 +63,6 @@ export function ServerDetails({
           className="text-heading-sm text-fg"
         />
         <div className="flex flex-wrap items-center gap-6">
-          {server.trusted ? (
-            <Badge tone="warm" icon={<ShieldCheck size={12} />}>
-              {t("details.trusted")}
-            </Badge>
-          ) : null}
           <Badge tone="accent">
             {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
           </Badge>

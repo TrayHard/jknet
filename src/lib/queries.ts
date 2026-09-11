@@ -68,7 +68,6 @@ import {
   type ServerStatus,
   type Settings,
   type SettingsPatch,
-  type TrustedServer,
 } from "./ipc";
 import { isTauri } from "./runtime";
 
@@ -463,13 +462,11 @@ export function useStopGame() {
  * Every key that names a list carries the game: the two games have separate
  * master lists and separate cache documents, and one key for both would show
  * Jedi Academy rows on a Jedi Outcast screen for a frame after every switch.
- * The trusted list is bundled with the build and is not scoped.
  */
 export const serverKeys = {
   /** The list `cache\servers-<game>.json` holds, kept fresh by
    * `useServerRefresh`. */
   cached: (game: Game) => ["servers", "cached", game] as const,
-  trusted: ["servers", "trusted"] as const,
   status: (game: Game, address: string) =>
     ["servers", "status", game, address] as const,
 };
@@ -486,15 +483,6 @@ export function useCachedServers(): UseQueryResult<ServerInfo[]> {
   return useQuery({
     queryKey: serverKeys.cached(game),
     queryFn: () => serversIpc.getCachedServers(game),
-    staleTime: Infinity,
-  });
-}
-
-/** The bundled trusted list. It ships with the build, so it never goes stale. */
-export function useTrustedServers(): UseQueryResult<TrustedServer[]> {
-  return useQuery({
-    queryKey: serverKeys.trusted,
-    queryFn: serversIpc.listTrustedServers,
     staleTime: Infinity,
   });
 }
