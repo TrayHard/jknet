@@ -4,15 +4,19 @@
   "launchError": "{{message}} <0>Öffnen Sie den Bereich Clients</0>, um den Spielordner festzulegen oder die Engine zu installieren.",
   "hero": {
     "quickPlay": "Schnellstart",
+    "continue": "Continue",
+    "lastServer": "Last server",
     "inGame": "Im Spiel",
     "running": "Läuft: {{client}}",
     "noClient": "Noch kein Client für {{game}}",
     "runningText": "Vor <0>{{age}}</0> gestartet, Prozess {{pid}}. Der Launcher hält sich zurück, solange Sie spielen.",
     "readyText": "Starten Sie den Standard-Client und wählen Sie im Spielmenü einen Server.",
+    "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
     "noClientText": "Ein Client ist ein Engine-Build mit eigenen Dateien und Einstellungen. Legen Sie einen an, dann ist {{game}} nur einen Klick entfernt.",
     "createClient": "Client für {{game}} erstellen",
     "play": "Spielen",
     "playHint": "Markieren Sie einen Client als Standard",
+    "connect": "Verbinden",
     "stop": "Beenden",
     "manageClients": "Clients verwalten",
     "aMoment": "einem Moment"
@@ -23,6 +27,8 @@
     "locate": "Dateien suchen"
   },
   "topServers": {
+    "favorites": "Favoriten",
+    "history": "Verlauf",
     "busiest": "Meistbesuchte Server",
     "emptyTitle": "Noch keine Server im Cache",
     "emptyText": "Öffnen Sie den Bereich Server einmal, dann erscheinen die meistbesuchten hier.",

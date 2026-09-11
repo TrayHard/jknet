@@ -4,15 +4,19 @@
   "launchError": "{{message}} <0>Otwórz ekran Klienci</0>, aby wskazać folder gry lub zainstalować silnik.",
   "hero": {
     "quickPlay": "Szybka gra",
+    "continue": "Continue",
+    "lastServer": "Last server",
     "inGame": "W grze",
     "running": "Działa: {{client}}",
     "noClient": "Brak klienta {{game}}",
     "runningText": "Uruchomiono <0>{{age}}</0> temu, proces {{pid}}. Launcher schodzi na bok na czas gry.",
     "readyText": "Uruchom domyślnego klienta i wybierz serwer w menu gry.",
+    "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
     "noClientText": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Wystarczy go utworzyć, aby uruchomić {{game}} jednym kliknięciem.",
     "createClient": "Utwórz klienta {{game}}",
     "play": "Graj",
     "playHint": "Oznacz klienta jako domyślnego",
+    "connect": "Połącz",
     "stop": "Zatrzymaj",
     "manageClients": "Zarządzaj klientami",
     "aMoment": "chwilę"
@@ -23,6 +27,8 @@
     "locate": "Wskaż pliki"
   },
   "topServers": {
+    "favorites": "Ulubione",
+    "history": "Historia",
     "busiest": "Najbardziej oblegane serwery",
     "emptyTitle": "Brak serwerów w pamięci podręcznej",
     "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",

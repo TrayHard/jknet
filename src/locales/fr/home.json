@@ -4,15 +4,19 @@
   "launchError": "{{message}} <0>Ouvrez l’écran Clients</0> pour indiquer le dossier du jeu ou installer le moteur.",
   "hero": {
     "quickPlay": "Partie rapide",
+    "continue": "Continue",
+    "lastServer": "Last server",
     "inGame": "En jeu",
     "running": "En cours : {{client}}",
     "noClient": "Aucun client {{game}}",
     "runningText": "Démarré il y a <0>{{age}}</0>, processus {{pid}}. Le lanceur s’efface pendant que vous jouez.",
     "readyText": "Lancez le client par défaut et choisissez un serveur dans le menu du jeu.",
+    "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
     "noClientText": "Un client est une version d’un moteur avec ses propres fichiers et paramètres. Créez-en un et {{game}} démarre en un clic.",
     "createClient": "Créer un client {{game}}",
     "play": "Jouer",
     "playHint": "Désignez un client comme client par défaut",
+    "connect": "Se connecter",
     "stop": "Arrêter",
     "manageClients": "Gérer les clients",
     "aMoment": "un instant"
@@ -23,6 +27,8 @@
     "locate": "Localiser les fichiers"
   },
   "topServers": {
+    "favorites": "Favoris",
+    "history": "Historique",
     "busiest": "Serveurs les plus remplis",
     "emptyTitle": "Aucun serveur dans le cache",
     "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",
