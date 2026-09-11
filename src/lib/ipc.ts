@@ -257,6 +257,14 @@ export interface Client {
   enginePublishedAt: string | null;
   /** Mod folder the client starts in, `+set fs_game`. */
   fsGame: string | null;
+  // --- slice: client launch args ---
+  /**
+   * Command line of this client, written the way a shortcut is written.
+   *
+   * Handed to the engine after the tokens of `extraLaunchArgs`, so a client
+   * that repeats a `+set` of the same cvar is the value the engine keeps.
+   */
+  launchArgs: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -294,17 +302,19 @@ export const ipc = {
   createClient: (name: string, engineId: string, game: Game) =>
     call<Client>("create_client", { name, engineId, game }),
   /**
-   * Changes the name, the mod folder, or both. A field left out keeps its
-   * value; an empty `fsGame` clears it back to the default of the engine.
+   * Changes the name, the mod folder, the launch arguments, or any of them. A
+   * field left out keeps its value; an empty `fsGame` clears it back to the
+   * default of the engine and an empty `launchArgs` clears the line.
    */
   updateClient: (
     clientId: string,
-    changes: { name?: string; fsGame?: string },
+    changes: { name?: string; fsGame?: string; launchArgs?: string },
   ) =>
     call<Client>("update_client", {
       clientId,
       name: changes.name ?? null,
       fsGame: changes.fsGame ?? null,
+      launchArgs: changes.launchArgs ?? null,
     }),
   deleteClient: (id: string) => call<void>("delete_client", { id }),
 

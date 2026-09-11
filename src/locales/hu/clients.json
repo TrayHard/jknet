@@ -75,7 +75,10 @@
     "namePlaceholder": "Mindennapi",
     "modFolder": "Modmappa (fs_game)",
     "modFolderHint": "A kliens a saját mappáján belül ebben a mappában indul, amelyet a <0>+set fs_game</0> kapcsoló ad át. Csak betű, számjegy, <1>_</1>, <2>-</2> és <3>+</3> lehet benne. Hagyja üresen, és a <4>{{folder}}</4> marad, ami {{engine}} esetén az alapértelmezés.",
-    "engineFallback": "a motor"
+    "engineFallback": "a motor",
+    "launchArgs": "Launch arguments",
+    "launchArgsPlaceholder": "+set r_mode 4 +exec duel.cfg",
+    "launchArgsHint": "This client adds these after the arguments of the Settings screen: a repeated <0>+set</0> of the same cvar wins, while commands such as <1>+exec</1> add up and run in the order they stand. Double quotes keep a value with a space together."
   },
   "missingToast": {
     "title": "Még nincs kliens a {{game}} játékhoz",

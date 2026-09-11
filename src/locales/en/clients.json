@@ -32,7 +32,7 @@
     "metaWithMod": "{{id}} · created {{date}} · fs_game {{mod}}",
     "delete": "Delete",
     "settingsOf": "Settings of {{client}}",
-    "settingsHint": "Name and mod folder",
+    "settingsHint": "Name, mod folder and launch arguments",
     "installedOn": "installed {{date}}",
     "manualInstall": "This build has to be installed by hand."
   },
@@ -75,7 +75,10 @@
     "namePlaceholder": "Everyday",
     "modFolder": "Mod folder (fs_game)",
     "modFolderHint": "The client starts in this folder of its home directory, passed as <0>+set fs_game</0>. Letters, digits, <1>_</1>, <2>-</2> and <3>+</3> only. Leave it empty for <4>{{folder}}</4>, the default of {{engine}}.",
-    "engineFallback": "the engine"
+    "engineFallback": "the engine",
+    "launchArgs": "Launch arguments",
+    "launchArgsPlaceholder": "+set r_mode 4 +exec duel.cfg",
+    "launchArgsHint": "This client adds these after the arguments of the Settings screen: a repeated <0>+set</0> of the same cvar wins, while commands such as <1>+exec</1> add up and run in the order they stand. Double quotes keep a value with a space together."
   },
   "missingToast": {
     "title": "No {{game}} client yet",

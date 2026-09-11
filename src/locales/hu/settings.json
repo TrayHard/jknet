@@ -30,7 +30,8 @@
     "title": "Indítás",
     "label": "További indítási argumentumok",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Minden kliens indításakor hozzáfűződik, pontosan úgy, mint egy parancsikonban. Például: <0>+set r_fullscreen 0 +set r_mode 4</0>. Az idézőjel egyben tartja a szóközt tartalmazó értéket."
+    "hint": "Minden kliens indításakor hozzáfűződik, pontosan úgy, mint egy parancsikonban. Például: <0>+set r_fullscreen 0 +set r_mode 4</0>. Az idézőjel egyben tartja a szóközt tartalmazó értéket.",
+    "order": "The arguments of a client stand after these, so a client that repeats a <0>+set</0> of the same cvar is the value the game takes."
   },
   "onboarding": {
     "title": "Első beállítás",
@@ -41,12 +42,12 @@
     "title": "Gyorsítótár",
     "mapPictures": "Pályaképek",
     "reading": "Az index beolvasása…",
-    "count_one": "{{count}} pályához van kép, a már meglévő pk3-fájlokból beolvasva. A JKNet semmit nem tölt le.",
-    "count_other": "{{count}} pályához van kép, a már meglévő pk3-fájlokból beolvasva. A JKNet semmit nem tölt le.",
     "perGame": "{{count}} {{game}}",
     "lastRebuild": "Utolsó újraépítés: {{maps}} kép {{sources}} fájlból, {{elapsed}} alatt.",
     "rebuild": "Újraépítés",
-    "rebuilding": "Újraépítés…"
+    "rebuilding": "Újraépítés…",
+    "count_one": "{{count}} pályához van kép, a már meglévő pk3-fájlokból beolvasva. A JKNet semmit nem tölt le.",
+    "count_other": "{{count}} pályához van kép, a már meglévő pk3-fájlokból beolvasva. A JKNet semmit nem tölt le."
   },
   "rest": {
     "title": "A beállítások többi része még nincs bekötve",

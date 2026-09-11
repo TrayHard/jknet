@@ -1101,6 +1101,7 @@ mod tests {
             engine_installed_at: None,
             engine_published_at: None,
             fs_game: fs_game.map(str::to_string),
+            launch_args: String::new(),
         }
     }
 
