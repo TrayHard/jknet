@@ -56,6 +56,7 @@ use engine_install::InstallState;
 use friends::FriendsState;
 use launch::LaunchState;
 use levelshots::LevelshotState;
+use servers::RefreshState;
 use state::AppState;
 use tauri::Manager;
 use tauri_plugin_log::{Target, TargetKind};
@@ -246,6 +247,11 @@ pub fn run() {
         // up. Kept apart from `AppState` for the same reason as the two above:
         // a background task must not queue behind a settings write.
         .manage(FriendsState::default())
+        // --- slice: servers browser ---
+        // Which tabs of which game have a scan in flight. Two tabs may scan at
+        // once, one tab may not scan twice: the guard lives here rather than in
+        // a disabled button, because a reloaded window would press it again.
+        .manage(RefreshState::default())
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::update_settings,
@@ -280,6 +286,8 @@ pub fn run() {
             // --- slice: servers ---
             servers::get_cached_servers,
             servers::refresh_servers,
+            servers::refresh_addresses,
+            servers::refresh_lan,
             servers::get_server_status,
             servers::set_server_favorite,
             servers::add_server_history,

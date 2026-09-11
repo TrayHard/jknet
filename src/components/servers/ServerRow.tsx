@@ -75,6 +75,11 @@ export function ServerRow({
         selected
           ? "bg-selected-overlay text-fg"
           : "hover:bg-hover-overlay text-fg-secondary",
+        // --- slice: servers browser ---
+        // A server that did not answer the last check is still a row — the
+        // player put it in their favourites — but it is not a row to join, so
+        // the whole line steps back.
+        !server.responded && "opacity-55",
       )}
     >
       <button
@@ -121,7 +126,19 @@ export function ServerRow({
 
       <PlayerCount server={server} />
 
-      <Ping ms={server.pingMs} />
+      {/* --- slice: servers browser ---
+          A measured round trip, or the reason there is none. A ping from the
+          last time the server was up would be a promise the row cannot keep. */}
+      {server.responded ? (
+        <Ping ms={server.pingMs} />
+      ) : (
+        <span
+          className="text-mono-xs text-fg-disabled truncate"
+          title={t("row.noResponseTitle")}
+        >
+          {t("row.noResponse")}
+        </span>
+      )}
 
       <span className="text-mono-xs text-fg-muted truncate" title={server.modName}>
         {server.modName}

@@ -63,6 +63,7 @@ import {
   type PresenceUpdated,
   type RunningGame,
   type ServerInfo,
+  type ServerScope,
   type ServersBatchEvent,
   type ServersDoneEvent,
   type ServerStatus,
@@ -469,6 +470,11 @@ export const serverKeys = {
   /** The list `cache\servers-<game>.json` holds, kept fresh by
    * `useServerRefresh`. */
   cached: (game: Game) => ["servers", "cached", game] as const,
+  // --- slice: servers browser ---
+  /** What the last LAN sweep found. Never written to disk, never merged into
+   * the list above: a machine on this network is not a server the master
+   * list knows about. */
+  lan: (game: Game) => ["servers", "lan", game] as const,
   status: (game: Game, address: string) =>
     ["servers", "status", game, address] as const,
 };
@@ -487,6 +493,27 @@ export function useCachedServers(): UseQueryResult<ServerInfo[]> {
     queryFn: () => serversIpc.getCachedServers(game),
     staleTime: Infinity,
   });
+}
+
+// --- slice: servers browser ---
+/**
+ * What the last LAN sweep found, for the length of this session.
+ *
+ * There is nothing to fetch: the list exists only after `refresh_lan` answers,
+ * and the sweep writes it into this cache itself. The query is here so the LAN
+ * rows live where every other list lives, keyed by game and kept out of the
+ * master list — and so the tab opens on an empty table with a hint rather than
+ * on a scan the player did not ask for.
+ */
+export function useLanServers(): ServerInfo[] {
+  const game = useActiveGame();
+  const query = useQuery({
+    queryKey: serverKeys.lan(game),
+    queryFn: () => [] as ServerInfo[],
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  return query.data ?? [];
 }
 
 /**
@@ -540,18 +567,45 @@ export function useAddServerHistory() {
   });
 }
 
-/** What `useServerRefresh` gives the Servers screen. */
-export interface ServerRefresh {
-  /** Starts a refresh, or does nothing while one runs. */
-  refresh: () => void;
+// --- slice: servers browser ---
+/** What one tab's own indicator shows. */
+export interface ScopeRefresh {
+  /** A scan of this tab is in flight. */
   running: boolean;
-  /** Message of the last failed refresh, cleared when the next one starts. */
+  /** Message of this tab's last failed scan, cleared when the next starts. */
   error: string | null;
-  /** Counts of the last finished refresh. */
+  /** Counts of this tab's last finished scan. */
   progress: ServersDoneEvent | null;
-  /** `Date.now()` of the last finished refresh, for "refreshed N s ago". */
+  /** `Date.now()` of this tab's last finished scan, for "refreshed N s ago". */
   refreshedAt: number | null;
 }
+
+/** What `useServerRefresh` gives the Servers screen. */
+export interface ServerRefresh {
+  /** **Get new list**: the master servers, then a probe of their addresses. */
+  getNewList: () => void;
+  /** **Refresh**: re-probes addresses already on screen, under one tab's scope. */
+  refreshAddresses: (scope: ServerScope, addresses: string[]) => void;
+  /** The **LAN** tab: one broadcast sweep of the local network. */
+  refreshLan: () => void;
+  /** The indicator of every tab, keyed by scope. */
+  scopes: Record<ServerScope, ScopeRefresh>;
+}
+
+/** A tab nothing has scanned yet. */
+const IDLE_SCOPE: ScopeRefresh = {
+  running: false,
+  error: null,
+  progress: null,
+  refreshedAt: null,
+};
+
+const IDLE_SCOPES: Record<ServerScope, ScopeRefresh> = {
+  all: IDLE_SCOPE,
+  favorites: IDLE_SCOPE,
+  history: IDLE_SCOPE,
+  lan: IDLE_SCOPE,
+};
 
 /** Adds or replaces rows by address, keeping the rest of the list intact. */
 function mergeServers(
@@ -564,13 +618,17 @@ function mergeServers(
 }
 
 /**
- * Runs a refresh and streams its results into the cached-list query.
+ * Runs the three scans of the browser and streams their results into the lists.
  *
- * The core answers twice: `servers:batch` every 100 ms while the scan runs,
- * and the command's own return value at the end. The batches are what makes
- * the table fill in row by row instead of appearing after four seconds; the
- * return value then replaces the list wholesale, which is what removes the
- * servers that went offline since the previous refresh.
+ * Nothing starts by itself: every scan is a button the player pressed. The core
+ * answers twice — `servers:batch` every 100 ms while a scan runs, and the
+ * command's own return value at the end. The batches are what makes the table
+ * fill in row by row; the return value is the whole answer of that scan.
+ *
+ * --- slice: servers browser ---
+ * Every event carries the scope that started it, so each tab keeps its own
+ * loader, counter and "refreshed N s ago" line, and a scan of Favorites leaves
+ * the All tab exactly where it was.
  */
 export function useServerRefresh(): ServerRefresh {
   const queryClient = useQueryClient();
@@ -578,11 +636,20 @@ export function useServerRefresh(): ServerRefresh {
   // One refresh belongs to one game. The events carry theirs, so a batch of
   // the other game is dropped rather than merged into the list on screen.
   const game = useActiveGame();
-  const running = useRef(false);
-  const [isRunning, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState<ServersDoneEvent | null>(null);
-  const [refreshedAt, setRefreshedAt] = useState<number | null>(null);
+  // A ref, not the state flags: two clicks in the same frame would both read
+  // `false` and start two scans of the same list.
+  const inFlight = useRef<Set<ServerScope>>(new Set());
+  const [scopes, setScopes] =
+    useState<Record<ServerScope, ScopeRefresh>>(IDLE_SCOPES);
+
+  const patchScope = useCallback(
+    (scope: ServerScope, change: Partial<ScopeRefresh>) =>
+      setScopes((before) => ({
+        ...before,
+        [scope]: { ...before[scope], ...change },
+      })),
+    [],
+  );
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -594,11 +661,16 @@ export function useServerRefresh(): ServerRefresh {
         "servers:batch",
         (event) => {
           // The payload names its game, so the rows land in that game's list
-          // even when the player switched away while the scan ran.
+          // even when the player switched away while the scan ran. A LAN batch
+          // lands in the sweep's own list: those rows belong to this network
+          // and to this session, not to the master list.
           const forGame = event.payload.game;
-          queryClient.setQueryData<ServerInfo[]>(
-            serverKeys.cached(forGame),
-            (rows) => mergeServers(rows ?? [], event.payload.servers),
+          const key =
+            event.payload.scope === "lan"
+              ? serverKeys.lan(forGame)
+              : serverKeys.cached(forGame);
+          queryClient.setQueryData<ServerInfo[]>(key, (rows) =>
+            mergeServers(rows ?? [], event.payload.servers),
           );
         },
       );
@@ -606,7 +678,7 @@ export function useServerRefresh(): ServerRefresh {
         "servers:done",
         (event) => {
           if (event.payload.game !== game) return;
-          setProgress(event.payload);
+          patchScope(event.payload.scope, { progress: event.payload });
         },
       );
       // The effect may have been torn down while the two promises resolved.
@@ -622,29 +694,69 @@ export function useServerRefresh(): ServerRefresh {
       disposed = true;
       for (const stop of stops) stop();
     };
-  }, [queryClient, game]);
+  }, [queryClient, game, patchScope]);
 
-  const refresh = useCallback(() => {
-    // A ref, not the state flag: two clicks in the same frame would both see
-    // `false` and start two scans of the whole internet.
-    if (running.current) return;
-    running.current = true;
-    setRunning(true);
-    setError(null);
-    serversIpc
-      .refreshServers(game)
-      .then((servers) => {
-        queryClient.setQueryData(serverKeys.cached(game), servers);
-        setRefreshedAt(Date.now());
-      })
-      .catch((e: unknown) => setError(errorMessage(e)))
-      .finally(() => {
-        running.current = false;
-        setRunning(false);
-      });
-  }, [queryClient, game]);
+  /** Runs one scan under one scope and writes its answer where `apply` says. */
+  const run = useCallback(
+    (
+      scope: ServerScope,
+      call: () => Promise<ServerInfo[]>,
+      apply: (servers: ServerInfo[]) => void,
+    ) => {
+      if (inFlight.current.has(scope)) return;
+      inFlight.current.add(scope);
+      patchScope(scope, { running: true, error: null });
+      call()
+        .then((servers) => {
+          apply(servers);
+          patchScope(scope, { refreshedAt: Date.now() });
+        })
+        .catch((e: unknown) => patchScope(scope, { error: errorMessage(e) }))
+        .finally(() => {
+          inFlight.current.delete(scope);
+          patchScope(scope, { running: false });
+        });
+    },
+    [patchScope],
+  );
 
-  return { refresh, running: isRunning, error, progress, refreshedAt };
+  const getNewList = useCallback(() => {
+    run(
+      "all",
+      () => serversIpc.refreshServers(game),
+      // Wholesale, and this is the only scan that may do it: the masters have
+      // just said who is online, so a row they no longer list has left.
+      (servers) => queryClient.setQueryData(serverKeys.cached(game), servers),
+    );
+  }, [run, queryClient, game]);
+
+  const refreshAddresses = useCallback(
+    (scope: ServerScope, addresses: string[]) => {
+      run(
+        scope,
+        () => serversIpc.refreshAddresses(addresses, scope, game),
+        // Merged by address: this scan knows about the addresses it asked and
+        // nothing else, so the rest of the list stays as it was.
+        (servers) =>
+          queryClient.setQueryData<ServerInfo[]>(serverKeys.cached(game), (rows) =>
+            mergeServers(rows ?? [], servers),
+          ),
+      );
+    },
+    [run, queryClient, game],
+  );
+
+  const refreshLan = useCallback(() => {
+    run(
+      "lan",
+      () => serversIpc.refreshLan(game),
+      // Wholesale as well: a sweep sees the whole network at once, so a
+      // machine that stopped answering is a machine that is gone.
+      (servers) => queryClient.setQueryData(serverKeys.lan(game), servers),
+    );
+  }, [run, queryClient, game]);
+
+  return { getNewList, refreshAddresses, refreshLan, scopes };
 }
 
 // ---------------------------------------------------------------------------

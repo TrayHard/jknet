@@ -93,6 +93,9 @@ export interface Settings {
   favoriteServers: string[];
   /** Servers Connect was pressed on, newest first, capped at 50. */
   serverHistory: ServerHistoryEntry[];
+  // --- slice: servers browser ---
+  /** The filter row of the Servers screen, as the player left it. */
+  serverFilters: StoredServerFilters;
   // --- slice: onboarding ---
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
@@ -139,6 +142,9 @@ export interface SettingsPatch {
   extraLaunchArgs?: string;
   favoriteServers?: string[];
   serverHistory?: ServerHistoryEntry[];
+  // --- slice: servers browser ---
+  /** The whole filter row: send the row the screen now shows, not one key. */
+  serverFilters?: StoredServerFilters;
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
   // --- slice: account ---
@@ -151,6 +157,31 @@ export interface ServerHistoryEntry {
   address: string;
   /** RFC 3339 in UTC. */
   lastConnected: string;
+}
+
+// --- slice: servers browser ---
+/** What the **Players** dropdown of the Servers screen narrows the list to. */
+export type PlayersFilter = "any" | "not-empty" | "not-full";
+
+/**
+ * `src-tauri/src/settings.rs`: the filter row of the Servers screen.
+ *
+ * Dropdowns and switches only. The search box is not stored — a browser that
+ * opens on yesterday's search word looks like a browser that lost half the
+ * servers — and neither is the open tab.
+ */
+export interface StoredServerFilters {
+  /** `gametype` as text, or `any`. */
+  gametype: string;
+  /** `fs_game` folder of the server, or `any`. */
+  modName: string;
+  players: PlayersFilter;
+  /** Network protocol as text, or `any`. */
+  protocol: string;
+  /** Drop the servers where every client is a bot. On by default. */
+  hideBotOnly: boolean;
+  /** Drop the servers that ask for a password. Off by default. */
+  hidePassworded: boolean;
 }
 
 /** `src-tauri/src/paths.rs`: the folders JKNet writes into. */
@@ -626,6 +657,18 @@ export const launchIpc = {
  */
 export type PlayersSource = "info" | "status" | "unknown";
 
+// --- slice: servers browser ---
+/**
+ * `src-tauri/src/servers/mod.rs`: which list of the browser one operation
+ * fills.
+ *
+ * The same four names as the tabs, because that is what they are: every event
+ * of a scan carries its scope, and the screen keeps a loader, a counter and a
+ * "refreshed N s ago" line per scope. Two scopes may scan at once; the core
+ * refuses a second scan of the same one.
+ */
+export type ServerScope = "all" | "favorites" | "history" | "lan";
+
 /** `src-tauri/src/servers/mod.rs`: one row of the browser. */
 export interface ServerInfo {
   // --- slice: game core ---
@@ -664,6 +707,15 @@ export interface ServerInfo {
   pingMs: number;
   /** Starred by the player. */
   favorite: boolean;
+  // --- slice: servers browser ---
+  /**
+   * False when the last direct probe of this address got nothing back.
+   *
+   * Such a row carries whatever the last successful scan knew, so the Favorites
+   * and History tabs keep showing a server that is switched off — muted, and
+   * with a mark where the ping goes. Every row of the cache is `true`.
+   */
+  responded: boolean;
   /** RFC 3339 in UTC. */
   lastSeen: string;
 }
@@ -693,14 +745,22 @@ export interface ServersBatchEvent {
   /** The game being refreshed: the event names stayed, the payload says
    * whose rows these are. */
   game: Game;
+  // --- slice: servers browser ---
+  /** Which tab asked. A `lan` batch holds rows that never enter the master
+   * list; every other scope holds rows of it. */
+  scope: ServerScope;
   servers: ServerInfo[];
 }
 
-/** Payload of the `servers:done` event, emitted once per refresh. */
+/** Payload of the `servers:done` event, emitted once per operation. */
 export interface ServersDoneEvent {
   // --- slice: game core ---
   game: Game;
-  /** Addresses the masters returned. */
+  // --- slice: servers browser ---
+  /** Which tab asked, so one tab's indicator is not closed by another's. */
+  scope: ServerScope;
+  /** Addresses that were asked: what the masters returned, what the caller
+   * sent, or — on a LAN sweep — the number that answered. */
   total: number;
   /** How many of them answered `getinfo`. */
   responded: number;
@@ -718,12 +778,40 @@ export interface ServersDoneEvent {
 export const serversIpc = {
   getCachedServers: (game?: Game) =>
     call<ServerInfo[]>("get_cached_servers", { game: game ?? null }),
-  /** `masters` overrides the stock master servers of the game. */
+  /**
+   * **Get new list**: the master servers, then a probe of every address they
+   * returned. The only call that rewrites the cache document.
+   *
+   * `masters` overrides the stock master servers of the game.
+   */
   refreshServers: (game?: Game, masters?: string[]) =>
     call<ServerInfo[]>("refresh_servers", {
       game: game ?? null,
       masters: masters ?? null,
     }),
+  // --- slice: servers browser ---
+  /**
+   * **Refresh**: probes the addresses the caller already has, no master server
+   * involved. Also how the Favorites and History tabs ask about the addresses
+   * the player saved.
+   *
+   * The answers are merged into the cache by address. An address that stays
+   * silent comes back all the same, with `responded` false and whatever the
+   * last successful scan knew about it.
+   */
+  refreshAddresses: (addresses: string[], scope: ServerScope, game?: Game) =>
+    call<ServerInfo[]>("refresh_addresses", {
+      game: game ?? null,
+      addresses,
+      scope,
+    }),
+  // --- slice: servers browser ---
+  /**
+   * The **LAN** tab: one `getinfo` broadcast to four ports of the local
+   * network. The rows never reach the cache.
+   */
+  refreshLan: (game?: Game) =>
+    call<ServerInfo[]>("refresh_lan", { game: game ?? null }),
   getServerStatus: (address: string, game?: Game) =>
     call<ServerStatus>("get_server_status", { address, game: game ?? null }),
   setServerFavorite: (address: string, favorite: boolean, game?: Game) =>
