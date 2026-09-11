@@ -267,6 +267,25 @@ export interface Client {
   launchArgs: string;
 }
 
+// --- slice: client window ---
+
+/** Payload of `clients:changed`. */
+export interface ClientsChanged {
+  clientId: string;
+}
+
+/**
+ * Events the clients module emits.
+ *
+ * One window edits a client and the other one is showing its card, so a record
+ * that changed has to reach a React Query cache that is not the one behind the
+ * call. Every window listens; the one that made the change refetches twice and
+ * nobody notices.
+ */
+export const clientEvents = {
+  changed: "clients:changed",
+} as const;
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -317,6 +336,27 @@ export const ipc = {
       launchArgs: changes.launchArgs ?? null,
     }),
   deleteClient: (id: string) => call<void>("delete_client", { id }),
+
+  // --- slice: client window ---
+  /**
+   * Reads several cvars out of the launch arguments of one client.
+   *
+   * A name the line does not carry answers `null`. The last mention wins, as
+   * it does in the engine.
+   */
+  readLaunchCvars: (clientId: string, names: string[]) =>
+    call<Record<string, string | null>>("read_launch_cvars", {
+      clientId,
+      names,
+    }),
+  /**
+   * Writes one cvar into the launch arguments and saves the client.
+   *
+   * `null` removes it. Every other token of the line stays where it was, which
+   * is what lets a dropdown and a hand-written command line share one field.
+   */
+  writeLaunchCvar: (clientId: string, name: string, value: string | null) =>
+    call<Client>("write_launch_cvar", { clientId, name, value }),
 
   // `launchClient` moved to `launchIpc` below when it stopped being a stub.
   // The library commands live in `libraryIpc` and the server browser in
@@ -575,6 +615,16 @@ export interface LaunchWarning {
   code: LaunchWarningCode;
 }
 
+// --- slice: client window ---
+
+/** `src-tauri/src/launch.rs`: the command line of a client, unlaunched. */
+export interface LaunchPreview {
+  /** One token per argument of the process, in the order they go out. */
+  args: string[];
+  /** The warning these arguments carry, in the codes of `launch:warning`. */
+  warning: LaunchWarningCode | null;
+}
+
 /** Event names the launch slice emits. */
 export const launchEvents = {
   installProgress: "launch:engine-install-progress",
@@ -599,6 +649,16 @@ export const launchIpc = {
     }),
   getRunningGame: () => call<RunningGame | null>("get_running_game"),
   stopGame: () => call<void>("stop_game"),
+
+  // --- slice: client window ---
+  /**
+   * The command line this client would start with, without starting it.
+   *
+   * The same roots and the same argument order as a real launch, and no
+   * `+connect`: the preview stands for the **Play** button.
+   */
+  previewLaunchArgs: (clientId: string) =>
+    call<LaunchPreview>("preview_launch_args", { clientId }),
 };
 // ---------------------------------------------------------------------------
 // --- slice: servers ---

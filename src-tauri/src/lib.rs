@@ -17,6 +17,7 @@
 //! | `clients`        | named engine instances on disk                  |
 //! | `servers`        | master server queries, ping and the server cache |
 //! | `launch`         | starting a client and watching it run           |
+//! | `launch_tokens`  | one cvar at a time inside a client's argument line |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
 //! | `levelshots`     | map pictures extracted from the player's pk3 files |
 //! | `online`         | JKNet Online: its wire types and its HTTP client |
@@ -38,6 +39,10 @@ mod game_files;
 // file page was served with, which `online` has no reason to share.
 mod jkhub;
 mod launch;
+// --- slice: client window ---
+// Reading and writing one cvar inside the launch arguments of a client, so a
+// dropdown and a hand-written command line edit the same string.
+mod launch_tokens;
 mod levelshots;
 mod library;
 // The one client of JKNet Online API v1. `account` calls its sign-in half and
@@ -262,6 +267,10 @@ pub fn run() {
             clients::create_client,
             clients::update_client,
             clients::delete_client,
+            // --- slice: client window ---
+            launch_tokens::read_launch_cvars,
+            launch_tokens::write_launch_cvar,
+            launch::preview_launch_args,
             launch::launch_client,
             // --- slice: library ---
             library::list_library,

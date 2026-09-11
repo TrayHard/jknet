@@ -20,6 +20,8 @@ import { useTranslation } from "react-i18next";
 import {
   accountIpc,
   ACCOUNT_CHANGED_EVENT,
+  // --- slice: client window ---
+  clientEvents,
   errorMessage,
   friendsEvents,
   friendsIpc,
@@ -35,6 +37,9 @@ import {
   type AccountChanged,
   type AccountState,
   type Client,
+  // --- slice: client window ---
+  type ClientsChanged,
+  type LaunchPreview,
   type ConflictReport,
   type DataPaths,
   type Engine,
@@ -243,6 +248,123 @@ export function useDeleteClient() {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     },
   });
+}
+
+// --- slice: client window ---------------------------------------------------
+//
+// Every key below starts with `queryKeys.clients`, so the one invalidation the
+// mutations already do covers the cvars and the command line preview as well:
+// both are derived from the record those mutations write.
+
+export const clientKeys = {
+  cvars: (clientId: string, names: string) =>
+    [...queryKeys.clients, clientId, "cvars", names] as const,
+  preview: (clientId: string) =>
+    [...queryKeys.clients, clientId, "preview"] as const,
+};
+
+/** One client out of the list, with the state of the list behind it. */
+export function useClient(clientId: string): {
+  client: Client | undefined;
+  isLoading: boolean;
+  error: unknown;
+} {
+  const clients = useClients();
+  return {
+    client: clients.data?.find((client) => client.id === clientId),
+    isLoading: clients.isLoading,
+    error: clients.error,
+  };
+}
+
+/**
+ * The values of several cvars inside the launch arguments of a client.
+ *
+ * One call for the whole window: the controls all read the same string, and a
+ * query each would be a dozen round trips for one field of one file. The
+ * answer never goes stale by itself — only a write to the record can change
+ * it, and every write invalidates `queryKeys.clients`.
+ */
+export function useLaunchCvars(
+  clientId: string,
+  names: readonly string[],
+): UseQueryResult<Record<string, string | null>> {
+  const key = names.join(",");
+  return useQuery({
+    queryKey: clientKeys.cvars(clientId, key),
+    queryFn: () => ipc.readLaunchCvars(clientId, [...names]),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Writes one cvar into the launch arguments of a client.
+ *
+ * `value: null` removes it. The core answers with the whole record, so the
+ * **Extra arguments** field sees the line the controls edited.
+ */
+export function useWriteLaunchCvar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      clientId,
+      name,
+      value,
+    }: {
+      clientId: string;
+      name: string;
+      value: string | null;
+    }) => ipc.writeLaunchCvar(clientId, name, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+/**
+ * The command line the client would be started with.
+ *
+ * `retry: false` because every way this fails is a refusal of the core — no
+ * game folder, no such client — and asking twice changes none of them.
+ */
+export function useLaunchPreview(
+  clientId: string,
+): UseQueryResult<LaunchPreview> {
+  return useQuery({
+    queryKey: clientKeys.preview(clientId),
+    queryFn: () => launchIpc.previewLaunchArgs(clientId),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * Refetches the client list when any window changes a record.
+ *
+ * A React Query cache belongs to one window. The client window writes a cvar
+ * and the Clients screen of the main window is showing the same record, so the
+ * core says so and both caches drop what they held.
+ */
+export function useClientEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen<ClientsChanged>(clientEvents.changed, () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [queryClient]);
 }
 
 // --- slice: library ---------------------------------------------------------

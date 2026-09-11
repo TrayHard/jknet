@@ -47,7 +47,8 @@
 | `game_files.rs` | Поиск `GameData` обеих игр в Steam и GOG, проверка ассетов и версии | готов |
 | `engines.rs` | Реестр пяти движков с их статусом, отбор архива релиза, три команды установки | готов |
 | `engine_install.rs` | Релизы GitHub, их кеш, загрузка архива и распаковка | готов |
-| `clients.rs` | Клиенты на диске: список, создание, изменение, удаление со снятием ссылки на папку игры | готов |
+| `clients.rs` | Клиенты на диске: список, создание, изменение, удаление со снятием ссылки на папку игры, событие `clients:changed` | готов |
+| `launch_tokens.rs` | Чтение и запись одного cvar внутри строки `launchArgs`, две команды к ним | готов |
 | `timestamp.rs` | Время в RFC 3339 без внешних зависимостей | готов |
 | `servers/` | Браузер серверов: мастер-серверы, `getinfo`, `getstatus`, кеш списка | готов |
 | `servers/protocol.rs` | Разбор пакетов Quake 3 без сокетов и часов | готов |
@@ -650,6 +651,9 @@ cargo test --lib -- --ignored --nocapture indexes_the_retail_archives
 | `create_client` | `name`, `engineId`, `game` | `Client` | готова |
 | `update_client` | `clientId`, `name`, `fsGame`, `launchArgs` | `Client` | готова |
 | `delete_client` | `id` | — | готова |
+| `read_launch_cvars` | `clientId`, `names` | `{ имя: значение | null }` | готова |
+| `write_launch_cvar` | `clientId`, `name`, `value` | `Client` | готова, `null` удаляет cvar |
+| `preview_launch_args` | `clientId` | `LaunchPreview` | готова, ничего не запускает |
 | `launch_client` | `clientId`, `connect`, `extraArgs` | `RunningGame` | готова |
 | `list_library` | `clientId` | `LibraryItem[]` | готова |
 | `inspect_pk3` | `path` | `Pk3Report` | готова |

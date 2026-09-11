@@ -27,6 +27,7 @@ use std::fs;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Emitter};
 
 use crate::engines;
 use crate::error::{AppError, Result};
@@ -111,6 +112,7 @@ pub fn list_clients(state: tauri::State<'_, AppState>) -> Result<Vec<Client>> {
 /// actually make: sending the engine of the game the player did *not* pick.
 #[tauri::command]
 pub fn create_client(
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     name: String,
     engine_id: String,
@@ -153,6 +155,7 @@ pub fn create_client(
         client.engine_id,
         client.game.display_name()
     );
+    emit_changed(&app, &client.id);
     Ok(client)
 }
 
@@ -171,6 +174,7 @@ pub fn create_client(
 /// player can see.
 #[tauri::command]
 pub fn update_client(
+    app: AppHandle,
     state: tauri::State<'_, AppState>,
     client_id: String,
     name: Option<String>,
@@ -196,7 +200,62 @@ pub fn update_client(
         client.fs_game,
         client.launch_args
     );
+    // --- slice: client window ---
+    // The card in the main window and the client's own window both show this
+    // record, and either of them may be the one that changed it.
+    emit_changed(&app, &client.id);
     Ok(client)
+}
+
+// --- slice: client window ---
+
+/// Replaces the launch arguments of a client and saves the record.
+///
+/// The `launch_args` half of [`update_client`], reachable from
+/// [`crate::launch_tokens`]: a control in the client window edits one cvar
+/// inside the line and the whole line comes back here, so there is one writer
+/// of `client.json` and one place that announces the change.
+pub(crate) fn set_launch_args(
+    app: &AppHandle,
+    state: &AppState,
+    client_id: &str,
+    launch_args: &str,
+) -> Result<Client> {
+    let paths = state.paths()?;
+    let mut client = read_record(&paths, client_id)?;
+    client.launch_args = launch_args.trim().to_string();
+    write_record(&paths, &client)?;
+    log::info!(
+        "updated client {}: launch_args {:?}",
+        client.id,
+        client.launch_args
+    );
+    emit_changed(app, &client.id);
+    Ok(client)
+}
+
+/// Payload of `clients:changed`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientsChanged {
+    /// The client that was created, changed or deleted.
+    pub client_id: String,
+}
+
+/// Tells every window that a client record is not what it was.
+///
+/// The launcher now has more than one window showing the same records, and a
+/// React Query cache is per window. Without this the card in the main window
+/// would keep the old name until something else refetched it.
+pub(crate) fn emit_changed(app: &AppHandle, client_id: &str) {
+    if let Err(e) = app.emit(
+        "clients:changed",
+        ClientsChanged {
+            client_id: client_id.to_string(),
+        },
+    ) {
+        log::warn!("cannot emit clients:changed: {e}");
+    }
 }
 
 /// Deletes a client with its engine files and its home folder.
@@ -204,7 +263,11 @@ pub fn update_client(
 /// The folder is removed, not moved to the recycle bin: an engine install is
 /// tens of megabytes of files the launcher can download again.
 #[tauri::command]
-pub fn delete_client(state: tauri::State<'_, AppState>, id: String) -> Result<()> {
+pub fn delete_client(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    id: String,
+) -> Result<()> {
     let paths = state.paths()?;
     let dir = paths.client_dir(&id);
     if !dir.is_dir() {
@@ -212,6 +275,7 @@ pub fn delete_client(state: tauri::State<'_, AppState>, id: String) -> Result<()
     }
     remove_client_dir(&dir)?;
     log::info!("deleted client {id}");
+    emit_changed(&app, &id);
 
     // A deleted client must not stay the default one, of the launcher or of
     // its game. The document comes from disk, so this write carries over
