@@ -326,7 +326,10 @@ export function ConnectDialog({
               ]}
               onChange={setProfileId}
             />
-            {(profiles.data?.profiles ?? []).length === 0 ? (
+            {/* Only once the document is in: an empty list is also what a
+                query in flight looks like, and «you have no profiles» is the
+                wrong thing to read for the frame before they arrive. */}
+            {profiles.data !== undefined && profiles.data.profiles.length === 0 ? (
               <p className="text-body-sm text-fg-muted">
                 {t("connect.profilesEmpty")}
               </p>
@@ -407,27 +410,32 @@ export function ConnectDialog({
           <p className="text-body-sm text-fg-muted">{t("connect.argsHint")}</p>
         </Field>
 
-        <Field label={t("connect.preview")}>
-          {preview.error ? (
-            <p role="alert" className="text-body-sm text-fg-danger break-words">
-              {errorText(preview.error)}
-            </p>
-          ) : (
-            <pre className="rounded-md border border-line bg-input p-12 text-mono-xs text-fg-secondary whitespace-pre-wrap break-all">
-              {preview.data === undefined
-                ? t("connect.previewLoading")
-                : commandLine(preview.data.args)}
-            </pre>
-          )}
-          {preview.data?.warning ? (
-            <div className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12">
-              <AlertTriangle size={16} className="text-fg-warm shrink-0 mt-2" />
-              <span className="text-body-sm text-fg">
-                {warningText(preview.data.warning)}
-              </span>
-            </div>
-          ) : null}
-        </Field>
+        {/* Nothing to preview without a client, and the query that would fill
+            it is turned off: an empty dialog must not say «building…» forever
+            over the line that explains there is no client to build for. */}
+        {client === undefined ? null : (
+          <Field label={t("connect.preview")}>
+            {preview.error ? (
+              <p role="alert" className="text-body-sm text-fg-danger break-words">
+                {errorText(preview.error)}
+              </p>
+            ) : (
+              <pre className="rounded-md border border-line bg-input p-12 text-mono-xs text-fg-secondary whitespace-pre-wrap break-all">
+                {preview.data === undefined
+                  ? t("connect.previewLoading")
+                  : commandLine(preview.data.args)}
+              </pre>
+            )}
+            {preview.data?.warning ? (
+              <div className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12">
+                <AlertTriangle size={16} className="text-fg-warm shrink-0 mt-2" />
+                <span className="text-body-sm text-fg">
+                  {warningText(preview.data.warning)}
+                </span>
+              </div>
+            ) : null}
+          </Field>
+        )}
 
         {error !== null ? (
           <p role="alert" className="text-body-sm text-fg-danger break-words">
