@@ -1,12 +1,13 @@
 /**
  * The bridge between the `launch:*` events and the rest of the interface.
  *
- * Three things happen here and nowhere else:
+ * Four things happen here and nowhere else:
  *
  * - install progress is collected per client, so a card can draw a bar
  *   without every card subscribing to the same event;
  * - the React Query caches that the events invalidate are invalidated once;
- * - the window hides while the game runs, when the player asked for that.
+ * - the window hides while the game runs, when the player asked for that;
+ * - a warning about the command line is held for the provider to show.
  *
  * Mount it once, at the top of the tree. Outside the Tauri runtime it does
  * nothing at all: `npm run dev` in a browser has no event system to listen to.
@@ -22,6 +23,7 @@ import {
   type EngineInstallProgress,
   type GameExited,
   type GameStarted,
+  type LaunchWarning,
 } from "./ipc";
 import { launchKeys, queryKeys } from "./queries";
 import { isTauri } from "./runtime";
@@ -34,6 +36,15 @@ export interface GameEvents {
   installs: InstallProgressMap;
   /** Forgets the entry of one client, for a dismissed error. */
   clearInstall: (clientId: string) => void;
+  /**
+   * The last thing the core had to say about a command line it started.
+   *
+   * A fresh object on every event, even for the same client and the same code,
+   * so that a second launch with the same mistake in it shows the message
+   * again. `GameEventsProvider` turns it into a toast: the column lives in a
+   * component and the subscription lives here.
+   */
+  warning: LaunchWarning | null;
 }
 
 /**
@@ -45,6 +56,7 @@ export interface GameEvents {
 export function useGameEvents(closeOnLaunch: boolean): GameEvents {
   const queryClient = useQueryClient();
   const [installs, setInstalls] = useState<InstallProgressMap>({});
+  const [warning, setWarning] = useState<LaunchWarning | null>(null);
   const hideOnLaunch = useRef(closeOnLaunch);
   hideOnLaunch.current = closeOnLaunch;
 
@@ -105,13 +117,25 @@ export function useGameEvents(closeOnLaunch: boolean): GameEvents {
       }),
     );
 
+    track(
+      listen<LaunchWarning>(launchEvents.warning, (event) => {
+        // Copied rather than stored as it arrives: the same client starting
+        // twice with the same argument would otherwise be the same object, and
+        // a message shown once for a mistake made twice is a message missed.
+        setWarning({ ...event.payload });
+        console.warn(
+          `launch warning ${event.payload.code} for ${event.payload.clientId}`,
+        );
+      }),
+    );
+
     return () => {
       cancelled = true;
       unlisteners.forEach((unlisten) => unlisten());
     };
   }, [queryClient]);
 
-  return { installs, clearInstall };
+  return { installs, clearInstall, warning };
 }
 
 /**

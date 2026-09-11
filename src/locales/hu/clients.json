@@ -51,11 +51,7 @@
   "engines": {
     "heading": "A {{game}} motorjai",
     "recommended": "Ajánlott",
-    "legacy": "Legacy",
-    "notes": {
-      "eternaljk": "Last released in 2020. In our tests it crashes on every map load on current Windows systems. Use TaystJK, its maintained successor, unless a server requires EternalJK.",
-      "eternaljkAction": "Create a TaystJK client"
-    }
+    "legacy": "Legacy"
   },
   "newDialog": {
     "title": "Új kliens",
@@ -85,5 +81,9 @@
     "title": "Még nincs kliens a {{game}} játékhoz",
     "text": "Hozzon létre egyet, és ezt indítja majd ez a játék. A {{game}} kliensei külön állnak a másik játékétól.",
     "action": "Kliens létrehozása"
+  },
+  "launchWarning": {
+    "title": "Check the launch arguments",
+    "eternaljkSInitsound": "EternalJK crashes when the sound system is disabled (s_initsound 0). Remove it from the launch arguments."
   }
 }
