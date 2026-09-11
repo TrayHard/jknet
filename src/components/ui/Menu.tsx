@@ -191,6 +191,11 @@ export function Menu({
         return;
       case "Escape":
         event.preventDefault();
+        // --- slice: connect dialog ---
+        // The menu closes and the Escape stops here. `Dialog` listens on the
+        // window, so without this one press would shut the popover and any
+        // modal around it.
+        event.stopPropagation();
         closeAndReturn();
         return;
       case "Tab":

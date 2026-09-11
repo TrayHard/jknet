@@ -42,7 +42,11 @@ interface ServerDetailsProps {
    */
   onRetryPlayers: () => void;
   onConnect: () => void;
-  /** False when there is no default client to start. */
+  /**
+   * False when nothing could come of the press — a game already running, say.
+   * Which readings turn the button off is the screen's to decide; `hint` is
+   * where it says why.
+   */
   canConnect: boolean;
   /** True while a launch is in flight, so the button cannot start a second. */
   connecting: boolean;

@@ -8,6 +8,23 @@ import { skinIconUrl, type PlayerModel } from "../../lib/ipc";
 import { usePlayerModels } from "../../lib/queries";
 import { Input } from "../ui";
 
+// --- slice: connect dialog ---
+/**
+ * How much room the grid takes.
+ *
+ * `md` is the profile form of the client window, which owns its page. `sm` is
+ * the **Connect…** dialog, where the grid is one field of a modal that also
+ * has to hold a nickname, two hilts, an argument field and a command line — so
+ * the tiles shrink rather than the dialog growing past the window.
+ */
+export type SkinPickerSize = "sm" | "md";
+
+/** What each size measures, in the pixel scale of the design tokens. */
+const SIZES: Record<SkinPickerSize, { icon: string; column: string; list: string }> = {
+  sm: { icon: "size-44", column: "52px", list: "max-h-160" },
+  md: { icon: "size-64", column: "72px", list: "max-h-232" },
+};
+
 /**
  * The grid of skins a profile may pick from.
  *
@@ -25,16 +42,19 @@ export function SkinPicker({
   clientId,
   value,
   onChange,
+  size = "md",
 }: {
   clientId: string;
   /** The `model` of the profile, or `null` when it sets none. */
   value: string | null;
   onChange: (value: string | null) => void;
+  size?: SkinPickerSize;
 }) {
   const { t } = useTranslation("clients");
   const errorText = useErrorText();
   const [query, setQuery] = useState("");
   const models = usePlayerModels(clientId, true);
+  const metrics = SIZES[size];
 
   const found = useMemo(() => {
     const words = query.trim().toLowerCase();
@@ -61,6 +81,7 @@ export function SkinPicker({
         type="search"
         icon={<Search size={14} />}
         value={query}
+        className={size === "sm" ? "h-28" : undefined}
         placeholder={t("clientWindow.profiles.form.skinSearch")}
         aria-label={t("clientWindow.profiles.form.skinSearch")}
         onChange={(event) => setQuery(event.target.value)}
@@ -80,15 +101,19 @@ export function SkinPicker({
           <div
             role="radiogroup"
             aria-label={t("clientWindow.profiles.form.skin")}
+            style={{
+              gridTemplateColumns: `repeat(auto-fill, minmax(${metrics.column}, 1fr))`,
+            }}
             className={cn(
-              "grid gap-8 max-h-232 overflow-y-auto p-8",
-              "grid-cols-[repeat(auto-fill,minmax(72px,1fr))]",
+              "grid gap-8 overflow-y-auto p-8",
+              metrics.list,
               "rounded-md border border-line bg-input",
             )}
           >
             <Tile
               selected={value === null}
               caption={t("clientWindow.profiles.form.skinNone")}
+              icon={metrics.icon}
               onSelect={() => onChange(null)}
             />
             {found.map((model) => (
@@ -96,6 +121,7 @@ export function SkinPicker({
                 key={model.value}
                 model={model}
                 selected={model.value === value}
+                icon={metrics.icon}
                 onSelect={() => onChange(model.value)}
               />
             ))}
@@ -115,10 +141,12 @@ export function SkinPicker({
 function SkinTile({
   model,
   selected,
+  icon,
   onSelect,
 }: {
   model: PlayerModel;
   selected: boolean;
+  icon: string;
   onSelect: () => void;
 }) {
   const { t } = useTranslation("clients");
@@ -130,6 +158,7 @@ function SkinTile({
       selected={selected}
       caption={caption}
       title={model.value}
+      icon={icon}
       onSelect={onSelect}
       picture={
         url === null ? (
@@ -141,7 +170,7 @@ function SkinTile({
             src={url}
             alt=""
             loading="lazy"
-            className="size-64 object-cover rounded-sm"
+            className={cn(icon, "object-cover rounded-sm")}
           />
         )
       }
@@ -155,12 +184,15 @@ function Tile({
   caption,
   title,
   picture,
+  icon,
   onSelect,
 }: {
   selected: boolean;
   caption: string;
   title?: string;
   picture?: React.ReactNode;
+  /** Tailwind size class of the picture, from the grid's own metrics. */
+  icon: string;
   onSelect: () => void;
 }) {
   return (
@@ -177,7 +209,12 @@ function Tile({
           : "border-transparent hover:bg-hover-overlay",
       )}
     >
-      <span className="flex items-center justify-center size-64 rounded-sm bg-elevated overflow-hidden">
+      <span
+        className={cn(
+          "flex items-center justify-center rounded-sm bg-elevated overflow-hidden",
+          icon,
+        )}
+      >
         {picture}
       </span>
       <span className="w-full text-label-xs text-fg-secondary text-center truncate">

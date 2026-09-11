@@ -55,6 +55,8 @@ import {
   type DetectedGameFiles,
   type Game,
   type GameInfo,
+  // --- slice: connect dialog ---
+  type InlineProfile,
   type OnlineProvider,
   type OnlineUser,
   type Invite,
@@ -273,8 +275,18 @@ export const clientKeys = {
   // The profile is part of the key: the preview of the window shows what
   // **Play** would run, and the one under an open form shows what the profile
   // being edited would run.
-  preview: (clientId: string, profileId?: string) =>
-    [...queryKeys.clients, clientId, "preview", profileId ?? ""] as const,
+  //
+  // --- slice: connect dialog ---
+  // So is everything a single run adds. The dialog changes those on every
+  // keystroke, and two lines that differ by a nickname must not share an answer.
+  preview: (clientId: string, profileId?: string, run?: LaunchRun) =>
+    [
+      ...queryKeys.clients,
+      clientId,
+      "preview",
+      profileId ?? "",
+      JSON.stringify(run ?? null),
+    ] as const,
   // --- slice: clients page ---
   dir: (clientId: string) => [...queryKeys.clients, clientId, "dir"] as const,
 };
@@ -337,6 +349,17 @@ export function useWriteLaunchCvar() {
   });
 }
 
+// --- slice: connect dialog ---
+/** What one launch adds to the line of a client: the three arguments of a run. */
+export interface LaunchRun {
+  /** A profile filled in by hand. Beside it `profileId` is not read. */
+  inlineProfile?: InlineProfile;
+  /** Free tokens of the **Launch arguments** field, already split. */
+  extraArgs?: string[];
+  /** `ip:port` of the server this run joins. */
+  connect?: string;
+}
+
 /**
  * The command line the client would be started with.
  *
@@ -345,20 +368,33 @@ export function useWriteLaunchCvar() {
  *
  * --- slice: player profiles ---
  * `profileId` names the profile to assume, and it is part of the key, so two
- * profiles of one client never share an answer. Nothing passes it yet:
- * `CommandPreview` asks for the line of the window as a whole, which is the
- * default profile's, and the token line under an open profile form comes from
- * `profileTokens` on the page instead — a draft nobody saved is not a profile
- * the core could resolve. The argument is here for the **Connect…** dialog of
- * B8, which starts a profile the player picks and wants the real line.
+ * profiles of one client never share an answer. `CommandPreview` passes
+ * neither argument and reads the line behind **Play**; the token line under an
+ * open profile form comes from `profileTokens` on the page instead — a draft
+ * nobody saved is not a profile the core could resolve.
+ *
+ * --- slice: connect dialog ---
+ * `run` is what a single launch adds on top: the profile the dialog filled in,
+ * the free tokens of its field and the address. The **Connect…** dialog passes
+ * all three, so the line under it is the line its own button starts.
  */
 export function useLaunchPreview(
   clientId: string,
   profileId?: string,
+  run?: LaunchRun,
+  enabled = true,
 ): UseQueryResult<LaunchPreview> {
   return useQuery({
-    queryKey: clientKeys.preview(clientId, profileId),
-    queryFn: () => launchIpc.previewLaunchArgs(clientId, profileId),
+    queryKey: clientKeys.preview(clientId, profileId, run),
+    queryFn: () =>
+      launchIpc.previewLaunchArgs(
+        clientId,
+        profileId,
+        run?.inlineProfile,
+        run?.extraArgs,
+        run?.connect,
+      ),
+    enabled,
     staleTime: Infinity,
     retry: false,
   });
@@ -389,11 +425,22 @@ export const appearanceKeys = {
   hilts: (clientId: string) => ["appearance", clientId, "hilts"] as const,
 };
 
-/** The profiles of one client and which of them is the default. */
-export function useProfiles(clientId: string): UseQueryResult<ProfileBook> {
+/**
+ * The profiles of one client and which of them is the default.
+ *
+ * --- slice: connect dialog ---
+ * `enabled` is for the caller that may have no client yet: the **Connect…**
+ * dialog opens on a game whose client list can be empty, and an id of `""`
+ * would be a round trip that can only come back `NotFound`.
+ */
+export function useProfiles(
+  clientId: string,
+  enabled = true,
+): UseQueryResult<ProfileBook> {
   return useQuery({
     queryKey: profileKeys.book(clientId),
     queryFn: () => profilesIpc.listProfiles(clientId),
+    enabled,
     staleTime: Infinity,
   });
 }
@@ -770,15 +817,27 @@ export function useLaunchClient() {
       connect,
       extraArgs,
       // --- slice: player profiles ---
-      // Left out by every caller today, which means the client's default
-      // profile. The Connect dialog is what will start sending one.
+      // Left out by the Play and Connect buttons, which means the client's
+      // default profile. The Connect dialog is what sends one.
       profileId,
+      // --- slice: connect dialog ---
+      // A profile of this launch alone, filled in by hand. Beside it the core
+      // does not read `profileId`.
+      inlineProfile,
     }: {
       clientId: string;
       connect?: string;
       extraArgs?: string[];
       profileId?: string;
-    }) => launchIpc.launchClient(clientId, connect, extraArgs, profileId),
+      inlineProfile?: InlineProfile;
+    }) =>
+      launchIpc.launchClient(
+        clientId,
+        connect,
+        extraArgs,
+        profileId,
+        inlineProfile,
+      ),
     onSuccess: (running) => {
       queryClient.setQueryData(launchKeys.runningGame, running);
     },

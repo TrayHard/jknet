@@ -199,7 +199,7 @@
         "nicknamePlaceholder": "Padawan",
         "nicknameHint": "Up to 36 bytes, colour codes included. A Latin letter costs one byte and a Cyrillic one costs two, so 36 Latin letters fit where 18 Cyrillic ones do. Type ^ and a digit from 0 to 9 to colour what follows it.",
         "nicknameBytes": "{{used}}/{{max}} bytes",
-        "nicknameTooLong": "The server cuts a name over {{max}} bytes. Shorten it to save the profile.",
+        "nicknameTooLong": "The server cuts a name over {{max}} bytes. Shorten it.",
         "nicknamePreview": "As other players read it",
         "nicknameSaved": "Saved nicknames",
         "nicknameSave": "Save nickname",

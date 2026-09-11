@@ -135,3 +135,60 @@ export function shortenPath(path: string, max = 52): string {
   const tail = path.slice(-(max - 4));
   return `...${tail}`;
 }
+
+// --- slice: connect dialog ---
+/**
+ * Splits a line of launch arguments into the tokens a process receives.
+ *
+ * A copy of `split_args` in `src-tauri/src/launch.rs`, and the core stays the
+ * authority: the same rule applies to the **Extra launch arguments** setting
+ * and to the client's own field, both of which the core splits itself. This
+ * copy exists because the **Connect…** dialog sends `extraArgs` as a list and
+ * types the line one character at a time — a round trip per keystroke to split
+ * a string would be a round trip to split a string. Keep the two in step.
+ *
+ * Whitespace separates tokens, double quotes keep a group together, and a
+ * quote inside a token ends there. Backslashes are left alone: this line is
+ * full of Windows paths, and treating `\` as an escape would break every one.
+ */
+export function splitArgs(line: string): string[] {
+  const tokens: string[] = [];
+  let current = "";
+  let quoted = false;
+  let started = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+      started = true;
+      continue;
+    }
+    if (!quoted && /\s/.test(char)) {
+      if (started) {
+        tokens.push(current);
+        current = "";
+        started = false;
+      }
+      continue;
+    }
+    current += char;
+    started = true;
+  }
+  if (started) tokens.push(current);
+  return tokens;
+}
+
+// --- slice: connect dialog ---
+/**
+ * One readable line out of the tokens a process will receive.
+ *
+ * The quotes go back around a token that holds a space, which is what the
+ * platform `main()` of the engine does when it rebuilds its own command line
+ * (`shared/sys/sys_main.cpp`). Without them a path with a space would read as
+ * two arguments it is not.
+ */
+export function commandLine(tokens: string[]): string {
+  return tokens
+    .map((token) => (token.includes(" ") ? `"${token}"` : token))
+    .join(" ");
+}
