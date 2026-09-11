@@ -264,6 +264,10 @@ export interface Engine {
   repo: string;
   /** The repository as a link, for the About card and the engine page. */
   repoUrl: string;
+  /** The page that lists every published build. */
+  releasesUrl: string;
+  /** The project's own site, when its README names one. */
+  homepage: string | null;
   /** Who the project credits for its icon, when it credits anyone. */
   iconCredit: string | null;
   /** Recommended, merely supported, or legacy with a note saying why. */
