@@ -65,6 +65,10 @@ export function ServerListBlock({
   actions,
 }: ServerListBlockProps) {
   const { t } = useTranslation("home");
+  // --- slice: server actions ---
+  // The tooltip over the player count says the same thing on both screens, so
+  // it is the same message: a server row is a server row wherever it is drawn.
+  const { t: tServers } = useTranslation("servers");
   const gametypes = useGametypeLabels();
 
   if (servers.length === 0) return null;
@@ -120,10 +124,30 @@ export function ServerListBlock({
               <Badge tone="accent">
                 {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
               </Badge>
-              <span className="text-mono-xs tabular-nums text-fg-secondary text-right">
+              {/* --- slice: server actions ---
+                  People over slots, and the bots in the tooltip, exactly as on
+                  the Servers screen: the same fact is worth the same room on
+                  both, and the message behind the tooltip is the same one. */}
+              <span
+                className="text-mono-xs tabular-nums text-fg-secondary text-right"
+                title={
+                  server.playersSource === "unknown"
+                    ? tServers("row.countsUnknownTitle", {
+                        clients: server.clients,
+                      })
+                    : tServers("row.countsTitle", {
+                        humans: realPlayers(server),
+                        bots: botCount(server),
+                        slots: server.maxClients,
+                      })
+                }
+              >
                 {realPlayers(server)}/{server.maxClients}
-                {botCount(server) > 0 ? (
-                  <span className="text-fg-muted"> +{botCount(server)}b</span>
+                {server.playersSource === "unknown" ? (
+                  <span className="text-fg-disabled" aria-hidden="true">
+                    {" "}
+                    ?
+                  </span>
                 ) : null}
               </span>
               <Ping ms={server.pingMs} className="justify-end" />

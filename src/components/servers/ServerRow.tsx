@@ -16,9 +16,10 @@ import { ServerName } from "./ServerName";
  * so the header, the rows and the skeleton cannot drift apart.
  *
  * The design gives the players column 52 px, which holds `12/32` and nothing
- * else. The bot suffix needs the rest; the name column gives it up, because
- * it is the only flexible one and a name loses less by being 24 px shorter
- * than a count does by being cut off.
+ * else. The 24 px above that were the bot suffix, and they stay after it: at
+ * 11 px monospace a busy server writes `128/128`, and a server that publishes
+ * no split writes a `?` after it. The name column is the one that gives them
+ * up, because it is the only flexible one and it truncates gracefully.
  */
 export const ROW_COLUMNS =
   "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px";
@@ -154,11 +155,18 @@ export function ServerRow({
 }
 
 /**
- * Real players over the slot count, and the bots beside it.
+ * Real players over the slot count, with the bots in the tooltip.
  *
- * The bots are muted and marked `b` rather than folded into the total: a
- * player scanning the column is looking for people, and a server showing `0/32
- * +12b` says in one glance what `12/32` used to hide.
+ * People and slots are the two numbers a player scans the column for, and the
+ * cell is 76 px wide: a `+12b` beside them doubled the length of the cell to
+ * answer a question nobody was asking while reading down a list. The bots are
+ * still a fact about the server, so they are a hover away — and the details
+ * panel, which is where a player looks once one row has their attention,
+ * spells them out.
+ *
+ * The `?` of an unknown split stays on the row. It is not a count but a
+ * warning that the count beside it is the server's own total, bots included,
+ * and a warning that only shows on hover is a warning nobody reads.
  */
 function PlayerCount({ server }: { server: ServerInfo }) {
   const { t } = useTranslation("servers");
@@ -181,7 +189,6 @@ function PlayerCount({ server }: { server: ServerInfo }) {
     >
       <span className={humans > 0 ? "text-fg" : undefined}>{humans}</span>
       <span className="text-fg-disabled">/{server.maxClients}</span>
-      {bots > 0 ? <span className="text-fg-muted"> +{bots}b</span> : null}
       {unknown ? <span className="text-fg-disabled" aria-hidden="true"> ?</span> : null}
     </span>
   );
