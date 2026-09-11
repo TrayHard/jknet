@@ -83,7 +83,33 @@
     "body": "{{files}} archivos de {{client}} contienen {{paths}} rutas compartidas. El motor lee el último que carga y omite el resto.",
     "wins": "Gana",
     "hidden": "Oculto",
-    "truncated": "Solo se listan las primeras {{shown}} rutas de {{total}}. Desactive uno de los archivos para ver el resto."
+    "truncated": "Solo se listan las primeras {{shown}} rutas de {{total}}. Desactive uno de los archivos para ver el resto.",
+    "ruleTitle": "How the game picks the winner",
+    "ruleOrder": "Inside one folder the game loads pk3 files by name, ignoring upper and lower case, and loads names that start with dl_ after every other name. Each file it loads goes in front of the ones before it, so the file loaded last is the one the game reads.",
+    "ruleDisable": "Disabling a file renames it on disk and takes it out of that order. The file stays in the client, and the switch on its card brings it back.",
+    "folderHint": "Only files in the same folder can override each other.",
+    "order": "Load order · the last file wins",
+    "outcome": "Disable {{winner}} and {{next}} takes over this path. Disable a hidden file and the game keeps reading {{winner}}.",
+    "disableWinner": "Disable {{file}} and {{next}} takes over this path.",
+    "disableHidden": "Disable {{file}}. The game already skips it here.",
+    "kind": {
+      "shader": "Shader",
+      "model": "Model",
+      "sound": "Sound",
+      "texture": "Texture",
+      "map": "Map",
+      "ui": "Interface",
+      "other": "Other"
+    },
+    "kindHint": {
+      "shader": "How a surface is drawn: glow, transparency, movement.",
+      "model": "A model: a player, a weapon, an object.",
+      "sound": "A sound effect or a music track.",
+      "texture": "A picture on a surface or in the interface.",
+      "map": "A level the server can load.",
+      "ui": "A menu screen or the text inside it.",
+      "other": "Another file the game reads."
+    }
   },
   "remove": {
     "title": "¿Quitar {{file}} de {{client}}?",
