@@ -759,18 +759,24 @@ export const launchIpc = {
    * `profileId` names the player profile to start with. Leaving it out takes
    * the client's default profile, which is what **Play** and **Connect** send;
    * a client with no profiles starts with no profile tokens at all.
+   *
+   * --- slice: connect dialog ---
+   * `inlineProfile` is a profile of this launch alone, nothing is stored and
+   * `profileId` is not read beside it.
    */
   launchClient: (
     clientId: string,
     connect?: string,
     extraArgs: string[] = [],
     profileId?: string,
+    inlineProfile?: InlineProfile,
   ) =>
     call<RunningGame>("launch_client", {
       clientId,
       connect: connect ?? null,
       extraArgs,
       profileId: profileId ?? null,
+      inlineProfile: inlineProfile ?? null,
     }),
   getRunningGame: () => call<RunningGame | null>("get_running_game"),
   stopGame: () => call<void>("stop_game"),
@@ -779,17 +785,32 @@ export const launchIpc = {
   /**
    * The command line this client would start with, without starting it.
    *
-   * The same roots and the same argument order as a real launch, and no
-   * `+connect`: the preview stands for the **Play** button.
+   * The same roots and the same argument order as a real launch. Called with
+   * the client alone it is the line behind **Play**: no `+connect` and no
+   * tokens of one run.
    *
    * --- slice: player profiles ---
    * `profileId` is the profile to assume; leaving it out takes the client's
    * default one, exactly as **Play** does.
+   *
+   * --- slice: connect dialog ---
+   * `inlineProfile`, `extraArgs` and `connect` are what a single run adds, and
+   * the **Connect…** dialog passes all three: the line it prints is the line
+   * its own button starts.
    */
-  previewLaunchArgs: (clientId: string, profileId?: string) =>
+  previewLaunchArgs: (
+    clientId: string,
+    profileId?: string,
+    inlineProfile?: InlineProfile,
+    extraArgs: string[] = [],
+    connect?: string,
+  ) =>
     call<LaunchPreview>("preview_launch_args", {
       clientId,
       profileId: profileId ?? null,
+      inlineProfile: inlineProfile ?? null,
+      extraArgs,
+      connect: connect ?? null,
     }),
 };
 
@@ -832,6 +853,17 @@ export interface PlayerProfile {
   color2: number | null;
   charColor: CharColor | null;
 }
+
+// --- slice: connect dialog ---
+/**
+ * `src-tauri/src/profiles.rs`: a profile that belongs to one launch.
+ *
+ * A {@link PlayerProfile} without the `id` and the `name`, which are what a
+ * *stored* profile is found and listed by. The **Connect…** dialog fills these
+ * fields in, presses **Connect** and is done: nothing reaches `profiles.json`.
+ * The core checks them at the same gate a saved profile passes.
+ */
+export type InlineProfile = Omit<PlayerProfile, "id" | "name">;
 
 /** `src-tauri/src/profiles.rs`: `clients\<slug>\profiles.json`. */
 export interface ProfileBook {

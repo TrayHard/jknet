@@ -75,6 +75,15 @@ const MAX_VALUE_LEN: usize = 64;
 /// enough that a broken writer cannot fill a disk.
 const MAX_PROFILES: usize = 64;
 
+/// --- slice: connect dialog ---
+/// The name a profile of one launch borrows on its way through [`validate`].
+///
+/// [`validate`] refuses a blank name, and rightly so for a stored profile: a
+/// row with no name is one the player cannot tell from the next. A profile of
+/// one run is never listed and never written, so it borrows a name rather than
+/// a second copy of every other check.
+const INLINE_NAME: &str = "one run";
+
 /// Highest value `color1` and `color2` take.
 ///
 /// `saber_colors_t` in `codemp/qcommon/q_shared.h:349-358` of OpenJK
@@ -135,6 +144,100 @@ pub struct PlayerProfile {
     /// Tint of the character model.
     #[serde(default)]
     pub char_color: Option<CharColor>,
+}
+
+// --- slice: connect dialog ---
+
+/// A profile that belongs to one launch and to nothing else.
+///
+/// The **Connect…** dialog fills these fields in by hand, presses **Connect**
+/// and is done: nothing reaches `profiles.json` and no id names it afterwards.
+/// It is a [`PlayerProfile`] without the `id` and the `name`, which are the two
+/// fields a *stored* profile is found and listed by, and which a profile that
+/// is neither stored nor listed has no use for.
+///
+/// The values pass the very gate a saved profile passes — see
+/// [`InlineProfile::into_profile`] — and become tokens through the very
+/// function a saved profile goes through, [`launch_tokens`]. A second copy of
+/// either would be a second set of rules about what may reach a command line.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InlineProfile {
+    /// Value of the cvar `name`, colour codes included.
+    #[serde(default)]
+    pub nickname: Option<String>,
+    /// Value of the cvar `model`: `kyle` or `kyle/red`.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// Value of the cvar `saber1`.
+    #[serde(default)]
+    pub saber1: Option<String>,
+    /// Value of the cvar `saber2`.
+    #[serde(default)]
+    pub saber2: Option<String>,
+    /// Blade colour of the first hilt, 0 to [`MAX_SABER_COLOR`].
+    #[serde(default)]
+    pub color1: Option<u8>,
+    /// Blade colour of the second hilt.
+    #[serde(default)]
+    pub color2: Option<u8>,
+    /// Tint of the character model.
+    #[serde(default)]
+    pub char_color: Option<CharColor>,
+}
+
+impl InlineProfile {
+    /// The same fields, checked and trimmed exactly as a stored profile is.
+    ///
+    /// The `id` stays empty and the `name` is [`INLINE_NAME`]: neither leaves
+    /// this function, because the only thing the caller does with the answer is
+    /// ask [`launch_tokens`] for the `+set` of it.
+    pub fn into_profile(self) -> Result<PlayerProfile> {
+        validate(PlayerProfile {
+            id: String::new(),
+            name: INLINE_NAME.to_string(),
+            nickname: self.nickname,
+            model: self.model,
+            saber1: self.saber1,
+            saber2: self.saber2,
+            color1: self.color1,
+            color2: self.color2,
+            char_color: self.char_color,
+        })
+    }
+}
+
+/// Which profile one launch runs with.
+///
+/// Two ways to name a profile and one value to carry both, because the pair
+/// travels together from the command down to `resolve_launch` and a signature
+/// that took them apart would be one that could be handed both at once.
+#[derive(Debug, Clone, Default)]
+pub struct ProfileChoice {
+    /// Id of a profile of this client. `None` means the client's default one,
+    /// which is what **Play** and the quick **Connect** send.
+    pub id: Option<String>,
+    /// A profile of this run alone. When it is here it *is* the answer and
+    /// [`ProfileChoice::id`] is never read: the dialog that fills the fields in
+    /// by hand has switched away from the list of stored profiles, and reading
+    /// both would put a nickname on a server that the player did not pick.
+    pub inline: Option<InlineProfile>,
+}
+
+impl ProfileChoice {
+    /// The `+set` tokens this choice adds to a command line.
+    ///
+    /// One place for the rule, so the preview and the launch cannot disagree
+    /// about whose nickname goes out.
+    pub fn tokens(self, paths: &DataPaths, client_id: &str, game: Game) -> Result<Vec<String>> {
+        if let Some(inline) = self.inline {
+            return Ok(launch_tokens(&inline.into_profile()?, game));
+        }
+        Ok(read_book(paths, client_id)
+            .resolve(self.id.as_deref())?
+            .map(|profile| launch_tokens(profile, game))
+            .unwrap_or_default())
+    }
 }
 
 /// `clients\<slug>\profiles.json`.
@@ -907,5 +1010,138 @@ mod tests {
         fs::write(book_file(&paths, "duel"), "{ not json").expect("a broken document");
 
         assert_eq!(read_book(&paths, "duel"), ProfileBook::default());
+    }
+
+    // --- slice: connect dialog ---
+
+    /// The same seven fields, filled the same way, for the two tests below.
+    fn inline() -> InlineProfile {
+        InlineProfile {
+            nickname: Some("  Kyle Katarn  ".to_string()),
+            model: Some("kyle/red".to_string()),
+            saber1: Some("single_1".to_string()),
+            saber2: Some("none".to_string()),
+            color1: Some(3),
+            color2: None,
+            char_color: Some(CharColor {
+                red: 10,
+                green: 20,
+                blue: 30,
+            }),
+        }
+    }
+
+    #[test]
+    fn a_profile_of_one_run_makes_the_very_tokens_a_stored_one_makes() {
+        // The dialog fills the fields in by hand and nothing is written, but
+        // what reaches the engine has to be indistinguishable: one function
+        // builds the tokens and one function checks the values.
+        let mut stored = profile("Duel");
+        stored.nickname = Some("  Kyle Katarn  ".to_string());
+        stored.model = Some("kyle/red".to_string());
+        stored.saber1 = Some("single_1".to_string());
+        stored.saber2 = Some("none".to_string());
+        stored.color1 = Some(3);
+        stored.char_color = Some(CharColor {
+            red: 10,
+            green: 20,
+            blue: 30,
+        });
+
+        let from_disk = validate(stored).expect("a stored profile of these values");
+        let from_dialog = inline().into_profile().expect("a profile of one run");
+
+        assert_eq!(
+            launch_tokens(&from_dialog, Game::JediAcademy),
+            launch_tokens(&from_disk, Game::JediAcademy),
+        );
+        // Trimmed by the same call, so the name reaches the server without the
+        // spaces the field happened to hold.
+        assert_eq!(from_dialog.nickname.as_deref(), Some("Kyle Katarn"));
+        // Neither field of a stored profile leaves the conversion.
+        assert!(from_dialog.id.is_empty());
+        assert_eq!(from_dialog.name, INLINE_NAME);
+    }
+
+    #[test]
+    fn a_profile_of_one_run_passes_the_same_gate_as_a_stored_one() {
+        // `save_profile` is not in this path, so the checks have to stand
+        // between the dialog and the command line on their own.
+        let mut quoted = inline();
+        quoted.nickname = Some("say \"hi\"".to_string());
+        assert!(quoted.into_profile().is_err());
+
+        let mut sliced = inline();
+        sliced.model = Some("../kyle".to_string());
+        assert!(sliced.into_profile().is_err());
+
+        let mut bright = inline();
+        bright.color1 = Some(MAX_SABER_COLOR + 1);
+        assert!(bright.into_profile().is_err());
+
+        let mut long = inline();
+        long.nickname = Some("x".repeat(MAX_NICKNAME_LEN + 1));
+        assert!(long.into_profile().is_err());
+
+        // An empty one is legal and simply manages nothing: the dialog opens on
+        // exactly this, and a player who types nowhere gets the command line
+        // the client would have had anyway.
+        let empty = InlineProfile {
+            nickname: None,
+            model: None,
+            saber1: None,
+            saber2: None,
+            color1: None,
+            color2: None,
+            char_color: None,
+        };
+        let blank = empty.into_profile().expect("a profile that manages nothing");
+        assert!(launch_tokens(&blank, Game::JediAcademy).is_empty());
+    }
+
+    #[test]
+    fn a_profile_of_one_run_is_the_answer_and_the_stored_id_is_not_read() {
+        // The dialog switches between a list of stored profiles and fields of
+        // its own, and sending both would put a nickname on a server that the
+        // player is not looking at.
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        paths.ensure().expect("the data layout");
+        paths::create_dir(&paths.client_dir("duel")).expect("the client folder");
+
+        let mut stored = profile("Duel");
+        stored.id = "duel".to_string();
+        stored.nickname = Some("Padawan".to_string());
+        write_book(
+            &paths,
+            "duel",
+            &ProfileBook {
+                profiles: vec![stored],
+                default_profile_id: Some("duel".to_string()),
+            },
+        )
+        .expect("the document");
+
+        let both = ProfileChoice {
+            id: Some("duel".to_string()),
+            inline: Some(inline()),
+        };
+        let tokens = both
+            .tokens(&paths, "duel", Game::JediAcademy)
+            .expect("the tokens of one run");
+        assert!(tokens.contains(&"Kyle Katarn".to_string()), "{tokens:?}");
+        assert!(!tokens.contains(&"Padawan".to_string()), "{tokens:?}");
+
+        // Without one, the stored profile is what answers, exactly as before.
+        let stored_only = ProfileChoice {
+            id: Some("duel".to_string()),
+            inline: None,
+        };
+        assert_eq!(
+            stored_only
+                .tokens(&paths, "duel", Game::JediAcademy)
+                .expect("the tokens of the stored profile"),
+            ["+set", "name", "Padawan"],
+        );
     }
 }
