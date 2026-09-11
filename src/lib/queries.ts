@@ -33,6 +33,8 @@ import {
   launchIpc,
   levelshotsIpc,
   libraryIpc,
+  // --- slice: player profiles ---
+  profilesIpc,
   serversIpc,
   settingsEvents,
   type AccountChanged,
@@ -68,7 +70,9 @@ import {
   type JkhubSort,
   type Levelshot,
   type LibraryItem,
+  type PlayerProfile,
   type PresenceUpdated,
+  type ProfileBook,
   type RunningGame,
   type ServerInfo,
   type ServerScope,
@@ -262,8 +266,12 @@ export function useDeleteClient() {
 export const clientKeys = {
   cvars: (clientId: string, names: string) =>
     [...queryKeys.clients, clientId, "cvars", names] as const,
-  preview: (clientId: string) =>
-    [...queryKeys.clients, clientId, "preview"] as const,
+  // --- slice: player profiles ---
+  // The profile is part of the key: the preview of the window shows what
+  // **Play** would run, and the one under an open form shows what the profile
+  // being edited would run.
+  preview: (clientId: string, profileId?: string) =>
+    [...queryKeys.clients, clientId, "preview", profileId ?? ""] as const,
   // --- slice: clients page ---
   dir: (clientId: string) => [...queryKeys.clients, clientId, "dir"] as const,
 };
@@ -331,16 +339,81 @@ export function useWriteLaunchCvar() {
  *
  * `retry: false` because every way this fails is a refusal of the core — no
  * game folder, no such client — and asking twice changes none of them.
+ *
+ * --- slice: player profiles ---
+ * `profileId` is the profile to assume. It is part of the key, so the preview
+ * under an open profile form is that profile's line and the preview of the
+ * window as a whole stays the default profile's.
  */
 export function useLaunchPreview(
   clientId: string,
+  profileId?: string,
 ): UseQueryResult<LaunchPreview> {
   return useQuery({
-    queryKey: clientKeys.preview(clientId),
-    queryFn: () => launchIpc.previewLaunchArgs(clientId),
+    queryKey: clientKeys.preview(clientId, profileId),
+    queryFn: () => launchIpc.previewLaunchArgs(clientId, profileId),
     staleTime: Infinity,
     retry: false,
   });
+}
+
+// --- slice: player profiles -------------------------------------------------
+//
+// Profiles live under `queryKeys.clients` as well, so the invalidation the
+// client mutations already do covers them: the core emits `clients:changed`
+// after every profile write, and `useClientEvents` turns that into one
+// invalidation of the whole prefix.
+
+export const profileKeys = {
+  book: (clientId: string) => [...queryKeys.clients, clientId, "profiles"] as const,
+};
+
+/** The profiles of one client and which of them is the default. */
+export function useProfiles(clientId: string): UseQueryResult<ProfileBook> {
+  return useQuery({
+    queryKey: profileKeys.book(clientId),
+    queryFn: () => profilesIpc.listProfiles(clientId),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * The three writers of a profile document.
+ *
+ * Each answers with the whole document, which goes straight into the cache:
+ * the core is the one that decides which profile is the default after a
+ * delete, and a screen that guessed would draw the wrong badge for a moment.
+ */
+function useProfileWriter<TVariables>(
+  clientId: string,
+  write: (variables: TVariables) => Promise<ProfileBook>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: write,
+    onSuccess: (book) => {
+      queryClient.setQueryData(profileKeys.book(clientId), book);
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+export function useSaveProfile(clientId: string) {
+  return useProfileWriter(clientId, (profile: PlayerProfile) =>
+    profilesIpc.saveProfile(clientId, profile),
+  );
+}
+
+export function useDeleteProfile(clientId: string) {
+  return useProfileWriter(clientId, (profileId: string) =>
+    profilesIpc.deleteProfile(clientId, profileId),
+  );
+}
+
+export function useSetDefaultProfile(clientId: string) {
+  return useProfileWriter(clientId, (profileId: string | null) =>
+    profilesIpc.setDefaultProfile(clientId, profileId),
+  );
 }
 
 /**
@@ -610,11 +683,16 @@ export function useLaunchClient() {
       clientId,
       connect,
       extraArgs,
+      // --- slice: player profiles ---
+      // Left out by every caller today, which means the client's default
+      // profile. The Connect dialog is what will start sending one.
+      profileId,
     }: {
       clientId: string;
       connect?: string;
       extraArgs?: string[];
-    }) => launchIpc.launchClient(clientId, connect, extraArgs),
+      profileId?: string;
+    }) => launchIpc.launchClient(clientId, connect, extraArgs, profileId),
     onSuccess: (running) => {
       queryClient.setQueryData(launchKeys.runningGame, running);
     },

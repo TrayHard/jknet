@@ -96,6 +96,9 @@ export interface Settings {
   // --- slice: servers browser ---
   /** The filter row of the Servers screen, as the player left it. */
   serverFilters: StoredServerFilters;
+  // --- slice: player profiles ---
+  /** Nicknames the player saved, newest first. One list for every client. */
+  savedNicknames: string[];
   // --- slice: onboarding ---
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
@@ -145,6 +148,14 @@ export interface SettingsPatch {
   // --- slice: servers browser ---
   /** The whole filter row: send the row the screen now shows, not one key. */
   serverFilters?: StoredServerFilters;
+  // --- slice: player profiles ---
+  /**
+   * The whole list of saved nicknames, replaced in one go.
+   *
+   * The core trims, drops the blanks and keeps the first of each spelling, so
+   * a form that prepends the name just typed does not have to.
+   */
+  savedNicknames?: string[];
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
   // --- slice: account ---
@@ -718,11 +729,25 @@ export const launchIpc = {
   checkEngineUpdate: (clientId: string) =>
     call<EngineUpdate>("check_engine_update", { clientId }),
 
-  launchClient: (clientId: string, connect?: string, extraArgs: string[] = []) =>
+  /**
+   * Starts a client, optionally joining a server straight away.
+   *
+   * --- slice: player profiles ---
+   * `profileId` names the player profile to start with. Leaving it out takes
+   * the client's default profile, which is what **Play** and **Connect** send;
+   * a client with no profiles starts with no profile tokens at all.
+   */
+  launchClient: (
+    clientId: string,
+    connect?: string,
+    extraArgs: string[] = [],
+    profileId?: string,
+  ) =>
     call<RunningGame>("launch_client", {
       clientId,
       connect: connect ?? null,
       extraArgs,
+      profileId: profileId ?? null,
     }),
   getRunningGame: () => call<RunningGame | null>("get_running_game"),
   stopGame: () => call<void>("stop_game"),
@@ -733,9 +758,94 @@ export const launchIpc = {
    *
    * The same roots and the same argument order as a real launch, and no
    * `+connect`: the preview stands for the **Play** button.
+   *
+   * --- slice: player profiles ---
+   * `profileId` is the profile to assume; leaving it out takes the client's
+   * default one, exactly as **Play** does.
    */
-  previewLaunchArgs: (clientId: string) =>
-    call<LaunchPreview>("preview_launch_args", { clientId }),
+  previewLaunchArgs: (clientId: string, profileId?: string) =>
+    call<LaunchPreview>("preview_launch_args", {
+      clientId,
+      profileId: profileId ?? null,
+    }),
+};
+
+// ---------------------------------------------------------------------------
+// --- slice: player profiles ---
+//
+// The fourth entity: who the player is inside the game. A profile belongs to a
+// client and lives in `clients\<slug>\profiles.json`; the skins and hilts it
+// may name come out of the archives that client loads.
+// ---------------------------------------------------------------------------
+
+/** `src-tauri/src/profiles.rs`: the tint of the character model. */
+export interface CharColor {
+  red: number;
+  green: number;
+  blue: number;
+}
+
+/**
+ * `src-tauri/src/profiles.rs`: one player profile of one client.
+ *
+ * Every field but `id` and `name` is optional, and `null` means «this profile
+ * has no opinion»: no token goes out and the engine keeps its own value. An
+ * empty `id` on the way in asks the core to create a profile.
+ */
+export interface PlayerProfile {
+  id: string;
+  /** Name of the profile in the launcher. Not the nickname. */
+  name: string;
+  /** Value of the cvar `name`, colour codes included. */
+  nickname: string | null;
+  /** Value of the cvar `model`: `kyle` or `kyle/red`. */
+  model: string | null;
+  /** Value of the cvar `saber1`: the name of a `.sab` block. */
+  saber1: string | null;
+  /** Value of the cvar `saber2`. `none` is a second hand left empty. */
+  saber2: string | null;
+  /** Blade colour of the first hilt, 0 to 5. */
+  color1: number | null;
+  color2: number | null;
+  charColor: CharColor | null;
+}
+
+/** `src-tauri/src/profiles.rs`: `clients\<slug>\profiles.json`. */
+export interface ProfileBook {
+  profiles: PlayerProfile[];
+  /** The profile **Play** and **Connect** use, or `null`. */
+  defaultProfileId: string | null;
+}
+
+/** The value of `saber2` that means «no hilt in the second hand». */
+export const NO_SECOND_HILT = "none";
+
+/**
+ * The six blade colours of the engine, by the number `color1` takes.
+ *
+ * `saber_colors_t` in `codemp/qcommon/q_shared.h:349-358` of OpenJK
+ * `1a6a6434`. The index is the value, so the list cannot drift from what the
+ * engine will do with it.
+ */
+export const SABER_COLORS: readonly string[] = [
+  "red",
+  "orange",
+  "yellow",
+  "green",
+  "blue",
+  "purple",
+];
+
+export const profilesIpc = {
+  listProfiles: (clientId: string) =>
+    call<ProfileBook>("list_profiles", { clientId }),
+  /** Creates a profile when `id` is empty, rewrites it otherwise. */
+  saveProfile: (clientId: string, profile: PlayerProfile) =>
+    call<ProfileBook>("save_profile", { clientId, profile }),
+  deleteProfile: (clientId: string, profileId: string) =>
+    call<ProfileBook>("delete_profile", { clientId, profileId }),
+  setDefaultProfile: (clientId: string, profileId: string | null) =>
+    call<ProfileBook>("set_default_profile", { clientId, profileId }),
 };
 // ---------------------------------------------------------------------------
 // --- slice: servers ---
