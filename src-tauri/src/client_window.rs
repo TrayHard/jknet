@@ -25,7 +25,7 @@
 //! its window for the same reason, and `closeOnLaunch` hides and shows them
 //! along with the main window.
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::clients;
 use crate::error::Result;
@@ -73,32 +73,62 @@ pub fn open_client_window(
     let client = clients::read_record(&paths, &client_id)?;
     let label = label_for(&client.id);
 
+    // Looking for the window and building one are a single step. The command
+    // is a plain `fn` on Tauri's blocking pool, so two clicks on the same gear
+    // inside the same instant arrive on two threads: without this, both see no
+    // window and both build one.
+    let _step = state.client_windows().enter();
+
     if let Some(window) = app.get_webview_window(&label) {
-        // Already open: raise it. `show` and `unminimize` are here because the
-        // window may have been hidden by `closeOnLaunch` or minimised by the
-        // player, and `set_focus` alone leaves both states as they were.
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
+        raise(&window);
         return Ok(());
     }
 
     // `WebviewUrl::App` is a path inside the bundled frontend, and the router
     // is a `HashRouter`, so the route has to be a fragment of `index.html`.
     let url = WebviewUrl::App(format!("index.html#/client/{}", client.id).into());
-    WebviewWindowBuilder::new(&app, &label, url)
+    let built = WebviewWindowBuilder::new(&app, &label, url)
         .title(&client.name)
         .inner_size(WIDTH, HEIGHT)
         .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
         .resizable(true)
         .decorations(false)
         .background_color(BACKGROUND)
-        .build()
-        .map_err(|e| {
-            crate::error::AppError::State(format!("cannot open the window of {}: {e}", client.id))
-        })?;
-    log::info!("opened the client window {label}");
-    Ok(())
+        .build();
+
+    match built {
+        Ok(_) => {
+            log::info!("opened the client window {label}");
+            Ok(())
+        }
+        // The window turned out to be there. Whoever else holds the label
+        // holds it for this same client — labels are built from the slug — so
+        // the answer to the click is that window, not a message about a name
+        // the player has never seen.
+        Err(tauri::Error::WebviewLabelAlreadyExists(_)) => {
+            log::info!("the client window {label} was already open");
+            if let Some(window) = app.get_webview_window(&label) {
+                raise(&window);
+            }
+            Ok(())
+        }
+        Err(e) => Err(crate::error::AppError::State(format!(
+            "cannot open the window of {}: {e}",
+            client.id
+        ))),
+    }
+}
+
+/// Brings a window the player already has in front of them.
+///
+/// `show` and `unminimize` are here because the window may have been hidden by
+/// `closeOnLaunch` or minimised by the player, and `set_focus` alone leaves
+/// both states as they were. Every step is best effort: a window that will not
+/// come up is not worth an error over a card the player can click again.
+fn raise(window: &WebviewWindow) {
+    let _ = window.show();
+    let _ = window.unminimize();
+    let _ = window.set_focus();
 }
 
 /// Closes the window of one client, if it is open.

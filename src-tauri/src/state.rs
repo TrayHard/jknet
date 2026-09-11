@@ -5,7 +5,7 @@
 //! demand, so nothing can go stale after the user moves the data folder.
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 use crate::error::{AppError, Result};
 use crate::paths::{self, DataPaths};
@@ -15,6 +15,9 @@ pub struct AppState {
     /// `%LOCALAPPDATA%\org.jknet.launcher`: the folder with `settings.json`.
     pub config_root: PathBuf,
     settings: Mutex<Settings>,
+    // --- slice: client window ---
+    client_records: StepLock,
+    client_windows: StepLock,
 }
 
 impl AppState {
@@ -30,6 +33,8 @@ impl AppState {
         let state = AppState {
             config_root,
             settings: Mutex::new(Settings::default()),
+            client_records: StepLock::default(),
+            client_windows: StepLock::default(),
         };
 
         match Settings::load(&state) {
@@ -73,5 +78,52 @@ impl AppState {
             &self.config_root,
             settings.data_dir_override.as_deref(),
         )))
+    }
+
+    // --- slice: client window ---
+
+    /// The lock every read-modify-write of a `client.json` goes through.
+    ///
+    /// One lock for every client rather than one per client: a record is a few
+    /// hundred bytes of JSON, and the launcher never saves two of them at once
+    /// outside a test. See [`crate::clients::edit_record`].
+    pub fn client_records(&self) -> &StepLock {
+        &self.client_records
+    }
+
+    /// The lock that turns «is the window open? then open it» into one step.
+    /// See [`crate::client_window::open_client_window`].
+    pub fn client_windows(&self) -> &StepLock {
+        &self.client_windows
+    }
+}
+
+// --- slice: client window ---
+
+/// A lock that guards no value: it holds a queue in front of a sequence of
+/// steps that has to run whole.
+///
+/// Commands of the launcher are plain `fn`, and Tauri hands those to a pool of
+/// blocking threads, so two of them genuinely run at the same moment. A client
+/// has a window of its own next to the card of it in the main window, and both
+/// edit the same record, which makes «read the file, change one field, write
+/// the file» a sequence that must not interleave with itself.
+#[derive(Debug, Default)]
+pub struct StepLock(Mutex<()>);
+
+impl StepLock {
+    /// Waits for whoever is inside the sequence, then enters it. The sequence
+    /// ends where the returned guard drops.
+    ///
+    /// A panic under this lock poisons it, and the poisoning is ignored —
+    /// unlike everywhere else in the launcher, where a poisoned lock becomes
+    /// an error. There is no value behind this one to leave half-written, and
+    /// the rule it keeps, one thread at a time, holds again the moment the
+    /// guard drops. Refusing every later edit until the launcher restarts
+    /// would be the larger failure.
+    pub fn enter(&self) -> MutexGuard<'_, ()> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
