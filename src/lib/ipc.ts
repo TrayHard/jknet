@@ -93,6 +93,9 @@ export interface Settings {
   favoriteServers: string[];
   /** Servers Connect was pressed on, newest first, capped at 50. */
   serverHistory: ServerHistoryEntry[];
+  // --- slice: servers browser ---
+  /** The filter row of the Servers screen, as the player left it. */
+  serverFilters: StoredServerFilters;
   // --- slice: onboarding ---
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
@@ -139,6 +142,9 @@ export interface SettingsPatch {
   extraLaunchArgs?: string;
   favoriteServers?: string[];
   serverHistory?: ServerHistoryEntry[];
+  // --- slice: servers browser ---
+  /** The whole filter row: send the row the screen now shows, not one key. */
+  serverFilters?: StoredServerFilters;
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
   // --- slice: account ---
@@ -151,6 +157,31 @@ export interface ServerHistoryEntry {
   address: string;
   /** RFC 3339 in UTC. */
   lastConnected: string;
+}
+
+// --- slice: servers browser ---
+/** What the **Players** dropdown of the Servers screen narrows the list to. */
+export type PlayersFilter = "any" | "not-empty" | "not-full";
+
+/**
+ * `src-tauri/src/settings.rs`: the filter row of the Servers screen.
+ *
+ * Dropdowns and switches only. The search box is not stored — a browser that
+ * opens on yesterday's search word looks like a browser that lost half the
+ * servers — and neither is the open tab.
+ */
+export interface StoredServerFilters {
+  /** `gametype` as text, or `any`. */
+  gametype: string;
+  /** `fs_game` folder of the server, or `any`. */
+  modName: string;
+  players: PlayersFilter;
+  /** Network protocol as text, or `any`. */
+  protocol: string;
+  /** Drop the servers where every client is a bot. On by default. */
+  hideBotOnly: boolean;
+  /** Drop the servers that ask for a password. Off by default. */
+  hidePassworded: boolean;
 }
 
 /** `src-tauri/src/paths.rs`: the folders JKNet writes into. */
