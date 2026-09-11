@@ -55,13 +55,14 @@ src/
                          en — исходный язык, в нём же _notes.md для
                          переводчиков
   components/            AppShell, TitleBar, Sidebar, GameSwitch, PageHeader,
-                         NewClientDialog, ClientSettingsDialog,
-                         GameFilesNotice, MissingClientToast,
+                         NewClientDialog, GameFilesNotice, MissingClientToast,
                          GameEventsProvider, AppUpdateProvider, AboutCard,
                          MapPreview, MapPicturesCard, ToastsProvider,
                          FriendsProvider, AccountProvider
   components/ui/         UI-кит: Button, Badge, Input, Select, Toggle, NavItem,
                          EmptyState, RadioCard, StepBadges, Toast, Avatar, Dialog
+  components/client/     окно клиента: элементы под cvar, блок движка,
+                         предпросмотр командной строки, полоса установки
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
                          JkhubIndexing, JkhubTree
@@ -92,6 +93,8 @@ src-tauri/
   src/engines.rs         статический реестр движков обеих игр
   src/engine_install.rs  релизы GitHub, загрузка и распаковка архива движка
   src/clients.rs         клиенты на диске
+  src/client_window.rs   окна клиентов с меткой client-<slug>
+  src/launch_tokens.rs   один cvar внутри строки launchArgs клиента
   src/servers/           браузер серверов: мастер-серверы, ping, кеш
   src/launch.rs          запуск клиента, корень basepath\ у Jedi Outcast,
                          слежение за процессом, остановка
