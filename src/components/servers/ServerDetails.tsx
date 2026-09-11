@@ -27,7 +27,16 @@ interface ServerDetailsProps {
   hint?: ReactNode;
 }
 
-/** The panel to the right of the table, for the selected server. */
+/**
+ * The panel to the right of the table, for the selected server.
+ *
+ * The panel is as tall as the row it sits in, and the player list takes what
+ * the blocks around it leave: `min-h-0` here lets that list shrink below its
+ * own content and scroll inside itself, so **Connect** keeps the bottom edge
+ * at every window height down to the 700 px minimum. A fixed cap on the list
+ * did neither — it wasted the space of a tall window and overflowed a short
+ * one.
+ */
 export function ServerDetails({
   server,
   players,
@@ -52,7 +61,7 @@ export function ServerDetails({
   };
 
   return (
-    <aside className="flex flex-col gap-16 w-320 shrink-0 rounded-lg border border-line bg-surface p-16">
+    <aside className="flex flex-col gap-16 w-320 shrink-0 min-h-0 rounded-lg border border-line bg-surface p-16">
       {/* --- slice: maps --- */}
       <MapPreview map={server.map} game={server.game} compact className="h-96" />
 
@@ -174,7 +183,7 @@ function PlayerList({
 
   if (humans.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
         <p className="text-body-sm text-fg-muted">
           {t("details.onlyBots", { count: bots.length })}
         </p>
@@ -184,7 +193,7 @@ function PlayerList({
   }
 
   return (
-    <div className="flex flex-col gap-6 max-h-200 overflow-y-auto -mx-4">
+    <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto -mx-4">
       <PlayerRows players={humans} />
       {bots.length > 0 ? (
         <>
