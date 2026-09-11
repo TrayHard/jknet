@@ -8,17 +8,12 @@ import { Menu, type MenuItem, type MenuSize } from "../ui";
 import { ConnectDialog } from "./ConnectDialog";
 
 /**
- * The three-dot menu of one selected server.
+ * The three-dot menu of one server.
  *
  * Two screens show it and both show the same three actions, so the items, the
  * two commands behind them and the dialog the first one opens live here rather
  * than in either screen: the Servers details panel puts it beside **Connect**,
- * and a selected row of Home puts it at the right end of the row.
- *
- * Only the selected server has one. A dots button on every row would be eight
- * more press targets down a list whose job is reading, and the actions behind
- * it are ones a player takes after looking at a server, not while scanning
- * past it.
+ * and the rows of Home put it at their right end.
  *
  * The dialog lives here too, and not on the two screens, for the same reason
  * the items do: it is a modal over the whole window, so where it hangs in the
