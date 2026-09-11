@@ -72,6 +72,7 @@ import {
   useGameInfo,
   useLanServers,
   useLaunchClient,
+  useRunningGame,
   useServerRefresh,
   useServerStatus,
   useSetServerFavorite,
@@ -106,6 +107,12 @@ export function ServersPage() {
   const setFavorite = useSetServerFavorite();
   const addHistory = useAddServerHistory();
   const launchClient = useLaunchClient();
+  // --- slice: server actions ---
+  // One game at a time: the core refuses a second, so the button that would
+  // ask for one is off while the first is up. The same reading the rows of
+  // Home go by, so one Connect does not look alive while its twin looks dead.
+  const runningGame = useRunningGame();
+  const running = runningGame.data ?? null;
   // --- slice: game switch ---
   // The list, the filters, the tabs and Connect all belong to one game. The
   // queries are keyed by it already, so the switch is what makes them refetch;
@@ -537,7 +544,9 @@ export function ServersPage() {
             // --- slice: game switch ---
             // Live even without a client: pressing it is how the player finds
             // out they need one, and the toast that says so offers to make it.
-            canConnect
+            // A game already running is the one thing that does stop it, and
+            // it stops the Connect of a row on Home by the same reading.
+            canConnect={running === null}
             connecting={launchClient.isPending}
             onConnect={connect}
           />
