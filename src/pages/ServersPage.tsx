@@ -402,9 +402,16 @@ export function ServersPage() {
         // --- slice: servers browser ---
         // The strip counts the rows the screen is drawing, so a frozen table
         // and the number beside its tab cannot disagree.
+        //
+        // --- slice: server actions ---
+        // Hidden is the one tab whose rows the strip does not count: it draws
+        // the two lists merged, and All or Favorites counted over that merge
+        // would promise LAN servers the master list never holds. Hidden
+        // freezes nothing either, because it never scans, so both lists are
+        // read where they live and the counts stay the same on every tab.
         tabs={buildTabs(
           t,
-          tab === "lan" ? (cached.data ?? []) : view.rows,
+          tab === "lan" || tab === "hidden" ? (cached.data ?? []) : view.rows,
           tab === "lan" ? view.rows : lan,
           historyAddresses,
         )}
