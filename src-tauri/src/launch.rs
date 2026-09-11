@@ -435,21 +435,62 @@ const MAX_STRING_CHARS: usize = 1024;
 /// Counts the command line the way the engine will: `+` segments, and the
 /// length of the single string the platform `main()` rebuilds from `argv[]`.
 ///
+/// Both numbers are taken from that assembled string rather than from the
+/// tokens, because both engine rules are written against the string and read
+/// differently on the tokens: the separator after the last argument is easy to
+/// lose, and a `+` means one thing inside quotes and another outside them.
+///
 /// Neither limit is enforced. A player who writes a long line gets the line
 /// they wrote, and a launcher that silently dropped a token would be the
 /// harder thing to debug. The count exists so the log says which limit was
 /// passed when a `+exec` at the end of a long line turns out to do nothing.
 fn command_line_size(args: &[String]) -> (usize, usize) {
-    let segments = args
-        .iter()
-        .filter(|token| token.starts_with('+'))
-        .count();
-    let length = args
-        .iter()
-        .map(|token| token.chars().count() + usize::from(token.contains(' ')) * 2)
-        .sum::<usize>()
-        + args.len().saturating_sub(1);
-    (segments, length)
+    let line = engine_command_line(args);
+    (console_segments(&line), line.chars().count())
+}
+
+/// Rebuilds the one string the platform `main()` hands to `Com_Init`.
+///
+/// `shared/sys/sys_main.cpp:763-776` of OpenJK `1a6a6434` walks `argv[]`, puts
+/// a pair of quotes back around every argument that holds a space, and appends
+/// a space after each argument. That last `Q_strcat` (`sys_main.cpp:775`) sits
+/// outside every condition, so `N` arguments carry `N` separators — the line
+/// ends with a trailing space — not the `N-1` of a join.
+fn engine_command_line(args: &[String]) -> String {
+    let mut line = String::new();
+    for token in args {
+        let holds_space = token.contains(' ');
+        if holds_space {
+            line.push('"');
+        }
+        line.push_str(token);
+        if holds_space {
+            line.push('"');
+        }
+        line.push(' ');
+    }
+    line
+}
+
+/// Counts the `+` segments `Com_ParseCommandLine` will open in the line.
+///
+/// The rule is the parser's own, `codemp/qcommon/common.cpp:382-403` of OpenJK
+/// `1a6a6434`: every `"` flips an «inside quotes» flag, and a `+` opens a
+/// segment only while that flag is off. Position in the token does not enter
+/// into it — a `+` in the middle of an unquoted argument separates exactly as
+/// one at its start does — and `\n` and `\r` separate whatever the flag says.
+fn console_segments(line: &str) -> usize {
+    let mut inside_quotes = false;
+    let mut segments = 0;
+    for ch in line.chars() {
+        match ch {
+            '"' => inside_quotes = !inside_quotes,
+            '+' if !inside_quotes => segments += 1,
+            '\n' | '\r' => segments += 1,
+            _ => {}
+        }
+    }
+    segments
 }
 
 /// Writes a WARN when the assembled line is past what the engine reads.
@@ -1207,20 +1248,21 @@ mod tests {
 
     #[test]
     fn the_engine_limits_are_counted_as_the_engine_counts_them() {
-        // Segments are the `+` tokens; the length is the one string the
-        // platform `main()` rebuilds, spaces between arguments included and a
-        // pair of quotes around every argument that holds a space.
+        // Segments are the `+` of the assembled line; the length is that same
+        // line, a pair of quotes around every argument that holds a space and a
+        // space after every argument — the last one included, which is why each
+        // count below is one past the sum of its tokens.
         assert_eq!(command_line_size(&[]), (0, 0));
-        assert_eq!(command_line_size(&split_args("+set r_mode 4")), (1, 13));
+        assert_eq!(command_line_size(&split_args("+set r_mode 4")), (1, 14));
         assert_eq!(
             command_line_size(&split_args("+connect 127.0.0.1:29070")),
-            (1, 24)
+            (1, 25)
         );
         // `+set name "Ben Kenobi"`: eleven characters of value plus the two
         // quotes the platform layer puts back.
         assert_eq!(
             command_line_size(&split_args("+set name \"Ben Kenobi\"")),
-            (1, 22)
+            (1, 23)
         );
 
         let long: Vec<String> = (0..40)
@@ -1229,6 +1271,36 @@ mod tests {
         let (segments, length) = command_line_size(&long);
         assert!(segments > MAX_CONSOLE_LINES, "{segments}");
         assert!(length < MAX_STRING_CHARS, "one limit at a time: {length}");
+    }
+
+    #[test]
+    fn a_plus_counts_as_a_segment_only_outside_quotes() {
+        // The platform layer re-quotes `+Obi Wan`, because it holds a space, and
+        // `Com_ParseCommandLine` reaches the `+` with its quote flag already on:
+        // the engine reads one segment, `set name +Obi Wan`, not two.
+        assert_eq!(
+            command_line_size(&split_args("+set name \"+Obi Wan\"")),
+            (1, 21)
+        );
+        // The other half of the same rule. Nothing quotes `a+b`, so the engine
+        // splits it where the token did not.
+        assert_eq!(command_line_size(&split_args("+set x a+b")), (2, 11));
+    }
+
+    #[test]
+    fn the_thirty_third_segment_is_the_one_past_the_limit() {
+        // `warn_past_engine_limits` writes its WARN on `segments >
+        // MAX_CONSOLE_LINES`, so the line to catch is the 33rd segment.
+        let segments_of = |count: usize| {
+            let args: Vec<String> = (0..count)
+                .flat_map(|n| ["+set".to_string(), format!("cg_x{n}"), "1".to_string()])
+                .collect();
+            let (segments, length) = command_line_size(&args);
+            assert!(length < MAX_STRING_CHARS, "one limit at a time: {length}");
+            segments
+        };
+        assert!(segments_of(33) > MAX_CONSOLE_LINES, "33 segments warn");
+        assert!(segments_of(32) <= MAX_CONSOLE_LINES, "32 segments do not");
     }
 
     #[test]
