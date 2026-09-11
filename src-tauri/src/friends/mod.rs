@@ -408,7 +408,15 @@ pub async fn join_friend(
     // No profile named, which means the default profile of that client: going
     // to a friend is the same game the Play button starts, under the same name
     // and the same skin.
-    launch::start_client(&app, &state, &launch, &client_id, Some(&address), &[], None)
+    launch::start_client(
+        &app,
+        &state,
+        &launch,
+        &client_id,
+        Some(&address),
+        &[],
+        crate::profiles::ProfileChoice::default(),
+    )
 }
 
 // ---------------------------------------------------------------------------

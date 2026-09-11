@@ -887,14 +887,18 @@ impl LaunchInputs {
 /// to answer for a client whose engine is not installed yet.
 ///
 /// --- slice: player profiles ---
-/// `profile_id` names a profile of this client; `None` means the one the client
-/// launches with by default, which is what **Play** and **Connect** send. A
-/// client with no profiles adds no tokens at all. An id that names nothing is a
-/// refusal rather than a silent fall back to another profile.
+/// `profile` names a profile of this client; the empty choice means the one the
+/// client launches with by default, which is what **Play** and the quick
+/// **Connect** send. A client with no profiles adds no tokens at all. An id that
+/// names nothing is a refusal rather than a silent fall back to another profile.
+///
+/// --- slice: connect dialog ---
+/// The same argument carries the profile of one run that the **Connect…**
+/// dialog fills in by hand. Which of the two it is, `ProfileChoice` decides.
 fn resolve_launch(
     state: &AppState,
     client_id: &str,
-    profile_id: Option<&str>,
+    profile: profiles::ProfileChoice,
 ) -> Result<LaunchInputs> {
     let settings = state.settings()?;
     let paths = state.paths()?;
@@ -909,10 +913,7 @@ fn resolve_launch(
         .clone()
         .or_else(|| engine.default_fs_game.map(str::to_string));
     // --- slice: player profiles ---
-    let profile_args = profiles::read_book(&paths, &client.id)
-        .resolve(profile_id)?
-        .map(|profile| profiles::launch_tokens(profile, client.game))
-        .unwrap_or_default();
+    let profile_args = profile.tokens(&paths, &client.id, client.game)?;
 
     Ok(LaunchInputs {
         client_dir: paths.client_dir(&client.id),
@@ -955,6 +956,15 @@ pub struct LaunchPreview {
 /// `profile_id` names the player profile to start with. Leaving it out takes
 /// the client's default profile, which is what the **Play** and **Connect**
 /// buttons do; a client with no profiles starts with no profile tokens.
+///
+/// --- slice: connect dialog ---
+/// `inline_profile` is a profile of this launch alone, the one the
+/// **Connect…** dialog fills in by hand. It wins over `profile_id`, which the
+/// dialog stops sending the moment the player switches to the manual fields.
+// The parameter list of a command *is* its payload: grouping two of these into
+// a struct would rename the fields the frontend sends, so the lint gives way to
+// the wire shape rather than the other way round.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub fn launch_client(
     app: AppHandle,
@@ -964,6 +974,7 @@ pub fn launch_client(
     connect: Option<String>,
     extra_args: Option<Vec<String>>,
     profile_id: Option<String>,
+    inline_profile: Option<profiles::InlineProfile>,
 ) -> Result<RunningGame> {
     start_client(
         &app,
@@ -972,7 +983,10 @@ pub fn launch_client(
         &client_id,
         connect.as_deref(),
         &extra_args.unwrap_or_default(),
-        profile_id.as_deref(),
+        profiles::ProfileChoice {
+            id: profile_id,
+            inline: inline_profile,
+        },
     )
 }
 
@@ -989,7 +1003,7 @@ pub(crate) fn start_client(
     client_id: &str,
     connect: Option<&str>,
     extra_args: &[String],
-    profile_id: Option<&str>,
+    profile: profiles::ProfileChoice,
 ) -> Result<RunningGame> {
     if let Some(running) = launch.current()? {
         return Err(AppError::Launch(format!(
@@ -1001,7 +1015,7 @@ pub(crate) fn start_client(
     // --- slice: client window ---
     // Read once, here and in the preview command, so the command line the
     // window shows and the one the process gets cannot drift apart.
-    let inputs = resolve_launch(state, client_id, profile_id)?;
+    let inputs = resolve_launch(state, client_id, profile)?;
     let client = &inputs.client;
     let engine = inputs.engine;
     game_files::validate(client.game, &inputs.game_data)?;
@@ -1110,24 +1124,46 @@ pub fn get_running_game(launch: tauri::State<'_, LaunchState>) -> Result<Option<
 /// The command line this client would be started with, without starting it.
 ///
 /// The same roots, the same `fs_game` and the same argument fields as a real
-/// launch, in the same order, and no `+connect`: the preview stands for the
-/// **Play** button, and joining a server is a different command line every
-/// time. Nothing is created on disk, so a client whose engine has not been
-/// downloaded yet still shows what it would run.
+/// launch, in the same order. Nothing is created on disk, so a client whose
+/// engine has not been downloaded yet still shows what it would run.
 ///
 /// --- slice: player profiles ---
 /// `profile_id` is the profile the preview should assume. Leaving it out takes
 /// the client's default one, exactly as **Play** does; the profile form sends
 /// the profile being edited, so the line under the form is the line that
 /// profile would start.
+///
+/// --- slice: connect dialog ---
+/// The last three arguments are the ones a single run carries: the profile
+/// filled in by hand, the free tokens of the **Launch arguments** field and the
+/// address. All three are what the **Connect…** dialog is about, and a preview
+/// that left them out would print a line the **Connect** button next to it does
+/// not run. The card of the client window passes none of them and still reads
+/// as the line behind **Play**.
 #[tauri::command]
 pub fn preview_launch_args(
     state: tauri::State<'_, AppState>,
     client_id: String,
     profile_id: Option<String>,
+    inline_profile: Option<profiles::InlineProfile>,
+    extra_args: Option<Vec<String>>,
+    connect: Option<String>,
 ) -> Result<LaunchPreview> {
-    let inputs = resolve_launch(&state, &client_id, profile_id.as_deref())?;
-    let args = build_launch_args(&inputs.plan(&[], None));
+    let inputs = resolve_launch(
+        &state,
+        &client_id,
+        profiles::ProfileChoice {
+            id: profile_id,
+            inline: inline_profile,
+        },
+    )?;
+    // Refused here the way a launch refuses it, so the dialog never prints a
+    // line the button beside it would answer with an error.
+    let connect = match connect.as_deref() {
+        Some(address) => Some(validate_address(address)?),
+        None => None,
+    };
+    let args = build_launch_args(&inputs.plan(&extra_args.unwrap_or_default(), connect));
     let warning = launch_warning(inputs.engine.id, &args).map(str::to_string);
     Ok(LaunchPreview { args, warning })
 }
