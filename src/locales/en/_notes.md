@@ -76,6 +76,7 @@ Everything else wraps.
 | `library:subtitleClient` | One line under the screen title, joined with « · ». It is truncated on a narrow window, so put the client name first. |
 | `library:categories.*` vs `library:categoryOne.*` | The first is the plural in the category rail, the second the singular on a card badge. Some languages need different words. |
 | `jkhub:details.ratingValue` | `{{value}}` is a rating out of five, already formatted; `{{count}}` is the number of reviews. |
+| `jkhub:search.unavailable` | The tooltip of the search box while it is switched off, which happens only while the launcher has no copy of the JKHub catalog. It says why the box refuses words, so keep it to one short sentence; the panel below the bar carries the progress and the buttons. |
 | `friends:status.lastSeen*` | `{{count}}` is minutes, hours or days. The three keys exist so each unit can take its own plural. |
 | `friends:requests.handle` | `jkhub:kyle_k`. Do not translate; it is an identifier. |
 | `onboarding:client.nameDefault` | The name suggested for a player's first client. Pick a short, ordinary word — it becomes a folder name after transliteration. |

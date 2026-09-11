@@ -55,6 +55,49 @@ const DEBOUNCE_MS = 150;
 /** An index older than this is described by its date rather than its age. */
 const A_DAY = 24 * 60 * 60;
 
+/**
+ * What the grid is scoped to, and who decided it.
+ *
+ * `null` is the one state the landing effect is allowed to fill in: the tab
+ * has not chosen a category yet. Everything else is a decision — the `all` of
+ * **Show all categories** included — and an effect that read `all` as «nothing
+ * chosen» would put the landing category straight back and undo the press in
+ * the same commit.
+ *
+ * `landed` and `picked` carry the same category and differ only in who chose
+ * it, which is the whole of what [`searchScope`] needs.
+ */
+export type Scope =
+  | { kind: "landed"; category: JkhubCategory }
+  | { kind: "picked"; category: JkhubCategory }
+  | { kind: "all" };
+
+/**
+ * The category a search is narrowed to, or null for the whole game.
+ *
+ * A query is answered out of the whole catalogue unless the player narrowed it
+ * themselves. The tab has to open somewhere and opens on the first category
+ * with files of its own — `Audio`, 44 of the 3 324 Jedi Academy files — and a
+ * search that stayed inside that would answer «nothing matches» to almost
+ * every word typed into a box that says it searches the whole catalog. Finding
+ * a file in a category nobody opened is what the local index is for.
+ *
+ * Picking a category narrows the search to it, which is what the counts in the
+ * tree are for; **Show all categories** widens it again.
+ *
+ * ```ts
+ * searchScope({ kind: "landed", category: audio }, "")     // audio.id
+ * searchScope({ kind: "landed", category: audio }, "kyle") // null
+ * searchScope({ kind: "picked", category: audio }, "kyle") // audio.id
+ * searchScope({ kind: "all" }, "kyle")                     // null
+ * ```
+ */
+export function searchScope(scope: Scope | null, query: string): number | null {
+  if (scope == null || scope.kind === "all") return null;
+  if (scope.kind === "landed" && query !== "") return null;
+  return scope.category.id;
+}
+
 interface JkhubBrowserProps {
   /** Client Install writes into. Null while none is selected. */
   clientId: string | null;
@@ -85,7 +128,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   const errorText = useErrorText();
   const format = useFormat();
   const gameNames = useGameNames();
-  const [category, setCategory] = useState<JkhubCategory | null>(null);
+  const [scope, setScope] = useState<Scope | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
   const [shown, setShown] = useState(PAGE);
   const [typed, setTyped] = useState("");
@@ -128,28 +171,36 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   // details panel cannot keep an **Install** button that would write a Jedi
   // Academy file into a Jedi Outcast client.
   useEffect(() => {
-    setCategory(null);
+    setScope(null);
     setOpenFile(null);
   }, [game]);
 
   // The first category with files of its own is the landing page of the tab:
-  // the two roots hold nothing themselves, and neither does Maps. A change of
-  // game brings a different tree, and a category picked in the old one is not
-  // in it, so the landing page is chosen again.
+  // the two roots hold nothing themselves, and neither does Maps. It is filled
+  // in while nothing is chosen — after a change of game, and after a walk of
+  // the tree that no longer holds the category which was picked in it. A scope
+  // the player chose, `all` included, is left where it is.
   const tree = useMemo(() => categories.data?.categories ?? [], [categories.data]);
   useEffect(() => {
     if (tree.length === 0) return;
-    if (category != null && tree.some((entry) => entry.id === category.id)) return;
+    if (scope?.kind === "all") return;
+    if (scope != null && tree.some((entry) => entry.id === scope.category.id)) return;
     const first = tree.find((entry) => entry.hasFiles && entry.parentId != null);
-    setCategory(first ?? null);
-  }, [tree, category]);
+    setScope(first ? { kind: "landed", category: first } : { kind: "all" });
+  }, [tree, scope]);
 
-  // A change of category, order or query starts the grid over at one page.
+  // The category the search is actually narrowed to, and the one the tree
+  // highlights: while a query is answered out of the whole catalogue, nothing
+  // is narrowed and nothing is highlighted.
+  const scoped = searchScope(scope, query);
+  const category = scope != null && scope.kind !== "all" ? scope.category : null;
+
+  // A change of scope, order or query starts the grid over at one page.
   useEffect(() => {
     setShown(PAGE);
-  }, [category?.id, sort, query]);
+  }, [scoped, sort, query]);
 
-  const search = useJkhubSearch(game, query, category?.id ?? null, sort, shown);
+  const search = useJkhubSearch(game, query, scoped, sort, shown);
   const cards = search.data?.cards ?? [];
   const total = search.data?.total ?? 0;
   const counts = query ? (search.data?.categoryCounts ?? {}) : null;
@@ -173,6 +224,13 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
 
   // A crawl of the other game must not put a progress line on this one.
   const building = status.data?.building === true;
+  // --- slice: jkhub index startup ---
+  // Whether there is a catalogue to list, to search and to type at. The rule
+  // is the core's — `index::browsable` — and the screen only reads it. Until
+  // the core has answered, the tab behaves as though it can browse: the status
+  // arrives within a frame or two, and a search box that switches itself off
+  // and on again in that time is worse than one that is briefly hopeful.
+  const browsable = status.data?.available !== false;
   // The event is the fresher of the two; the answer of the status is what a tab
   // opened halfway through a crawl has instead of the events it missed.
   const step = indexing.get(game) ?? status.data?.progress ?? null;
@@ -348,28 +406,10 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
     );
   }
 
-  // --- slice: jkhub index startup ---
-  // Nothing to list and nothing to search: no crawl of this machine and no
-  // copy inside the build. The tree and the grid would both be empty, and a
-  // search box over an empty catalogue answers «nothing matches» to every
-  // word — so the whole tab becomes the wait instead, with one button to stop
-  // it. Every shipped build carries a snapshot, so this is a safety net and
-  // not the normal first run.
-  if (status.data != null && !status.data.available) {
-    return (
-      <JkhubIndexing
-        building={building}
-        step={step}
-        busy={refreshing}
-        onCancel={runCancel}
-        onRetry={() => runRefresh(true)}
-      />
-    );
-  }
-
   // A query with answers elsewhere and none here is not an empty catalogue:
   // it is the wrong category, and the way out is one button.
-  const elsewhere = query !== "" && total === 0 && category != null;
+  const elsewhere =
+    query !== "" && total === 0 && scoped != null && category != null;
 
   return (
     <>
@@ -387,8 +427,8 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
         <aside className="w-232 shrink-0">
           <JkhubTree
             categories={tree}
-            selected={category?.id ?? null}
-            onSelect={setCategory}
+            selected={scoped}
+            onSelect={(entry) => setScope({ kind: "picked", category: entry })}
             onUpdate={runUpdateCategories}
             updating={updatingTree}
             counts={counts}
@@ -402,6 +442,12 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
               placeholder={t("search.placeholder")}
               value={typed}
               className="w-232"
+              // --- slice: jkhub index startup ---
+              // Nothing to search yet, so the box says so by being off rather
+              // than by answering «nothing matches» to every word. The panel
+              // below the bar is where the reason and the progress are.
+              disabled={!browsable}
+              title={browsable ? undefined : t("search.unavailable")}
               onChange={(event) => setTyped(event.target.value)}
             />
             <span className="flex-1" />
@@ -459,7 +505,24 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             </button>
           </p>
 
-          {search.isLoading ? (
+          {/* --- slice: jkhub index startup ---
+              Nothing to list and nothing to search: no crawl of this machine
+              and no copy inside the build. The grid would sit empty while a
+              crawl ran behind it, which reads as a broken screen rather than
+              as a wait, so the wait takes its place — with the progress, the
+              reason and one button to stop it. The bar above stays, with its
+              search box switched off: the catalogue is what is missing, not
+              the tab. Every shipped build carries a snapshot, so this is a
+              safety net and not the normal first run. */}
+          {!browsable ? (
+            <JkhubIndexing
+              building={building}
+              step={step}
+              busy={refreshing}
+              onCancel={runCancel}
+              onRetry={() => runRefresh(true)}
+            />
+          ) : search.isLoading ? (
             <p className="text-body-sm text-fg-muted">{t("loading.files")}</p>
           ) : search.error ? (
             <EmptyState
@@ -480,7 +543,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
               }
               action={
                 elsewhere ? (
-                  <Button onClick={() => setCategory(null)}>
+                  <Button onClick={() => setScope({ kind: "all" })}>
                     {t("empty.showAllCategories")}
                   </Button>
                 ) : undefined

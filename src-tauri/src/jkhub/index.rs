@@ -503,6 +503,25 @@ pub enum IndexSource {
     Missing,
 }
 
+/// The rule behind `available` in `jkhub_index_status`, and behind the search
+/// box the **Browse JKHub** tab draws from it.
+///
+/// A catalogue can be browsed when it came from somewhere — a crawl of this
+/// machine or the copy inside the build — and holds at least one file. The
+/// count is part of the rule rather than a detail: a catalogue of nothing
+/// answers «nothing matches» to every word typed into it, which reads as a
+/// search box that ignores the keyboard rather than as a tab with no catalogue
+/// yet. Both states are the same wait, and the screen says so the same way.
+///
+/// ```text
+/// browsable(IndexSource::Missing, 0)     // false, nothing to search
+/// browsable(IndexSource::Snapshot, 0)    // false, a catalogue of nothing
+/// browsable(IndexSource::Snapshot, 3324) // true
+/// ```
+pub fn browsable(source: IndexSource, files: u32) -> bool {
+    source != IndexSource::Missing && files > 0
+}
+
 /// An index in memory, with the folded text a search runs over.
 #[derive(Debug)]
 pub struct LoadedIndex {
@@ -1789,6 +1808,31 @@ mod tests {
             "a file two categories list keeps the first one the crawl met"
         );
         assert_eq!(files[2].category_id, 15);
+    }
+
+    /// What the search box of the tab is switched on by.
+    ///
+    /// The tab types into the catalogue, so both ways of having none — no
+    /// document at all, and a document holding nothing — have to switch the
+    /// box off. A box left on over a catalogue of nothing answers «nothing
+    /// matches» to every key, which is indistinguishable from a broken one.
+    #[test]
+    fn a_catalogue_is_browsable_when_it_came_from_somewhere_and_holds_a_file() {
+        assert!(
+            !browsable(IndexSource::Missing, 0),
+            "no crawl and no snapshot is nothing to search"
+        );
+        assert!(
+            !browsable(IndexSource::Snapshot, 0),
+            "a catalogue of nothing is a wait, not a search"
+        );
+        assert!(
+            !browsable(IndexSource::Cache, 0),
+            "and the crawled one of nothing is the same wait"
+        );
+        assert!(browsable(IndexSource::Snapshot, 1));
+        assert!(browsable(IndexSource::Snapshot, 3324));
+        assert!(browsable(IndexSource::Cache, 3324));
     }
 
     /// The rule behind `available` in `jkhub_index_status`: only a machine
