@@ -237,6 +237,11 @@ pub struct LaunchPlan<'a> {
     pub fs_game: Option<&'a str>,
     /// Tokens from the settings, already split.
     pub settings_args: &'a [String],
+    // --- slice: client launch args ---
+    /// Tokens from the client's own field, already split. They follow the
+    /// settings so that a client repeating a `+set` of the same cvar is the
+    /// value the engine keeps.
+    pub client_args: &'a [String],
     /// Tokens the caller passed for this run only.
     pub extra_args: &'a [String],
     /// `address:port` of a server to join straight away.
@@ -253,6 +258,18 @@ pub struct LaunchPlan<'a> {
 /// at startup, then `fs_game`, then the player's own tokens (which may override
 /// anything above), then `+connect`, which must be the last command so the
 /// console runs it after everything is set.
+///
+/// --- slice: client launch args ---
+/// The player's tokens arrive from three places and go out in this order: the
+/// **Extra launch arguments** setting, the client's own field, then whatever
+/// the caller passed for this one run. The order is the whole mechanism by
+/// which a client overrides a general value — `Com_StartupVariable` walks the
+/// `+` segments from left to right and overwrites the cvar on every match, so
+/// the last `+set` of a cvar is the one the engine keeps. Commands such as
+/// `+exec` and `+map` do not override each other at all: `Com_AddStartupCommands`
+/// appends every segment to the command buffer and they run in order. The
+/// section «Как движок разрешает повторы» of `docs/architecture.md` carries
+/// the file-and-line sources.
 ///
 /// --- slice: game core ---
 /// The roots come from the game's own spec, because the two engines disagree
@@ -288,6 +305,7 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     }
 
     args.extend(plan.settings_args.iter().cloned());
+    args.extend(plan.client_args.iter().cloned());
     args.extend(plan.extra_args.iter().cloned());
 
     if let Some(address) = plan.connect.map(str::trim).filter(|v| !v.is_empty()) {
@@ -396,6 +414,59 @@ fn names_cvar(token: &str, cvar: &str) -> bool {
 fn is_zero(token: &str) -> bool {
     let value = token.trim().trim_matches('"');
     value.parse::<f64>().is_ok_and(|number| number == 0.0)
+}
+
+// ---------------------------------------------------------------------------
+// What the engine will actually read
+// ---------------------------------------------------------------------------
+
+/// Most `+` segments `Com_ParseCommandLine` keeps, `MAX_CONSOLE_LINES` in
+/// `codemp/qcommon/common.cpp:371` of OpenJK `1a6a6434`. The parser stops at
+/// the limit without a word, so the 33rd segment and everything after it never
+/// reaches the engine.
+const MAX_CONSOLE_LINES: usize = 32;
+
+/// Longest command line the platform `main()` hands to `Com_Init`,
+/// `MAX_STRING_CHARS` in `codemp/qcommon/q_shared.h:178` of OpenJK `1a6a6434`.
+/// The string is rebuilt from `argv[]` in `shared/sys/sys_main.cpp:743`, which
+/// re-quotes every argument that holds a space.
+const MAX_STRING_CHARS: usize = 1024;
+
+/// Counts the command line the way the engine will: `+` segments, and the
+/// length of the single string the platform `main()` rebuilds from `argv[]`.
+///
+/// Neither limit is enforced. A player who writes a long line gets the line
+/// they wrote, and a launcher that silently dropped a token would be the
+/// harder thing to debug. The count exists so the log says which limit was
+/// passed when a `+exec` at the end of a long line turns out to do nothing.
+fn command_line_size(args: &[String]) -> (usize, usize) {
+    let segments = args
+        .iter()
+        .filter(|token| token.starts_with('+'))
+        .count();
+    let length = args
+        .iter()
+        .map(|token| token.chars().count() + usize::from(token.contains(' ')) * 2)
+        .sum::<usize>()
+        + args.len().saturating_sub(1);
+    (segments, length)
+}
+
+/// Writes a WARN when the assembled line is past what the engine reads.
+fn warn_past_engine_limits(client_id: &str, args: &[String]) {
+    let (segments, length) = command_line_size(args);
+    if segments > MAX_CONSOLE_LINES {
+        log::warn!(
+            "{client_id}: {segments} '+' segments on the command line, \
+             the engine reads the first {MAX_CONSOLE_LINES} and drops the rest"
+        );
+    }
+    if length > MAX_STRING_CHARS {
+        log::warn!(
+            "{client_id}: the command line is {length} characters, \
+             the engine reads the first {MAX_STRING_CHARS}"
+        );
+    }
 }
 
 /// Refuses an address that would smuggle extra console commands.
@@ -775,6 +846,10 @@ pub(crate) fn start_client(
         None => None,
     };
     let settings_args = split_args(&settings.extra_launch_args);
+    // --- slice: client launch args ---
+    // Split the same way the settings field is: one rule for both, so what a
+    // player learns about quoting in one place holds in the other.
+    let client_args = split_args(&client.launch_args);
     let fs_game = client
         .fs_game
         .as_deref()
@@ -788,6 +863,7 @@ pub(crate) fn start_client(
         home_dir: &home_dir,
         fs_game,
         settings_args: &settings_args,
+        client_args: &client_args,
         extra_args,
         connect,
     });
@@ -799,6 +875,8 @@ pub(crate) fn start_client(
         executable.display(),
         args.join(" ")
     );
+    // --- slice: client launch args ---
+    warn_past_engine_limits(&client.id, &args);
 
     // The arguments are the player's and stay exactly as written; this only
     // says out loud what the log already shows. Sent before the spawn, so the
@@ -973,6 +1051,7 @@ mod tests {
             home_dir,
             fs_game: None,
             settings_args: &[],
+            client_args: &[],
             extra_args: &[],
             connect: None,
         }
@@ -1054,18 +1133,25 @@ mod tests {
             .any(|arg| arg == "fs_game"));
     }
 
+    // --- slice: client launch args ---
+
     #[test]
-    fn connect_is_last_and_settings_come_before_the_client_arguments() {
+    fn the_settings_lead_the_client_follows_and_connect_is_last() {
+        // The three sources of player tokens in the order the engine reads
+        // them — the settings field, the client's own field, then whatever the
+        // caller passed for this run — and the launcher's `+connect` last.
         let game = Path::new("D:\\GameData");
         let engine = Path::new("C:\\JKNet\\clients\\duel\\engine");
         let base = Path::new("C:\\JKNet\\clients\\duel\\basepath");
         let home = Path::new("C:\\JKNet\\clients\\duel\\home");
-        let settings_args = vec!["+set".to_string(), "r_mode".to_string(), "-1".to_string()];
-        let extra_args = vec!["+set".to_string(), "name".to_string(), "Kyle".to_string()];
+        let settings_args = split_args("+set r_mode -1");
+        let client_args = split_args("+exec duel.cfg");
+        let extra_args = split_args("+set name Kyle");
 
         let mut with = plan(game, engine, base, home);
         with.fs_game = Some("japlus");
         with.settings_args = &settings_args;
+        with.client_args = &client_args;
         with.extra_args = &extra_args;
         with.connect = Some("jkhub.org:29070");
 
@@ -1077,6 +1163,8 @@ mod tests {
                 "+set",
                 "r_mode",
                 "-1",
+                "+exec",
+                "duel.cfg",
                 "+set",
                 "name",
                 "Kyle",
@@ -1084,6 +1172,63 @@ mod tests {
                 "jkhub.org:29070"
             ]
         );
+    }
+
+    #[test]
+    fn a_client_repeating_a_cvar_stands_after_the_settings() {
+        // `Com_StartupVariable` walks the `+` segments from left to right and
+        // overwrites the cvar on every match, so the engine keeps the last
+        // `+set` of a name. The client overriding the settings is that rule
+        // and nothing else: no filtering, no deduplication, just the order.
+        let game = Path::new("D:\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\duel\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\duel\\basepath");
+        let home = Path::new("C:\\JKNet\\clients\\duel\\home");
+        let settings_args = split_args("+set r_mode 3");
+        let client_args = split_args("+set r_mode 4");
+
+        let mut with = plan(game, engine, base, home);
+        with.settings_args = &settings_args;
+        with.client_args = &client_args;
+
+        let args = build_launch_args(&with);
+        assert_eq!(&args[9..], ["+set", "r_mode", "3", "+set", "r_mode", "4"]);
+
+        let general = args
+            .iter()
+            .position(|token| token == "3")
+            .expect("the settings value");
+        let own = args
+            .iter()
+            .position(|token| token == "4")
+            .expect("the client value");
+        assert!(own > general, "the engine takes the later one: {args:?}");
+    }
+
+    #[test]
+    fn the_engine_limits_are_counted_as_the_engine_counts_them() {
+        // Segments are the `+` tokens; the length is the one string the
+        // platform `main()` rebuilds, spaces between arguments included and a
+        // pair of quotes around every argument that holds a space.
+        assert_eq!(command_line_size(&[]), (0, 0));
+        assert_eq!(command_line_size(&split_args("+set r_mode 4")), (1, 13));
+        assert_eq!(
+            command_line_size(&split_args("+connect 127.0.0.1:29070")),
+            (1, 24)
+        );
+        // `+set name "Ben Kenobi"`: eleven characters of value plus the two
+        // quotes the platform layer puts back.
+        assert_eq!(
+            command_line_size(&split_args("+set name \"Ben Kenobi\"")),
+            (1, 22)
+        );
+
+        let long: Vec<String> = (0..40)
+            .flat_map(|n| ["+set".to_string(), format!("cg_x{n}"), "1".to_string()])
+            .collect();
+        let (segments, length) = command_line_size(&long);
+        assert!(segments > MAX_CONSOLE_LINES, "{segments}");
+        assert!(length < MAX_STRING_CHARS, "one limit at a time: {length}");
     }
 
     #[test]
@@ -1311,6 +1456,44 @@ mod tests {
             ),
             Some(ETERNALJK_S_INITSOUND)
         );
+    }
+
+    // --- slice: client launch args ---
+    #[test]
+    fn the_pair_is_found_whichever_field_it_came_from() {
+        // The settings field is no longer the only way in. A client that
+        // carries `s_initsound 0` on its own has to be warned about, and so
+        // does one where the settings and the client each carry a half of the
+        // pair — which is what reading the assembled list, rather than any one
+        // field, is for.
+        let game = Path::new("D:\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\eternal\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\eternal\\basepath");
+        let home = Path::new("C:\\JKNet\\clients\\eternal\\home");
+
+        let client_args = split_args("+set s_initsound 0");
+        let mut only_client = plan(game, engine, base, home);
+        only_client.client_args = &client_args;
+        assert_eq!(
+            launch_warning("eternaljk", &build_launch_args(&only_client)),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+
+        let settings_args = split_args("+set s_initsound");
+        let value = split_args("0");
+        let mut split_across = plan(game, engine, base, home);
+        split_across.settings_args = &settings_args;
+        split_across.client_args = &value;
+        assert_eq!(
+            launch_warning("eternaljk", &build_launch_args(&split_across)),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+
+        // The client alone is also enough to leave the sound system on.
+        let silent = split_args("+set s_volume 0");
+        let mut quiet = plan(game, engine, base, home);
+        quiet.client_args = &silent;
+        assert_eq!(launch_warning("eternaljk", &build_launch_args(&quiet)), None);
     }
 
     #[test]

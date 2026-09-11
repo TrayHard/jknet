@@ -81,6 +81,17 @@ pub struct Client {
     /// takes the default of the engine, which is `base` for all but jaMME.
     #[serde(default)]
     pub fs_game: Option<String>,
+
+    // --- slice: client launch args ---
+    /// Command line of this client, written the way a shortcut is written.
+    ///
+    /// Split by [`crate::launch::split_args`] and handed to the engine after
+    /// the tokens of the **Extra launch arguments** setting, so a client that
+    /// repeats a `+set` of the same cvar is the value the engine keeps. Blank
+    /// on a record written before the field existed, and blank is the
+    /// launcher's own default.
+    #[serde(default)]
+    pub launch_args: String,
 }
 
 /// Lists every client, sorted by name.
@@ -133,6 +144,7 @@ pub fn create_client(
         engine_installed_at: None,
         engine_published_at: None,
         fs_game: None,
+        launch_args: String::new(),
     };
     write_record(&paths, &client)?;
     log::info!(
@@ -144,19 +156,26 @@ pub fn create_client(
     Ok(client)
 }
 
-/// Changes the parts of a client the player may edit: its name and its mod
-/// folder.
+/// Changes the parts of a client the player may edit: its name, its mod
+/// folder and its launch arguments.
 ///
 /// A field left out of the call keeps its value. The folder on disk keeps its
 /// slug even when the name changes: a path that another part of the launcher
 /// stored must stay valid. An `fs_game` that is blank clears the field, which
 /// puts the client back on the default folder of its engine.
+///
+/// --- slice: client launch args ---
+/// `launch_args` is stored as the player wrote it, trimmed at the ends and
+/// nothing more. It reaches the engine as its own tokens, and a field that
+/// rewrote them would make the engine read something other than what the
+/// player can see.
 #[tauri::command]
 pub fn update_client(
     state: tauri::State<'_, AppState>,
     client_id: String,
     name: Option<String>,
     fs_game: Option<String>,
+    launch_args: Option<String>,
 ) -> Result<Client> {
     let paths = state.paths()?;
     let mut client = read_record(&paths, &client_id)?;
@@ -166,12 +185,16 @@ pub fn update_client(
     if let Some(fs_game) = fs_game {
         client.fs_game = validate_fs_game(&fs_game)?;
     }
+    if let Some(launch_args) = launch_args {
+        client.launch_args = launch_args.trim().to_string();
+    }
     write_record(&paths, &client)?;
     log::info!(
-        "updated client {}: name {:?}, fs_game {:?}",
+        "updated client {}: name {:?}, fs_game {:?}, launch_args {:?}",
         client.id,
         client.name,
-        client.fs_game
+        client.fs_game,
+        client.launch_args
     );
     Ok(client)
 }
@@ -429,6 +452,32 @@ mod tests {
         .expect("an older record parses");
         assert_eq!(older.game, Game::JediAcademy);
         assert_eq!(older.engine_id, "openjk");
+    }
+
+    // --- slice: client launch args ---
+
+    #[test]
+    fn a_client_json_without_launch_arguments_reads_as_a_blank_line() {
+        // The field arrived after the first release, so every record on every
+        // installed launcher lacks it. A missing field is the same as an empty
+        // one: the client adds nothing of its own to the command line.
+        let older: Client = serde_json::from_str(
+            r#"{"id":"everyday","name":"Everyday","engineId":"openjk","game":"ja",
+                "engineVersion":"latest","createdAt":"2026-09-10T00:00:00Z"}"#,
+        )
+        .expect("an older record parses");
+        assert_eq!(older.launch_args, "");
+
+        let written: Client = serde_json::from_str(
+            r#"{"id":"duel","name":"Duel","engineId":"openjk","game":"ja",
+                "engineVersion":null,"createdAt":"2026-09-10T00:00:00Z",
+                "launchArgs":"+set r_mode 4"}"#,
+        )
+        .expect("a record with the field parses");
+        assert_eq!(written.launch_args, "+set r_mode 4");
+
+        let json = serde_json::to_string(&written).expect("it serializes");
+        assert!(json.contains("\"launchArgs\":\"+set r_mode 4\""), "{json}");
     }
 
     #[test]

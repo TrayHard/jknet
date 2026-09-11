@@ -858,6 +858,7 @@ mod tests {
             engine_published_at: published.map(str::to_string),
             engine_installed_at: None,
             fs_game: None,
+            launch_args: String::new(),
             created_at: "2026-09-10T00:00:00Z".into(),
         }
     }
