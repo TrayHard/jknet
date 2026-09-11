@@ -746,13 +746,19 @@ export function useSetServerHidden() {
       serversIpc.setServerHidden(address, hidden, game),
     onSuccess: (settings, variables) => {
       queryClient.setQueryData(queryKeys.settings, settings);
-      queryClient.setQueryData<ServerInfo[]>(serverKeys.cached(game), (rows) =>
-        rows?.map((row) =>
-          row.address === variables.address
-            ? { ...row, hidden: variables.hidden }
-            : row,
-        ),
-      );
+      // Both lists, because a server on the desk next to the player is hidden
+      // by the same press and lives in the sweep's own list: the LAN tab holds
+      // rows that never enter the cached one, and a row that stayed put after
+      // **Hide** would read as a press that did nothing.
+      for (const key of [serverKeys.cached(game), serverKeys.lan(game)]) {
+        queryClient.setQueryData<ServerInfo[]>(key, (rows) =>
+          rows?.map((row) =>
+            row.address === variables.address
+              ? { ...row, hidden: variables.hidden }
+              : row,
+          ),
+        );
+      }
     },
   });
 }

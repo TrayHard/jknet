@@ -162,10 +162,18 @@ export function ServersPage() {
   const scope = tabScope === null ? IDLE_SCOPE : refresh.scopes[tabScope];
   /** Whether a sweep has finished, which is what "nothing here" then means. */
   const lanScanned = refresh.scopes.lan.refreshedAt !== null;
-  const source = useMemo(
-    () => (tab === "lan" ? lan : (cached.data ?? [])),
-    [tab, lan, cached.data],
-  );
+  const source = useMemo(() => {
+    if (tab === "lan") return lan;
+    const rows = cached.data ?? [];
+    // --- slice: server actions ---
+    // The Hidden tab is the only way back, so it has to see every row that can
+    // be hidden. A LAN server is one of them and its rows never enter the
+    // cached list, so they are added here — otherwise hiding the test server on
+    // the desk would put it somewhere with no button to bring it back.
+    if (tab !== "hidden") return rows;
+    const known = new Set(rows.map((row) => row.address));
+    return [...rows, ...lan.filter((row) => !known.has(row.address))];
+  }, [tab, lan, cached.data]);
   // The rows the screen works from. While this tab's scan runs they are the
   // ones it started with, so counts, tabs, filter options and the table agree
   // with each other and none of them moves under the cursor.
@@ -844,6 +852,14 @@ function buildTabs(
   // All would promise a row that is not there.
   const shown = visibleServers(servers);
   const known = new Set(shown.map((server) => server.address));
+  // A hidden LAN server is in neither list twice, so the count of the Hidden
+  // tab is the hidden rows of the main list plus the LAN rows that are not in
+  // it — otherwise the tab would read as empty while holding a row.
+  const seen = new Set(servers.map((server) => server.address));
+  const hidden =
+    servers.length -
+    shown.length +
+    lanRows.filter((row) => row.hidden && !seen.has(row.address)).length;
   return [
     { id: "all", label: t("tabs.all"), count: shown.length },
     {
@@ -869,7 +885,7 @@ function buildTabs(
     {
       id: "hidden",
       label: t("tabs.hidden"),
-      count: servers.length - shown.length,
+      count: hidden,
       title: t("tabs.hiddenHint"),
     },
   ];
