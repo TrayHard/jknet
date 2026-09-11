@@ -8,6 +8,8 @@
 
 export { Badge, type BadgeTone } from "./Badge";
 export { Button, type ButtonSize, type ButtonVariant } from "./Button";
+// --- slice: connect dialog ---
+export { Combobox, type ComboboxOption } from "./Combobox";
 export { Dialog, type DialogVariant } from "./Dialog";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
