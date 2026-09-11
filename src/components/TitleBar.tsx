@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "../lib/format";
 import { isTauri } from "../lib/runtime";
+// --- slice: client window ---
+import { logWindowFailure } from "../lib/windowLog";
 import { Logo } from "./Logo";
 
 /**
@@ -75,11 +77,21 @@ export function TitleBar({
     };
   }, []);
 
-  /** Runs a window action, and nothing at all in a plain browser. */
-  const windowAction = (action: (appWindow: TauriWindow) => Promise<unknown>) => () => {
-    if (!isTauri()) return;
-    action(getCurrentWindow()).catch(() => undefined);
-  };
+  /**
+   * Runs a window action, and nothing at all in a plain browser.
+   *
+   * --- slice: client window ---
+   * A refusal still does not reach the player: there is no dialog worth
+   * showing over a button they can press again. It does reach the log, named
+   * by the action and by the window — a close button that quietly does nothing
+   * is the whole of a «the window will not close» report, and the line below
+   * is what turns that report into a place to look.
+   */
+  const windowAction =
+    (name: string, action: (appWindow: TauriWindow) => Promise<unknown>) => () => {
+      if (!isTauri()) return;
+      action(getCurrentWindow()).catch((e: unknown) => logWindowFailure(name, e));
+    };
 
   return (
     <header
@@ -116,14 +128,16 @@ export function TitleBar({
       <div className="flex items-center h-full">
         <WindowButton
           label={t("window.minimize")}
-          onClick={windowAction((appWindow) => appWindow.minimize())}
+          onClick={windowAction("minimize", (appWindow) => appWindow.minimize())}
         >
           <Minus size={16} />
         </WindowButton>
         {maximizable ? (
           <WindowButton
             label={maximized ? t("window.restore") : t("window.maximize")}
-            onClick={windowAction((appWindow) => appWindow.toggleMaximize())}
+            onClick={windowAction("toggleMaximize", (appWindow) =>
+              appWindow.toggleMaximize(),
+            )}
           >
             {maximized ? <Copy size={12} /> : <Square size={13} />}
           </WindowButton>
@@ -131,7 +145,7 @@ export function TitleBar({
         <WindowButton
           label={t("window.close")}
           danger
-          onClick={windowAction((appWindow) => appWindow.close())}
+          onClick={windowAction("close", (appWindow) => appWindow.close())}
         >
           <X size={16} />
         </WindowButton>
