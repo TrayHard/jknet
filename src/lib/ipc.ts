@@ -57,6 +57,10 @@ export interface GameInfo {
    * index is the number a server publishes. The **Mode** filter builds its
    * options from this: Jedi Outcast has no Siege and no Power Duel. */
   gametypes: string[];
+  // --- slice: player profiles ---
+  /** Whether the player picks a saber hilt in this game. False hides the two
+   * hilt lists of the profile form: Jedi Outcast ships no hilt data at all. */
+  hasSaberHilts: boolean;
 }
 
 // ---------------------------------------------------------------------------
