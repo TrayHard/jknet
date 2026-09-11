@@ -2,20 +2,6 @@
   "title": "Clients",
   "subtitle": "Ein Client ist ein Engine-Build mit eigenen Dateien und Einstellungen. Geben Sie ihm einen Namen, und er gehört Ihnen.",
   "newClient": "Neuer Client",
-  "gameFiles": {
-    "title": "Dateien von {{game}}",
-    "titleFallback": "Spieldateien",
-    "ready": "Bereit",
-    "notSet": "Nicht festgelegt",
-    "text": "JKNet liest <0>{{range}}</0> aus diesem Ordner und schreibt nie hinein.",
-    "searching": "Suche nach Kopien in Steam und GOG…",
-    "noCopy": "Keine Kopie gefunden",
-    "foundThrough": "Quelle: {{source}}. Bestätigen Sie den Ordner, um ihn zu nutzen.",
-    "changeFolder": "Ordner ändern",
-    "useThisFolder": "Diesen Ordner nutzen",
-    "pickTitle": "Ordner GameData auswählen",
-    "invalid": "Keine Spieldateien in {{path}}. Es fehlen: {{missing}}."
-  },
   "list": {
     "heading": "Ihre Clients",
     "emptyTitle": "Noch keine Clients für {{game}}",
