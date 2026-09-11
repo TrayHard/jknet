@@ -16,7 +16,7 @@
     "createClient": "Utwórz klienta {{game}}",
     "play": "Graj",
     "playHint": "Oznacz klienta jako domyślnego",
-    "connect": "Connect",
+    "connect": "Połącz",
     "stop": "Zatrzymaj",
     "manageClients": "Zarządzaj klientami",
     "aMoment": "chwilę"
@@ -27,8 +27,8 @@
     "locate": "Wskaż pliki"
   },
   "topServers": {
-    "favorites": "Favorites",
-    "history": "History",
+    "favorites": "Ulubione",
+    "history": "Historia",
     "busiest": "Najbardziej oblegane serwery",
     "emptyTitle": "Brak serwerów w pamięci podręcznej",
     "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",

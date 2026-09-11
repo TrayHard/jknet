@@ -16,7 +16,7 @@
     "createClient": "Crear un cliente de {{game}}",
     "play": "Jugar",
     "playHint": "Marque un cliente como predeterminado",
-    "connect": "Connect",
+    "connect": "Conectar",
     "stop": "Detener",
     "manageClients": "Gestionar clientes",
     "aMoment": "un momento"
@@ -27,8 +27,8 @@
     "locate": "Localizar archivos"
   },
   "topServers": {
-    "favorites": "Favorites",
-    "history": "History",
+    "favorites": "Favoritos",
+    "history": "Historial",
     "busiest": "Servidores más concurridos",
     "emptyTitle": "Todavía no hay servidores en la caché",
     "emptyText": "Abra la pantalla Servidores una vez y los más concurridos aparecerán aquí.",

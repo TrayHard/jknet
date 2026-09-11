@@ -16,7 +16,7 @@
     "createClient": "Kliens létrehozása a {{game}} játékhoz",
     "play": "Játék",
     "playHint": "Jelöljön ki egy klienst alapértelmezettként",
-    "connect": "Connect",
+    "connect": "Csatlakozás",
     "stop": "Leállítás",
     "manageClients": "Kliensek kezelése",
     "aMoment": "néhány másodperc"
@@ -27,8 +27,8 @@
     "locate": "Mappa megadása"
   },
   "topServers": {
-    "favorites": "Favorites",
-    "history": "History",
+    "favorites": "Kedvencek",
+    "history": "Előzmények",
     "busiest": "Legnépesebb szerverek",
     "emptyTitle": "Még nincs szerver a gyorsítótárban",
     "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",

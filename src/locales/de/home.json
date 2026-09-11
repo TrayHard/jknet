@@ -16,7 +16,7 @@
     "createClient": "Client für {{game}} erstellen",
     "play": "Spielen",
     "playHint": "Markieren Sie einen Client als Standard",
-    "connect": "Connect",
+    "connect": "Verbinden",
     "stop": "Beenden",
     "manageClients": "Clients verwalten",
     "aMoment": "einem Moment"
@@ -27,8 +27,8 @@
     "locate": "Dateien suchen"
   },
   "topServers": {
-    "favorites": "Favorites",
-    "history": "History",
+    "favorites": "Favoriten",
+    "history": "Verlauf",
     "busiest": "Meistbesuchte Server",
     "emptyTitle": "Noch keine Server im Cache",
     "emptyText": "Öffnen Sie den Bereich Server einmal, dann erscheinen die meistbesuchten hier.",
