@@ -16,7 +16,8 @@ import { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 
-import { ClientSettingsDialog } from "../components/ClientSettingsDialog";
+// --- slice: client window ---
+import { InstallProgressBar } from "../components/client/InstallProgressBar";
 import { useGameEventsContext } from "../components/GameEventsProvider";
 // --- slice: game switch ---
 import {
@@ -41,6 +42,8 @@ import {
   type SettingsPatch,
 } from "../lib/ipc";
 import { shortenPath } from "../lib/format";
+// --- slice: client window ---
+import { useOpenClientWindow } from "../lib/clientWindow";
 // --- slice: game switch ---
 import {
   clientsOfGame,
@@ -103,8 +106,12 @@ export function ClientsPage() {
   const pendingInstalls = usePendingInstalls();
   const { installs, clearInstall } = useGameEventsContext();
 
+  // --- slice: client window ---
+  // The gear opens a window of its own now. The dialog it replaced could hold
+  // three fields; the window holds everything a client has.
+  const openClientWindow = useOpenClientWindow();
+
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Review finding (Low): the game the toast came about, when it named one.
   // Kept in state because the effect below drops the parameter it arrived in.
@@ -321,7 +328,12 @@ export function ClientsPage() {
                 // of the client, so Jedi Outcast cannot take the Play button
                 // away from a Jedi Academy one.
                 onMakeDefault={() => patchSettings(defaultClientPatch(client))}
-                onEdit={() => setEditing(client)}
+                onEdit={() => {
+                  setError(null);
+                  openClientWindow(client.id).catch((e: unknown) =>
+                    setError(errorText(e)),
+                  );
+                }}
                 onDelete={() =>
                   deleteClient.mutate(client.id, {
                     onError: (e) => setError(errorText(e)),
@@ -423,13 +435,6 @@ export function ClientsPage() {
         />
       ) : null}
 
-      {editing ? (
-        <ClientSettingsDialog
-          client={editing}
-          engine={engines.find((engine) => engine.id === editing.engineId)}
-          onClose={() => setEditing(null)}
-        />
-      ) : null}
     </Page>
   );
 }
@@ -734,46 +739,6 @@ function EngineControls({
           {t("card.installedOn", { date: format.date(client.engineInstalledAt) })}
         </span>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * The bar under a card while an engine downloads and unpacks.
- *
- * A download without a content length gets an indeterminate bar rather than a
- * fake percentage: GitHub always sends one, mirrors do not always.
- */
-function InstallProgressBar({ progress }: { progress: EngineInstallProgress }) {
-  const format = useFormat();
-  const ratio =
-    progress.total > 0 ? Math.min(1, progress.downloaded / progress.total) : null;
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-8">
-        <span className="text-body-sm text-fg-secondary truncate">
-          {progress.message}
-        </span>
-        <span className="text-mono-xs text-fg-muted shrink-0">
-          {ratio === null
-            ? format.bytes(progress.downloaded)
-            : `${format.bytes(progress.downloaded)} / ${format.bytes(progress.total)}`}
-        </span>
-      </div>
-      <div
-        className="h-6 rounded-full bg-elevated overflow-hidden"
-        role="progressbar"
-        aria-label={progress.message}
-        aria-valuenow={ratio === null ? undefined : Math.round(ratio * 100)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div
-          className="h-full bg-accent transition-[width] duration-200"
-          style={{ width: ratio === null ? "100%" : `${ratio * 100}%` }}
-        />
-      </div>
     </div>
   );
 }

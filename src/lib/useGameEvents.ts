@@ -143,13 +143,18 @@ export function useGameEvents(closeOnLaunch: boolean): GameEvents {
  *
  * A hidden window may also have been minimised before it was hidden, so all
  * three calls are needed; `setFocus` last, because the other two can steal it.
+ *
+ * --- slice: client window ---
+ * Every window runs this, its own: the client windows step aside with the main
+ * one and come back with it. Only `main` takes the focus, because two windows
+ * asking for it at once is a flicker and the player left from the main one.
  */
 async function showWindow(): Promise<void> {
   try {
     const window = getCurrentWindow();
     await window.show();
     await window.unminimize();
-    await window.setFocus();
+    if (window.label === "main") await window.setFocus();
   } catch (e) {
     console.warn("cannot show the window", e);
   }

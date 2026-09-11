@@ -11,7 +11,10 @@ import { GameEventsProvider } from "./components/GameEventsProvider";
 import { ToastsProvider } from "./components/ToastsProvider";
 // --- slice: i18n ---
 import { LanguageSync } from "./i18n/LanguageSync";
+// --- slice: client window ---
+import { isClientWindowHash } from "./lib/clientWindow";
 import { ClientsPage } from "./pages/ClientsPage";
+import { ClientWindowPage } from "./pages/ClientWindowPage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { HomePage } from "./pages/HomePage";
 import { LibraryPage } from "./pages/LibraryPage";
@@ -40,6 +43,18 @@ const queryClient = new QueryClient({
  * that does not exist; `#/servers` never leaves `index.html`.
  */
 export default function App() {
+  // --- slice: client window ---
+  // A document opened at `#/client/<id>` is the editing window of one client,
+  // and it is a narrower application than the launcher: the query cache, the
+  // language, the toast column and the launch events, and none of the
+  // providers that own a connection or a schedule. A second live socket, a
+  // second presence heartbeat and a second update check belong to no window.
+  //
+  // The initial hash decides, once. A client window never navigates, and the
+  // main window reaching the same route in a browser — which is how the layout
+  // is reviewed under `npm run dev` — keeps the providers it already has.
+  if (isClientWindowHash(window.location.hash)) return <ClientWindowApp />;
+
   return (
     <QueryClientProvider client={queryClient}>
       {/* --- slice: i18n --- above the router and outside every screen: the
@@ -84,11 +99,44 @@ export default function App() {
                     <Route element={<AppShell withSidebar={false} />}>
                       <Route path="/onboarding" element={<OnboardingPage />} />
                     </Route>
+                    {/* --- slice: client window --- */}
+                    {/* Outside the shell: the window has no sidebar and draws
+                        its own title bar. The route lives here too so that the
+                        gear can open it in the tab under `npm run dev`, where
+                        there are no windows to open. */}
+                    <Route path="/client/:id" element={<ClientWindowPage />} />
                   </Routes>
                 </HashRouter>
               </FriendsProvider>
             </AccountProvider>
           </AppUpdateProvider>
+        </GameEventsProvider>
+      </ToastsProvider>
+    </QueryClientProvider>
+  );
+}
+
+// --- slice: client window ---
+
+/**
+ * The application a client window runs.
+ *
+ * Four providers, in the same order as the launcher's own: the query cache,
+ * the language, the toast column, and the launch events — which is what hides
+ * this window with the main one when `closeOnLaunch` is on, and what keeps its
+ * engine block in step with an install started from the Clients screen.
+ */
+function ClientWindowApp() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <LanguageSync />
+      <ToastsProvider>
+        <GameEventsProvider>
+          <HashRouter>
+            <Routes>
+              <Route path="/client/:id" element={<ClientWindowPage />} />
+            </Routes>
+          </HashRouter>
         </GameEventsProvider>
       </ToastsProvider>
     </QueryClientProvider>

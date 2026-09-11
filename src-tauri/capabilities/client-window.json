@@ -1,0 +1,20 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "client-window",
+  "description": "Permissions of a client window, labelled client-<slug>: its own title bar, a title that follows a rename, the events it listens to, stepping aside while the game runs, the system locale the first frame needs and the log the frontend console is copied into. It opens no dialogs, follows no links, never maximises and never touches the updater.",
+  "windows": ["client-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-set-title",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "log:default",
+    "os:allow-locale"
+  ]
+}

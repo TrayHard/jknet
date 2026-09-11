@@ -19,8 +19,27 @@ import { Logo } from "./Logo";
  *
  * Outside the Tauri runtime the bar still renders, because the design is
  * reviewed in a plain browser, but the buttons do nothing.
+ *
+ * --- slice: client window ---
+ * Every window draws this same bar, and it always acts on the window it is in:
+ * `getCurrentWindow()` reads the label of the document rather than naming
+ * `main`. The client window passes a title of its own and drops the maximise
+ * button, because its content is one column and has nothing to grow into.
  */
-export function TitleBar() {
+interface TitleBarProps {
+  /** Replaces the JKNET mark and the version, for a window about one thing. */
+  title?: string;
+  /** Smaller line after the title: the client id, in monospace. */
+  subtitle?: string;
+  /** False hides the maximise button and the double-click that does the same. */
+  maximizable?: boolean;
+}
+
+export function TitleBar({
+  title,
+  subtitle,
+  maximizable = true,
+}: TitleBarProps = {}) {
   const { t } = useTranslation("common");
   const [version, setVersion] = useState("");
   const [maximized, setMaximized] = useState(false);
@@ -70,12 +89,26 @@ export function TitleBar() {
         "bg-titlebar border-b border-line-subtle",
       )}
     >
-      <div data-tauri-drag-region className="flex items-center gap-8 pointer-events-none">
-        <Logo size={20} />
-        <span className="text-display-nav text-fg tracking-[0.12em]">JKNET</span>
-        {version ? (
-          <span className="text-mono-xs text-fg-muted">v{version}</span>
-        ) : null}
+      <div
+        data-tauri-drag-region
+        className="flex items-center gap-8 min-w-0 pointer-events-none"
+      >
+        {title === undefined ? (
+          <>
+            <Logo size={20} />
+            <span className="text-display-nav text-fg tracking-[0.12em]">JKNET</span>
+            {version ? (
+              <span className="text-mono-xs text-fg-muted">v{version}</span>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <span className="text-display-nav text-fg truncate">{title}</span>
+            {subtitle ? (
+              <span className="text-mono-xs text-fg-muted truncate">{subtitle}</span>
+            ) : null}
+          </>
+        )}
       </div>
 
       <div data-tauri-drag-region className="flex-1 h-full" />
@@ -87,12 +120,14 @@ export function TitleBar() {
         >
           <Minus size={16} />
         </WindowButton>
-        <WindowButton
-          label={maximized ? t("window.restore") : t("window.maximize")}
-          onClick={windowAction((appWindow) => appWindow.toggleMaximize())}
-        >
-          {maximized ? <Copy size={12} /> : <Square size={13} />}
-        </WindowButton>
+        {maximizable ? (
+          <WindowButton
+            label={maximized ? t("window.restore") : t("window.maximize")}
+            onClick={windowAction((appWindow) => appWindow.toggleMaximize())}
+          >
+            {maximized ? <Copy size={12} /> : <Square size={13} />}
+          </WindowButton>
+        ) : null}
         <WindowButton
           label={t("window.close")}
           danger
