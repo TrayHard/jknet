@@ -34,6 +34,7 @@ import {
   levelshotsIpc,
   libraryIpc,
   serversIpc,
+  settingsEvents,
   type AccountChanged,
   type AccountState,
   type Client,
@@ -42,6 +43,8 @@ import {
   type LaunchPreview,
   type ConflictReport,
   type DataPaths,
+  // --- slice: clients page ---
+  type DefaultClientsChanged,
   type Engine,
   type EngineRelease,
   type EngineUpdate,
@@ -261,6 +264,8 @@ export const clientKeys = {
     [...queryKeys.clients, clientId, "cvars", names] as const,
   preview: (clientId: string) =>
     [...queryKeys.clients, clientId, "preview"] as const,
+  // --- slice: clients page ---
+  dir: (clientId: string) => [...queryKeys.clients, clientId, "dir"] as const,
 };
 
 /** One client out of the list, with the state of the list behind it. */
@@ -355,6 +360,54 @@ export function useClientEvents(): void {
 
     void listen<ClientsChanged>(clientEvents.changed, () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [queryClient]);
+}
+
+// --- slice: clients page ---
+
+/**
+ * The folder of one client on disk, as the core resolves it.
+ *
+ * Asked of the core rather than joined onto `dataRoot` on the screen:
+ * `dataDirOverride` moves that root and the slug is a detail of `paths.rs`.
+ * The answer holds until the settings change, which is exactly when
+ * `useUpdateSettings` invalidates the whole `clients` prefix.
+ */
+export function useClientDir(clientId: string | null): UseQueryResult<string> {
+  return useQuery({
+    queryKey: clientKeys.dir(clientId ?? ""),
+    queryFn: () => ipc.clientDir(clientId as string),
+    enabled: clientId !== null,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * Refetches the settings when any window moves the default client of a game.
+ *
+ * The same story as `useClientEvents`, one document over: the switch is in the
+ * client window and the **DEFAULT** badge on a card of the main one, and
+ * neither window refetches on focus.
+ */
+export function useDefaultClientEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen<DefaultClientsChanged>(settingsEvents.defaultClients, () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
     }).then((unlisten) => {
       if (cancelled) unlisten();
       else stop = unlisten;

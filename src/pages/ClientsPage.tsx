@@ -1,7 +1,9 @@
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
   Check,
   Download,
+  FolderOpen,
   Play,
   Plus,
   RefreshCw,
@@ -11,10 +13,12 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 // --- slice: client window ---
 import { InstallProgressBar } from "../components/client/InstallProgressBar";
+// --- slice: clients page ---
+import { EngineLogo } from "../components/EngineLogo";
 import { GameFilesNotice } from "../components/GameFilesNotice";
 import { useGameEventsContext } from "../components/GameEventsProvider";
 // --- slice: game switch ---
@@ -35,14 +39,14 @@ import {
   type EngineInstallProgress,
   type Game,
   type RunningGame,
-  type SettingsPatch,
 } from "../lib/ipc";
 // --- slice: client window ---
 import { useOpenClientWindow } from "../lib/clientWindow";
+// --- slice: clients page ---
+import { engineRoute } from "../lib/engines";
 // --- slice: game switch ---
 import {
   clientsOfGame,
-  defaultClientPatch,
   isGame,
   otherGame,
   resolveDefaultClientId,
@@ -50,6 +54,7 @@ import {
   useGameNames,
 } from "../lib/game";
 import {
+  useClientDir,
   useClients,
   useDeleteClient,
   useEngineReleases,
@@ -61,8 +66,8 @@ import {
   useRunningGame,
   useSettings,
   useStopGame,
-  useUpdateSettings,
 } from "../lib/queries";
+import { isTauri } from "../lib/runtime";
 
 /**
  * Clients: the clients of the active game, and nothing else.
@@ -90,7 +95,6 @@ export function ClientsPage() {
   // line under the list says how many clients are waiting there.
   const engines = useEnginesOfGame(activeGame);
   const { label: gameName } = useGameNames();
-  const updateSettings = useUpdateSettings();
   const deleteClient = useDeleteClient();
   const installEngine = useInstallEngine();
   const launchClient = useLaunchClient();
@@ -133,15 +137,6 @@ export function ClientsPage() {
       { replace: true },
     );
   }, [askedForNew, askedForGame, setSearch]);
-
-  // Only the changed fields go to the core: the cached document would carry
-  // back stale values for everything else and overwrite `settings.json`.
-  const patchSettings = (patch: SettingsPatch) => {
-    setError(null);
-    updateSettings.mutate(patch, {
-      onError: (e) => setError(errorText(e)),
-    });
-  };
 
   // A command that never answered is as much of a failure as one that said
   // no, and outside the Tauri runtime it is the only thing to report.
@@ -205,10 +200,6 @@ export function ClientsPage() {
                 install={installs[client.id]}
                 installPending={pendingInstalls.includes(client.id)}
                 running={runningGame.data ?? null}
-                // --- slice: game switch --- the default belongs to the game
-                // of the client, so Jedi Outcast cannot take the Play button
-                // away from a Jedi Academy one.
-                onMakeDefault={() => patchSettings(defaultClientPatch(client))}
                 onEdit={() => {
                   setError(null);
                   openClientWindow(client.id).catch((e: unknown) =>
@@ -289,6 +280,15 @@ export function ClientsPage() {
 // `sourceName` is gone: the four detection sources are `games.sources.*` in the
 // catalogs, and both this screen and the first run read them from there.
 
+/**
+ * What joins the facts on the second line of a card.
+ *
+ * Punctuation in the code, not a word in a catalog: the parts around it are
+ * whole messages of their own, which is the same arrangement the subtitle of
+ * the Servers screen uses.
+ */
+const DOT = "·";
+
 interface ClientCardProps {
   client: Client;
   engine: Engine | undefined;
@@ -299,7 +299,6 @@ interface ClientCardProps {
   installPending: boolean;
   /** The game JKNet started, whichever client it belongs to. */
   running: RunningGame | null;
-  onMakeDefault: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onInstall: () => void;
@@ -309,6 +308,19 @@ interface ClientCardProps {
   onNewClient: () => void;
 }
 
+/**
+ * One client, as the design's «Regular ETJK» card has it.
+ *
+ * The mark of the build on the left, the name and its badges on top, the build
+ * and the date under them, and one large **Launch** on the right. Everything
+ * else — the update check, the folder, the settings window, **Delete** — is a
+ * small button on a row of its own at the bottom, so the card has exactly one
+ * thing that looks like the thing a player came to press.
+ *
+ * **Make default** is not here any more. It is a property of the client and
+ * lives in the client's own window, next to its name and its mod folder; the
+ * badge on this card is what says where it went.
+ */
 function ClientCard({
   client,
   engine,
@@ -316,7 +328,6 @@ function ClientCard({
   install,
   installPending,
   running,
-  onMakeDefault,
   onEdit,
   onDelete,
   onInstall,
@@ -325,8 +336,13 @@ function ClientCard({
   onNewClient,
 }: ClientCardProps) {
   const { t } = useTranslation("clients");
+  const errorText = useErrorText();
   const format = useFormat();
   const engineNote = useEngineNote();
+  // Asked for every card rather than on the click: the command reads one small
+  // file, and a button that has to wait for an answer before it can open a
+  // folder feels like a button that did not work.
+  const clientDir = useClientDir(client.id);
   // A client built on a build nobody maintains says so once, under the card
   // head, and offers the successor the note names. It is a sentence and a
   // link, not a dialog: the client still works, and a player who keeps it for
@@ -345,63 +361,72 @@ function ClientCard({
   return (
     <li className="flex flex-col gap-12 rounded-lg border border-line bg-surface p-16">
       <div className="flex items-start gap-12">
-        <span className="flex items-center justify-center size-44 rounded-md bg-elevated text-fg-accent text-display-md shrink-0">
-          {engineName.slice(0, 2).toUpperCase()}
-        </span>
+        <EngineLogo engineId={client.engineId} name={engineName} size={44} />
         <div className="flex-1 min-w-0 flex flex-col gap-4">
           <div className="flex items-center gap-8">
             <span className="text-heading-sm text-fg truncate">{client.name}</span>
             {isDefault ? <Badge tone="accent">{t("card.default")}</Badge> : null}
             {isRunning ? <Badge tone="success">{t("card.running")}</Badge> : null}
           </div>
-          <div className="flex items-center gap-8 flex-wrap">
-            <Badge tone={installed ? "neutral" : "warm"}>
-              {engineName}
-              {client.engineVersion ? ` ${client.engineVersion}` : ""}
-            </Badge>
-            {installed ? null : (
-              <span className="text-body-sm text-fg-muted">
-                {t("card.engineNotInstalled")}
-              </span>
-            )}
-          </div>
-          <span className="text-mono-xs text-fg-muted">
-            {client.fsGame
-              ? t("card.metaWithMod", {
-                  id: client.id,
-                  date: format.date(client.createdAt),
-                  mod: client.fsGame,
-                })
-              : t("card.meta", {
-                  id: client.id,
-                  date: format.date(client.createdAt),
-                })}
-          </span>
-        </div>
-        <div className="flex flex-col gap-8 shrink-0">
-          <Button size="sm" onClick={onMakeDefault} disabled={isDefault}>
-            {isDefault ? t("card.default") : t("card.makeDefault")}
-          </Button>
-          <div className="flex items-center gap-4">
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<SettingsIcon size={14} />}
-              onClick={onEdit}
-              aria-label={t("card.settingsOf", { client: client.name })}
-              title={t("card.settingsHint")}
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<Trash2 size={14} />}
-              onClick={onDelete}
-              disabled={isRunning || installing}
+          {/* Four facts joined with a middle dot, the way the Servers subtitle
+              is: each is a finished message of its own, and the dot is
+              punctuation in the code rather than a word to translate. The id
+              of the client is not among them — it is a folder name, the player
+              never types it, and the client window says it where it matters. */}
+          <p className="flex items-center gap-6 flex-wrap text-body-sm text-fg-muted">
+            <Link
+              to={engineRoute(client.engineId)}
+              title={t("card.engineDetails", { engine: engineName })}
+              className="text-fg-secondary hover:text-fg-accent hover:underline"
             >
-              {t("card.delete")}
-            </Button>
-          </div>
+              {engineName}
+            </Link>
+            {installed ? (
+              <span className="text-mono-xs">{client.engineVersion}</span>
+            ) : (
+              <span className="text-fg-warm">{t("card.engineNotInstalled")}</span>
+            )}
+            <span aria-hidden="true">{DOT}</span>
+            <span>{t("card.created", { date: format.date(client.createdAt) })}</span>
+            {client.fsGame ? (
+              <>
+                <span aria-hidden="true">{DOT}</span>
+                <span className="text-mono-xs">
+                  {t("card.modFolder", { mod: client.fsGame })}
+                </span>
+              </>
+            ) : null}
+          </p>
         </div>
+        {isRunning ? (
+          <Button
+            size="lg"
+            variant="danger"
+            icon={<Square size={16} />}
+            className="shrink-0"
+            onClick={onStop}
+          >
+            {t("engine.stop")}
+          </Button>
+        ) : (
+          <Button
+            size="lg"
+            variant="primary"
+            icon={<Play size={16} />}
+            className="shrink-0"
+            onClick={onLaunch}
+            disabled={!installed || installing || otherIsRunning}
+            title={
+              otherIsRunning
+                ? t("engine.otherRunning")
+                : installed
+                  ? undefined
+                  : t("engine.installFirst")
+            }
+          >
+            {t("engine.launch")}
+          </Button>
+        )}
       </div>
 
       {legacyNote !== null ? (
@@ -429,22 +454,63 @@ function ClientCard({
         <p className="text-body-sm text-fg-danger break-words">{install.message}</p>
       ) : null}
 
-      {engine && !engine.installable ? (
-        <p className="text-body-sm text-fg-muted">
-          {engine.notInstallableReason ?? t("card.manualInstall")}
-        </p>
-      ) : (
-        <EngineControls
-          client={client}
-          installed={installed}
-          installing={installing}
-          isRunning={isRunning}
-          otherIsRunning={otherIsRunning}
-          onInstall={onInstall}
-          onLaunch={onLaunch}
-          onStop={onStop}
+      {/* One row of small buttons, in the order a player reaches for them:
+          what the build is doing, where its files are, what it is set to, and
+          the one that destroys it, last and on its own. */}
+      <div className="flex items-center gap-8 flex-wrap">
+        {engine && !engine.installable ? (
+          <p className="text-body-sm text-fg-muted">
+            {engine.notInstallableReason ?? t("card.manualInstall")}
+          </p>
+        ) : (
+          <EngineControls
+            client={client}
+            installed={installed}
+            installing={installing}
+            isRunning={isRunning}
+            onInstall={onInstall}
+          />
+        )}
+        <span className="flex-1" />
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<FolderOpen size={14} />}
+          // `revealItemInDir` and not `openPath`: the permission of the latter
+          // is scoped to `$APPLOCALDATA`, and `dataDirOverride` can put the
+          // client folder anywhere on the disk. The price is that the file
+          // manager opens `clients\` with the folder selected rather than
+          // inside it.
+          onClick={() => {
+            if (!isTauri() || clientDir.data === undefined) return;
+            void revealItemInDir(clientDir.data).catch(() => undefined);
+          }}
+          disabled={clientDir.data === undefined}
+          title={clientDir.data ?? undefined}
+        >
+          {t("card.openFolder")}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<SettingsIcon size={14} />}
+          onClick={onEdit}
+          aria-label={t("card.settingsOf", { client: client.name })}
+          title={t("card.settingsHint")}
         />
-      )}
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<Trash2 size={14} />}
+          onClick={onDelete}
+          disabled={isRunning || installing}
+        >
+          {t("card.delete")}
+        </Button>
+      </div>
+      {clientDir.error ? (
+        <p className="text-body-sm text-fg-danger">{errorText(clientDir.error)}</p>
+      ) : null}
     </li>
   );
 }
@@ -454,14 +520,15 @@ interface EngineControlsProps {
   installed: boolean;
   installing: boolean;
   isRunning: boolean;
-  otherIsRunning: boolean;
   onInstall: () => void;
-  onLaunch: () => void;
-  onStop: () => void;
 }
 
 /**
- * The row of buttons that turns an engine into a running game.
+ * What the card says about the engine build itself.
+ *
+ * **Launch** moved to the head of the card, where it is the one large button.
+ * What is left is the update check and the install, which are about the files
+ * under the client rather than about starting a game.
  *
  * The update check is a button, not a page load: it costs a request to GitHub,
  * and a player who opens the screen to rename a client has not asked for one.
@@ -473,10 +540,7 @@ function EngineControls({
   installed,
   installing,
   isRunning,
-  otherIsRunning,
   onInstall,
-  onLaunch,
-  onStop,
 }: EngineControlsProps) {
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
@@ -495,30 +559,7 @@ function EngineControls({
   const updateAvailable = update.data?.updateAvailable === true;
 
   return (
-    <div className="flex items-center gap-8 flex-wrap">
-      {isRunning ? (
-        <Button size="sm" variant="danger" icon={<Square size={14} />} onClick={onStop}>
-          {t("engine.stop")}
-        </Button>
-      ) : (
-        <Button
-          size="sm"
-          variant="primary"
-          icon={<Play size={14} />}
-          onClick={onLaunch}
-          disabled={!installed || installing || otherIsRunning}
-          title={
-            otherIsRunning
-              ? t("engine.otherRunning")
-              : installed
-                ? undefined
-                : t("engine.installFirst")
-          }
-        >
-          {t("engine.launch")}
-        </Button>
-      )}
-
+    <>
       {installed ? (
         <>
           <Button
@@ -572,6 +613,6 @@ function EngineControls({
           {t("card.installedOn", { date: format.date(client.engineInstalledAt) })}
         </span>
       ) : null}
-    </div>
+    </>
   );
 }

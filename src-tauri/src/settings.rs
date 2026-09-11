@@ -35,6 +35,42 @@ pub struct ActiveGameChanged {
     pub game: Game,
 }
 
+// --- slice: clients page ---
+/// Emitted when the default client of a game changed, and only then.
+///
+/// Two windows show the same fact: the **DEFAULT** badge on a card of the
+/// Clients screen, and the **Make default client** switch in the window of
+/// that client. Each window has its own React Query cache and neither refetches
+/// on focus, so without this the badge would keep saying what it said before
+/// the switch was pressed in the other window. `clients:changed` already does
+/// the same job for the record itself; the default lives in the settings
+/// document, which that event says nothing about.
+pub const DEFAULT_CLIENTS_EVENT: &str = "settings:default-clients";
+
+/// Payload of [`DEFAULT_CLIENTS_EVENT`]: the map as it now stands.
+///
+/// The whole map rather than the one game that moved: a listener invalidates
+/// the settings either way, and a payload that can answer «which client is the
+/// default one of Jedi Outcast» without a round trip costs two strings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultClientsChanged {
+    pub default_client_ids: BTreeMap<Game, String>,
+}
+
+/// Announces the default clients of the document as it landed on disk.
+///
+/// Called by [`update_settings`] and by `clients::delete_client`, which takes
+/// a deleted client off the position without going through a patch.
+pub fn emit_default_clients(app: &AppHandle, settings: &Settings) {
+    let payload = DefaultClientsChanged {
+        default_client_ids: settings.default_client_ids.clone(),
+    };
+    if let Err(e) = app.emit(DEFAULT_CLIENTS_EVENT, payload) {
+        log::warn!("cannot emit {DEFAULT_CLIENTS_EVENT}: {e}");
+    }
+}
+
 // --- slice: i18n ---
 /// The value of `language` that means «follow the operating system».
 pub const SYSTEM_LANGUAGE: &str = "system";
@@ -605,6 +641,13 @@ pub fn update_settings(
     patch.validate()?;
     let mut settings = Settings::current(&state)?;
     let was = settings.active_game;
+    // --- slice: clients page ---
+    // Both fields, because a Jedi Academy client is written into the map and
+    // into the 0.2 field at once, and a patch may carry either.
+    let was_defaults = (
+        settings.default_client_ids.clone(),
+        settings.default_client_id.clone(),
+    );
     patch.apply(&mut settings);
     settings.save(&state)?;
     state.set_settings(settings.clone())?;
@@ -621,6 +664,12 @@ pub fn update_settings(
         if let Err(e) = app.emit(ACTIVE_GAME_EVENT, payload) {
             log::warn!("cannot emit {ACTIVE_GAME_EVENT}: {e}");
         }
+    }
+    // --- slice: clients page ---
+    if (settings.default_client_ids.clone(), settings.default_client_id.clone())
+        != was_defaults
+    {
+        emit_default_clients(&app, &settings);
     }
     Ok(settings.redacted())
 }

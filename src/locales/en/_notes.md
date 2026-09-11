@@ -73,7 +73,9 @@ Everything else wraps.
 | `servers:columns.players` | Abbreviation of «players» — the column is 76 px. |
 | `servers:details.botBadge` | A badge on one player's row, at most four characters. |
 | `servers:empty.filteredBots` | `{{count}}` is the number of servers hidden by the bot switch. The sentence names the switch, which is `servers:filters.hideBotOnly` — use the same wording. |
-| `clients:card.meta` | `{{id}}` is a folder name, `{{date}}` is already formatted. Both are monospaced; keep the « · » between them. |
+| `clients:card.created`, `clients:card.modFolder` | Two of the parts of the second line of a client card, joined with « · » by the code. Each is a fragment, not a sentence: no capital at the start and no full stop at the end. `{{date}}` is already formatted for the language and `{{mod}}` is a folder name; `fs_game` is an identifier and stays. |
+| `clients:card.openFolder` | Shows the folder of the client in the file manager. The button is narrow: two words at most. |
+| `clients:clientWindow.client.default*`, `makeDefault`, `isDefault` | The row that decides which client the **Play** button of a game starts. Name the button the same way in both places it is mentioned, and keep «Play» as `home:hero.play` prints it in your language. `{{game}}` is Jedi Academy or Jedi Outcast and is never translated. |
 | `clients:enginePage.facts.*` | Sentences read from each project’s own README. Project names, cvar names (`s_initsound`), file names (`jamp.exe`) and mod folder names (`base`, `ja+`, `mme`) are identifiers and stay as they are; the words around them are yours. |
 | `clients:enginePage.factsExecutable`, `factsModFolder` | `{{file}}` is the name of an executable and `{{folder}}` the name of a folder on disk. Neither is translated. |
 | `clients:enginePage.versionsText` | Says where a build is installed from, which is a client and not this page. Do not promise a button the page does not have. |

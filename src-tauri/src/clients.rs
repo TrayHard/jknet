@@ -341,9 +341,31 @@ pub fn delete_client(
             settings.default_client_id.clone()
         };
         settings.save(&state)?;
-        state.set_settings(settings)?;
+        state.set_settings(settings.clone())?;
+        // --- slice: clients page ---
+        // The Play button of the Home screen and the badge on a card both read
+        // this, and neither went through `update_settings` to learn about it.
+        crate::settings::emit_default_clients(&app, &settings);
     }
     Ok(())
+}
+
+// --- slice: clients page ---
+/// Returns the folder of one client: `clients\<slug>\`.
+///
+/// The **Open folder** button of a card is the only caller, and it hands the
+/// answer to the `opener` plugin. Built here rather than on the frontend out of
+/// `dataRoot` because `dataDirOverride` moves that root and the slug is a
+/// detail of this module: a path assembled on the screen would be a second
+/// copy of a layout only `paths.rs` is allowed to know.
+///
+/// The record is read first, so an id that names nothing is a refusal rather
+/// than a path to a folder that is not there.
+#[tauri::command]
+pub fn client_dir(state: tauri::State<'_, AppState>, client_id: String) -> Result<String> {
+    let paths = state.paths()?;
+    let client = read_record(&paths, &client_id)?;
+    Ok(paths.client_dir(&client.id).display().to_string())
 }
 
 // --- slice: game core ---
