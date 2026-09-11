@@ -33,6 +33,7 @@
     "emptyTitle": "Brak serwerów w pamięci podręcznej",
     "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",
     "openServers": "Otwórz Serwery",
-    "seeAll": "Zobacz wszystkie"
+    "seeAll": "Zobacz wszystkie",
+    "connect": "Connect"
   }
 }

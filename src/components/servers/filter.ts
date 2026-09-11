@@ -16,12 +16,30 @@ export type { PlayersFilter, StoredServerFilters };
 
 // --- slice: servers browser ---
 /**
- * The tabs of the browser, which are also the scopes the core scans under.
+ * The tabs of the browser.
  *
- * One name for both on purpose: every tab has its own scan and its own loader,
- * and a tab the core has never heard of would have no way to fill itself.
+ * Four of them are the scopes the core scans under, and they carry the scope's
+ * own name: every one of those has its own scan, its own loader and its own
+ * «refreshed N s ago» line.
+ *
+ * --- slice: server actions ---
+ * **Hidden** is the fifth and asks nothing of the network. It is a view of the
+ * same cached list the other tabs read, narrowed to the rows the player took
+ * off the browser, so the core has never heard of it and does not need to.
  */
-export type ServerTab = ServerScope;
+export type ServerTab = ServerScope | "hidden";
+
+// --- slice: server actions ---
+/**
+ * The scan behind a tab, or `null` for the tab that has none.
+ *
+ * Everything keyed by scope — the loader, the error bar, the refresh button —
+ * goes through this rather than through the tab, so the one tab without a scan
+ * cannot be handed a scope it does not have.
+ */
+export function scopeOfTab(tab: ServerTab): ServerScope | null {
+  return tab === "hidden" ? null : tab;
+}
 
 /**
  * The filter row on screen: what the settings keep, plus the search box.
@@ -206,24 +224,46 @@ export function applyFilters(
  * The LAN tab narrows nothing: its rows come from a broadcast sweep and live in
  * a list of their own, so the caller hands that list in and every row of it
  * belongs on the tab.
+ *
+ * --- slice: server actions ---
+ * A hidden row is on exactly one tab, **Hidden**, and on no other. That is the
+ * whole of what hiding does: the core keeps scanning the address and keeps the
+ * row in the cache, because it is the row the player puts back. Filtering here
+ * rather than on each tab in turn is what also keeps hidden servers out of the
+ * counts beside the tab names and out of the subtitle, both of which count the
+ * rows this function returns.
  */
 export function applyTab(
   servers: ServerInfo[],
   tab: ServerTab,
   historyAddresses: string[],
 ): ServerInfo[] {
+  if (tab === "hidden") return servers.filter((server) => server.hidden);
+  const shown = servers.filter((server) => !server.hidden);
   switch (tab) {
     case "favorites":
-      return servers.filter((server) => server.favorite);
+      return shown.filter((server) => server.favorite);
     case "history": {
-      const byAddress = new Map(servers.map((row) => [row.address, row]));
+      const byAddress = new Map(shown.map((row) => [row.address, row]));
       return historyAddresses
         .map((address) => byAddress.get(address))
         .filter((row): row is ServerInfo => row !== undefined);
     }
     default:
-      return servers;
+      return shown;
   }
+}
+
+// --- slice: server actions ---
+/**
+ * The rows of a list the player has not taken off the browser.
+ *
+ * The rule of `applyTab` where there is no tab: the Home screen builds its
+ * three blocks straight off the cached list, and a server hidden on the Servers
+ * screen has to be gone from those as well.
+ */
+export function visibleServers(servers: ServerInfo[]): ServerInfo[] {
+  return servers.filter((server) => !server.hidden);
 }
 
 export type SortColumn = "name" | "map" | "mode" | "players" | "ping" | "mod";

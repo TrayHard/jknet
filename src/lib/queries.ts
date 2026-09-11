@@ -801,8 +801,14 @@ export interface ServerRefresh {
   scopes: Record<ServerScope, ScopeRefresh>;
 }
 
-/** A tab nothing has scanned yet. */
-const IDLE_SCOPE: ScopeRefresh = {
+/**
+ * A tab nothing has scanned yet.
+ *
+ * --- slice: server actions ---
+ * Exported because the **Hidden** tab has no scan at all and never will: it is
+ * a view of the cached list, so this is its indicator for good.
+ */
+export const IDLE_SCOPE: ScopeRefresh = {
   running: false,
   error: null,
   progress: null,

@@ -33,6 +33,7 @@
     "emptyTitle": "No servers in the cache yet",
     "emptyText": "Open the Servers screen once and the busiest ones show up here.",
     "openServers": "Open Servers",
-    "seeAll": "See all"
+    "seeAll": "See all",
+    "connect": "Connect"
   }
 }

@@ -36,7 +36,9 @@
     "favorites": "Favorites",
     "history": "History",
     "lan": "LAN",
-    "lanHint": "Servers on your own network, found by broadcast"
+    "lanHint": "Servers on your own network, found by broadcast",
+    "hidden": "Hidden",
+    "hiddenHint": "Servers you took off the browser"
   },
   "columns": {
     "server": "SERVER",
@@ -76,6 +78,8 @@
     "favoritesText": "Press the star on a row to keep a server here.",
     "historyTitle": "No connections yet",
     "historyText": "Servers you connect to show up here, newest first.",
+    "hiddenTitle": "Nothing is hidden",
+    "hiddenText": "Hide a server from the menu beside Connect and it waits here until you bring it back.",
     "noneTitle": "No servers yet",
     "noneText": "Press Get new list to ask the master servers who is online.",
     "filteredTitle": "Nothing matches the filters",
@@ -100,6 +104,11 @@
     "playersClosed": "This server does not publish its player list.",
     "playersRemembered": "PLAYER LIST FROM {{age}} AGO",
     "playersRememberedUnknown": "LAST KNOWN PLAYER LIST"
+  },
+  "menu": {
+    "actions": "Server actions",
+    "hide": "Hide",
+    "unhide": "Unhide"
   },
   "ping": {
     "noAnswer": "No answer",

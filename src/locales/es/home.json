@@ -33,6 +33,7 @@
     "emptyTitle": "Todavía no hay servidores en la caché",
     "emptyText": "Abra la pantalla Servidores una vez y los más concurridos aparecerán aquí.",
     "openServers": "Abrir Servidores",
-    "seeAll": "Ver todo"
+    "seeAll": "Ver todo",
+    "connect": "Connect"
   }
 }

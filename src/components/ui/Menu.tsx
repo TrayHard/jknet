@@ -26,8 +26,14 @@ export interface MenuItem {
   danger?: boolean;
 }
 
-/** `sm` is a 24 px trigger, `md` is 28 px. */
-export type MenuSize = "sm" | "md";
+/** The square trigger, at the three heights of `Button`: 28, 36 and 44 px. */
+export type MenuSize = "sm" | "md" | "lg";
+
+const SIZES: Record<MenuSize, string> = {
+  sm: "size-28 rounded-sm",
+  md: "size-36 rounded-md",
+  lg: "size-44 rounded-md",
+};
 
 interface MenuProps {
   items: MenuItem[];
@@ -287,13 +293,13 @@ export function Menu({
         }}
         onKeyDown={onTriggerKeyDown}
         className={cn(
-          "inline-flex items-center justify-center shrink-0 rounded-md",
+          "inline-flex items-center justify-center shrink-0",
           "border transition-colors duration-150 cursor-pointer",
           "disabled:cursor-not-allowed disabled:text-fg-disabled",
           open
             ? "border-line-focus bg-surface-hover text-fg"
             : "border-line bg-surface text-fg-secondary hover:bg-surface-hover hover:text-fg",
-          size === "sm" ? "size-24" : "size-28",
+          SIZES[size],
           className,
         )}
       >

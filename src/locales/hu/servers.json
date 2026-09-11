@@ -36,7 +36,9 @@
     "favorites": "Kedvencek",
     "history": "Előzmények",
     "lan": "LAN",
-    "lanHint": "Servers on your own network, found by broadcast"
+    "lanHint": "Servers on your own network, found by broadcast",
+    "hidden": "Hidden",
+    "hiddenHint": "Servers you took off the browser"
   },
   "columns": {
     "server": "SZERVER",
@@ -76,6 +78,8 @@
     "favoritesText": "Nyomja meg a csillagot a soron, és a szerver itt marad.",
     "historyTitle": "Még nincs csatlakozás",
     "historyText": "Amelyik szerverre csatlakozik, itt jelenik meg, a legfrissebb elöl.",
+    "hiddenTitle": "Nothing is hidden",
+    "hiddenText": "Hide a server from the menu beside Connect and it waits here until you bring it back.",
     "noneTitle": "Még nincs szerver",
     "noneText": "Press Get new list to ask the master servers who is online.",
     "filteredTitle": "Nincs a szűrőknek megfelelő szerver",
@@ -100,6 +104,11 @@
     "onlyBots_other": "Senki sem játszik: {{count}} bot van csak itt.",
     "botHeading_one": "{{count}} BOT",
     "botHeading_other": "{{count}} BOT"
+  },
+  "menu": {
+    "actions": "Server actions",
+    "hide": "Hide",
+    "unhide": "Unhide"
   },
   "ping": {
     "noAnswer": "Nincs válasz",
