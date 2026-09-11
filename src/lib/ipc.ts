@@ -1309,9 +1309,10 @@ export interface JkhubSearchResult {
 export interface JkhubIndexStatus {
   game: Game;
   /**
-   * True when there is something to search: a crawl of this machine, or the
-   * copy the build shipped. False only when both are missing, which is the one
-   * state the tab blocks browsing for.
+   * True when there is something to list and to search: a crawl of this
+   * machine or the copy the build shipped, holding at least one file. The rule
+   * is `index::browsable` in the core. False is the one state the tab switches
+   * its search box off for, and puts the waiting panel where the grid goes.
    */
   available: boolean;
   builtAt: string;

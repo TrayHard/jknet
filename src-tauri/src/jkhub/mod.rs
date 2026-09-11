@@ -673,10 +673,10 @@ pub struct JkhubSearchResult {
 #[serde(rename_all = "camelCase")]
 pub struct JkhubIndexStatus {
     pub game: Game,
-    /// True when there is something to search: an index crawled on this
-    /// machine, or the copy the build shipped. False only when both are
-    /// missing — which is the one state the tab cannot browse in, and the one
-    /// it blocks itself for.
+    /// True when there is something to list and to search: an index crawled on
+    /// this machine or the copy the build shipped, holding at least one file.
+    /// The rule is [`index::browsable`]. False is the one state the tab cannot
+    /// browse in, and the one it switches its search box off for.
     pub available: bool,
     pub built_at: String,
     pub updated_at: String,
@@ -769,21 +769,24 @@ pub async fn jkhub_index_status(
     let loaded = jkhub.index(&data, snapshots.as_ref(), game);
 
     let status = match &loaded {
-        Some(loaded) => JkhubIndexStatus {
-            game,
-            available: true,
-            built_at: loaded.index.built_at.clone(),
-            updated_at: loaded.index.updated_at.clone(),
-            age: loaded.index.age(timestamp::now_unix()),
-            files: loaded.index.files.len() as u32,
-            source: loaded.source,
-            stale: is_stale(loaded),
-            building: jkhub.catalogues.running(game),
-            progress: jkhub.progress_of(game),
-        },
+        Some(loaded) => {
+            let files = loaded.index.files.len() as u32;
+            JkhubIndexStatus {
+                game,
+                available: index::browsable(loaded.source, files),
+                built_at: loaded.index.built_at.clone(),
+                updated_at: loaded.index.updated_at.clone(),
+                age: loaded.index.age(timestamp::now_unix()),
+                files,
+                source: loaded.source,
+                stale: is_stale(loaded),
+                building: jkhub.catalogues.running(game),
+                progress: jkhub.progress_of(game),
+            }
+        }
         None => JkhubIndexStatus {
             game,
-            available: false,
+            available: index::browsable(IndexSource::Missing, 0),
             built_at: String::new(),
             updated_at: String::new(),
             age: 0,

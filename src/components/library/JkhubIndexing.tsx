@@ -24,9 +24,13 @@ interface JkhubIndexingProps {
  * The tab lists and searches from a local copy of the catalogue, so with
  * neither a crawl of this machine nor the copy inside the build there is
  * nothing to draw — the grid used to sit empty while a crawl ran behind it,
- * which read as a broken screen rather than as a wait. This panel replaces the
- * tree and the grid outright: one thing happening, one thing to look at, and
- * one button to stop it.
+ * which read as a broken screen rather than as a wait. This panel stands where
+ * the grid would be: one thing happening, one thing to look at, and one button
+ * to stop it.
+ *
+ * The bar above it stays, with its search box switched off. What is missing is
+ * the catalogue, not the tab, and a box that accepted words it could not answer
+ * would be the broken screen all over again.
  *
  * It is a safety net rather than the normal path. Every build ships a snapshot
  * of both catalogues and the launcher warms the index a few seconds after it
