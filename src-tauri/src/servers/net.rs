@@ -85,11 +85,25 @@ pub async fn resolve_master(master: &str) -> Result<SocketAddrV4> {
         .ok_or_else(|| AppError::Network(format!("{master} has no IPv4 address")))
 }
 
+// --- slice: servers robustness ---
+/// One answered `getservers`.
+pub struct MasterReply {
+    /// Every address the datagrams carried, in the order they arrived.
+    pub addresses: Vec<SocketAddrV4>,
+    /// True when the `\EOT` marker closed the list.
+    ///
+    /// False means the budget ran out first, so the list is whatever arrived
+    /// before it did — a truncated answer that looks exactly like a short one.
+    /// The caller asks again rather than treating it as the whole world.
+    pub complete: bool,
+}
+
 /// Asks one master server for its address list.
 ///
 /// The reply arrives as one or more datagrams, the last of them carrying the
 /// `\EOT` marker. The function stops on that marker or when `budget` expires,
-/// whichever comes first, and returns everything it managed to read.
+/// whichever comes first, and returns everything it managed to read along with
+/// which of the two ended it.
 ///
 /// A master that sends nothing at all is an error, not an empty list. The
 /// distinction matters: `masterjk3.ravensoft.com` still resolves but has been
@@ -99,7 +113,7 @@ pub async fn query_master(
     master: &str,
     protocol: u16,
     budget: Duration,
-) -> Result<Vec<SocketAddrV4>> {
+) -> Result<MasterReply> {
     let peer = resolve_master(master).await?;
     let socket = connected_socket(peer).await?;
     let request = oob_packet(&format!("getservers {protocol}"));
@@ -112,6 +126,7 @@ pub async fn query_master(
     let mut buffer = vec![0u8; MAX_DATAGRAM];
     let mut found = Vec::new();
     let mut datagrams = 0usize;
+    let mut complete = false;
 
     while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
         let read = match timeout(remaining, socket.recv(&mut buffer)).await {
@@ -124,6 +139,7 @@ pub async fn query_master(
         datagrams += 1;
         found.extend(protocol::parse_master_response(datagram));
         if protocol::is_master_end(datagram) {
+            complete = true;
             break;
         }
     }
@@ -131,7 +147,10 @@ pub async fn query_master(
     if datagrams == 0 {
         return Err(AppError::Network(format!("{master} did not answer")));
     }
-    Ok(found)
+    Ok(MasterReply {
+        addresses: found,
+        complete,
+    })
 }
 
 /// One answered `getinfo`.
