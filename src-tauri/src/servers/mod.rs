@@ -32,8 +32,9 @@
 //! side by side, the writes do not.
 //!
 //! Everything the launcher calls a player count is a count of people. Bots are
-//! carried alongside in [`ServerInfo::bots`] and shown as a suffix, never
-//! added in. [`PlayersSource`] says how sure a given row is.
+//! carried alongside in [`ServerInfo::bots`] and counted apart, never added in:
+//! the row keeps them in its tooltip and the details panel spells them out.
+//! [`PlayersSource`] says how sure a given row is.
 //!
 //! Results do not wait for the slowest server: they are pushed to the window
 //! in batches through the `servers:batch` event while the refresh runs, and
@@ -560,7 +561,7 @@ impl ServerInfo {
     ///
     /// Falls back to `clients` while the split is unknown: on a server that
     /// answers neither question, "someone is playing" is still truer than a
-    /// zero, and the row shows the number without a bot suffix.
+    /// zero, and the row shows the number with a `?` beside it.
     pub fn real_players(&self) -> u16 {
         self.humans.unwrap_or(self.clients)
     }
