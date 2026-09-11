@@ -281,7 +281,6 @@ pub fn run() {
             servers::get_cached_servers,
             servers::refresh_servers,
             servers::get_server_status,
-            servers::list_trusted_servers,
             servers::set_server_favorite,
             servers::add_server_history,
             // --- slice: maps ---

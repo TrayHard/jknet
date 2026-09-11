@@ -33,7 +33,6 @@
   },
   "tabs": {
     "all": "All",
-    "trusted": "Trusted",
     "favorites": "Favorites",
     "history": "History",
     "lan": "LAN",
@@ -50,7 +49,6 @@
   "row": {
     "addFavorite": "Add to favorites",
     "removeFavorite": "Remove from favorites",
-    "trusted": "Trusted",
     "passwordRequired": "Password required",
     "countsTitle": "{{humans}} players, {{bots}} bots, {{slots}} slots",
     "countsUnknownTitle": "{{clients}} clients; this server does not say how many are bots"
@@ -73,8 +71,6 @@
     "favoritesText": "Press the star on a row to keep a server here.",
     "historyTitle": "No connections yet",
     "historyText": "Servers you connect to show up here, newest first.",
-    "trustedTitle": "No trusted servers in this list",
-    "trustedText": "The bundled list of vouched-for community servers is empty in this build.",
     "noneTitle": "No servers yet",
     "noneText": "Press Refresh to ask the master servers who is online.",
     "filteredTitle": "Nothing matches the filters",
@@ -83,7 +79,6 @@
     "filteredBots_other": "Widen the filters, or clear the search box. {{count}} servers have bots and nobody else; turn off Hide bot-only to see them."
   },
   "details": {
-    "trusted": "TRUSTED",
     "password": "PASSWORD",
     "copyAddress": "Copy address",
     "bots_one": "+{{count}} bot",

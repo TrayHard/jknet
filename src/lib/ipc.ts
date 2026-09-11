@@ -640,20 +640,10 @@ export interface ServerInfo {
   /** 26 is Jedi Academy 1.01; 15 and 16 are Jedi Outcast 1.02/1.03 and 1.04. */
   protocol: number;
   pingMs: number;
-  /** Listed in the bundled `trusted_servers.json`. */
-  trusted: boolean;
   /** Starred by the player. */
   favorite: boolean;
   /** RFC 3339 in UTC. */
   lastSeen: string;
-}
-
-/** `src-tauri/src/servers/mod.rs`: a vouched-for community server. */
-export interface TrustedServer {
-  address: string;
-  name: string;
-  community: string;
-  url: string;
 }
 
 /** One player of a `getstatus` answer. */
@@ -714,7 +704,6 @@ export const serversIpc = {
     }),
   getServerStatus: (address: string, game?: Game) =>
     call<ServerStatus>("get_server_status", { address, game: game ?? null }),
-  listTrustedServers: () => call<TrustedServer[]>("list_trusted_servers"),
   setServerFavorite: (address: string, favorite: boolean, game?: Game) =>
     call<Settings>("set_server_favorite", { address, favorite, game: game ?? null }),
   addServerHistory: (address: string, game?: Game) =>

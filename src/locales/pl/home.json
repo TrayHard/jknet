@@ -23,7 +23,6 @@
     "locate": "Wskaż pliki"
   },
   "topServers": {
-    "trusted": "Zaufane serwery",
     "busiest": "Najbardziej oblegane serwery",
     "emptyTitle": "Brak serwerów w pamięci podręcznej",
     "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",

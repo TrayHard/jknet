@@ -23,7 +23,6 @@
     "locate": "Mappa megadása"
   },
   "topServers": {
-    "trusted": "Megbízható szerverek",
     "busiest": "Legnépesebb szerverek",
     "emptyTitle": "Még nincs szerver a gyorsítótárban",
     "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",

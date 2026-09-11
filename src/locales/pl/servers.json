@@ -43,7 +43,6 @@
   },
   "tabs": {
     "all": "Wszystkie",
-    "trusted": "Zaufane",
     "favorites": "Ulubione",
     "history": "Historia",
     "lan": "LAN",
@@ -60,7 +59,6 @@
   "row": {
     "addFavorite": "Dodaj do ulubionych",
     "removeFavorite": "Usuń z ulubionych",
-    "trusted": "Zaufany",
     "passwordRequired": "Wymagane hasło",
     "countsTitle": "Graczy: {{humans}}, botów: {{bots}}, miejsc: {{slots}}",
     "countsUnknownTitle": "Klientów: {{clients}}; ten serwer nie podaje, ilu z nich to boty"
@@ -83,8 +81,6 @@
     "favoritesText": "Naciśnij gwiazdkę w wierszu, aby zatrzymać tu serwer.",
     "historyTitle": "Brak połączeń",
     "historyText": "Odwiedzone serwery pojawiają się tutaj, od najnowszych.",
-    "trustedTitle": "Brak zaufanych serwerów na tej liście",
-    "trustedText": "Wbudowana lista polecanych serwerów społeczności jest w tej wersji pusta.",
     "noneTitle": "Brak serwerów",
     "noneText": "Naciśnij Odśwież, aby zapytać serwery główne, kto jest w sieci.",
     "filteredTitle": "Nic nie pasuje do filtrów",
@@ -95,7 +91,6 @@
     "filteredBots_other": "Poszerz filtry albo wyczyść pole wyszukiwania. Na {{count}} serwerach grają same boty; wyłącz Ukryj botowe, aby je zobaczyć."
   },
   "details": {
-    "trusted": "ZAUFANY",
     "password": "HASŁO",
     "copyAddress": "Kopiuj adres",
     "bots_one": "+{{count}} bot",

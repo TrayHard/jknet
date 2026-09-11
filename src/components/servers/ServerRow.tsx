@@ -1,4 +1,4 @@
-import { Lock, ShieldCheck, Star } from "lucide-react";
+import { Lock, Star } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
@@ -104,9 +104,6 @@ export function ServerRow({
       />
 
       <span className="flex items-center gap-4 text-fg-muted">
-        {server.trusted ? (
-          <ShieldCheck size={14} className="text-fg-warm" aria-label={t("row.trusted")} />
-        ) : null}
         {server.needpass ? (
           <Lock size={14} aria-label={t("row.passwordRequired")} />
         ) : null}
