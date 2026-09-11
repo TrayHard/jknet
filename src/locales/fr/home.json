@@ -23,7 +23,6 @@
     "locate": "Localiser les fichiers"
   },
   "topServers": {
-    "trusted": "Serveurs de confiance",
     "busiest": "Serveurs les plus remplis",
     "emptyTitle": "Aucun serveur dans le cache",
     "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",

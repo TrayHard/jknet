@@ -172,7 +172,7 @@ export function ServersPage() {
   // mod folder and a gametype number mean different things in the two games —
   // number 7 is Siege in Jedi Academy and CTF in Jedi Outcast — so carrying
   // them over would hide rows for a reason nothing on screen explains. The
-  // tabs stay: All, Trusted, Favorites and History mean the same in both.
+  // tabs stay: All, Favorites and History mean the same in both.
   useEffect(() => {
     setSelectedAddress(null);
     setFilters(DEFAULT_FILTERS);
@@ -696,11 +696,6 @@ function buildTabs(
   return [
     { id: "all", label: t("tabs.all"), count: servers.length },
     {
-      id: "trusted",
-      label: t("tabs.trusted"),
-      count: servers.filter((server) => server.trusted).length,
-    },
-    {
       id: "favorites",
       label: t("tabs.favorites"),
       count: servers.filter((server) => server.favorite).length,
@@ -782,7 +777,6 @@ function emptyTitle(t: ServersT, tab: ServerTab, total: number): string {
   if (tab === "lan") return t("empty.lanTitle");
   if (tab === "favorites") return t("empty.favoritesTitle");
   if (tab === "history") return t("empty.historyTitle");
-  if (tab === "trusted") return t("empty.trustedTitle");
   return total === 0 ? t("empty.noneTitle") : t("empty.filteredTitle");
 }
 
@@ -799,8 +793,6 @@ function emptyText(
       return t("empty.favoritesText");
     case "history":
       return t("empty.historyText");
-    case "trusted":
-      return t("empty.trustedText");
     default:
       if (total === 0) return t("empty.noneText");
       // A player who filtered everything away deserves to know that the bot

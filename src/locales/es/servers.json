@@ -38,7 +38,6 @@
   },
   "tabs": {
     "all": "Todos",
-    "trusted": "De confianza",
     "favorites": "Favoritos",
     "history": "Historial",
     "lan": "LAN",
@@ -55,7 +54,6 @@
   "row": {
     "addFavorite": "Agregar a favoritos",
     "removeFavorite": "Quitar de favoritos",
-    "trusted": "De confianza",
     "passwordRequired": "Requiere contraseña",
     "countsTitle": "{{humans}} jugadores, {{bots}} bots, {{slots}} plazas",
     "countsUnknownTitle": "{{clients}} clientes; este servidor no dice cuántos son bots"
@@ -78,8 +76,6 @@
     "favoritesText": "Haga clic en la estrella de una fila para guardar aquí un servidor.",
     "historyTitle": "Aún no hay conexiones",
     "historyText": "Los servidores a los que se conecte aparecen aquí, los más recientes primero.",
-    "trustedTitle": "No hay servidores de confianza en esta lista",
-    "trustedText": "La lista incluida de servidores avalados por la comunidad está vacía en esta compilación.",
     "noneTitle": "Aún no hay servidores",
     "noneText": "Haga clic en Actualizar para preguntar a los servidores maestros quién está en línea.",
     "filteredTitle": "Nada coincide con los filtros",
@@ -89,7 +85,6 @@
     "filteredBots_other": "Amplíe los filtros o vacíe el cuadro de búsqueda. {{count}} servidores tienen bots y nadie más; desactive Ocultar solo bots para verlos."
   },
   "details": {
-    "trusted": "DE CONFIANZA",
     "password": "CONTRASEÑA",
     "copyAddress": "Copiar dirección",
     "bots_one": "+{{count}} bot",

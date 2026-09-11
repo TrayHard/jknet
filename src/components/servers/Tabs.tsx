@@ -18,7 +18,7 @@ interface TabsProps<Id extends string> {
   className?: string;
 }
 
-/** The tab strip over the server table: All, Trusted, Favorites, History. */
+/** The tab strip over the server table: All, Favorites, History. */
 export function Tabs<Id extends string>({
   tabs,
   value,
