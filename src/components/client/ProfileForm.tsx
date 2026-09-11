@@ -253,7 +253,11 @@ function HiltSelect({
     // value of `saberType` is what the file says and what a mod author reads.
     return hilt.saberType;
   };
+  // «Not set» is an option and not only the placeholder: a list whose empty
+  // state is unreachable would let a player pick a hilt and never take it
+  // back, and the profile would go on writing a cvar they no longer want.
   const options: SelectOption[] = [
+    { value: "", label: t("clientWindow.notSet") },
     ...extra,
     ...hilts.map((hilt) => ({
       value: hilt.id,
@@ -305,13 +309,13 @@ function ColorSelect({
   onChange: (value: number | null) => void;
 }) {
   const { t } = useTranslation("clients");
-  const options: SelectOption[] = SABER_COLOR_KEYS.slice(
-    0,
-    SABER_COLORS.length,
-  ).map((key, index) => ({
-    value: String(index),
-    label: t(key),
-  }));
+  const options: SelectOption[] = [
+    { value: "", label: t("clientWindow.notSet") },
+    ...SABER_COLOR_KEYS.slice(0, SABER_COLORS.length).map((key, index) => ({
+      value: String(index),
+      label: t(key),
+    })),
+  ];
 
   return (
     <Select

@@ -84,6 +84,9 @@ export function NicknameField({
         />
       </div>
 
+      {/* A menu of names to copy into the field, not a bound control: the
+          value stays empty so the list always reads «Saved nicknames» and the
+          field above is the one place the nickname lives. */}
       {saved.length > 0 ? (
         <Select
           value=""
