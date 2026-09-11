@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowLeft, ExternalLink, Plus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ExternalLink, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router";
@@ -36,10 +36,18 @@ export function EnginePage() {
   const engines = useEngines();
   const engine = engines.data?.find((entry) => entry.id === id);
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Review finding (Medium): a refusal the player can read. The dialog closes
+  // itself on a failure, so without this bar a client that was never made
+  // looks exactly like one that was.
+  const [failure, setFailure] = useState<string | null>(null);
 
   // Another engine under the same component: the dialog was opened about the
   // build the player was reading, and that is no longer the build on screen.
-  useEffect(() => setDialogOpen(false), [id]);
+  // The message it left goes with it — it was about the other engine.
+  useEffect(() => {
+    setDialogOpen(false);
+    setFailure(null);
+  }, [id]);
 
   if (engines.isLoading) return <Page>{null}</Page>;
 
@@ -55,11 +63,30 @@ export function EnginePage() {
         </Link>
       </p>
 
+      {/* The same bar, in the same words, as the one the Clients screen puts
+          over its list: a failed **New client** is reported where the player
+          pressed the button, whichever of the two screens that was. */}
+      {failure !== null ? (
+        <div
+          role="alert"
+          className="flex items-start gap-8 rounded-md border border-line-danger bg-danger-subtle p-12 mb-16"
+        >
+          <AlertTriangle size={16} className="text-fg-danger shrink-0 mt-2" />
+          <span className="text-body-sm text-fg">{failure}</span>
+        </div>
+      ) : null}
+
       {engine === undefined ? (
         <p className="text-body-md text-fg-secondary">{t("enginePage.notFound")}</p>
       ) : (
         <>
-          <EngineHead engine={engine} onNewClient={() => setDialogOpen(true)} />
+          <EngineHead
+            engine={engine}
+            onNewClient={() => {
+              setFailure(null);
+              setDialogOpen(true);
+            }}
+          />
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-16 pt-24">
             <Facts engine={engine} />
             <div className="flex flex-col gap-16">
@@ -76,8 +103,8 @@ export function EnginePage() {
           engineId={engine.id}
           onClose={() => setDialogOpen(false)}
           // The dialog closes itself on a failure and the card it would have
-          // made is not here to carry the message, so it goes to the console.
-          onError={(message) => console.warn(message)}
+          // made is not here to carry the message, so the page carries it.
+          onError={(message) => setFailure(message)}
         />
       ) : null}
     </Page>
