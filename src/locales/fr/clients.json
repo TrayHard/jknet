@@ -17,7 +17,7 @@
     "created": "created {{date}}",
     "modFolder": "fs_game {{mod}}",
     "engineDetails": "About {{engine}}",
-    "openFolder": "Open folder",
+    "openFolder": "Ouvrir le dossier",
     "delete": "Supprimer",
     "settingsOf": "Paramètres de {{client}}",
     "settingsHint": "Nom et dossier du mod",
