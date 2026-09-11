@@ -18,6 +18,7 @@ import { Link, useSearchParams } from "react-router";
 // --- slice: client window ---
 import { InstallProgressBar } from "../components/client/InstallProgressBar";
 // --- slice: clients page ---
+import { DeleteClientDialog } from "../components/DeleteClientDialog";
 import { EngineLogo } from "../components/EngineLogo";
 import { GameFilesNotice } from "../components/GameFilesNotice";
 import { useGameEventsContext } from "../components/GameEventsProvider";
@@ -113,6 +114,12 @@ export function ClientsPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // --- slice: clients page ---
+  // The client **Delete** was pressed about, until the question is answered.
+  // Held here rather than on the card so that the folder the dialog names
+  // comes out of the same cached query the card's **Open folder** uses.
+  const [pendingDelete, setPendingDelete] = useState<Client | null>(null);
+  const pendingDir = useClientDir(pendingDelete?.id ?? null);
   // Review finding (Low): the game the toast came about, when it named one.
   // Kept in state because the effect below drops the parameter it arrived in.
   const [newClientGame, setNewClientGame] = useState<Game | undefined>(undefined);
@@ -206,11 +213,10 @@ export function ClientsPage() {
                     setError(errorText(e)),
                   );
                 }}
-                onDelete={() =>
-                  deleteClient.mutate(client.id, {
-                    onError: (e) => setError(errorText(e)),
-                  })
-                }
+                onDelete={() => {
+                  setError(null);
+                  setPendingDelete(client);
+                }}
                 onInstall={() => {
                   setError(null);
                   clearInstall(client.id);
@@ -272,6 +278,29 @@ export function ClientsPage() {
         />
       ) : null}
 
+      {/* --- slice: clients page --- */}
+      {pendingDelete !== null ? (
+        <DeleteClientDialog
+          client={pendingDelete}
+          engineName={
+            pendingDelete.engineVersion === null
+              ? null
+              : (engines.find((engine) => engine.id === pendingDelete.engineId)
+                  ?.name ?? pendingDelete.engineId)
+          }
+          folder={pendingDir.data ?? null}
+          busy={deleteClient.isPending}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() =>
+            deleteClient.mutate(pendingDelete.id, {
+              onError: (e) => setError(errorText(e)),
+              // Closed either way: the card is gone on success, and on a
+              // failure the bar at the top of the screen carries the reason.
+              onSettled: () => setPendingDelete(null),
+            })
+          }
+        />
+      ) : null}
     </Page>
   );
 }

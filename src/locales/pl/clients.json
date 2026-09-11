@@ -25,6 +25,12 @@
     "installedOn": "zainstalowano {{date}}",
     "manualInstall": "Tę kompilację trzeba zainstalować ręcznie."
   },
+  "removeDialog": {
+    "title": "Delete {{client}}?",
+    "body": "The whole folder of this client goes with it: the engine, the pk3 files installed into it and the settings of the game. Nothing is moved to the recycle bin, and this cannot be undone.",
+    "engine": "The {{engine}} build inside it is deleted too and would have to be downloaded again.",
+    "confirm": "Delete client"
+  },
   "engine": {
     "launch": "Uruchom",
     "stop": "Zatrzymaj",
