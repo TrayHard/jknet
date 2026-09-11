@@ -330,40 +330,53 @@ pub struct StatusReply {
 /// The reply is `statusResponse\n<infostring>\n<player lines>`, so the body is
 /// split on the first newline. Servers with many players answer in one large
 /// datagram; there is no continuation packet to collect.
-pub async fn query_status(address: SocketAddrV4, budget: Duration) -> Result<StatusReply> {
+///
+/// --- slice: servers robustness ---
+/// `attempts` counts the requests, not the retries, the way [`query_info`]
+/// counts them: `2` means one retry. A lost datagram is the ordinary failure
+/// of a single UDP exchange, and one more request costs one more budget.
+pub async fn query_status(
+    address: SocketAddrV4,
+    per_attempt: Duration,
+    attempts: u32,
+) -> Result<StatusReply> {
     let socket = connected_socket(address).await?;
-    let challenge = next_challenge();
-    socket
-        .send(&oob_packet(&format!("getstatus {challenge}")))
-        .await
-        .map_err(|e| AppError::Network(format!("cannot query {address}: {e}")))?;
-
-    let deadline = Instant::now() + budget;
     let mut buffer = vec![0u8; MAX_DATAGRAM];
 
-    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
-        let Ok(Ok(read)) = timeout(remaining, socket.recv(&mut buffer)).await else {
-            break;
-        };
-        let Some(payload) = oob_payload(&buffer[..read]) else {
-            continue;
-        };
-        let (command, body) = split_command(payload);
-        if command != b"statusResponse" {
-            continue;
+    for _ in 0..attempts.max(1) {
+        let challenge = next_challenge();
+        socket
+            .send(&oob_packet(&format!("getstatus {challenge}")))
+            .await
+            .map_err(|e| AppError::Network(format!("cannot query {address}: {e}")))?;
+
+        let deadline = Instant::now() + per_attempt;
+        while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+            let Ok(Ok(read)) = timeout(remaining, socket.recv(&mut buffer)).await else {
+                break;
+            };
+            let Some(payload) = oob_payload(&buffer[..read]) else {
+                continue;
+            };
+            let (command, body) = split_command(payload);
+            if command != b"statusResponse" {
+                continue;
+            }
+            let text = protocol::decode_bytes(body);
+            let (infostring, players) = match text.split_once('\n') {
+                Some((info, rest)) => (info.to_string(), rest.to_string()),
+                None => (text, String::new()),
+            };
+            // A late answer to the previous attempt carries the previous
+            // challenge, so it is skipped rather than taken for this one.
+            if parse_infostring(&infostring).get("challenge") != Some(&challenge) {
+                continue;
+            }
+            return Ok(StatusReply {
+                infostring,
+                players,
+            });
         }
-        let text = protocol::decode_bytes(body);
-        let (infostring, players) = match text.split_once('\n') {
-            Some((info, rest)) => (info.to_string(), rest.to_string()),
-            None => (text, String::new()),
-        };
-        if parse_infostring(&infostring).get("challenge") != Some(&challenge) {
-            continue;
-        }
-        return Ok(StatusReply {
-            infostring,
-            players,
-        });
     }
 
     Err(AppError::Network(format!("{address} did not answer")))
@@ -465,14 +478,71 @@ mod tests {
             server.send_to(&reply, from).await.unwrap();
         });
 
-        let reply = query_status(address, Duration::from_millis(800)).await.unwrap();
+        let reply = query_status(address, Duration::from_millis(800), 1)
+            .await
+            .unwrap();
         assert_eq!(parse_infostring(&reply.infostring)["sv_hostname"], "Blue");
         assert_eq!(protocol::parse_status_players(&reply.players).len(), 1);
     }
 
     #[tokio::test]
     async fn an_unanswered_status_is_an_error() {
-        let reply = query_status("127.0.0.1:1".parse().unwrap(), Duration::from_millis(120)).await;
+        let reply = query_status(
+            "127.0.0.1:1".parse().unwrap(),
+            Duration::from_millis(120),
+            2,
+        )
+        .await;
+        assert!(reply.is_err());
+    }
+
+    // --- slice: servers robustness ---
+    /// A server that swallows the first `getstatus` and answers the second.
+    ///
+    /// Which is what a lost datagram looks like from here, and the reason the
+    /// details panel sends two requests instead of one.
+    async fn stub_deaf_once() -> SocketAddrV4 {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = match server.local_addr().unwrap() {
+            std::net::SocketAddr::V4(v4) => v4,
+            other => panic!("expected IPv4, got {other}"),
+        };
+        tokio::spawn(async move {
+            let mut buffer = vec![0u8; MAX_DATAGRAM];
+            let mut seen = 0usize;
+            while let Ok((read, from)) = server.recv_from(&mut buffer).await {
+                seen += 1;
+                if seen == 1 {
+                    continue;
+                }
+                let Some(payload) = oob_payload(&buffer[..read]) else {
+                    continue;
+                };
+                let (_, challenge) = split_command(payload);
+                let challenge = String::from_utf8_lossy(challenge).to_string();
+                let reply = oob_packet(&format!(
+                    "statusResponse\n\\challenge\\{challenge}\\sv_hostname\\Quiet\n7 42 \"Jaden\"\n"
+                ));
+                let _ = server.send_to(&reply, from).await;
+            }
+        });
+        address
+    }
+
+    #[tokio::test]
+    async fn a_status_request_is_sent_again_when_the_first_one_is_lost() {
+        let reply = query_status(stub_deaf_once().await, Duration::from_millis(150), 2)
+            .await
+            .expect("the second request must be answered");
+        assert_eq!(parse_infostring(&reply.infostring)["sv_hostname"], "Quiet");
+        assert_eq!(protocol::parse_status_players(&reply.players).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn one_status_request_gives_up_on_the_same_server() {
+        // The same stub, one request: this is what the panel used to do, and
+        // what it reported as «did not answer».
+        let reply = query_status(stub_deaf_once().await, Duration::from_millis(150), 1).await;
         assert!(reply.is_err());
     }
 }

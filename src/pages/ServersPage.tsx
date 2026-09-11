@@ -497,11 +497,11 @@ export function ServersPage() {
             server={selected}
             players={status.data?.players}
             playersLoading={status.isFetching && status.data === undefined}
-            playersError={
-              status.error === null
-                ? null
-                : t("details.playersError", { message: errorText(status.error) })
-            }
+            // --- slice: servers robustness ---
+            // Only that it failed. The panel knows better than this screen
+            // what to put there: the list the row remembers, or a sentence
+            // about a server that publishes none.
+            playersFailed={status.error !== null}
             // --- slice: game switch ---
             // Live even without a client: pressing it is how the player finds
             // out they need one, and the toast that says so offers to make it.

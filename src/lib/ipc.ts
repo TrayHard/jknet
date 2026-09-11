@@ -779,6 +779,25 @@ export interface ServerInfo {
    * with a mark where the ping goes. Every row of the cache is `true`.
    */
   responded: boolean;
+  // --- slice: servers robustness ---
+  /**
+   * Whole **Get new list** scans this address has missed in a row.
+   *
+   * Zero on every row that answered. The core drops the row at two, so a
+   * server that went quiet for one scan is still on the screen, marked
+   * offline, and a server that is gone leaves on the next press.
+   */
+  missedRefreshes: number;
+  /**
+   * The last player list this address ever gave, bots included.
+   *
+   * What the details panel shows when the server answers `getinfo` and
+   * refuses `getstatus` — a real configuration, not a failure. `null` until
+   * one scan has got a list out of it.
+   */
+  lastPlayers: ServerPlayer[] | null;
+  /** When `lastPlayers` was collected, RFC 3339 in UTC. */
+  lastPlayersAt: string | null;
   /** RFC 3339 in UTC. */
   lastSeen: string;
 }

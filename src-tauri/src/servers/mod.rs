@@ -88,6 +88,22 @@ const MAX_IN_FLIGHT: usize = 64;
 const STATUS_TIMEOUT: Duration = Duration::from_millis(1_500);
 
 // --- slice: servers robustness ---
+/// How long one `getstatus` of the details panel waits for its answer.
+///
+/// Shorter than the refresh's budget because the panel sends two requests:
+/// five populated servers measured on 11 September 2026 answered in 69 to
+/// 161 ms, so a second before giving up is already ten times the round trip,
+/// and a server that needs longer than that is not slow — it is silent.
+const STATUS_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(1_000);
+
+/// Requests the details panel sends: the first one and one retry.
+///
+/// One retry is worth it and a second one is not. The same measurement found
+/// a server that answers `getinfo` in 70 ms and never answers `getstatus` at
+/// all — eleven requests, budgets up to six seconds, nothing — so past the
+/// lost-datagram case there is nothing left for more requests to win.
+const STATUS_ATTEMPTS: u32 = 2;
+
 /// How many whole refreshes in a row a server may miss before its row is
 /// dropped from the cache.
 ///
@@ -327,6 +343,19 @@ pub struct ServerInfo {
     /// a server the player was looking at.
     #[serde(default)]
     pub missed_refreshes: u32,
+    // --- slice: servers robustness ---
+    /// The last player list this address ever gave, with no bots removed.
+    ///
+    /// Filled by the `getstatus` pass of a refresh and by every answered call
+    /// of [`get_server_status`]. It is what the details panel shows when the
+    /// server stops answering `getstatus` while staying online — a real
+    /// configuration, not a failure: `135.125.145.49:29070` answered `getinfo`
+    /// in 70 ms and eleven `getstatus` requests with nothing at all.
+    #[serde(default)]
+    pub last_players: Option<Vec<PlayerInfo>>,
+    /// When [`ServerInfo::last_players`] was collected, RFC 3339 in UTC.
+    #[serde(default)]
+    pub last_players_at: Option<String>,
     /// When this row was last confirmed, RFC 3339 in UTC.
     pub last_seen: String,
 }
@@ -389,9 +418,13 @@ impl ServerInfo {
             ping_ms,
             favorite: false,
             responded: true,
-            // --- slice: servers robustness --- a fresh answer has missed
-            // nothing; the counter is raised by a scan this address ignored.
+            // --- slice: servers robustness ---
+            // A fresh answer has missed nothing, and the player list of this
+            // exchange is unknown: `getinfo` does not carry one. Both are
+            // carried over from the cached row by `keep_remembered`.
             missed_refreshes: 0,
+            last_players: None,
+            last_players_at: None,
             last_seen: last_seen.to_string(),
         }
     }
@@ -423,11 +456,38 @@ impl ServerInfo {
     /// player list is cut where the engine's 1 kB buffer ends
     /// (`codemp/server/sv_main.cpp:432`). The status count is the better one
     /// for both halves of the question, so it wins for `humans` and `bots`.
-    pub fn apply_status(&mut self, players: &[protocol::StatusPlayer]) {
+    ///
+    /// --- slice: servers robustness ---
+    /// The list itself is kept as well, not only the two numbers it produced:
+    /// it is the only player list the launcher will ever have for a server
+    /// that answers `getinfo` and refuses `getstatus`, and the details panel
+    /// shows it with the time it was taken instead of a network error.
+    pub fn apply_status(&mut self, players: &[protocol::StatusPlayer], at: &str) {
         let (humans, bots) = protocol::count_humans_and_bots(players);
         self.humans = Some(humans);
         self.bots = Some(bots);
         self.players_source = PlayersSource::Status;
+        self.remember_players(players, at);
+    }
+
+    // --- slice: servers robustness ---
+    /// Stores a player list as the last one known for this address.
+    pub fn remember_players(&mut self, players: &[protocol::StatusPlayer], at: &str) {
+        self.last_players = Some(players.iter().map(PlayerInfo::from_status).collect());
+        self.last_players_at = Some(at.to_string());
+    }
+
+    // --- slice: servers robustness ---
+    /// Carries what only the cache knows onto a row built from a fresh answer.
+    ///
+    /// A `getinfo` says nothing about players by name, so a refresh would
+    /// otherwise wipe the list the panel falls back to every time the server
+    /// answered the first question and not the second.
+    fn keep_remembered(&mut self, cached: &ServerInfo) {
+        if self.last_players.is_none() {
+            self.last_players = cached.last_players.clone();
+            self.last_players_at = cached.last_players_at.clone();
+        }
     }
 
     /// Players the browser counts on this row.
@@ -629,6 +689,19 @@ pub struct PlayerInfo {
     /// Zero ping, which `SV_CalcPings` writes for `SVF_BOT` and for nothing
     /// else. See [`protocol::StatusPlayer::is_bot`].
     pub is_bot: bool,
+}
+
+impl PlayerInfo {
+    /// One parsed line of a `statusResponse`, with the colour codes stripped.
+    fn from_status(player: &protocol::StatusPlayer) -> PlayerInfo {
+        PlayerInfo {
+            name_raw: player.name_raw.clone(),
+            name_clean: strip_colors(&player.name_raw).trim().to_string(),
+            score: player.score,
+            ping: player.ping,
+            is_bot: player.is_bot(),
+        }
+    }
 }
 
 /// Reads `ip:port`, or `ip` with the stock server port of this game.
@@ -1008,6 +1081,12 @@ fn keep_silent_rows(
         .iter()
         .map(|row| (row.address.as_str(), row))
         .collect();
+    for row in answered.iter_mut() {
+        if let Some(cached) = known.get(row.address.as_str()) {
+            row.keep_remembered(cached);
+        }
+    }
+
     let replied: HashSet<String> = answered.iter().map(|row| row.address.clone()).collect();
     let mut counts = SilentRows {
         silent: 0,
@@ -1104,7 +1183,7 @@ pub async fn refresh_addresses(
     }
     let total = wanted.len();
 
-    let answered = probe_addresses(
+    let mut answered = probe_addresses(
         Some(&app),
         game,
         scope,
@@ -1117,6 +1196,11 @@ pub async fn refresh_addresses(
     // Read, merge and write as one step: a **Get new list** of the same game
     // runs under its own claim and ends at this same file.
     let document = merge_into_cache_locked(refreshes.cache_lock(game), &file, &answered).await;
+    // --- slice: servers robustness ---
+    // A `getinfo` carries no player list, so the one the cache remembers has
+    // to survive this scan on the screen as well as in the document: the
+    // details panel falls back to it.
+    remember_from_cache(&document, &mut answered);
 
     let mut rows = answered;
     rows.extend(silent_rows(game, &document, &wanted, &rows, &favorites));
@@ -1211,7 +1295,7 @@ async fn scan_lan(
 
     // The same second pass as a refresh: a server on the desk next to the
     // player hides `g_humanplayers` as readily as one on the internet.
-    resolve_bots_by_status(app, game, RefreshScope::Lan, &mut rows).await;
+    resolve_bots_by_status(app, game, RefreshScope::Lan, &mut rows, &last_seen).await;
     sort_rows(&mut rows);
 
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
@@ -1326,7 +1410,7 @@ async fn probe_addresses(
         );
     }
 
-    resolve_bots_by_status(app, game, scope, &mut collected).await;
+    resolve_bots_by_status(app, game, scope, &mut collected, last_seen).await;
     sort_rows(&mut collected);
     ProbeOutcome {
         servers: collected,
@@ -1350,6 +1434,11 @@ struct ProbeOutcome {
 
 // --- slice: servers browser ---
 /// Replaces the rows of `incoming` by address and appends the ones that are new.
+///
+/// --- slice: servers robustness ---
+/// A replaced row hands over what only the cache knows — the last player list
+/// and when it was taken — because the answer that replaces it came from a
+/// `getinfo`, which has no player list in it at all.
 fn merge_rows(document: &mut Vec<ServerInfo>, incoming: &[ServerInfo]) {
     let mut index: BTreeMap<String, usize> = document
         .iter()
@@ -1358,11 +1447,33 @@ fn merge_rows(document: &mut Vec<ServerInfo>, incoming: &[ServerInfo]) {
         .collect();
     for row in incoming {
         match index.get(&row.address) {
-            Some(&at) => document[at] = row.clone(),
+            Some(&at) => {
+                let mut row = row.clone();
+                row.keep_remembered(&document[at]);
+                document[at] = row;
+            }
             None => {
                 index.insert(row.address.clone(), document.len());
                 document.push(row.clone());
             }
+        }
+    }
+}
+
+// --- slice: servers robustness ---
+/// Copies the remembered player list of `document` onto the matching rows.
+///
+/// The screen half of the rule [`merge_rows`] applies to the document: the
+/// rows a command returns are the ones the panel reads, so they carry the same
+/// fallback the cache does.
+fn remember_from_cache(document: &[ServerInfo], rows: &mut [ServerInfo]) {
+    let known: BTreeMap<&str, &ServerInfo> = document
+        .iter()
+        .map(|row| (row.address.as_str(), row))
+        .collect();
+    for row in rows.iter_mut() {
+        if let Some(cached) = known.get(row.address.as_str()) {
+            row.keep_remembered(cached);
         }
     }
 }
@@ -1423,6 +1534,33 @@ async fn write_cache_locked(
 ) {
     let _writing = lock.lock().await;
     write_cache(file, servers);
+}
+
+// --- slice: servers robustness ---
+/// Writes one answered player list onto the cached row of that address.
+///
+/// The row has to exist: the cache is the record of servers a scan has seen,
+/// and the details panel only ever asks about a row that is on the screen. An
+/// address that is not in the document is therefore left alone rather than
+/// appended as a row nothing else knows anything about.
+///
+/// Under the game's cache lock, like every other read-modify-write of this
+/// file — a **Get new list** finishing at the same moment must not lose the
+/// list, and must not lose its own document to it either.
+async fn remember_players_locked(
+    lock: &tokio::sync::Mutex<()>,
+    file: &PathBuf,
+    address: &str,
+    players: &[protocol::StatusPlayer],
+    at: &str,
+) {
+    let _writing = lock.lock().await;
+    let mut document = read_cache(file);
+    let Some(row) = document.iter_mut().find(|row| row.address == address) else {
+        return;
+    };
+    row.remember_players(players, at);
+    write_cache(file, &document);
 }
 
 // --- slice: servers browser ---
@@ -1506,6 +1644,9 @@ async fn resolve_bots_by_status(
     // --- slice: servers browser --- travels on the batch this pass emits.
     scope: RefreshScope,
     servers: &mut [ServerInfo],
+    // --- slice: servers robustness --- when the player lists it collects were
+    // taken, which is what the details panel puts under a remembered list.
+    at: &str,
 ) -> usize {
     let candidates = status_candidates(servers, MAX_STATUS_QUERIES);
     if candidates.is_empty() {
@@ -1521,7 +1662,11 @@ async fn resolve_bots_by_status(
         let gate = Arc::clone(&semaphore);
         probes.spawn(async move {
             let _permit = gate.acquire_owned().await.ok()?;
-            let reply = net::query_status(peer, STATUS_TIMEOUT).await.ok()?;
+            // One request here: this pass asks up to 150 servers at once and
+            // only needs the human-to-bot split, while the details panel asks
+            // one server the player is looking at and retries. See
+            // [`STATUS_ATTEMPTS`].
+            let reply = net::query_status(peer, STATUS_TIMEOUT, 1).await.ok()?;
             Some((index, protocol::parse_status_players(&reply.players)))
         });
     }
@@ -1531,7 +1676,7 @@ async fn resolve_bots_by_status(
         let Ok(Some((index, players))) = joined else {
             continue;
         };
-        servers[index].apply_status(&players);
+        servers[index].apply_status(&players, at);
         updated.push(servers[index].clone());
     }
 
@@ -1644,8 +1789,14 @@ async fn collect_addresses(
 
 /// Asks one server for its player list and full `serverinfo`.
 ///
-/// The Servers screen calls this when a row is selected, so it must stay a
-/// single short exchange: one datagram out, one back, no retry.
+/// The Servers screen calls this when a row is selected, so it stays a short
+/// exchange: [`STATUS_ATTEMPTS`] requests of [`STATUS_ATTEMPT_TIMEOUT`] each,
+/// two seconds in the worst case.
+///
+/// --- slice: servers robustness ---
+/// An answer is also written into the cache document, so the panel has a list
+/// to show the next time this server refuses `getstatus`. The write is a
+/// failure the player cannot act on, so it is logged rather than returned.
 ///
 /// --- slice: game core ---
 /// `game` only completes an address the caller sent without a port; the
@@ -1653,22 +1804,24 @@ async fn collect_addresses(
 #[tauri::command]
 pub async fn get_server_status(
     state: tauri::State<'_, AppState>,
+    refreshes: tauri::State<'_, RefreshState>,
     address: String,
     game: Option<Game>,
 ) -> Result<ServerStatus> {
     let game = state.settings()?.game_or_active(game);
     let peer = parse_address(game, &address)?;
-    let reply = net::query_status(peer, STATUS_TIMEOUT).await?;
-    let players = protocol::parse_status_players(&reply.players)
-        .into_iter()
-        .map(|player| PlayerInfo {
-            name_clean: strip_colors(&player.name_raw).trim().to_string(),
-            is_bot: player.is_bot(),
-            name_raw: player.name_raw,
-            score: player.score,
-            ping: player.ping,
-        })
-        .collect();
+    let file = cache_file(&state, game)?;
+    let reply = net::query_status(peer, STATUS_ATTEMPT_TIMEOUT, STATUS_ATTEMPTS).await?;
+    let parsed = protocol::parse_status_players(&reply.players);
+    remember_players_locked(
+        refreshes.cache_lock(game),
+        &file,
+        &peer.to_string(),
+        &parsed,
+        &timestamp::now_rfc3339(),
+    )
+    .await;
+    let players = parsed.iter().map(PlayerInfo::from_status).collect();
 
     Ok(ServerStatus {
         address: peer.to_string(),
@@ -1980,7 +2133,7 @@ mod tests {
         let mut server = row("\\hostname\\Vanilla\\clients\\4");
         let players =
             protocol::parse_status_players("3 60 \"Kyle\"\n1 0 \"Reborn\"\n0 0 \"Jedi\"\n");
-        server.apply_status(&players);
+        server.apply_status(&players, "2026-09-11T00:00:00Z");
         assert_eq!(server.humans, Some(1));
         assert_eq!(server.bots, Some(2));
         assert_eq!(server.players_source, PlayersSource::Status);
@@ -1991,9 +2144,10 @@ mod tests {
     #[test]
     fn a_player_list_of_bots_only_settles_it_too() {
         let mut server = row("\\hostname\\Vanilla\\clients\\3");
-        server.apply_status(&protocol::parse_status_players(
-            "0 0 \"b1\"\n0 0 \"b2\"\n0 0 \"b3\"\n",
-        ));
+        server.apply_status(
+            &protocol::parse_status_players("0 0 \"b1\"\n0 0 \"b2\"\n0 0 \"b3\"\n"),
+            "2026-09-11T00:00:00Z",
+        );
         assert_eq!(server.humans, Some(0));
         assert_eq!(server.bots, Some(3));
         assert!(server.is_bots_only());
@@ -2004,7 +2158,7 @@ mod tests {
         // The server said four clients and then listed none. The list is the
         // one that can be counted, so the row shows nobody rather than four.
         let mut server = row("\\hostname\\Vanilla\\clients\\4");
-        server.apply_status(&[]);
+        server.apply_status(&[], "2026-09-11T00:00:00Z");
         assert_eq!(server.humans, Some(0));
         assert_eq!(server.bots, Some(0));
         assert_eq!(server.real_players(), 0);
@@ -2064,7 +2218,10 @@ mod tests {
             .join("servers.json");
         let _ = fs::remove_file(&file);
         let mut server = row("\\hostname\\Vanilla\\clients\\5");
-        server.apply_status(&protocol::parse_status_players("1 70 \"Kyle\"\n0 0 \"Bot\"\n"));
+        server.apply_status(
+            &protocol::parse_status_players("1 70 \"Kyle\"\n0 0 \"Bot\"\n"),
+            "2026-09-11T00:00:00Z",
+        );
         write_cache(&file, &[server]);
         let read = read_cache(&file);
         assert_eq!(read[0].players_source, PlayersSource::Status);
@@ -2643,11 +2800,57 @@ mod tests {
     }
 
     #[test]
-    fn a_row_written_before_the_miss_counter_existed_still_reads() {
-        // A 0.3 document has no counter on its rows, and serde has to fill it
-        // rather than throw the list away.
+    fn a_player_list_is_remembered_on_the_row_and_survives_the_next_scan() {
+        let game = Game::JediAcademy;
+        let mut server = game_row(game, "10.0.0.1:29070", "\\hostname\\Quiet\\clients\\2");
+        server.apply_status(
+            &protocol::parse_status_players("12 70 \"^1Kyle\"\n0 0 \"Bot\"\n"),
+            "2026-09-11T10:00:00Z",
+        );
+
+        let remembered = server.last_players.clone().expect("a list");
+        assert_eq!(remembered.len(), 2);
+        assert_eq!(remembered[0].name_clean, "Kyle", "colour codes are stripped");
+        assert_eq!(remembered[0].ping, 70);
+        assert!(!remembered[0].is_bot);
+        assert!(remembered[1].is_bot, "ping 0 is a bot");
+        assert_eq!(server.last_players_at.as_deref(), Some("2026-09-11T10:00:00Z"));
+
+        // The next scan answers `getinfo`, which carries no player list at
+        // all. The row must not lose the one the panel falls back to.
+        let mut document = vec![server.clone()];
+        let fresh = game_row(game, "10.0.0.1:29070", "\\hostname\\Quiet\\clients\\3");
+        assert!(fresh.last_players.is_none(), "a getinfo knows no names");
+        merge_rows(&mut document, std::slice::from_ref(&fresh));
+        assert_eq!(document[0].clients, 3, "the fresh answer wins");
+        assert_eq!(
+            document[0].last_players.as_ref().map(Vec::len),
+            Some(2),
+            "and the remembered list rides along"
+        );
+
+        // The same rule on the way to the screen, and through the cache file.
+        let mut rows = vec![fresh];
+        remember_from_cache(&document, &mut rows);
+        assert_eq!(rows[0].last_players_at.as_deref(), Some("2026-09-11T10:00:00Z"));
+
         let file = std::env::temp_dir()
-            .join("jknet-test-cache-without-the-counter")
+            .join("jknet-test-remembered-players")
+            .join("servers-ja.json");
+        let _ = fs::remove_file(&file);
+        write_cache(&file, &document);
+        let read = read_cache(&file);
+        assert_eq!(read[0].last_players.as_ref().map(Vec::len), Some(2));
+        assert_eq!(read[0].last_players.as_ref().unwrap()[0].name_clean, "Kyle");
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_row_written_before_the_two_fields_existed_still_reads() {
+        // A 0.3 document has neither counter nor player list, and serde has to
+        // fill both rather than throw the list away.
+        let file = std::env::temp_dir()
+            .join("jknet-test-cache-without-the-new-fields")
             .join("servers-ja.json");
         let _ = fs::remove_file(&file);
         fs::create_dir_all(file.parent().unwrap()).expect("the folder");
@@ -2664,6 +2867,8 @@ mod tests {
         let read = read_cache(&file);
         assert_eq!(read.len(), 1);
         assert_eq!(read[0].missed_refreshes, 0, "an old row has missed nothing");
+        assert!(read[0].last_players.is_none());
+        assert!(read[0].last_players_at.is_none());
         assert!(read[0].responded, "and is not a ghost");
         let _ = fs::remove_file(&file);
     }
@@ -3055,7 +3260,8 @@ mod tests {
             .expect("at least one server must have a player on it");
         let status = net::query_status(
             parse_address(Game::JediAcademy, &busiest.address).unwrap(),
-            MASTER_TIMEOUT,
+            STATUS_ATTEMPT_TIMEOUT,
+            STATUS_ATTEMPTS,
         )
         .await
         .expect("the busiest server must answer getstatus");
@@ -3146,13 +3352,13 @@ mod tests {
             let permit_source = Arc::clone(&gate);
             probes.spawn(async move {
                 let _permit = permit_source.acquire_owned().await.ok()?;
-                let reply = net::query_status(peer, STATUS_TIMEOUT).await.ok()?;
+                let reply = net::query_status(peer, STATUS_TIMEOUT, 1).await.ok()?;
                 Some((index, protocol::parse_status_players(&reply.players)))
             });
         }
         while let Some(joined) = probes.join_next().await {
             if let Ok(Some((index, players))) = joined {
-                answered[index].apply_status(&players);
+                answered[index].apply_status(&players, &timestamp::now_rfc3339());
                 resolved += 1;
             }
         }
