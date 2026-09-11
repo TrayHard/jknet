@@ -187,6 +187,24 @@ pub struct AddResult {
     pub skipped: Vec<SkippedFile>,
 }
 
+/// What kind of content sits at a conflicting internal path.
+///
+/// The screen prints the kind next to the path, so the player reads "Shader"
+/// instead of guessing what `shaders/mymod.shader` changes. The core decides
+/// it and not the screen: the same path must be named the same way whoever
+/// asks, and the rule belongs next to the paths it reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConflictKind {
+    Shader,
+    Model,
+    Sound,
+    Texture,
+    Map,
+    Ui,
+    Other,
+}
+
 /// One internal path that more than one enabled archive carries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -194,6 +212,8 @@ pub struct LibraryConflict {
     /// Path inside the archives, lowercase, forward slashes.
     pub path: String,
     pub folder: String,
+    /// What the path holds, read out of the path itself.
+    pub kind: ConflictKind,
     /// Ids of the items that carry the path, in the engine's load order.
     pub files: Vec<String>,
     /// Id of the item the engine actually reads: the last one loaded.
@@ -1058,6 +1078,7 @@ fn conflicts(data: &DataPaths, client_id: &str) -> Result<ConflictReport> {
             // `files` is sorted in load order, so the last owner wins.
             let winner = ids.last().cloned().unwrap_or_default();
             LibraryConflict {
+                kind: conflict_kind(path),
                 path: path.to_string(),
                 folder: folder.to_string(),
                 files: ids,
@@ -1087,6 +1108,34 @@ pub(crate) fn pak_order(file_name: &str) -> (u8, String) {
     let lower = file_name.to_ascii_lowercase();
     let downloaded = u8::from(lower.starts_with("dl_"));
     (downloaded, lower)
+}
+
+/// What an internal path holds, read from the folder it starts with and the
+/// extension it ends with.
+///
+/// An archive is mounted at the root of the search path, so every path starts
+/// with one of the folders the engine itself reads. The order of the checks is
+/// a priority, not a preference: `shaders/` and `maps/` carry more than their
+/// own file type — a readme, a source file, a picture — and only the exact
+/// extension makes a path a shader or a map. Everything that matches nothing
+/// is `Other` rather than a guess.
+fn conflict_kind(path: &str) -> ConflictKind {
+    let path = path.replace('\\', "/").to_ascii_lowercase();
+    if path.starts_with("shaders/") && path.ends_with(".shader") {
+        ConflictKind::Shader
+    } else if path.starts_with("maps/") && path.ends_with(".bsp") {
+        ConflictKind::Map
+    } else if path.starts_with("models/") {
+        ConflictKind::Model
+    } else if path.starts_with("sound/") || path.starts_with("music/") {
+        ConflictKind::Sound
+    } else if path.starts_with("textures/") || path.starts_with("gfx/") {
+        ConflictKind::Texture
+    } else if path.starts_with("ui/") || path.starts_with("strip/") {
+        ConflictKind::Ui
+    } else {
+        ConflictKind::Other
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1435,6 +1484,7 @@ mod tests {
         assert!(!report.truncated);
         let conflict = &report.conflicts[0];
         assert_eq!(conflict.path, shared);
+        assert_eq!(conflict.kind, ConflictKind::Model);
         assert_eq!(conflict.files.len(), 3);
         assert_eq!(conflict.winner, "base/z-skins.pk3");
         assert_eq!(report.files.len(), 3);
@@ -1446,6 +1496,43 @@ mod tests {
         assert!(pak_order("dl_extra.pk3") > pak_order("zzz.pk3"));
         assert!(pak_order("assets0.pk3") < pak_order("assets1.pk3"));
         assert_eq!(pak_order("Skin.PK3").1, "skin.pk3");
+    }
+
+    #[test]
+    fn every_kind_of_content_has_a_path_that_names_it() {
+        assert_eq!(conflict_kind("shaders/mymod.shader"), ConflictKind::Shader);
+        assert_eq!(
+            conflict_kind("models/players/kyle/model.glm"),
+            ConflictKind::Model
+        );
+        assert_eq!(
+            conflict_kind("sound/weapons/saber/saberhup.mp3"),
+            ConflictKind::Sound
+        );
+        assert_eq!(conflict_kind("music/mp/duel.mp3"), ConflictKind::Sound);
+        assert_eq!(conflict_kind("textures/mymod/wall.jpg"), ConflictKind::Texture);
+        assert_eq!(conflict_kind("gfx/hud/radar.tga"), ConflictKind::Texture);
+        assert_eq!(conflict_kind("maps/mp/ffa3.bsp"), ConflictKind::Map);
+        assert_eq!(conflict_kind("ui/jamp/ingame.menu"), ConflictKind::Ui);
+        assert_eq!(conflict_kind("strip/menus.str"), ConflictKind::Ui);
+        assert_eq!(
+            conflict_kind("ext_data/sabers/kyle.sab"),
+            ConflictKind::Other
+        );
+    }
+
+    #[test]
+    fn a_folder_alone_makes_neither_a_shader_nor_a_map() {
+        // Both folders carry more than their own file type, and the extension
+        // is what decides. A readme next to a shader is not a shader.
+        assert_eq!(conflict_kind("shaders/readme.txt"), ConflictKind::Other);
+        assert_eq!(conflict_kind("maps/mp/ffa3.jpg"), ConflictKind::Other);
+        // The conflict finder hands over a lowercase path with forward
+        // slashes, but the rule does not lean on the caller for that.
+        assert_eq!(
+            conflict_kind("Models\\Players\\Kyle\\model.glm"),
+            ConflictKind::Model
+        );
     }
 
     #[test]
