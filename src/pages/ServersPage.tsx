@@ -33,9 +33,11 @@ import {
   filtersAreDefault,
   isBotOnly,
   sameStoredFilters,
+  scopeOfTab,
   sortServers,
   storedFilters,
   totalRealPlayers,
+  visibleServers,
   type ServerFilters,
   type ServerTab,
   type SortColumn,
@@ -64,6 +66,7 @@ import type { Game, GameInfo, ServerInfo } from "../lib/ipc";
 // --- slice: game switch ---
 import { useActiveGame, useConnectClient, useGameNames } from "../lib/game";
 import {
+  IDLE_SCOPE,
   useAddServerHistory,
   useCachedServers,
   useGameInfo,
@@ -152,7 +155,11 @@ export function ServersPage() {
   // draws from the sweep's own list; every other tab draws from the list the
   // master servers filled.
   const lan = useLanServers();
-  const scope = refresh.scopes[tab];
+  // --- slice: server actions ---
+  // Four of the five tabs have a scan of their own; Hidden has none and shows
+  // the indicator of a tab that has never scanned, which is the truth about it.
+  const tabScope = scopeOfTab(tab);
+  const scope = tabScope === null ? IDLE_SCOPE : refresh.scopes[tabScope];
   /** Whether a sweep has finished, which is what "nothing here" then means. */
   const lanScanned = refresh.scopes.lan.refreshedAt !== null;
   const source = useMemo(
@@ -251,6 +258,10 @@ export function ServersPage() {
       case "history":
         return historyAddresses;
       case "lan":
+      // --- slice: server actions --- the Hidden tab asks nothing of the
+      // network: it is a view of the cached list, and the rows on it are ones
+      // the player has said they do not want checked.
+      case "hidden":
         return [];
       default:
         return inTab.map((server) => server.address);
@@ -268,8 +279,8 @@ export function ServersPage() {
       refresh.refreshLan();
       return;
     }
-    if (tabAddresses.length === 0) return;
-    refresh.refreshAddresses(tab, tabAddresses);
+    if (tabScope === null || tabAddresses.length === 0) return;
+    refresh.refreshAddresses(tabScope, tabAddresses);
   };
   /** Nothing to ask: an empty tab needs the other button, or a star first. */
   const nothingToRefresh = tab !== "lan" && tabAddresses.length === 0;
@@ -825,13 +836,18 @@ function buildTabs(
   lanRows: ServerInfo[],
   historyAddresses: string[],
 ): TabDefinition<ServerTab>[] {
-  const known = new Set(servers.map((server) => server.address));
+  // --- slice: server actions ---
+  // Every count but the last one is over the rows that are shown somewhere: a
+  // hidden server is on the Hidden tab and on no other, so counting it under
+  // All would promise a row that is not there.
+  const shown = visibleServers(servers);
+  const known = new Set(shown.map((server) => server.address));
   return [
-    { id: "all", label: t("tabs.all"), count: servers.length },
+    { id: "all", label: t("tabs.all"), count: shown.length },
     {
       id: "favorites",
       label: t("tabs.favorites"),
-      count: servers.filter((server) => server.favorite).length,
+      count: shown.filter((server) => server.favorite).length,
     },
     {
       id: "history",
@@ -841,8 +857,18 @@ function buildTabs(
     {
       id: "lan",
       label: t("tabs.lan"),
-      count: lanRows.length,
+      count: visibleServers(lanRows).length,
       title: t("tabs.lanHint"),
+    },
+    // --- slice: server actions ---
+    // Always on the strip, count or no count: it is the only way back for a
+    // server the player hid, and a tab that appears once something is hidden is
+    // a tab nobody knows to look for beforehand.
+    {
+      id: "hidden",
+      label: t("tabs.hidden"),
+      count: servers.length - shown.length,
+      title: t("tabs.hiddenHint"),
     },
   ];
 }
@@ -913,6 +939,8 @@ function emptyTitle(
   if (tab === "lan") return lanScanned ? t("empty.lanNoneTitle") : t("empty.lanTitle");
   if (tab === "favorites") return t("empty.favoritesTitle");
   if (tab === "history") return t("empty.historyTitle");
+  // --- slice: server actions ---
+  if (tab === "hidden") return t("empty.hiddenTitle");
   return total === 0 ? t("empty.noneTitle") : t("empty.filteredTitle");
 }
 
@@ -930,6 +958,9 @@ function emptyText(
       return t("empty.favoritesText");
     case "history":
       return t("empty.historyText");
+    // --- slice: server actions ---
+    case "hidden":
+      return t("empty.hiddenText");
     default:
       if (total === 0) return t("empty.noneText");
       // A player who filtered everything away deserves to know that the bot

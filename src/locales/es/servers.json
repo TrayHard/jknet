@@ -38,7 +38,9 @@
     "favorites": "Favoritos",
     "history": "Historial",
     "lan": "LAN",
-    "lanHint": "Servers on your own network, found by broadcast"
+    "lanHint": "Servers on your own network, found by broadcast",
+    "hidden": "Hidden",
+    "hiddenHint": "Servers you took off the browser"
   },
   "columns": {
     "server": "SERVIDOR",
@@ -78,6 +80,8 @@
     "favoritesText": "Haga clic en la estrella de una fila para guardar aquí un servidor.",
     "historyTitle": "Aún no hay conexiones",
     "historyText": "Los servidores a los que se conecte aparecen aquí, los más recientes primero.",
+    "hiddenTitle": "Nothing is hidden",
+    "hiddenText": "Hide a server from the menu beside Connect and it waits here until you bring it back.",
     "noneTitle": "Aún no hay servidores",
     "noneText": "Press Get new list to ask the master servers who is online.",
     "filteredTitle": "Nada coincide con los filtros",
@@ -106,6 +110,11 @@
     "botHeading_one": "{{count}} BOT",
     "botHeading_many": "{{count}} BOTS",
     "botHeading_other": "{{count}} BOTS"
+  },
+  "menu": {
+    "actions": "Server actions",
+    "hide": "Hide",
+    "unhide": "Unhide"
   },
   "ping": {
     "noAnswer": "Sin respuesta",

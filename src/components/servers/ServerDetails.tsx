@@ -11,6 +11,7 @@ import { MapPreview } from "../MapPreview";
 import { Badge, Button } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
+import { ServerMenu } from "./ServerMenu";
 import { ServerName } from "./ServerName";
 
 interface ServerDetailsProps {
@@ -153,16 +154,24 @@ export function ServerDetails({
       />
 
       <div className="flex flex-col gap-6 mt-auto">
-        <Button
-          variant="primary"
-          size="lg"
-          block
-          icon={<Play size={18} />}
-          disabled={!canConnect || connecting}
-          onClick={onConnect}
-        >
-          {connecting ? tCommon("states.starting") : t("details.connect")}
-        </Button>
+        {/* --- slice: server actions ---
+            Connect and the rest, in that order of loudness. The menu is where
+            the actions that change the list live — starring the server, taking
+            it off the browser — and they sit beside the press the panel exists
+            for rather than competing with it. */}
+        <div className="flex items-center gap-8">
+          <Button
+            variant="primary"
+            size="lg"
+            className="flex-1 min-w-0"
+            icon={<Play size={18} />}
+            disabled={!canConnect || connecting}
+            onClick={onConnect}
+          >
+            {connecting ? tCommon("states.starting") : t("details.connect")}
+          </Button>
+          <ServerMenu server={server} size="lg" />
+        </div>
         {canConnect ? null : hint}
       </div>
     </aside>

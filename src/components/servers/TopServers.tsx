@@ -1,11 +1,12 @@
 import { Play } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
+import type { ServerInfo } from "../../lib/ipc";
 import { useCachedServers } from "../../lib/queries";
 import { EmptyState } from "../ui";
-import { isBotOnly, realPlayers } from "./filter";
+import { isBotOnly, realPlayers, visibleServers } from "./filter";
 import { ServerListBlock } from "./ServerListBlock";
 
 /** How many rows the Home screen shows. */
@@ -19,14 +20,29 @@ const TOP_COUNT = 4;
  *
  * Busiest means people. A server full of bots is not somewhere to send a
  * player from the first screen, so it is dropped from the pool outright.
+ *
+ * --- slice: server actions ---
+ * The selection is the Home screen's and is passed straight through: one row is
+ * selected across all three blocks, so no block may hold that state itself.
  */
-export function TopServers() {
+export function TopServers({
+  selectedAddress,
+  onSelect,
+  actions,
+}: {
+  selectedAddress?: string | null;
+  onSelect?: (address: string) => void;
+  actions?: (server: ServerInfo) => ReactNode;
+}) {
   const { t } = useTranslation("home");
   const cached = useCachedServers();
 
   const rows = useMemo(
     () =>
-      (cached.data ?? [])
+      // --- slice: server actions --- a server the player took off the browser
+      // is off this list too: the whole point of hiding is not being suggested
+      // it again.
+      visibleServers(cached.data ?? [])
         .filter((server) => !isBotOnly(server))
         .sort((a, b) => realPlayers(b) - realPlayers(a))
         .slice(0, TOP_COUNT),
@@ -56,5 +72,14 @@ export function TopServers() {
     );
   }
 
-  return <ServerListBlock title={t("topServers.busiest")} servers={rows} seeAll />;
+  return (
+    <ServerListBlock
+      title={t("topServers.busiest")}
+      servers={rows}
+      seeAll
+      selectedAddress={selectedAddress}
+      onSelect={onSelect}
+      actions={actions}
+    />
+  );
 }

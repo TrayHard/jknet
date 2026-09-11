@@ -33,6 +33,7 @@
     "emptyTitle": "Noch keine Server im Cache",
     "emptyText": "Öffnen Sie den Bereich Server einmal, dann erscheinen die meistbesuchten hier.",
     "openServers": "Server öffnen",
-    "seeAll": "Alle anzeigen"
+    "seeAll": "Alle anzeigen",
+    "connect": "Connect"
   }
 }

@@ -5,10 +5,13 @@ import { Link, useNavigate } from "react-router";
 
 import { GameFilesNotice } from "../components/GameFilesNotice";
 import { MapPreview } from "../components/MapPreview";
+// --- slice: server actions ---
+import { useMissingClientToast } from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
-import { realPlayers } from "../components/servers/filter";
+import { realPlayers, visibleServers } from "../components/servers/filter";
 import { ServerListBlock } from "../components/servers/ServerListBlock";
+import { ServerMenu } from "../components/servers/ServerMenu";
 import { TopServers } from "../components/servers/TopServers";
 import { Badge, Button } from "../components/ui";
 // --- slice: i18n ---
@@ -66,6 +69,11 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   // --- slice: game switch ---
   const [newClientOpen, setNewClientOpen] = useState(false);
+  // --- slice: server actions ---
+  // One selected row for the whole screen, not one per block: the buttons that
+  // appear on it act on a server, and two rows offering to start a client at
+  // once is two answers to a question with one.
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
   // --- slice: game switch ---
   // The hero belongs to the game the switcher is on. A player who owns both
@@ -78,6 +86,7 @@ export function HomePage() {
   // Connect is a quick connect: the client the player reached that very server
   // with, and the default client only when there is no such record.
   const connectClient = useConnectClient();
+  const missingClientToast = useMissingClientToast();
   // Home draws server rows from the cache alone: no refresh of its own, no
   // command of its own. Both pools below are the cached list read two ways.
   const cachedServers = useCachedServers();
@@ -91,7 +100,9 @@ export function HomePage() {
   /** Starred servers, the busiest first. */
   const favorites = useMemo(
     () =>
-      (cachedServers.data ?? [])
+      // --- slice: server actions --- a hidden row is off Home as it is off
+      // every tab of the browser but the one that undoes it.
+      visibleServers(cachedServers.data ?? [])
         .filter((row) => row.favorite)
         .sort((a, b) => realPlayers(b) - realPlayers(a))
         .slice(0, BLOCK_COUNT),
@@ -111,7 +122,7 @@ export function HomePage() {
    * Jedi Outcast entries from the Jedi Academy screen and back.
    */
   const history = useMemo(() => {
-    const rows = cachedServers.data ?? [];
+    const rows = visibleServers(cachedServers.data ?? []);
     if (rows.length === 0) return [];
     const byAddress = new Map(rows.map((row) => [row.address, row]));
     const picked: ServerInfo[] = [];
@@ -197,7 +208,14 @@ export function HomePage() {
    */
   const connect = (server: ServerInfo) => {
     const client = connectClient(server.address);
-    if (!client) return;
+    // --- slice: server actions ---
+    // A row of this game with no client of this game: the press was reasonable
+    // and the answer is the step that fixes it, the same toast the Servers
+    // screen shows.
+    if (!client) {
+      missingClientToast(activeGame);
+      return;
+    }
     if (launchClient.isPending) return;
     setError(null);
     addHistory.mutate({ address: server.address, clientId: client.id });
@@ -206,6 +224,33 @@ export function HomePage() {
       { onError: (e) => setError(errorText(e)) },
     );
   };
+
+  // --- slice: server actions ---
+  /**
+   * Connect and the menu, drawn on the selected row of any of the three blocks.
+   *
+   * The press stops at the button: the row under it is already the selected
+   * one, and letting the click through would only re-select it.
+   */
+  const rowActions = (server: ServerInfo) => (
+    <>
+      <Button
+        size="sm"
+        variant="primary"
+        icon={<Zap size={14} />}
+        disabled={running !== null || launchClient.isPending}
+        onClick={(event) => {
+          event.stopPropagation();
+          connect(server);
+        }}
+      >
+        {startingConnect && launchClient.variables?.connect === server.address
+          ? tCommon("states.starting")
+          : t("topServers.connect")}
+      </Button>
+      <ServerMenu server={server} size="sm" />
+    </>
+  );
 
   return (
     <Page>
@@ -389,9 +434,25 @@ export function HomePage() {
           hides when it has no rows, so a player with neither favourites nor
           history keeps the screen they had before. */}
       <div className="flex flex-col gap-24 pt-24">
-        <ServerListBlock title={t("topServers.favorites")} servers={favorites} />
-        <ServerListBlock title={t("topServers.history")} servers={history} />
-        <TopServers />
+        <ServerListBlock
+          title={t("topServers.favorites")}
+          servers={favorites}
+          selectedAddress={selectedAddress}
+          onSelect={setSelectedAddress}
+          actions={rowActions}
+        />
+        <ServerListBlock
+          title={t("topServers.history")}
+          servers={history}
+          selectedAddress={selectedAddress}
+          onSelect={setSelectedAddress}
+          actions={rowActions}
+        />
+        <TopServers
+          selectedAddress={selectedAddress}
+          onSelect={setSelectedAddress}
+          actions={rowActions}
+        />
       </div>
 
       {/* --- slice: game switch --- the dialog already opens on the active
