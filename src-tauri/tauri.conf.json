@@ -30,7 +30,10 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPLOCALDATA/cache/levelshots/**"]
+        "scope": [
+          "$APPLOCALDATA/cache/levelshots/**",
+          "$APPLOCALDATA/cache/skins/**"
+        ]
       }
     }
   },

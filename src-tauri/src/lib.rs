@@ -21,6 +21,7 @@
 //! | `launch_tokens`  | one cvar at a time inside a client's argument line |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
 //! | `profiles`       | player profiles of one client: nickname, skin, hilts |
+//! | `appearance`     | the skins and hilts a client can offer a profile |
 //! | `levelshots`     | map pictures extracted from the player's pk3 files |
 //! | `online`         | JKNet Online: its wire types and its HTTP client |
 //! | `account`        | signing in to the service and owning the account |
@@ -28,6 +29,12 @@
 //! | `jkhub`          | browsing jkhub.org and installing its files     |
 
 mod account;
+// --- slice: player profiles ---
+// The skins and saber hilts a client can offer a profile, read out of the
+// archives it loads. Its own module rather than a part of `library`: that one
+// owns the pk3 files of a client, this one looks inside them and inside the
+// retail archives of the game, which the library never touches.
+mod appearance;
 // --- slice: client window ---
 // Opening, finding and closing the `client-<slug>` windows. Kept apart from
 // `clients` because it is about windows, not records, and `clients` has to
@@ -329,6 +336,8 @@ pub fn run() {
             profiles::save_profile,
             profiles::delete_profile,
             profiles::set_default_profile,
+            appearance::list_player_models,
+            appearance::list_saber_hilts,
             // --- slice: library ---
             library::list_library,
             library::inspect_pk3,
