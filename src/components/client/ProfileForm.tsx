@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
-import { cn } from "../../lib/format";
+import { cn, commandLine } from "../../lib/format";
 import {
   NO_SECOND_HILT,
   SABER_COLORS,
@@ -17,7 +17,13 @@ import {
   useSaberHilts,
   useSaveProfile,
 } from "../../lib/queries";
-import { Button, Input, Select, type SelectOption } from "../ui";
+import {
+  Button,
+  Input,
+  Select,
+  type SelectOption,
+  type SelectSize,
+} from "../ui";
 import { SettingRow } from "./CvarControls";
 import { MAX_NICKNAME_BYTES, NicknameField, nicknameBytes } from "./NicknameField";
 import { SkinPicker } from "./SkinPicker";
@@ -232,18 +238,27 @@ export function ProfileForm({
   );
 }
 
-/** One hilt list, with «Not set» in front and whatever else the caller adds. */
-function HiltSelect({
+/**
+ * One hilt list, with «Not set» in front and whatever else the caller adds.
+ *
+ * --- slice: connect dialog ---
+ * Exported because the **Connect…** dialog offers the same two hilts over the
+ * same values: the list a player learns in the client window is the list they
+ * meet again before joining a server.
+ */
+export function HiltSelect({
   value,
   hilts,
   label,
   extra = [],
+  size,
   onChange,
 }: {
   value: string | null;
   hilts: SaberHilt[];
   label: string;
   extra?: SelectOption[];
+  size?: SelectSize;
   onChange: (value: string | null) => void;
 }) {
   const { t } = useTranslation("clients");
@@ -281,6 +296,7 @@ function HiltSelect({
       value={value ?? ""}
       options={options}
       ariaLabel={label}
+      size={size}
       placeholder={t("clientWindow.notSet")}
       onChange={(next) => onChange(next === "" ? null : next)}
     />
@@ -425,12 +441,3 @@ export function profileTokens(profile: PlayerProfile, hasHilts: boolean): string
   return tokens;
 }
 
-/**
- * One readable line out of the tokens, quoted the way the engine's own
- * platform `main()` quotes them. The same rule as `CommandPreview`.
- */
-function commandLine(tokens: string[]): string {
-  return tokens
-    .map((token) => (token.includes(" ") ? `"${token}"` : token))
-    .join(" ");
-}

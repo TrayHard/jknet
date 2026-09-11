@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { useLaunchWarningText } from "../../i18n/launchWarnings";
+import { commandLine } from "../../lib/format";
 import { useLaunchPreview } from "../../lib/queries";
 
 /**
@@ -46,18 +47,4 @@ export function CommandPreview({ clientId }: { clientId: string }) {
       ) : null}
     </div>
   );
-}
-
-/**
- * One readable line out of the tokens the process will receive.
- *
- * The quotes go back around a token that holds a space, which is what the
- * platform `main()` of the engine does when it rebuilds its own command line
- * (`shared/sys/sys_main.cpp`). Without them a path with a space would read
- * here as two arguments it is not.
- */
-function commandLine(args: string[]): string {
-  return args
-    .map((token) => (token.includes(" ") ? `"${token}"` : token))
-    .join(" ");
 }

@@ -69,7 +69,8 @@ src/
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
                          JkhubIndexing, JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs,
-                         меню действий у выделенного сервера
+                         меню действий у выделенного сервера, окно
+                         «Подключиться…»
   components/account/    учётная запись: карточка Settings, кнопки провайдеров,
                          ожидание браузера
   components/friends/    экран Friends: строка, панель друга, заявки, presence.ts

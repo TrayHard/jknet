@@ -1,26 +1,29 @@
-import { EyeOff, Eye, Star, StarOff } from "lucide-react";
+import { EyeOff, Eye, Plug, Star, StarOff } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ServerInfo } from "../../lib/ipc";
 import { useSetServerFavorite, useSetServerHidden } from "../../lib/queries";
 import { Menu, type MenuItem, type MenuSize } from "../ui";
+import { ConnectDialog } from "./ConnectDialog";
 
 /**
  * The three-dot menu of one selected server.
  *
- * Two screens show it and both show the same two actions, so the items and the
- * two commands behind them live here rather than in either screen: the Servers
- * details panel puts it beside **Connect**, and a selected row of Home puts it
- * at the right end of the row.
+ * Two screens show it and both show the same three actions, so the items, the
+ * two commands behind them and the dialog the first one opens live here rather
+ * than in either screen: the Servers details panel puts it beside **Connect**,
+ * and a selected row of Home puts it at the right end of the row.
  *
  * Only the selected server has one. A dots button on every row would be eight
- * more press targets down a list whose job is reading, and the two actions
- * behind it are ones a player takes after looking at a server, not while
- * scanning past it.
+ * more press targets down a list whose job is reading, and the actions behind
+ * it are ones a player takes after looking at a server, not while scanning
+ * past it.
  *
- * **Connect…** of the design is not here yet: the dialog it opens is a slice of
- * its own, and a menu item that opens nothing is worse than an item that is not
- * there.
+ * The dialog lives here too, and not on the two screens, for the same reason
+ * the items do: it is a modal over the whole window, so where it hangs in the
+ * tree decides nothing, while two copies of the state that opens it would be
+ * two chances for the screens to disagree about what **Connect…** does.
  */
 export function ServerMenu({
   server,
@@ -32,8 +35,14 @@ export function ServerMenu({
   const { t } = useTranslation("servers");
   const setFavorite = useSetServerFavorite();
   const setHidden = useSetServerHidden();
+  const [dialog, setDialog] = useState(false);
 
   const items: MenuItem[] = [
+    // --- slice: connect dialog ---
+    // First, because it is the action the menu is opened for: the quick
+    // Connect beside it answers «which client, as whom» on its own, and this
+    // is where a player says otherwise.
+    { id: "connect", label: t("menu.connect"), icon: <Plug size={14} /> },
     server.favorite
       ? {
           id: "unfavorite",
@@ -58,20 +67,29 @@ export function ServerMenu({
   ];
 
   return (
-    <Menu
-      ariaLabel={t("menu.actions")}
-      size={size}
-      items={items}
-      onSelect={(id) => {
-        if (id === "favorite" || id === "unfavorite") {
-          setFavorite.mutate({
-            address: server.address,
-            favorite: id === "favorite",
-          });
-          return;
-        }
-        setHidden.mutate({ address: server.address, hidden: id === "hide" });
-      }}
-    />
+    <>
+      <Menu
+        ariaLabel={t("menu.actions")}
+        size={size}
+        items={items}
+        onSelect={(id) => {
+          if (id === "connect") {
+            setDialog(true);
+            return;
+          }
+          if (id === "favorite" || id === "unfavorite") {
+            setFavorite.mutate({
+              address: server.address,
+              favorite: id === "favorite",
+            });
+            return;
+          }
+          setHidden.mutate({ address: server.address, hidden: id === "hide" });
+        }}
+      />
+      {dialog ? (
+        <ConnectDialog server={server} onClose={() => setDialog(false)} />
+      ) : null}
+    </>
   );
 }

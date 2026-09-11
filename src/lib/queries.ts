@@ -382,6 +382,7 @@ export function useLaunchPreview(
   clientId: string,
   profileId?: string,
   run?: LaunchRun,
+  enabled = true,
 ): UseQueryResult<LaunchPreview> {
   return useQuery({
     queryKey: clientKeys.preview(clientId, profileId, run),
@@ -393,6 +394,7 @@ export function useLaunchPreview(
         run?.extraArgs,
         run?.connect,
       ),
+    enabled,
     staleTime: Infinity,
     retry: false,
   });
@@ -423,11 +425,22 @@ export const appearanceKeys = {
   hilts: (clientId: string) => ["appearance", clientId, "hilts"] as const,
 };
 
-/** The profiles of one client and which of them is the default. */
-export function useProfiles(clientId: string): UseQueryResult<ProfileBook> {
+/**
+ * The profiles of one client and which of them is the default.
+ *
+ * --- slice: connect dialog ---
+ * `enabled` is for the caller that may have no client yet: the **Connect…**
+ * dialog opens on a game whose client list can be empty, and an id of `""`
+ * would be a round trip that can only come back `NotFound`.
+ */
+export function useProfiles(
+  clientId: string,
+  enabled = true,
+): UseQueryResult<ProfileBook> {
   return useQuery({
     queryKey: profileKeys.book(clientId),
     queryFn: () => profilesIpc.listProfiles(clientId),
+    enabled,
     staleTime: Infinity,
   });
 }
