@@ -24,6 +24,14 @@
 //! of is an app that looks like it failed to quit. Deleting a client closes
 //! its window for the same reason, and `closeOnLaunch` hides and shows them
 //! along with the main window.
+//!
+//! ## Diagnostics
+//!
+//! Every step of opening a window is a line in `logs\JKNet.log`: the label and
+//! the URL before the build, the label after it, and the text of the failure
+//! instead of a silent `Err`. A window that comes up blank is otherwise
+//! invisible to a bug report — the frontend of a window that never mounted
+//! cannot write anything either.
 
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
@@ -58,13 +66,50 @@ pub fn is_client_label(label: &str) -> bool {
     label.starts_with(LABEL_PREFIX)
 }
 
+/// The path a client window is opened at, for [`WebviewUrl::App`].
+///
+/// The router is a `HashRouter`, so the route is a fragment. Which fragment
+/// form survives depends on how Tauri turns the path into an address, and the
+/// sources of `tauri` 2.11.5 answer that in two places:
+///
+/// - `src/manager/webview.rs:444-459` joins the path onto the application URL
+///   with `Url::join` — `devUrl` under `npm run tauri dev`, `tauri://localhost`
+///   (`http://tauri.localhost` on Windows) in a build. The one path it does not
+///   join is the bare `index.html`, special-cased at line 451 as a
+///   simplification. `Url::join` keeps the fragment of the relative reference,
+///   so `index.html#/client/<id>`, `#/client/<id>` and `/#/client/<id>` all
+///   reach the webview with the fragment intact.
+/// - `src/protocol/tauri.rs:149-153` strips the query and the fragment before
+///   the bundle is read, and `src/manager/mod.rs:384-402` then resolves the
+///   remaining path: `index.html` is found by name, while an empty path is
+///   turned into `index.html` by the branch at line 397.
+///
+/// So all three forms work in both modes, and `index.html#/client/<id>` is the
+/// one the sources name literally at both ends: the file exists under that name
+/// in `frontendDist` and is served under it by Vite, instead of depending on an
+/// index fallback. That is why it is the form here.
+fn window_path(client_id: &str) -> String {
+    format!("index.html#/client/{client_id}")
+}
+
 /// Opens the editing window of a client, or raises the one already open.
 ///
 /// The client is read before the window is built, so a call naming a record
 /// that is not there fails with `NotFound` instead of opening a window that
 /// would show an error and nothing else. The name becomes the window title.
+///
+/// `async` on purpose, and not for any work that waits. Tauri runs a plain
+/// `fn` command on the thread that received the message, which on Windows is
+/// the thread pumping the WebView2 message loop, and building a webview from
+/// there is the known deadlock of `wry` issue 583: the new window appears,
+/// its webview never finishes initialising, and the loop that would close it
+/// is the loop that is stuck. The sources say so twice —
+/// `tauri-2.11.5/src/webview/webview_window.rs:56-59` and `:113-116`, under
+/// «Known issues»: *«You should use `async` commands and separate threads when
+/// creating windows»*. An `async` command runs on the async runtime, so the
+/// build is dispatched to the event loop instead of being run inside it.
 #[tauri::command]
-pub fn open_client_window(
+pub async fn open_client_window(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
     client_id: String,
@@ -73,21 +118,24 @@ pub fn open_client_window(
     let client = clients::read_record(&paths, &client_id)?;
     let label = label_for(&client.id);
 
-    // Looking for the window and building one are a single step. The command
-    // is a plain `fn` on Tauri's blocking pool, so two clicks on the same gear
-    // inside the same instant arrive on two threads: without this, both see no
-    // window and both build one.
+    // Looking for the window and building one are a single step. Two clicks on
+    // the same gear inside the same instant arrive as two commands on two
+    // threads of the async runtime: without this, both see no window and both
+    // build one. Nothing between `enter` and the end of the sequence awaits, so
+    // the guard never crosses a suspension point.
     let _step = state.client_windows().enter();
 
     if let Some(window) = app.get_webview_window(&label) {
+        log::info!("the client window {label} is open, raising it");
         raise(&window);
         return Ok(());
     }
 
-    // `WebviewUrl::App` is a path inside the bundled frontend, and the router
-    // is a `HashRouter`, so the route has to be a fragment of `index.html`.
-    let url = WebviewUrl::App(format!("index.html#/client/{}", client.id).into());
-    let built = WebviewWindowBuilder::new(&app, &label, url)
+    // `WebviewUrl::App` is a path inside the bundled frontend; see
+    // [`window_path`] for why the route travels as a fragment of `index.html`.
+    let path = window_path(&client.id);
+    log::info!("opening the client window {label} at {path}");
+    let built = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(path.into()))
         .title(&client.name)
         .inner_size(WIDTH, HEIGHT)
         .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
@@ -112,10 +160,16 @@ pub fn open_client_window(
             }
             Ok(())
         }
-        Err(e) => Err(crate::error::AppError::State(format!(
-            "cannot open the window of {}: {e}",
-            client.id
-        ))),
+        Err(e) => {
+            // The branch that used to answer the frontend and tell the log
+            // nothing. A build that fails here is the one failure a blank
+            // window cannot report by itself.
+            log::error!("cannot build the client window {label}: {e}");
+            Err(crate::error::AppError::State(format!(
+                "cannot open the window of {}: {e}",
+                client.id
+            )))
+        }
     }
 }
 
@@ -166,5 +220,31 @@ mod tests {
         assert_eq!(label_for("everyday"), "client-everyday");
         assert!(is_client_label(&label_for("duel-japro")));
         assert!(!is_client_label("main"));
+    }
+
+    #[test]
+    fn the_route_travels_as_a_fragment_of_index_html() {
+        assert_eq!(window_path("everyday"), "index.html#/client/everyday");
+        // Not the bare `index.html`: that path is the one Tauri skips joining,
+        // and the window would open on the route of the main one.
+        assert_ne!(window_path("everyday"), "index.html");
+        // The fragment has to survive `Url::join`, and it is what `App` reads
+        // to decide that this document is a client window.
+        assert!(window_path("duel-japro").contains("#/client/"));
+    }
+
+    /// The address the window ends up at, in both modes: Tauri joins the path
+    /// onto the application URL, and the asset handler then drops the fragment
+    /// (`tauri-2.11.5/src/manager/webview.rs:444-459`, `src/protocol/tauri.rs:149-153`).
+    #[test]
+    fn the_path_joins_onto_both_application_urls() {
+        let path = window_path("everyday");
+        for base in ["http://localhost:1420/", "http://tauri.localhost/"] {
+            let joined = format!("{base}{path}");
+            let document = joined.split('#').next().unwrap();
+            let fragment = joined.split_once('#').unwrap().1;
+            assert_eq!(document, format!("{base}index.html"));
+            assert_eq!(fragment, "/client/everyday");
+        }
     }
 }
