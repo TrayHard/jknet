@@ -5,9 +5,16 @@
  * the rules, so a wrong row on screen can be reasoned about without React.
  */
 
-import type { ServerInfo } from "../../lib/ipc";
+import type { ServerInfo, ServerScope } from "../../lib/ipc";
 
-export type ServerTab = "all" | "favorites" | "history" | "lan";
+// --- slice: servers browser ---
+/**
+ * The tabs of the browser, which are also the scopes the core scans under.
+ *
+ * One name for both on purpose: every tab has its own scan and its own loader,
+ * and a tab the core has never heard of would have no way to fill itself.
+ */
+export type ServerTab = ServerScope;
 
 export type PlayersFilter = "any" | "not-empty" | "not-full";
 
@@ -157,6 +164,11 @@ export function applyFilters(
  *
  * History keeps the order of `historyAddresses`, newest first, because the
  * point of that tab is "where was I yesterday" and not "who is busiest".
+ *
+ * --- slice: servers browser ---
+ * The LAN tab narrows nothing: its rows come from a broadcast sweep and live in
+ * a list of their own, so the caller hands that list in and every row of it
+ * belongs on the tab.
  */
 export function applyTab(
   servers: ServerInfo[],
@@ -172,8 +184,6 @@ export function applyTab(
         .map((address) => byAddress.get(address))
         .filter((row): row is ServerInfo => row !== undefined);
     }
-    case "lan":
-      return [];
     default:
       return servers;
   }

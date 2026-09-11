@@ -5,9 +5,7 @@ export interface TabDefinition<Id extends string> {
   label: string;
   /** Number after the label. Omit to show none. */
   count?: number;
-  /** A tab that exists in the design but has nothing behind it yet. */
-  disabled?: boolean;
-  /** Why the tab is disabled, shown on hover. */
+  /** What this tab holds, shown on hover. */
   title?: string;
 }
 
@@ -18,7 +16,13 @@ interface TabsProps<Id extends string> {
   className?: string;
 }
 
-/** The tab strip over the server table: All, Favorites, History. */
+/**
+ * The tab strip over the server table: All, Favorites, History and LAN.
+ *
+ * --- slice: servers browser ---
+ * Every tab is live. The strip had a disabled state while LAN discovery was a
+ * placeholder; a tab nobody can press is not something to keep on a screen.
+ */
 export function Tabs<Id extends string>({
   tabs,
   value,
@@ -38,7 +42,6 @@ export function Tabs<Id extends string>({
             type="button"
             role="tab"
             aria-selected={active}
-            disabled={tab.disabled}
             title={tab.title}
             onClick={() => onChange(tab.id)}
             className={cn(
@@ -47,8 +50,6 @@ export function Tabs<Id extends string>({
               active
                 ? "border-line-accent text-fg"
                 : "border-transparent text-fg-muted hover:text-fg-secondary",
-              tab.disabled &&
-                "text-fg-disabled hover:text-fg-disabled cursor-not-allowed",
             )}
           >
             {tab.label}
