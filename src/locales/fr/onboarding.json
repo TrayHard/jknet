@@ -10,13 +10,6 @@
     "stepCurrent": " (étape en cours)",
     "stepUpcoming": " (pas commencée)"
   },
-  "brand": {
-    "tagline": "Un seul lanceur pour le multijoueur de Jedi Academy.",
-    "promiseLaunch": "Lancez n’importe quel client en un clic, avec ou sans Steam.",
-    "promiseClients": "Gardez plusieurs clients côte à côte, chacun avec ses propres mods.",
-    "promiseServers": "Trouvez un serveur actif et rejoignez-le depuis le lanceur.",
-    "footer": "JKNet lit les fichiers du jeu que vous possédez déjà. Il n’écrit jamais dans le dossier du jeu."
-  },
   "resolving": {
     "heading": "Où le jeu est-il installé ?",
     "text": "JKNet a besoin du dossier qui contient base\\assets0.pk3 à assets3.pk3.",

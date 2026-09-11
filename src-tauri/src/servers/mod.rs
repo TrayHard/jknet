@@ -3,8 +3,10 @@
 //! Three operations fill the browser, and every one of them ends in the same
 //! probe of a list of addresses — [`probe_addresses`]:
 //!
-//! - [`refresh_servers`] asks the master servers for their address lists, then
-//!   probes what they returned. This is **Get new list**.
+//! - [`refresh_servers`] asks the master servers for their address lists,
+//!   adds the addresses already in the cache and probes all of them. This is
+//!   **Get new list**. A server that answers neither of two whole scans in a
+//!   row leaves the cache; until then its row stays, marked offline.
 //! - [`refresh_addresses`] probes the addresses the caller already has, with no
 //!   master server in it at all. This is **Refresh**, and it is also how the
 //!   Favorites and History tabs ask about the addresses the player saved.
@@ -84,6 +86,42 @@ const MAX_IN_FLIGHT: usize = 64;
 
 /// How long one server has to answer a `getstatus`.
 const STATUS_TIMEOUT: Duration = Duration::from_millis(1_500);
+
+// --- slice: servers robustness ---
+/// How long one `getstatus` of the details panel waits for its answer.
+///
+/// Shorter than the refresh's budget because the panel sends two requests:
+/// five populated servers measured on 11 September 2026 answered in 69 to
+/// 161 ms, so a second before giving up is already ten times the round trip,
+/// and a server that needs longer than that is not slow — it is silent.
+const STATUS_ATTEMPT_TIMEOUT: Duration = Duration::from_millis(1_000);
+
+/// Requests the details panel sends: the first one and one retry.
+///
+/// One retry is worth it and a second one is not. The same measurement found
+/// a server that answers `getinfo` in 70 ms and never answers `getstatus` at
+/// all — eleven requests, budgets up to six seconds, nothing — so past the
+/// lost-datagram case there is nothing left for more requests to win.
+const STATUS_ATTEMPTS: u32 = 2;
+
+/// How many whole refreshes in a row a server may miss before its row is
+/// dropped from the cache.
+///
+/// One miss is a lost datagram or a map change; the row stays and the screen
+/// marks it offline. Two in a row is a server that has gone, and the master
+/// servers no longer list it either.
+const MISSED_REFRESH_LIMIT: u32 = 2;
+
+/// How many players one remembered list may keep.
+///
+/// The list is written into the cache document, which is read whole on every
+/// start, so its length is bounded here rather than left to whatever a server
+/// chooses to print. Sixty-four is twice the engine's own ceiling — the server
+/// clamps `sv_maxclients` to `MAX_CLIENTS`, which is 32
+/// (`codemp/server/sv_init.cpp:252`, `codemp/qcommon/q_shared.h:890`) — so no
+/// honest server ever reaches it, and one printing a made-up scoreboard cannot
+/// grow the file without bound.
+const MAX_REMEMBERED_PLAYERS: usize = 64;
 
 /// How many servers one refresh may ask for a player list.
 ///
@@ -307,6 +345,28 @@ pub struct ServerInfo {
     /// of ghosts.
     #[serde(default = "answered")]
     pub responded: bool,
+    // --- slice: servers robustness ---
+    /// Whole refreshes this address has missed in a row.
+    ///
+    /// Zero on every row that answered. A full scan raises it by one for an
+    /// address that stayed silent and drops the row at
+    /// [`MISSED_REFRESH_LIMIT`], so one bad second costs a muted row and not
+    /// a server the player was looking at.
+    #[serde(default)]
+    pub missed_refreshes: u32,
+    // --- slice: servers robustness ---
+    /// The last player list this address ever gave, with no bots removed.
+    ///
+    /// Filled by the `getstatus` pass of a refresh and by every answered call
+    /// of [`get_server_status`]. It is what the details panel shows when the
+    /// server stops answering `getstatus` while staying online — a real
+    /// configuration, not a failure: `135.125.145.49:29070` answered `getinfo`
+    /// in 70 ms and eleven `getstatus` requests with nothing at all.
+    #[serde(default)]
+    pub last_players: Option<Vec<PlayerInfo>>,
+    /// When [`ServerInfo::last_players`] was collected, RFC 3339 in UTC.
+    #[serde(default)]
+    pub last_players_at: Option<String>,
     /// When this row was last confirmed, RFC 3339 in UTC.
     pub last_seen: String,
 }
@@ -369,6 +429,13 @@ impl ServerInfo {
             ping_ms,
             favorite: false,
             responded: true,
+            // --- slice: servers robustness ---
+            // A fresh answer has missed nothing, and the player list of this
+            // exchange is unknown: `getinfo` does not carry one. Both are
+            // carried over from the cached row by `keep_remembered`.
+            missed_refreshes: 0,
+            last_players: None,
+            last_players_at: None,
             last_seen: last_seen.to_string(),
         }
     }
@@ -400,11 +467,50 @@ impl ServerInfo {
     /// player list is cut where the engine's 1 kB buffer ends
     /// (`codemp/server/sv_main.cpp:432`). The status count is the better one
     /// for both halves of the question, so it wins for `humans` and `bots`.
-    pub fn apply_status(&mut self, players: &[protocol::StatusPlayer]) {
+    ///
+    /// --- slice: servers robustness ---
+    /// The list itself is kept as well, not only the two numbers it produced:
+    /// it is the only player list the launcher will ever have for a server
+    /// that answers `getinfo` and refuses `getstatus`, and the details panel
+    /// shows it with the time it was taken instead of a network error.
+    pub fn apply_status(&mut self, players: &[protocol::StatusPlayer], at: &str) {
         let (humans, bots) = protocol::count_humans_and_bots(players);
         self.humans = Some(humans);
         self.bots = Some(bots);
         self.players_source = PlayersSource::Status;
+        self.remember_players(players, at);
+    }
+
+    // --- slice: servers robustness ---
+    /// Stores a player list as the last one known for this address.
+    ///
+    /// Kept to [`MAX_REMEMBERED_PLAYERS`] entries: this list goes into the
+    /// cache document, and a row's size must not be whatever a server decided
+    /// to print. The head is the part kept, because a `getstatus` answer is in
+    /// slot order and the slots the game fills first are the ones a reader
+    /// cares about.
+    pub fn remember_players(&mut self, players: &[protocol::StatusPlayer], at: &str) {
+        self.last_players = Some(
+            players
+                .iter()
+                .take(MAX_REMEMBERED_PLAYERS)
+                .map(PlayerInfo::from_status)
+                .collect(),
+        );
+        self.last_players_at = Some(at.to_string());
+    }
+
+    // --- slice: servers robustness ---
+    /// Carries what only the cache knows onto a row built from a fresh answer.
+    ///
+    /// A `getinfo` says nothing about players by name, so a refresh would
+    /// otherwise wipe the list the panel falls back to every time the server
+    /// answered the first question and not the second.
+    fn keep_remembered(&mut self, cached: &ServerInfo) {
+        if self.last_players.is_none() {
+            self.last_players = cached.last_players.clone();
+            self.last_players_at = cached.last_players_at.clone();
+        }
     }
 
     /// Players the browser counts on this row.
@@ -608,6 +714,19 @@ pub struct PlayerInfo {
     pub is_bot: bool,
 }
 
+impl PlayerInfo {
+    /// One parsed line of a `statusResponse`, with the colour codes stripped.
+    fn from_status(player: &protocol::StatusPlayer) -> PlayerInfo {
+        PlayerInfo {
+            name_raw: player.name_raw.clone(),
+            name_clean: strip_colors(&player.name_raw).trim().to_string(),
+            score: player.score,
+            ping: player.ping,
+            is_bot: player.is_bot(),
+        }
+    }
+}
+
 /// Reads `ip:port`, or `ip` with the stock server port of this game.
 ///
 /// --- slice: game core ---
@@ -787,9 +906,18 @@ pub fn get_cached_servers(
 /// Queries the master servers, pings every address and rewrites the cache.
 ///
 /// This is the **Get new list** button: the only operation that asks a master
-/// server, and the only one that replaces the cache document instead of
-/// merging into it — a server the masters no longer list has left, and that is
-/// what takes its row off the screen.
+/// server, and the only one that writes the whole cache document rather than
+/// merging into it.
+///
+/// --- slice: servers robustness ---
+/// What it writes is not the masters' answer alone. The addresses asked are
+/// the masters' list **and** the addresses already in the cache, and an
+/// address that stays silent keeps its row — muted, with
+/// [`ServerInfo::responded`] false — until it has missed
+/// [`MISSED_REFRESH_LIMIT`] whole refreshes in a row. A master rotates its own
+/// list between two presses of the button (13 of 238 addresses came and went
+/// inside one 45-second window on 11 September 2026), and writing its answer
+/// alone turned that rotation into servers disappearing off the screen.
 ///
 /// `masters` overrides the stock master servers of the game, which is what a
 /// test or a player behind a blocked DNS needs. An empty list falls back to the
@@ -833,43 +961,81 @@ pub async fn refresh_servers(
         .filter(|list| !list.is_empty())
         .unwrap_or_else(|| spec.masters.iter().map(|master| (*master).to_string()).collect());
 
-    let addresses = collect_addresses(&masters, spec.master_protocols).await?;
+    let from_masters = collect_addresses(&masters, spec.master_protocols).await?;
+    // --- slice: servers robustness ---
+    // The cache is read before the probe, not under the write lock: these rows
+    // are the addresses to ask and the last thing known about the ones that
+    // will not answer.
+    let cached = read_cache(&file);
+    let addresses = merge_addresses(game, &from_masters, &cached);
     let total = addresses.len();
     log::info!(
-        "{total} addresses from {} {} master(s)",
+        "{} addresses from {} {} master(s), {total} to ask with the cache",
+        from_masters.len(),
         masters.len(),
         game.display_name()
     );
 
-    let collected = probe_addresses(
+    let probe = probe_addresses(
         Some(&app),
         game,
         RefreshScope::All,
-        addresses,
+        addresses.clone(),
         &favorites,
         &timestamp::now_rfc3339(),
     )
     .await;
+    // --- slice: servers robustness ---
+    // The document is the answers plus the rows of the addresses that stayed
+    // silent and have not yet used up their grace.
+    let mut collected = probe.servers;
+    let kept = keep_silent_rows(game, &cached, &addresses, &mut collected, &favorites);
+    sort_rows(&mut collected);
     // The probe is over before the lock is taken: a scan of the Favorites tab
     // that is still on the wire is none of this command's business, and only
     // the file the two of them share is.
     write_cache_locked(refreshes.cache_lock(game), &file, &collected).await;
 
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
+    let answered = collected.iter().filter(|server| server.responded).count();
     let real_players: u32 = collected
         .iter()
         .map(|server| u32::from(server.real_players()))
         .sum();
     log::info!(
-        "refresh ({}): {} of {total} servers answered in {elapsed_ms} ms, \
+        "refresh ({}): {answered} of {total} servers answered in {elapsed_ms} ms, \
          {real_players} real players, {} servers running bots only",
         game.display_name(),
-        collected.len(),
         collected
             .iter()
             .filter(|server| server.is_bots_only())
             .count()
     );
+    // --- slice: servers robustness ---
+    // The one line a report about a missing server is answered from: how many
+    // addresses each source named, how many of them are gone for good, and how
+    // many answers the mod filter took off the screen before anything counted
+    // them.
+    log::info!(
+        "refresh ({}): {} from the masters, {} from the cache, {answered} answered, \
+         {} silent and kept, {} dropped after {MISSED_REFRESH_LIMIT} misses, \
+         {} hidden by the mod filter",
+        game.display_name(),
+        from_masters.len(),
+        cached.len(),
+        kept.silent,
+        kept.dropped,
+        probe.hidden
+    );
+    let strangers = answered_off_the_master_list(&from_masters, &collected);
+    if !strangers.is_empty() {
+        log::info!(
+            "refresh ({}): {} answered without being on the master list: {}",
+            game.display_name(),
+            strangers.len(),
+            strangers.join(", ")
+        );
+    }
     emit(
         Some(&app),
         "servers:done",
@@ -877,11 +1043,121 @@ pub async fn refresh_servers(
             game,
             scope: RefreshScope::All,
             total,
-            responded: collected.len(),
+            responded: answered,
             elapsed_ms,
         },
     );
     Ok(collected)
+}
+
+// --- slice: servers robustness ---
+/// The addresses a full scan asks: the masters' list and the cache's own.
+///
+/// A cached row whose address no longer parses is dropped with a line in the
+/// log rather than failing the press, the same way a typed address is.
+fn merge_addresses(
+    game: Game,
+    from_masters: &[SocketAddrV4],
+    cached: &[ServerInfo],
+) -> Vec<SocketAddrV4> {
+    let mut merged: BTreeSet<SocketAddrV4> = from_masters.iter().copied().collect();
+    for row in cached {
+        match parse_address(game, &row.address) {
+            Ok(peer) => {
+                merged.insert(peer);
+            }
+            Err(e) => log::warn!("skipping the cached row {}: {e}", row.address),
+        }
+    }
+    merged.into_iter().collect()
+}
+
+// --- slice: servers robustness ---
+/// What the grace rule did to the addresses that did not answer.
+struct SilentRows {
+    /// Rows kept in the document, muted, with one more miss on the counter.
+    silent: usize,
+    /// Rows that used up [`MISSED_REFRESH_LIMIT`] and left the cache.
+    dropped: usize,
+}
+
+// --- slice: servers robustness ---
+/// Appends the rows of the asked addresses that said nothing, and counts them.
+///
+/// A row that answered has its miss counter cleared and keeps the player list
+/// the cache remembered for it. A row that did not answer carries everything
+/// the last successful scan knew, is marked with `responded: false` and spends
+/// one of its misses; at [`MISSED_REFRESH_LIMIT`] it is left out, which is what
+/// finally takes a switched-off server off the screen.
+///
+/// An address nobody has ever seen does not become a row here: a full scan asks
+/// the masters' list, and an address on it that never answered is not a server
+/// the cache has anything to say about.
+fn keep_silent_rows(
+    game: Game,
+    cached: &[ServerInfo],
+    asked: &[SocketAddrV4],
+    answered: &mut Vec<ServerInfo>,
+    favorites: &HashSet<String>,
+) -> SilentRows {
+    let known: BTreeMap<&str, &ServerInfo> = cached
+        .iter()
+        .map(|row| (row.address.as_str(), row))
+        .collect();
+    for row in answered.iter_mut() {
+        if let Some(cached) = known.get(row.address.as_str()) {
+            row.keep_remembered(cached);
+        }
+    }
+
+    let replied: HashSet<String> = answered.iter().map(|row| row.address.clone()).collect();
+    let mut counts = SilentRows {
+        silent: 0,
+        dropped: 0,
+    };
+    for address in asked {
+        let key = address.to_string();
+        if replied.contains(key.as_str()) {
+            continue;
+        }
+        let Some(row) = known.get(key.as_str()) else {
+            continue;
+        };
+        if is_hidden_mod(&row.mod_name) {
+            continue;
+        }
+        let mut row = (*row).clone();
+        row.game = game;
+        row.responded = false;
+        row.missed_refreshes = row.missed_refreshes.saturating_add(1);
+        if row.missed_refreshes >= MISSED_REFRESH_LIMIT {
+            counts.dropped += 1;
+            continue;
+        }
+        row.decorate(favorites);
+        counts.silent += 1;
+        answered.push(row);
+    }
+    counts
+}
+
+// --- slice: servers robustness ---
+/// Addresses that answered although no master named them.
+///
+/// Worth a line in the log rather than a warning: a favourite on a private
+/// server is exactly this, and so is a server the master dropped a minute ago
+/// and is still running. It is also the shortest proof that the merge with the
+/// cache is doing something.
+fn answered_off_the_master_list(
+    from_masters: &[SocketAddrV4],
+    collected: &[ServerInfo],
+) -> Vec<String> {
+    let listed: HashSet<String> = from_masters.iter().map(|peer| peer.to_string()).collect();
+    collected
+        .iter()
+        .filter(|row| row.responded && !listed.contains(&row.address))
+        .map(|row| row.address.clone())
+        .collect()
 }
 
 // --- slice: servers browser ---
@@ -930,7 +1206,7 @@ pub async fn refresh_addresses(
     }
     let total = wanted.len();
 
-    let answered = probe_addresses(
+    let mut answered = probe_addresses(
         Some(&app),
         game,
         scope,
@@ -938,10 +1214,16 @@ pub async fn refresh_addresses(
         &favorites,
         &timestamp::now_rfc3339(),
     )
-    .await;
+    .await
+    .servers;
     // Read, merge and write as one step: a **Get new list** of the same game
     // runs under its own claim and ends at this same file.
     let document = merge_into_cache_locked(refreshes.cache_lock(game), &file, &answered).await;
+    // --- slice: servers robustness ---
+    // A `getinfo` carries no player list, so the one the cache remembers has
+    // to survive this scan on the screen as well as in the document: the
+    // details panel falls back to it.
+    remember_from_cache(&document, &mut answered);
 
     let mut rows = answered;
     rows.extend(silent_rows(game, &document, &wanted, &rows, &favorites));
@@ -1036,7 +1318,7 @@ async fn scan_lan(
 
     // The same second pass as a refresh: a server on the desk next to the
     // player hides `g_humanplayers` as readily as one on the internet.
-    resolve_bots_by_status(app, game, RefreshScope::Lan, &mut rows).await;
+    resolve_bots_by_status(app, game, RefreshScope::Lan, &mut rows, &last_seen).await;
     sort_rows(&mut rows);
 
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
@@ -1090,8 +1372,9 @@ async fn probe_addresses(
     addresses: Vec<SocketAddrV4>,
     favorites: &HashSet<String>,
     last_seen: &str,
-) -> Vec<ServerInfo> {
+) -> ProbeOutcome {
     let total = addresses.len();
+    let mut hidden = 0usize;
     let semaphore = Arc::new(Semaphore::new(MAX_IN_FLIGHT));
     let mut probes = JoinSet::new();
     for address in addresses {
@@ -1118,6 +1401,7 @@ async fn probe_addresses(
         // Dropped before the batch and before `collected`, so a hidden mod
         // reaches neither the window nor the cache this refresh writes.
         if is_hidden_mod(&server.mod_name) {
+            hidden += 1;
             continue;
         }
         server.decorate(favorites);
@@ -1149,13 +1433,35 @@ async fn probe_addresses(
         );
     }
 
-    resolve_bots_by_status(app, game, scope, &mut collected).await;
+    resolve_bots_by_status(app, game, scope, &mut collected, last_seen).await;
     sort_rows(&mut collected);
-    collected
+    ProbeOutcome {
+        servers: collected,
+        hidden,
+    }
+}
+
+// --- slice: servers robustness ---
+/// What one probe of a list of addresses produced.
+///
+/// The hidden count is carried out rather than only logged inside, because the
+/// summary of a refresh has to answer «where did the rest of the addresses go»
+/// in one line: the mod filter and a silent server are different fates and the
+/// player asking why a server is missing needs to tell them apart.
+struct ProbeOutcome {
+    /// Rows of the addresses that answered, minus the hidden mods.
+    servers: Vec<ServerInfo>,
+    /// Answers dropped by [`is_hidden_mod`].
+    hidden: usize,
 }
 
 // --- slice: servers browser ---
 /// Replaces the rows of `incoming` by address and appends the ones that are new.
+///
+/// --- slice: servers robustness ---
+/// A replaced row hands over what only the cache knows — the last player list
+/// and when it was taken — because the answer that replaces it came from a
+/// `getinfo`, which has no player list in it at all.
 fn merge_rows(document: &mut Vec<ServerInfo>, incoming: &[ServerInfo]) {
     let mut index: BTreeMap<String, usize> = document
         .iter()
@@ -1164,11 +1470,33 @@ fn merge_rows(document: &mut Vec<ServerInfo>, incoming: &[ServerInfo]) {
         .collect();
     for row in incoming {
         match index.get(&row.address) {
-            Some(&at) => document[at] = row.clone(),
+            Some(&at) => {
+                let mut row = row.clone();
+                row.keep_remembered(&document[at]);
+                document[at] = row;
+            }
             None => {
                 index.insert(row.address.clone(), document.len());
                 document.push(row.clone());
             }
+        }
+    }
+}
+
+// --- slice: servers robustness ---
+/// Copies the remembered player list of `document` onto the matching rows.
+///
+/// The screen half of the rule [`merge_rows`] applies to the document: the
+/// rows a command returns are the ones the panel reads, so they carry the same
+/// fallback the cache does.
+fn remember_from_cache(document: &[ServerInfo], rows: &mut [ServerInfo]) {
+    let known: BTreeMap<&str, &ServerInfo> = document
+        .iter()
+        .map(|row| (row.address.as_str(), row))
+        .collect();
+    for row in rows.iter_mut() {
+        if let Some(cached) = known.get(row.address.as_str()) {
+            row.keep_remembered(cached);
         }
     }
 }
@@ -1229,6 +1557,33 @@ async fn write_cache_locked(
 ) {
     let _writing = lock.lock().await;
     write_cache(file, servers);
+}
+
+// --- slice: servers robustness ---
+/// Writes one answered player list onto the cached row of that address.
+///
+/// The row has to exist: the cache is the record of servers a scan has seen,
+/// and the details panel only ever asks about a row that is on the screen. An
+/// address that is not in the document is therefore left alone rather than
+/// appended as a row nothing else knows anything about.
+///
+/// Under the game's cache lock, like every other read-modify-write of this
+/// file — a **Get new list** finishing at the same moment must not lose the
+/// list, and must not lose its own document to it either.
+async fn remember_players_locked(
+    lock: &tokio::sync::Mutex<()>,
+    file: &PathBuf,
+    address: &str,
+    players: &[protocol::StatusPlayer],
+    at: &str,
+) {
+    let _writing = lock.lock().await;
+    let mut document = read_cache(file);
+    let Some(row) = document.iter_mut().find(|row| row.address == address) else {
+        return;
+    };
+    row.remember_players(players, at);
+    write_cache(file, &document);
 }
 
 // --- slice: servers browser ---
@@ -1312,6 +1667,9 @@ async fn resolve_bots_by_status(
     // --- slice: servers browser --- travels on the batch this pass emits.
     scope: RefreshScope,
     servers: &mut [ServerInfo],
+    // --- slice: servers robustness --- when the player lists it collects were
+    // taken, which is what the details panel puts under a remembered list.
+    at: &str,
 ) -> usize {
     let candidates = status_candidates(servers, MAX_STATUS_QUERIES);
     if candidates.is_empty() {
@@ -1327,7 +1685,11 @@ async fn resolve_bots_by_status(
         let gate = Arc::clone(&semaphore);
         probes.spawn(async move {
             let _permit = gate.acquire_owned().await.ok()?;
-            let reply = net::query_status(peer, STATUS_TIMEOUT).await.ok()?;
+            // One request here: this pass asks up to 150 servers at once and
+            // only needs the human-to-bot split, while the details panel asks
+            // one server the player is looking at and retries. See
+            // [`STATUS_ATTEMPTS`].
+            let reply = net::query_status(peer, STATUS_TIMEOUT, 1).await.ok()?;
             Some((index, protocol::parse_status_players(&reply.players)))
         });
     }
@@ -1337,7 +1699,7 @@ async fn resolve_bots_by_status(
         let Ok(Some((index, players))) = joined else {
             continue;
         };
-        servers[index].apply_status(&players);
+        servers[index].apply_status(&players, at);
         updated.push(servers[index].clone());
     }
 
@@ -1359,6 +1721,39 @@ async fn resolve_bots_by_status(
         );
     }
     answered
+}
+
+// --- slice: servers robustness ---
+/// Asks one master one question, and asks again when the answer is in doubt.
+///
+/// One thing is in doubt: a master whose datagrams stopped without the `\EOT`
+/// marker — the budget ended that list, so what arrived is a prefix of it and
+/// looks exactly like a short one. The second question is asked once, and both
+/// answers are merged: a master that is rotating its own list gives two
+/// overlapping halves rather than one of them.
+///
+/// A master that said nothing at all is not asked again. It has no prefix to
+/// finish, and silence is its steady state rather than a bad second:
+/// `masterjk3.ravensoft.com` never answers, so for Jedi Academy the second
+/// question would spend another whole [`MASTER_TIMEOUT`] on every refresh —
+/// and [`collect_addresses`] waits for the slowest master, so those 1.5 s land
+/// on **Get new list** in full.
+async fn ask_master(master: &str, protocol: u16) -> Result<Vec<SocketAddrV4>> {
+    let first = match net::query_master(master, protocol, MASTER_TIMEOUT).await {
+        Ok(reply) if reply.complete => return Ok(reply.addresses),
+        Ok(partial) => partial,
+        Err(silent) => return Err(silent),
+    };
+
+    log::info!("master {master} protocol {protocol}: asking again");
+    match net::query_master(master, protocol, MASTER_TIMEOUT).await {
+        Ok(second) => {
+            let mut merged: BTreeSet<SocketAddrV4> = first.addresses.into_iter().collect();
+            merged.extend(second.addresses);
+            Ok(merged.into_iter().collect())
+        }
+        Err(_) => Ok(first.addresses),
+    }
 }
 
 /// Asks every master for every protocol at once and merges the answers.
@@ -1385,7 +1780,7 @@ async fn collect_addresses(
         for protocol in protocols.iter().copied() {
             let master = master.clone();
             queries.spawn(async move {
-                let found = net::query_master(&master, protocol, MASTER_TIMEOUT).await;
+                let found = ask_master(&master, protocol).await;
                 (master, protocol, found)
             });
         }
@@ -1422,8 +1817,14 @@ async fn collect_addresses(
 
 /// Asks one server for its player list and full `serverinfo`.
 ///
-/// The Servers screen calls this when a row is selected, so it must stay a
-/// single short exchange: one datagram out, one back, no retry.
+/// The Servers screen calls this when a row is selected, so it stays a short
+/// exchange: [`STATUS_ATTEMPTS`] requests of [`STATUS_ATTEMPT_TIMEOUT`] each,
+/// two seconds in the worst case.
+///
+/// --- slice: servers robustness ---
+/// An answer is also written into the cache document, so the panel has a list
+/// to show the next time this server refuses `getstatus`. The write is a
+/// failure the player cannot act on, so it is logged rather than returned.
 ///
 /// --- slice: game core ---
 /// `game` only completes an address the caller sent without a port; the
@@ -1431,22 +1832,24 @@ async fn collect_addresses(
 #[tauri::command]
 pub async fn get_server_status(
     state: tauri::State<'_, AppState>,
+    refreshes: tauri::State<'_, RefreshState>,
     address: String,
     game: Option<Game>,
 ) -> Result<ServerStatus> {
     let game = state.settings()?.game_or_active(game);
     let peer = parse_address(game, &address)?;
-    let reply = net::query_status(peer, STATUS_TIMEOUT).await?;
-    let players = protocol::parse_status_players(&reply.players)
-        .into_iter()
-        .map(|player| PlayerInfo {
-            name_clean: strip_colors(&player.name_raw).trim().to_string(),
-            is_bot: player.is_bot(),
-            name_raw: player.name_raw,
-            score: player.score,
-            ping: player.ping,
-        })
-        .collect();
+    let file = cache_file(&state, game)?;
+    let reply = net::query_status(peer, STATUS_ATTEMPT_TIMEOUT, STATUS_ATTEMPTS).await?;
+    let parsed = protocol::parse_status_players(&reply.players);
+    remember_players_locked(
+        refreshes.cache_lock(game),
+        &file,
+        &peer.to_string(),
+        &parsed,
+        &timestamp::now_rfc3339(),
+    )
+    .await;
+    let players = parsed.iter().map(PlayerInfo::from_status).collect();
 
     Ok(ServerStatus {
         address: peer.to_string(),
@@ -1758,7 +2161,7 @@ mod tests {
         let mut server = row("\\hostname\\Vanilla\\clients\\4");
         let players =
             protocol::parse_status_players("3 60 \"Kyle\"\n1 0 \"Reborn\"\n0 0 \"Jedi\"\n");
-        server.apply_status(&players);
+        server.apply_status(&players, "2026-09-11T00:00:00Z");
         assert_eq!(server.humans, Some(1));
         assert_eq!(server.bots, Some(2));
         assert_eq!(server.players_source, PlayersSource::Status);
@@ -1769,9 +2172,10 @@ mod tests {
     #[test]
     fn a_player_list_of_bots_only_settles_it_too() {
         let mut server = row("\\hostname\\Vanilla\\clients\\3");
-        server.apply_status(&protocol::parse_status_players(
-            "0 0 \"b1\"\n0 0 \"b2\"\n0 0 \"b3\"\n",
-        ));
+        server.apply_status(
+            &protocol::parse_status_players("0 0 \"b1\"\n0 0 \"b2\"\n0 0 \"b3\"\n"),
+            "2026-09-11T00:00:00Z",
+        );
         assert_eq!(server.humans, Some(0));
         assert_eq!(server.bots, Some(3));
         assert!(server.is_bots_only());
@@ -1782,7 +2186,7 @@ mod tests {
         // The server said four clients and then listed none. The list is the
         // one that can be counted, so the row shows nobody rather than four.
         let mut server = row("\\hostname\\Vanilla\\clients\\4");
-        server.apply_status(&[]);
+        server.apply_status(&[], "2026-09-11T00:00:00Z");
         assert_eq!(server.humans, Some(0));
         assert_eq!(server.bots, Some(0));
         assert_eq!(server.real_players(), 0);
@@ -1842,7 +2246,10 @@ mod tests {
             .join("servers.json");
         let _ = fs::remove_file(&file);
         let mut server = row("\\hostname\\Vanilla\\clients\\5");
-        server.apply_status(&protocol::parse_status_players("1 70 \"Kyle\"\n0 0 \"Bot\"\n"));
+        server.apply_status(
+            &protocol::parse_status_players("1 70 \"Kyle\"\n0 0 \"Bot\"\n"),
+            "2026-09-11T00:00:00Z",
+        );
         write_cache(&file, &[server]);
         let read = read_cache(&file);
         assert_eq!(read[0].players_source, PlayersSource::Status);
@@ -2092,6 +2499,147 @@ mod tests {
         assert_eq!(only_15.len(), 2);
     }
 
+    // --- slice: servers robustness ---
+    /// A master that cuts its first answer short and sends the whole list on
+    /// the second question.
+    ///
+    /// The first reply carries half the addresses and no `\EOT`, which is what
+    /// a master whose datagrams the budget cut off looks like from here. The
+    /// counter says how many questions were asked, so the test can prove there
+    /// was a second one rather than infer it from the addresses.
+    async fn stub_flaky_master(
+        first: &'static [&'static str],
+        then: &'static [&'static str],
+        cut_off_the_first: bool,
+    ) -> (String, Arc<Mutex<usize>>) {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+            .await
+            .expect("a socket");
+        let address = socket.local_addr().expect("an address").to_string();
+        let asked = Arc::new(Mutex::new(0usize));
+        let counter = Arc::clone(&asked);
+        tokio::spawn(async move {
+            let mut buffer = vec![0u8; 2048];
+            while let Ok(Ok((read, from))) = tokio::time::timeout(
+                Duration::from_millis(4_000),
+                socket.recv_from(&mut buffer),
+            )
+            .await
+            {
+                if !String::from_utf8_lossy(&buffer[4..read]).starts_with("getservers ") {
+                    continue;
+                }
+                let seen = {
+                    let mut asked = counter.lock().expect("the counter");
+                    *asked += 1;
+                    *asked
+                };
+                let datagram = if seen == 1 {
+                    let mut packet = master_datagram(first);
+                    if cut_off_the_first {
+                        // The addresses of a half-sent list, with the
+                        // end-of-transmission marker cut off with the rest.
+                        packet.truncate(packet.len() - 7);
+                    }
+                    packet
+                } else {
+                    master_datagram(then)
+                };
+                let _ = socket.send_to(&datagram, from).await;
+            }
+        });
+        (address, asked)
+    }
+
+    #[tokio::test]
+    async fn a_master_answer_without_its_end_marker_is_asked_again() {
+        static FIRST: &[&str] = &["10.0.0.1:29070", "10.0.0.2:29070"];
+        static THEN: &[&str] = &["10.0.0.2:29070", "10.0.0.3:29070", "10.0.0.4:29070"];
+        let (master, asked) = stub_flaky_master(FIRST, THEN, true).await;
+
+        let found = collect_addresses(&[master], &[26])
+            .await
+            .expect("the stub answers");
+        let listed: Vec<String> = found.iter().map(|peer| peer.to_string()).collect();
+        assert_eq!(*asked.lock().expect("the counter"), 2, "asked twice");
+        // Both answers, merged and deduplicated: a short first answer costs
+        // nothing, and neither list alone is the whole one.
+        assert_eq!(
+            listed,
+            vec![
+                "10.0.0.1:29070".to_string(),
+                "10.0.0.2:29070".to_string(),
+                "10.0.0.3:29070".to_string(),
+                "10.0.0.4:29070".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_master_that_closed_its_list_is_asked_once() {
+        // The ordinary day: one question, one answer closed by `\EOT`, and no
+        // second round trip spent on a master that already said everything.
+        // The second list is there only so a second question would be visible
+        // in the result as well as in the counter.
+        static FIRST: &[&str] = &["10.0.0.7:29070"];
+        static THEN: &[&str] = &["10.0.0.8:29070"];
+        let (master, asked) = stub_flaky_master(FIRST, THEN, false).await;
+
+        let found = collect_addresses(&[master], &[26])
+            .await
+            .expect("the stub answers");
+        assert_eq!(*asked.lock().expect("the counter"), 1, "asked once");
+        assert_eq!(found.len(), 1);
+    }
+
+    // --- slice: servers robustness ---
+    /// A master that hears every question and answers none.
+    ///
+    /// The counter is the whole point of the stub: silence leaves no addresses
+    /// to reason from, so how many questions were spent on it is the only
+    /// thing the test can see.
+    async fn stub_deaf_master() -> (String, Arc<Mutex<usize>>) {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+            .await
+            .expect("a socket");
+        let address = socket.local_addr().expect("an address").to_string();
+        let asked = Arc::new(Mutex::new(0usize));
+        let counter = Arc::clone(&asked);
+        tokio::spawn(async move {
+            let mut buffer = vec![0u8; 2048];
+            while let Ok(Ok((read, _))) = tokio::time::timeout(
+                Duration::from_millis(4_000),
+                socket.recv_from(&mut buffer),
+            )
+            .await
+            {
+                if String::from_utf8_lossy(&buffer[4..read]).starts_with("getservers ") {
+                    *counter.lock().expect("the counter") += 1;
+                }
+            }
+        });
+        (address, asked)
+    }
+
+    #[tokio::test]
+    async fn a_master_that_says_nothing_is_asked_once() {
+        // Not the rare case but every Jedi Academy refresh:
+        // `masterjk3.ravensoft.com` never answers. Silence carries no prefix
+        // for a second question to finish, and `collect_addresses` waits for
+        // the slowest master, so a retry here would put another whole
+        // MASTER_TIMEOUT on **Get new list** with nothing to win.
+        let (master, asked) = stub_deaf_master().await;
+
+        let failure = collect_addresses(&[master], &[26])
+            .await
+            .expect_err("nothing answered");
+        assert!(
+            failure.to_string().contains("no master server answered"),
+            "{failure}"
+        );
+        assert_eq!(*asked.lock().expect("the counter"), 1, "asked once");
+    }
+
     #[tokio::test]
     async fn a_master_that_answers_one_protocol_is_not_a_failed_refresh() {
         // A master that knows nothing about protocol 15 simply says nothing
@@ -2185,7 +2733,8 @@ mod tests {
             &favorites,
             "2026-09-11T00:00:00Z",
         )
-        .await;
+        .await
+        .servers;
 
         assert_eq!(answered.len(), 1, "only the server that answered");
         assert_eq!(answered[0].hostname_clean, "Nearby");
@@ -2230,6 +2779,231 @@ mod tests {
             "\\hostname\\Back up\\clients\\1\\g_humanplayers\\1",
         )];
         assert!(silent_rows(Game::JediAcademy, &known, &[silent], &answered, &favorites).is_empty());
+    }
+
+    // --- slice: servers robustness ---
+
+    #[test]
+    fn a_full_scan_asks_the_cache_as_well_as_the_masters() {
+        // The master rotates its own list between two presses of the button.
+        // The addresses it stopped naming are still asked, so a server that is
+        // simply not registered this minute keeps its row.
+        let game = Game::JediAcademy;
+        let from_masters: Vec<SocketAddrV4> = ["10.0.0.1:29070", "10.0.0.2:29070"]
+            .iter()
+            .map(|address| address.parse().expect("an address"))
+            .collect();
+        let cached = vec![
+            game_row(game, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
+            game_row(game, "10.0.0.9:29070", "\\hostname\\Private\\clients\\2\\g_humanplayers\\2"),
+        ];
+
+        let asked: Vec<String> = merge_addresses(game, &from_masters, &cached)
+            .iter()
+            .map(|peer| peer.to_string())
+            .collect();
+        assert_eq!(
+            asked,
+            vec![
+                "10.0.0.1:29070".to_string(),
+                "10.0.0.2:29070".to_string(),
+                "10.0.0.9:29070".to_string(),
+            ],
+            "the union of both sources, deduplicated"
+        );
+
+        // A cached row with an address that stopped parsing costs itself and
+        // nothing else: the press still asks everybody else.
+        let broken = vec![game_row(game, "10.0.0.9:29070", "").clone()];
+        let mut broken = broken;
+        broken[0].address = "not an address".to_string();
+        assert_eq!(merge_addresses(game, &from_masters, &broken).len(), 2);
+    }
+
+    #[test]
+    fn a_silent_server_is_dropped_on_the_second_miss_and_not_the_first() {
+        let game = Game::JediAcademy;
+        let live: SocketAddrV4 = "10.0.0.1:29070".parse().expect("an address");
+        let gone: SocketAddrV4 = "10.0.0.2:29070".parse().expect("an address");
+        let favorites: HashSet<String> = [gone.to_string()].into_iter().collect();
+        let cached = vec![
+            game_row(game, &live.to_string(), "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
+            game_row(game, &gone.to_string(), "\\hostname\\Bravo\\clients\\4\\g_humanplayers\\4"),
+        ];
+
+        // First scan: Alpha answers, Bravo does not. Both rows stay.
+        let mut rows = vec![game_row(
+            game,
+            &live.to_string(),
+            "\\hostname\\Alpha\\clients\\2\\g_humanplayers\\2",
+        )];
+        let first = keep_silent_rows(game, &cached, &[live, gone], &mut rows, &favorites);
+        assert_eq!((first.silent, first.dropped), (1, 0));
+        assert_eq!(rows.len(), 2, "the server that went quiet keeps its row");
+        let muted = rows.iter().find(|row| row.address == gone.to_string()).unwrap();
+        assert!(!muted.responded, "the screen mutes it and drops the ping");
+        assert_eq!(muted.hostname_clean, "Bravo", "with what was last known");
+        assert_eq!(muted.missed_refreshes, 1);
+        assert!(muted.favorite, "the star comes from the settings");
+        // And the row that answered starts over from zero.
+        let alive = rows.iter().find(|row| row.address == live.to_string()).unwrap();
+        assert_eq!(alive.missed_refreshes, 0);
+
+        // Second scan, over the document the first one wrote: Bravo is gone.
+        let mut rows = vec![game_row(
+            game,
+            &live.to_string(),
+            "\\hostname\\Alpha\\clients\\2\\g_humanplayers\\2",
+        )];
+        let second = keep_silent_rows(game, &rows_of(&muted.clone(), &cached), &[live, gone], &mut rows, &favorites);
+        assert_eq!((second.silent, second.dropped), (0, 1));
+        assert_eq!(rows.len(), 1, "two misses in a row take the row off the list");
+
+        // An address the masters named that nobody has ever seen does not
+        // become a row: the cache records servers, not addresses.
+        let stranger: SocketAddrV4 = "10.0.0.9:29070".parse().expect("an address");
+        let mut rows: Vec<ServerInfo> = Vec::new();
+        let counts = keep_silent_rows(game, &cached, &[stranger], &mut rows, &favorites);
+        assert_eq!((counts.silent, counts.dropped), (0, 0));
+        assert!(rows.is_empty());
+    }
+
+    /// The cached document of the second scan: the muted row over the first one.
+    fn rows_of(muted: &ServerInfo, cached: &[ServerInfo]) -> Vec<ServerInfo> {
+        let mut document = cached.to_vec();
+        merge_rows(&mut document, std::slice::from_ref(muted));
+        document
+    }
+
+    #[test]
+    fn a_player_list_is_remembered_on_the_row_and_survives_the_next_scan() {
+        let game = Game::JediAcademy;
+        let mut server = game_row(game, "10.0.0.1:29070", "\\hostname\\Quiet\\clients\\2");
+        server.apply_status(
+            &protocol::parse_status_players("12 70 \"^1Kyle\"\n0 0 \"Bot\"\n"),
+            "2026-09-11T10:00:00Z",
+        );
+
+        let remembered = server.last_players.clone().expect("a list");
+        assert_eq!(remembered.len(), 2);
+        assert_eq!(remembered[0].name_clean, "Kyle", "colour codes are stripped");
+        assert_eq!(remembered[0].ping, 70);
+        assert!(!remembered[0].is_bot);
+        assert!(remembered[1].is_bot, "ping 0 is a bot");
+        assert_eq!(server.last_players_at.as_deref(), Some("2026-09-11T10:00:00Z"));
+
+        // The next scan answers `getinfo`, which carries no player list at
+        // all. The row must not lose the one the panel falls back to.
+        let mut document = vec![server.clone()];
+        let fresh = game_row(game, "10.0.0.1:29070", "\\hostname\\Quiet\\clients\\3");
+        assert!(fresh.last_players.is_none(), "a getinfo knows no names");
+        merge_rows(&mut document, std::slice::from_ref(&fresh));
+        assert_eq!(document[0].clients, 3, "the fresh answer wins");
+        assert_eq!(
+            document[0].last_players.as_ref().map(Vec::len),
+            Some(2),
+            "and the remembered list rides along"
+        );
+
+        // The same rule on the way to the screen, and through the cache file.
+        let mut rows = vec![fresh];
+        remember_from_cache(&document, &mut rows);
+        assert_eq!(rows[0].last_players_at.as_deref(), Some("2026-09-11T10:00:00Z"));
+
+        let file = std::env::temp_dir()
+            .join("jknet-test-remembered-players")
+            .join("servers-ja.json");
+        let _ = fs::remove_file(&file);
+        write_cache(&file, &document);
+        let read = read_cache(&file);
+        assert_eq!(read[0].last_players.as_ref().map(Vec::len), Some(2));
+        assert_eq!(read[0].last_players.as_ref().unwrap()[0].name_clean, "Kyle");
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_remembered_player_list_is_kept_to_its_cap() {
+        // The cache document is read whole on every start, so a row may not
+        // grow to whatever a server prints. Nothing honest reaches the cap:
+        // the engine clamps `sv_maxclients` to 32, half of it.
+        let game = Game::JediAcademy;
+        let mut server = game_row(game, "10.0.0.1:29070", "\\hostname\\Loud\\clients\\2");
+
+        let scoreboard: String = (0..MAX_REMEMBERED_PLAYERS + 40)
+            .map(|slot| format!("1 40 \"Player{slot}\"\n"))
+            .collect();
+        let printed = protocol::parse_status_players(&scoreboard);
+        assert_eq!(printed.len(), MAX_REMEMBERED_PLAYERS + 40, "the stub prints them all");
+
+        server.apply_status(&printed, "2026-09-11T10:00:00Z");
+        let remembered = server.last_players.as_ref().expect("a list");
+        assert_eq!(remembered.len(), MAX_REMEMBERED_PLAYERS);
+        // The head is what stays: a `getstatus` answer is in slot order.
+        assert_eq!(remembered[0].name_clean, "Player0");
+        assert_eq!(
+            remembered[MAX_REMEMBERED_PLAYERS - 1].name_clean,
+            format!("Player{}", MAX_REMEMBERED_PLAYERS - 1)
+        );
+
+        // The counts still come off the whole answer: the cap is about what a
+        // row stores, not about how many players the browser says are there.
+        assert_eq!(server.humans, Some((MAX_REMEMBERED_PLAYERS + 40) as u16));
+
+        // An ordinary scoreboard is not touched by any of this.
+        let mut modest = game_row(game, "10.0.0.2:29070", "\\hostname\\Quiet\\clients\\2");
+        modest.apply_status(
+            &protocol::parse_status_players("12 70 \"Kyle\"\n3 55 \"Jan\"\n"),
+            "2026-09-11T10:00:00Z",
+        );
+        assert_eq!(modest.last_players.as_ref().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn a_row_written_before_the_two_fields_existed_still_reads() {
+        // A 0.3 document has neither counter nor player list, and serde has to
+        // fill both rather than throw the list away.
+        let file = std::env::temp_dir()
+            .join("jknet-test-cache-without-the-new-fields")
+            .join("servers-ja.json");
+        let _ = fs::remove_file(&file);
+        fs::create_dir_all(file.parent().unwrap()).expect("the folder");
+        fs::write(
+            &file,
+            r#"{"updatedAt":"2026-09-10T00:00:00Z","servers":[{"game":"ja",
+               "address":"10.0.0.1:29070","hostnameRaw":"Alpha","hostnameClean":"Alpha",
+               "map":"mp/ffa3","gametype":0,"gametypeLabel":"FFA","clients":2,"humans":2,
+               "maxClients":16,"needpass":false,"protocol":26,"pingMs":40,"favorite":false,
+               "lastSeen":"2026-09-10T00:00:00Z"}]}"#,
+        )
+        .expect("the document");
+
+        let read = read_cache(&file);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].missed_refreshes, 0, "an old row has missed nothing");
+        assert!(read[0].last_players.is_none());
+        assert!(read[0].last_players_at.is_none());
+        assert!(read[0].responded, "and is not a ghost");
+        let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn the_log_names_the_servers_the_masters_did_not() {
+        let game = Game::JediAcademy;
+        let from_masters: Vec<SocketAddrV4> =
+            vec!["10.0.0.1:29070".parse().expect("an address")];
+        let mut listed = game_row(game, "10.0.0.1:29070", "\\hostname\\Listed\\clients\\0");
+        let mut stranger = game_row(game, "10.0.0.9:29070", "\\hostname\\Private\\clients\\1");
+        let mut silent = game_row(game, "10.0.0.8:29070", "\\hostname\\Gone\\clients\\0");
+        listed.responded = true;
+        stranger.responded = true;
+        silent.responded = false;
+
+        let named = answered_off_the_master_list(&from_masters, &[listed, stranger, silent]);
+        assert_eq!(
+            named,
+            vec!["10.0.0.9:29070".to_string()],
+            "only the address that answered without being on the list"
+        );
     }
 
     #[test]
@@ -2510,10 +3284,15 @@ mod tests {
                     let started = Instant::now();
                     let found = net::query_master(master, protocol, MASTER_TIMEOUT).await;
                     match found {
-                        Ok(addresses) => println!(
-                            "{master} protocol {protocol}: {} addresses in {} ms",
-                            addresses.len(),
-                            started.elapsed().as_millis()
+                        Ok(reply) => println!(
+                            "{master} protocol {protocol}: {} addresses in {} ms, {}",
+                            reply.addresses.len(),
+                            started.elapsed().as_millis(),
+                            if reply.complete {
+                                "closed by \\EOT"
+                            } else {
+                                "cut off by the budget"
+                            }
                         ),
                         Err(e) => println!("{master} protocol {protocol}: {e}"),
                     }
@@ -2594,7 +3373,8 @@ mod tests {
             .expect("at least one server must have a player on it");
         let status = net::query_status(
             parse_address(Game::JediAcademy, &busiest.address).unwrap(),
-            MASTER_TIMEOUT,
+            STATUS_ATTEMPT_TIMEOUT,
+            STATUS_ATTEMPTS,
         )
         .await
         .expect("the busiest server must answer getstatus");
@@ -2685,13 +3465,13 @@ mod tests {
             let permit_source = Arc::clone(&gate);
             probes.spawn(async move {
                 let _permit = permit_source.acquire_owned().await.ok()?;
-                let reply = net::query_status(peer, STATUS_TIMEOUT).await.ok()?;
+                let reply = net::query_status(peer, STATUS_TIMEOUT, 1).await.ok()?;
                 Some((index, protocol::parse_status_players(&reply.players)))
             });
         }
         while let Some(joined) = probes.join_next().await {
             if let Ok(Some((index, players))) = joined {
-                answered[index].apply_status(&players);
+                answered[index].apply_status(&players, &timestamp::now_rfc3339());
                 resolved += 1;
             }
         }

@@ -5,6 +5,17 @@ import { useTranslation } from "react-i18next";
 import { Button, StepBadges } from "../../components/ui";
 import { STEP_COUNT, STEP_KEYS, type OnboardingStep } from "./steps";
 
+// --- slice: servers robustness ---
+/**
+ * How wide the step may grow, whatever the window does.
+ *
+ * The window minimum is 1100 px, and 32 px of padding on each side leaves
+ * 1036 px of it. 760 px is a readable measure for the heading and the sentence
+ * under it, and keeps the two ends of a game-folder row within one glance; the
+ * rest of the window is margin.
+ */
+const CONTENT_WIDTH = 760;
+
 interface StepPanelProps {
   step: OnboardingStep;
   heading: string;
@@ -20,11 +31,17 @@ interface StepPanelProps {
 }
 
 /**
- * The right half of the first run: badges, heading, content, footer.
+ * One step of the first run: badges, heading, content, footer.
  *
  * Only the middle scrolls. The heading says where the player is and the footer
  * says how to leave, and neither may drift off a short window while a list of
  * game folders grows.
+ *
+ * --- slice: servers robustness ---
+ * The column is centred in the whole window now that nothing stands beside it,
+ * and capped at [`CONTENT_WIDTH`]: a line of text that runs the full width of a
+ * 1280 px window is a line nobody finishes reading, and a list of game folders
+ * that wide puts the path and the badge at opposite ends of the screen.
  */
 export function StepPanel({
   step,
@@ -40,7 +57,10 @@ export function StepPanel({
 
   return (
     <div className="flex-1 min-w-0 flex justify-center overflow-hidden">
-      <div className="flex flex-col w-full max-w-[640px] p-32">
+      <div
+        className="flex flex-col w-full p-32"
+        style={{ maxWidth: CONTENT_WIDTH }}
+      >
         <StepBadges
           steps={STEP_KEYS.map((key) => ({
             label: t(`steps.${key}`),
