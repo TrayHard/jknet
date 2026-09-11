@@ -128,12 +128,18 @@ export function ServerRow({
 
       {/* --- slice: servers browser ---
           A measured round trip, or the reason there is none. A ping from the
-          last time the server was up would be a promise the row cannot keep. */}
+          last time the server was up would be a promise the row cannot keep.
+
+          --- slice: server actions ---
+          Left, and said so rather than inherited: the column holds a number,
+          an **Offline** word and a column heading, and three elements that
+          each fall where the layout happens to put them are three elements
+          that drift apart the moment one of them changes shape. */}
       {server.responded ? (
-        <Ping ms={server.pingMs} />
+        <Ping ms={server.pingMs} className="justify-start" />
       ) : (
         <span
-          className="text-mono-xs text-fg-disabled truncate"
+          className="text-mono-xs text-fg-disabled text-left truncate"
           title={t("row.noResponseTitle")}
         >
           {t("row.noResponse")}
