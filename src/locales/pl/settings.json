@@ -30,7 +30,8 @@
     "title": "Uruchamianie",
     "label": "Dodatkowe argumenty uruchamiania",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Dopisywane do każdego klienta, dokładnie jak w skrócie. Przykład: <0>+set r_fullscreen 0 +set r_mode 4</0>. Podwójny cudzysłów trzyma razem wartość ze spacją."
+    "hint": "Dopisywane do każdego klienta, dokładnie jak w skrócie. Przykład: <0>+set r_fullscreen 0 +set r_mode 4</0>. Podwójny cudzysłów trzyma razem wartość ze spacją.",
+    "order": "The arguments of a client stand after these, so a client that repeats a <0>+set</0> of the same cvar is the value the game takes."
   },
   "onboarding": {
     "title": "Konfiguracja początkowa",
@@ -41,14 +42,14 @@
     "title": "Pamięć podręczna",
     "mapPictures": "Obrazki map",
     "reading": "Odczytywanie indeksu…",
-    "count_one": "{{count}} mapa ma obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
-    "count_few": "{{count}} mapy mają obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
-    "count_many": "{{count}} map ma obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
-    "count_other": "{{count}} mapy ma obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
     "perGame": "{{count}} {{game}}",
     "lastRebuild": "Ostatnia przebudowa: {{maps}} obrazków z {{sources}} plików w {{elapsed}}.",
     "rebuild": "Przebuduj",
-    "rebuilding": "Przebudowywanie…"
+    "rebuilding": "Przebudowywanie…",
+    "count_one": "{{count}} mapa ma obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
+    "count_few": "{{count}} mapy mają obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
+    "count_many": "{{count}} map ma obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane.",
+    "count_other": "{{count}} mapy ma obrazek, odczytany z plików pk3 znajdujących się na dysku. Nic nie jest pobierane."
   },
   "rest": {
     "title": "Reszta ustawień nie jest jeszcze podłączona",

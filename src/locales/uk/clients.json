@@ -77,7 +77,10 @@
     "namePlaceholder": "Щоденний",
     "modFolder": "Папка мода (fs_game)",
     "modFolderHint": "Клієнт запускається в цій папці свого домашнього каталогу, вона передається як <0>+set fs_game</0>. Дозволені літери, цифри, <1>_</1>, <2>-</2> та <3>+</3>. Залиште поле порожнім, щоб отримати <4>{{folder}}</4> — типову папку {{engine}}.",
-    "engineFallback": "рушія"
+    "engineFallback": "рушія",
+    "launchArgs": "Launch arguments",
+    "launchArgsPlaceholder": "+set r_mode 4 +exec duel.cfg",
+    "launchArgsHint": "This client adds these after the arguments of the Settings screen: a repeated <0>+set</0> of the same cvar wins, while commands such as <1>+exec</1> add up and run in the order they stand. Double quotes keep a value with a space together."
   },
   "missingToast": {
     "title": "Клієнта {{game}} ще немає",

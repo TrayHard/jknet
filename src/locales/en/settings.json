@@ -30,7 +30,8 @@
     "title": "Launch",
     "label": "Extra launch arguments",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Appended to every client, exactly as in a shortcut. Example: <0>+set r_fullscreen 0 +set r_mode 4</0>. Double quotes keep a value with a space together."
+    "hint": "Appended to every client, exactly as in a shortcut. Example: <0>+set r_fullscreen 0 +set r_mode 4</0>. Double quotes keep a value with a space together.",
+    "order": "The arguments of a client stand after these, so a client that repeats a <0>+set</0> of the same cvar is the value the game takes."
   },
   "onboarding": {
     "title": "First-time setup",

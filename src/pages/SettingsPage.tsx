@@ -393,6 +393,17 @@ function ExtraLaunchArgs({ onError }: { onError: (message: string) => void }) {
           components={[<span className="text-mono-sm" />]}
         />
       </p>
+      {/* --- slice: client launch args ---
+          A key of its own rather than a longer `launch.hint`: the six machine
+          drafts are filled from English by `npm run i18n:seed`, which adds a
+          key and never rewrites a value that is already translated. */}
+      <p className="text-body-sm text-fg-secondary pt-4">
+        <Trans
+          t={t}
+          i18nKey="launch.order"
+          components={[<span className="text-mono-sm" />]}
+        />
+      </p>
       {updateSettings.isPending ? (
         <p className="text-body-sm text-fg-muted pt-4">{tCommon("states.saving")}</p>
       ) : null}
