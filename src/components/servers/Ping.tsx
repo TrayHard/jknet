@@ -35,7 +35,15 @@ const TEXT_COLOR: Record<PingLevel, string> = {
 /** How many of the three bars each level lights up. */
 const LIT: Record<PingLevel, number> = { good: 3, ok: 2, bad: 1, unknown: 0 };
 
-/** Three rising bars and the number, as in the Figma Ping component. */
+/**
+ * Three rising bars and the number, as in the Figma Ping component.
+ *
+ * --- slice: server actions ---
+ * The caller says where the pair sits in the cell it is given, with
+ * `justify-start` or `justify-end` in `className`. No default is baked in
+ * here: `cn` joins class names and does not resolve a conflict between two of
+ * them, so a base `justify-*` would fight every caller that asks for the other.
+ */
 export function Ping({ ms, className }: { ms: number | null; className?: string }) {
   const { t } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");

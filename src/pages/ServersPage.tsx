@@ -792,7 +792,9 @@ function SortHeader({
       {cell("map", t("columns.map"))}
       {cell("mode", t("columns.mode"))}
       {cell("players", t("columns.players"))}
-      {cell("ping", t("columns.ping"))}
+      {/* --- slice: server actions --- the heading sits over its values, and
+          the values of this column are left-aligned. */}
+      {cell("ping", t("columns.ping"), "justify-start")}
       {cell("mod", t("columns.mod"))}
     </div>
   );
