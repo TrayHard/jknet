@@ -61,6 +61,8 @@
     "version": "Версия {{version}}",
     "versionUnknown": "Версия неизвестна",
     "license": "GPL-3.0-or-later",
+    "engineIcons": "Значки движков принадлежат их проектам, все под лицензией GPL-2.0:",
+    "engineIconBy": "значок — {{author}}",
     "check": "Проверить обновления",
     "install": "Установить и перезапустить"
   }

@@ -61,6 +61,8 @@
     "version": "Версія {{version}}",
     "versionUnknown": "Версія невідома",
     "license": "GPL-3.0-or-later",
+    "engineIcons": "Engine icons belong to their projects, all released under GPL-2.0:",
+    "engineIconBy": "icon by {{author}}",
     "check": "Перевірити оновлення",
     "install": "Встановити й перезапустити"
   }

@@ -88,6 +88,18 @@ pub struct Engine {
     pub executable: &'static str,
     /// `owner/name` of the GitHub repository that publishes the releases.
     pub repo: &'static str,
+    /// The same repository as a link the player can open.
+    ///
+    /// Spelled out rather than built from [`Engine::repo`] so that a project
+    /// that ever moves off GitHub needs one edit in one place and no string
+    /// concatenation anywhere. A test below proves the two agree.
+    pub repo_url: &'static str,
+    /// Who the project credits for its icon, when it credits anyone.
+    ///
+    /// The About card names it. JK2MV is the one build whose README hands the
+    /// icon to a person rather than to the project, and the credit belongs
+    /// wherever the icon is shown.
+    pub icon_credit: Option<&'static str>,
     /// Recommended, merely supported, or legacy with a note saying why.
     pub status: EngineStatus,
     /// False when the project ships no archive JKNet can use. Such an engine
@@ -162,6 +174,8 @@ const ENGINES: &[Engine] = &[
         description: "The community reference build. Stable, closest to the original game.",
         executable: "openjk.x86.exe",
         repo: "JACoders/OpenJK",
+        repo_url: "https://github.com/JACoders/OpenJK",
+        icon_credit: None,
         status: EngineStatus::Recommended,
         installable: true,
         not_installable_reason: None,
@@ -188,6 +202,8 @@ const ENGINES: &[Engine] = &[
         description: "OpenJK with the modern multiplayer patches most servers expect.",
         executable: "eternaljk.x86.exe",
         repo: "eternalcodes/EternalJK",
+        repo_url: "https://github.com/eternalcodes/EternalJK",
+        icon_credit: None,
         // Last release 1.5.8.5 of 2020-06-15, and a build people play every
         // day. It was briefly marked legacy here over a fault on every map
         // load — 0xC0000005 inside `eternaljk.x86.exe` right after the
@@ -221,6 +237,8 @@ const ENGINES: &[Engine] = &[
         description: "Fork focused on competitive play and quality of life fixes.",
         executable: "taystjk.x86.exe",
         repo: "taysta/TaystJK",
+        repo_url: "https://github.com/taysta/TaystJK",
+        icon_credit: None,
         status: EngineStatus::Supported,
         installable: true,
         not_installable_reason: None,
@@ -246,6 +264,8 @@ const ENGINES: &[Engine] = &[
         // `jamme.exe`, without the `.x86` the other three carry.
         executable: "jamme.exe",
         repo: "entdark/jaMME",
+        repo_url: "https://github.com/entdark/jaMME",
+        icon_credit: None,
         status: EngineStatus::Supported,
         installable: true,
         not_installable_reason: None,
@@ -273,6 +293,9 @@ const ENGINES: &[Engine] = &[
         description: "The Jedi Outcast multiplayer client. Plays 1.02, 1.03 and 1.04.",
         executable: "jk2mvmp.exe",
         repo: "mvdevs/jk2mv",
+        repo_url: "https://github.com/mvdevs/jk2mv",
+        // The README of the project hands the icon to this author by name.
+        icon_credit: Some("Thoroughbred-Of-Sin"),
         // Recommended within its game; the status is read per game, so the two
         // recommendations do not compete.
         status: EngineStatus::Recommended,
@@ -755,6 +778,21 @@ mod tests {
         assert!(find("eternaljk").is_some());
         assert!(find("quake3").is_none());
         assert!(require("quake3").is_err());
+    }
+
+    #[test]
+    fn the_repository_link_of_every_engine_matches_its_repo() {
+        // Two spellings of one fact, so they are compared rather than trusted:
+        // the short form names the project in a log line, the link is what the
+        // About card and the engine page open.
+        for engine in ENGINES {
+            assert_eq!(
+                engine.repo_url,
+                format!("https://github.com/{}", engine.repo),
+                "{}",
+                engine.id
+            );
+        }
     }
 
     #[test]
