@@ -118,11 +118,6 @@ export function totalRealPlayers(servers: ServerInfo[]): number {
   return servers.reduce((sum, server) => sum + realPlayers(server), 0);
 }
 
-/** Bots over a whole list, for the "K bots hidden from counts" tail. */
-export function totalBots(servers: ServerInfo[]): number {
-  return servers.reduce((sum, server) => sum + botCount(server), 0);
-}
-
 /**
  * One row against the search box.
  *

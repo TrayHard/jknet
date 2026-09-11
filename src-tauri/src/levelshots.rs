@@ -934,7 +934,7 @@ pub async fn get_levelshot(
         notify(&app);
     }
     if let Some(shot) = resolve(&index, &dir, &key) {
-        return Ok(Some(shot));
+        return Ok(Some(served(&app, shot)));
     }
     if shots.is_known_miss(&key) {
         return Ok(None);
@@ -955,7 +955,18 @@ pub async fn get_levelshot(
     let mut index = index;
     index.maps.insert(key.clone(), shot);
     save_index(&dir, &index)?;
-    Ok(resolve(&index, &dir, &key))
+    Ok(resolve(&index, &dir, &key).map(|shot| served(&app, shot)))
+}
+
+// --- slice: servers robustness ---
+/// Puts one answer of [`get_levelshot`] into the asset protocol's scope.
+///
+/// One place, so the path the window is handed and the path the scope is given
+/// are the same string by construction. See [`allow_picture`] for why the
+/// folder alone is not enough.
+fn served(app: &AppHandle, shot: Levelshot) -> Levelshot {
+    allow_picture(app, &shot);
+    shot
 }
 
 /// Reads every source again, whatever the index says. The Settings screen's
@@ -1022,21 +1033,56 @@ fn notify(app: &AppHandle) {
 
 /// Lets the webview read the cache folder through the asset protocol.
 ///
-/// The static scope in `tauri.conf.json` covers `$APPLOCALDATA/cache/**`,
-/// which is where the folder is unless the player set `dataDirOverride`. This
-/// adds the resolved folder, so a data folder on another disk shows pictures
-/// too. Nothing else is added: the scope stays one folder the launcher owns.
+/// The static scope in `tauri.conf.json` covers
+/// `$APPLOCALDATA/cache/levelshots/**`, which is where the folder is unless
+/// the player set `dataDirOverride`. This adds the resolved folder, so a data
+/// folder on another disk shows pictures too. Nothing else is added: the scope
+/// stays one folder the launcher owns.
+///
+/// A folder is not the whole answer, though — see [`allow_picture`].
 pub fn allow_cache_folder(app: &AppHandle, paths: &DataPaths) {
-    use tauri::Manager;
-
     let dir = cache_dir(paths);
     if let Err(e) = paths::create_dir(&dir) {
         log::warn!("{e}");
         return;
     }
-    if let Err(e) = app.asset_protocol_scope().allow_directory(&dir, false) {
+    if let Err(e) = asset_scope(app).allow_directory(&dir, false) {
         log::warn!("cannot serve {}: {e}", dir.display());
+        return;
     }
+    log::info!("asset protocol: serving {}", dir.display());
+}
+
+// --- slice: servers robustness ---
+/// Lets the webview read one picture, by the very path it is handed.
+///
+/// Both scopes above name a **folder**, and the protocol never asks about a
+/// folder: `Scope::is_allowed` runs `std::fs::canonicalize` on the path in the
+/// request and matches the result against the patterns
+/// (`tauri-2.11.5/src/scope/fs.rs`). A folder pattern is canonicalised when it
+/// is added and the file is canonicalised when it is asked for, so the two
+/// agree only as long as the file system resolves both the same way. Where it
+/// does not — a `%LOCALAPPDATA%` redirected for the process, a junction that
+/// appeared after the scope was built, a data folder moved between two runs —
+/// every folder pattern misses and the window gets
+/// `asset protocol not configured to allow the path` with a 403, which is
+/// exactly what the log showed on 11 September 2026.
+///
+/// Allowing the file itself closes that gap: `allow_file` canonicalises the
+/// same path with the same call the check will make, so the pattern and the
+/// request cannot disagree about where the file is. The cost is one pattern
+/// per map the player looks at.
+fn allow_picture(app: &AppHandle, shot: &Levelshot) {
+    if let Err(e) = asset_scope(app).allow_file(&shot.path) {
+        log::warn!("cannot serve {}: {e}", shot.path);
+    }
+}
+
+/// The scope of the asset protocol, which both functions above extend.
+fn asset_scope(app: &AppHandle) -> tauri::scope::fs::Scope {
+    use tauri::Manager;
+
+    app.asset_protocol_scope()
 }
 
 #[cfg(test)]
@@ -1279,6 +1325,55 @@ mod tests {
         header[14..16].copy_from_slice(&height.to_le_bytes());
         header[16] = 24; // bits per pixel
         header
+    }
+
+    // --- slice: servers robustness ---
+    /// The path the window is handed, and therefore the path the asset
+    /// protocol's scope is given: one file inside `cache\levelshots\`, named
+    /// after the key and nothing else.
+    ///
+    /// `allow_picture` is fed this very value, so a change here that moved the
+    /// file out of the folder — or renamed it — would have to move the scope
+    /// with it, and this is the test that says so out loud.
+    #[test]
+    fn the_served_path_is_the_file_inside_the_cache_folder() {
+        let (_temp, paths, _settings) = workspace();
+        let dir = cache_dir(&paths);
+        fs::create_dir_all(&dir).expect("cache folder");
+        fs::write(dir.join("ja__mp__ffa3.jpg"), b"x").expect("picture");
+
+        let mut index = Index {
+            version: INDEX_VERSION,
+            built_at: "2026-09-11T00:00:00Z".to_string(),
+            sources: Vec::new(),
+            maps: BTreeMap::new(),
+        };
+        index.maps.insert(
+            "ja/mp/ffa3".to_string(),
+            MapShot {
+                file: "ja__mp__ffa3.jpg".to_string(),
+                source: "assets0.pk3".to_string(),
+                width: 512,
+                height: 512,
+            },
+        );
+
+        let shot = resolve(&index, &dir, "ja/mp/ffa3").expect("the picture is on disk");
+        assert_eq!(shot.path, dir.join("ja__mp__ffa3.jpg").display().to_string());
+        assert_eq!(Path::new(&shot.path).parent(), Some(dir.as_path()));
+
+        // A key the index has and the disk does not is no answer at all, so
+        // nothing is ever added to the scope for a file that is not there.
+        index.maps.insert(
+            "ja/mp/ffa4".to_string(),
+            MapShot {
+                file: "ja__mp__ffa4.jpg".to_string(),
+                source: "assets0.pk3".to_string(),
+                width: 512,
+                height: 512,
+            },
+        );
+        assert!(resolve(&index, &dir, "ja/mp/ffa4").is_none());
     }
 
     #[test]

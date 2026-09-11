@@ -8,18 +8,12 @@
   "scanning": "Scanning",
   "subtitle": {
     "empty": "No {{game}} servers yet",
-    "all_one": "{{count}} {{game}} server",
-    "all_other": "{{count}} {{game}} servers",
-    "some_one": "{{count}} of {{total}} {{game}} server",
-    "some_other": "{{count}} of {{total}} {{game}} servers",
     "players_one": "{{count}} player online",
     "players_other": "{{count}} players online",
-    "bots_one": "{{count}} bot hidden from counts",
-    "bots_other": "{{count}} bots hidden from counts",
+    "servers_one": "{{count}} {{game}} server",
+    "servers_other": "{{count}} {{game}} servers",
     "scanning": "checking servers",
-    "refreshed": "refreshed {{age}} ago",
-    "silent_one": "{{count}} did not answer",
-    "silent_other": "{{count}} did not answer"
+    "refreshed": "refreshed {{age}} ago"
   },
   "filters": {
     "mode": "Mode",
@@ -103,7 +97,9 @@
     "botHeading_one": "{{count}} BOT",
     "botHeading_other": "{{count}} BOTS",
     "botBadge": "BOT",
-    "playersError": "No player list: {{message}}"
+    "playersClosed": "This server does not publish its player list.",
+    "playersRemembered": "PLAYER LIST FROM {{age}} AGO",
+    "playersRememberedUnknown": "LAST KNOWN PLAYER LIST"
   },
   "ping": {
     "noAnswer": "No answer",

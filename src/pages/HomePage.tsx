@@ -1,5 +1,5 @@
 import { AlertTriangle, Play, Plus, Square, Zap } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
@@ -17,16 +17,18 @@ import { useFormat } from "../i18n/useFormat";
 import { cn } from "../lib/format";
 // --- slice: game switch ---
 import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
-import type { ServerInfo } from "../lib/ipc";
+import type { Game, ServerInfo } from "../lib/ipc";
 import {
   useAddServerHistory,
   useCachedServers,
   useClients,
   useLaunchClient,
   useRunningGame,
+  useServerRefresh,
   useSettings,
   useStopGame,
 } from "../lib/queries";
+import { isTauri } from "../lib/runtime";
 
 /**
  * How many rows the Favorites and History blocks show.
@@ -70,6 +72,12 @@ export function HomePage() {
   // Home draws server rows from the cache alone: no refresh of its own, no
   // command of its own. Both pools below are the cached list read two ways.
   const cachedServers = useCachedServers();
+  // --- slice: servers robustness ---
+  // The one thing Home does ask the network for, once, and only when the cache
+  // has nothing in it: see `useFirstServerList`. The hook also puts this screen
+  // on the `servers:batch` events, which is what fills the blocks below while
+  // that scan runs instead of after the player walks to Servers and back.
+  const servers = useServerRefresh();
 
   /** Starred servers, the busiest first. */
   const favorites = useMemo(
@@ -148,6 +156,11 @@ export function HomePage() {
    * thing that made the old block unreadable.
    */
   const heroServer = running !== null ? lastServer : continueServer;
+
+  // --- slice: servers robustness ---
+  // The one exception to «nothing refreshes by itself»: a cache with no rows
+  // in it at all. See `useFirstServerList`.
+  useFirstServerList(activeGame, cachedServers, servers.getNewList);
 
   const play = () => {
     if (!defaultClient) return;
@@ -383,6 +396,42 @@ export function HomePage() {
  * sentence is one message with the clock in a slot: the words around a duration
  * change with the language, and «Запущено 3 мин назад» puts them on both sides.
  */
+// --- slice: servers robustness ---
+/**
+ * Asks the master servers once, and only when there is nothing to show.
+ *
+ * The launcher does not refresh the server list by itself — one scan is around
+ * 230 datagrams and two to four seconds, and doing that behind the player at
+ * every screen they open is what the rule in the architecture document
+ * forbids. An empty cache is the one case the rule does not cover: there is
+ * nothing to protect, the Servers screen would open on a blank table, and the
+ * player who just finished the first run has no reason to know a button has to
+ * be pressed before the launcher knows about any servers.
+ *
+ * Once means once. The ref remembers the games already asked for the life of
+ * this screen, and the core refuses a second scan of a scope it is already
+ * running, so neither a re-render nor a walk back to Home starts another one.
+ * A cache with a single row in it starts nothing at all.
+ */
+function useFirstServerList(
+  game: Game,
+  cached: ReturnType<typeof useCachedServers>,
+  getNewList: () => void,
+) {
+  const asked = useRef<Set<Game>>(new Set());
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    // Not `data === undefined`: a cache that is still being read is not an
+    // empty one, and a read that failed is a reason to show the error rather
+    // than to put two hundred datagrams on the wire.
+    if (!cached.isSuccess || cached.data.length > 0) return;
+    if (asked.current.has(game)) return;
+    asked.current.add(game);
+    getNewList();
+  }, [game, cached.isSuccess, cached.data, getNewList]);
+}
+
 function RunningLine({ startedAt, pid }: { startedAt: string; pid: number }) {
   const { t } = useTranslation("home");
   const format = useFormat();
