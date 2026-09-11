@@ -48,18 +48,27 @@ const PROFILES_FILE: &str = "profiles.json";
 
 /// Longest profile name the launcher accepts. The same limit a client name
 /// has: both are names on a card, and a longer one says nothing extra.
+///
+/// Characters, not bytes, and on purpose: this name is read in the launcher
+/// and never reaches the engine, so nothing downstream counts its bytes.
 const MAX_NAME_LEN: usize = 48;
 
-/// Longest nickname the launcher accepts.
+/// Longest nickname the launcher accepts, **in bytes of UTF-8**.
 ///
 /// `MAX_NETNAME` of the engine (`codemp/game/g_local.h:478` of OpenJK
-/// `1a6a6434`): `ClientCleanName` cuts the name to this length before other
-/// players ever see it. Colour codes count towards it, which is why the field
-/// in the window counts characters rather than visible letters.
+/// `1a6a6434`): `ClientCleanName` copies the name byte by byte into a buffer
+/// of this size and stops at `outpos < outSize - 1`, so what it counts is
+/// bytes and not letters. A Cyrillic letter costs two of them, which makes a
+/// nickname of eighteen Cyrillic letters exactly as long as one of thirty-six
+/// Latin ones. Colour codes count towards the limit as well.
+///
+/// Counting characters here instead would let the window promise a name the
+/// server then cuts in half, possibly through the middle of a letter.
 const MAX_NICKNAME_LEN: usize = 36;
 
 /// Longest value of the cvars that name a file: the model and the two hilts.
-/// `MAX_QPATH` in `codemp/qcommon/qfiles.h:39` of OpenJK `1a6a6434`.
+/// `MAX_QPATH` in `codemp/qcommon/qfiles.h:39` of OpenJK `1a6a6434`, a byte
+/// buffer like the one above.
 const MAX_VALUE_LEN: usize = 64;
 
 /// Most profiles one client may hold. High enough that nobody meets it and low
@@ -452,30 +461,102 @@ fn validate(profile: PlayerProfile) -> Result<PlayerProfile> {
     Ok(PlayerProfile {
         id: profile.id.trim().to_string(),
         name: name.to_string(),
-        nickname: clean(profile.nickname.as_deref(), MAX_NICKNAME_LEN, "nickname")?,
-        model: clean(profile.model.as_deref(), MAX_VALUE_LEN, "model")?,
-        saber1: clean(profile.saber1.as_deref(), MAX_VALUE_LEN, "saber1")?,
-        saber2: clean(profile.saber2.as_deref(), MAX_VALUE_LEN, "saber2")?,
+        nickname: clean(
+            profile.nickname.as_deref(),
+            MAX_NICKNAME_LEN,
+            "nickname",
+            Shape::Free,
+        )?,
+        model: clean(profile.model.as_deref(), MAX_VALUE_LEN, "model", Shape::Model)?,
+        saber1: clean(
+            profile.saber1.as_deref(),
+            MAX_VALUE_LEN,
+            "saber1",
+            Shape::Block,
+        )?,
+        saber2: clean(
+            profile.saber2.as_deref(),
+            MAX_VALUE_LEN,
+            "saber2",
+            Shape::Block,
+        )?,
         color1: profile.color1,
         color2: profile.color2,
         char_color: profile.char_color,
     })
 }
 
+/// The form a value has to keep on top of the rules of the command line.
+#[derive(Clone, Copy)]
+enum Shape {
+    /// Whatever the player typed. The nickname: colour codes, any alphabet and
+    /// any punctuation are theirs to choose.
+    Free,
+    /// `<model>` or `<model>/<variant>`, the two forms the cvar `model` takes.
+    Model,
+    /// The name of a block in a `.sab` file, which is one part with no slash.
+    Block,
+}
+
+impl Shape {
+    /// Whether the value is one the game could look a file up by.
+    fn fits(self, value: &str) -> bool {
+        match self {
+            Shape::Free => true,
+            Shape::Model => match value.split_once('/') {
+                Some((model, variant)) => is_file_part(model) && is_file_part(variant),
+                None => is_file_part(value),
+            },
+            Shape::Block => is_file_part(value),
+        }
+    }
+}
+
+/// Whether the value is one part of a name the game holds a file under.
+///
+/// The rule of [`crate::appearance`], which guards the very same names on
+/// their way out of an archive: letters, digits and the four marks a Raven
+/// folder name uses, never a lone `.` or `..`, never a slash. Upper case
+/// passes here because a player types this value and a `.sab` block keeps the
+/// case its author gave it, while the paths inside an archive are lowercased
+/// before `appearance` ever compares them.
+///
+/// The window only ever offers values the core itself found, but `profiles.json`
+/// is a text file and `save_profile` is a command any page in the window can
+/// call, so the value that arrives has to pass the same gate as the value the
+/// launcher went and looked for.
+fn is_file_part(value: &str) -> bool {
+    !value.is_empty()
+        && value != "."
+        && value != ".."
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '+'))
+}
+
 /// One cvar value of a profile, trimmed, bounded and refused when it would
-/// rewrite the command line it goes onto.
-fn clean(value: Option<&str>, max: usize, what: &str) -> Result<Option<String>> {
+/// rewrite the command line it goes onto or name a file the game has no name
+/// for.
+///
+/// `max` counts **bytes of UTF-8**, because the buffers of the engine this
+/// value ends up in are counted in bytes. See [`MAX_NICKNAME_LEN`].
+fn clean(value: Option<&str>, max: usize, what: &str, shape: Shape) -> Result<Option<String>> {
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(None);
     };
-    if value.chars().count() > max {
+    if value.len() > max {
         return Err(AppError::InvalidInput(format!(
-            "the {what} is longer than {max} characters"
+            "the {what} is longer than {max} bytes of UTF-8"
         )));
     }
     if value.contains('"') || value.contains('\n') || value.contains('\r') {
         return Err(AppError::InvalidInput(format!(
             "the {what} cannot hold a double quote or a line break"
+        )));
+    }
+    if !shape.fits(value) {
+        return Err(AppError::InvalidInput(format!(
+            "the {what} is not a name the game holds a file under"
         )));
     }
     Ok(Some(value.to_string()))
@@ -645,6 +726,66 @@ mod tests {
 
         assert!(validate(profile("   ")).is_err());
         assert!(validate(profile(&"x".repeat(MAX_NAME_LEN + 1))).is_err());
+    }
+
+    #[test]
+    fn a_nickname_is_measured_in_bytes_the_way_the_engine_measures_it() {
+        // `ClientCleanName` copies bytes into a buffer of `MAX_NETNAME`, so a
+        // Cyrillic letter costs two and eighteen of them fill the name.
+        let mut fits = profile("Duel");
+        fits.nickname = Some("Т".repeat(MAX_NICKNAME_LEN / 2));
+        let clean = validate(fits).expect("eighteen Cyrillic letters are thirty-six bytes");
+        assert_eq!(clean.nickname.as_deref(), Some("Т".repeat(18).as_str()));
+
+        let mut over = profile("Duel");
+        over.nickname = Some("Т".repeat(MAX_NICKNAME_LEN / 2 + 1));
+        // Nineteen letters are thirty-eight bytes: the server would cut the
+        // name, possibly through the middle of a letter, so the launcher says
+        // so instead of promising a name nobody will read.
+        assert!(matches!(
+            validate(over),
+            Err(AppError::InvalidInput(_)),
+        ));
+
+        // A colour code is two bytes of the limit like any other pair of Latin
+        // characters, because the engine counts it in and the launcher has to
+        // agree.
+        let mut coloured = profile("Duel");
+        coloured.nickname = Some(format!("^1{}", "x".repeat(MAX_NICKNAME_LEN - 2)));
+        assert!(validate(coloured).is_ok());
+
+        let mut coloured_over = profile("Duel");
+        coloured_over.nickname = Some(format!("^1{}", "x".repeat(MAX_NICKNAME_LEN - 1)));
+        assert!(validate(coloured_over).is_err());
+    }
+
+    #[test]
+    fn a_model_or_a_hilt_that_is_not_a_file_name_is_refused() {
+        // `save_profile` is a command the window can call with anything, and
+        // `profiles.json` is a text file, so the form of these three values is
+        // checked here rather than trusted to the pickers.
+        for bad in ["../../secret", "a/b/c", "/", "kyle/", "/red", "..", "."] {
+            let mut wrong = profile("Duel");
+            wrong.model = Some(bad.to_string());
+            assert!(validate(wrong).is_err(), "{bad:?} is not a model");
+        }
+
+        for bad in ["kyle/red", "../hilt", "single 1"] {
+            let mut wrong = profile("Duel");
+            wrong.saber1 = Some(bad.to_string());
+            assert!(validate(wrong).is_err(), "{bad:?} is not a hilt");
+        }
+
+        // And what the pickers do offer still goes through.
+        let mut right = profile("Duel");
+        right.model = Some("kyle".to_string());
+        right.saber1 = Some("single_1".to_string());
+        right.saber2 = Some("none".to_string());
+        assert!(validate(right).is_ok());
+
+        let mut variant = profile("Duel");
+        variant.model = Some("jedi_hf/red".to_string());
+        assert!(validate(variant).is_ok());
     }
 
     #[test]

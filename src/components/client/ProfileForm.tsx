@@ -19,7 +19,7 @@ import {
 } from "../../lib/queries";
 import { Button, Input, Select, type SelectOption } from "../ui";
 import { SettingRow } from "./CvarControls";
-import { NicknameField } from "./NicknameField";
+import { MAX_NICKNAME_BYTES, NicknameField, nicknameBytes } from "./NicknameField";
 import { SkinPicker } from "./SkinPicker";
 
 /** The tint the sliders start on when the player switches the tint on. */
@@ -82,7 +82,12 @@ export function ProfileForm({
     setDraft((current) => ({ ...current, ...changes }));
 
   const tokens = profileTokens(draft, hasHilts);
-  const ready = draft.name.trim() !== "" && !save.isPending;
+  // The core refuses a nickname over `MAX_NETNAME`, so the button says so
+  // before the round trip does. The field itself shows the count.
+  const ready =
+    draft.name.trim() !== "" &&
+    nicknameBytes(draft.nickname ?? "") <= MAX_NICKNAME_BYTES &&
+    !save.isPending;
 
   return (
     <form

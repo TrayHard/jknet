@@ -623,8 +623,10 @@ fn non_empty(value: Option<String>) -> Option<String> {
 
 // --- slice: player profiles ---
 
-/// Longest nickname the list stores. `MAX_NETNAME` of the engine: the server
-/// cuts a longer one before anybody reads it.
+/// Longest nickname the list stores, **in bytes of UTF-8**. `MAX_NETNAME` of
+/// the engine: the server cuts a longer one before anybody reads it, and what
+/// it counts is bytes, so a Cyrillic letter costs two. The same limit
+/// [`crate::profiles`] holds a nickname to, for the same reason.
 const MAX_NICKNAME_LEN: usize = 36;
 
 /// Most nicknames the list holds. The form prepends, so the oldest one falls
@@ -644,7 +646,7 @@ fn clean_nicknames(values: Vec<String>) -> Vec<String> {
     let mut kept: Vec<String> = Vec::new();
     for value in values {
         let value = value.trim();
-        if value.is_empty() || value.chars().count() > MAX_NICKNAME_LEN {
+        if value.is_empty() || value.len() > MAX_NICKNAME_LEN {
             continue;
         }
         let key = value.to_lowercase();
@@ -1328,6 +1330,21 @@ mod tests {
         // The engine cuts a name to `MAX_NETNAME`, so a longer one is not a
         // name anybody would see.
         assert_eq!(clean_nicknames(vec!["x".repeat(MAX_NICKNAME_LEN + 1)]), Vec::<String>::new());
+        // And it counts bytes: eighteen Cyrillic letters fill the buffer,
+        // nineteen overflow it.
+        assert_eq!(
+            clean_nicknames(vec!["Т".repeat(MAX_NICKNAME_LEN / 2)]),
+            ["Т".repeat(18)]
+        );
+        assert_eq!(
+            clean_nicknames(vec!["Т".repeat(MAX_NICKNAME_LEN / 2 + 1)]),
+            Vec::<String>::new()
+        );
+        // A colour code costs its two bytes here as well.
+        assert_eq!(
+            clean_nicknames(vec![format!("^1{}", "x".repeat(MAX_NICKNAME_LEN - 1))]),
+            Vec::<String>::new()
+        );
         // And the list cannot grow without end under a form that prepends.
         let many: Vec<String> = (0..MAX_NICKNAMES + 10).map(|n| format!("name{n}")).collect();
         assert_eq!(clean_nicknames(many).len(), MAX_NICKNAMES);
