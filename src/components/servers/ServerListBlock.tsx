@@ -23,16 +23,12 @@ interface ServerListBlockProps {
   /** Draws the link to the Servers screen beside the heading. */
   seeAll?: boolean;
   // --- slice: server actions ---
-  /** Address of the selected row, when the selected row is in this block. */
-  selectedAddress?: string | null;
-  /** Called with the address of the row that was pressed. */
-  onSelect?: (address: string) => void;
   /**
-   * Drawn at the right end of the selected row, and only there.
+   * Drawn at the right end of every row.
    *
-   * Buttons on every row would be eight more press targets down a list whose
-   * job is reading. The screen owns them, because starting a client is its
-   * business and not this component's.
+   * The screen owns them, because starting a client is its business and not
+   * this component's. Every row gets the same pair, so the player presses what
+   * they see instead of first teaching the list which row they mean.
    */
   actions?: (server: ServerInfo) => ReactNode;
   /**
@@ -61,17 +57,16 @@ interface ServerListBlockProps {
  * window.
  *
  * --- slice: server actions ---
- * A row is selected rather than followed. It used to be a link to the Servers
- * screen, which answered every press with the same screen and left the player
- * to find the row again; now the press picks the row out and the two buttons
- * that matter appear on it — **Connect**, and the menu behind the three dots.
+ * The row is read, not pressed: **Connect** and the three dots stand on every
+ * row and are the only press targets in it. Selecting a row first was a step
+ * that bought nothing — the player already knows which server they want, and
+ * a list where the buttons appear only after a click is a list whose buttons
+ * are found by accident.
  */
 export function ServerListBlock({
   title,
   servers,
   seeAll = false,
-  selectedAddress = null,
-  onSelect,
   actions,
   caption,
 }: ServerListBlockProps) {
@@ -99,31 +94,21 @@ export function ServerListBlock({
         ) : null}
       </div>
 
-      <div className="flex flex-col rounded-lg border border-line bg-surface overflow-hidden">
+      <ul className="flex flex-col rounded-lg border border-line bg-surface overflow-hidden">
         {servers.map((server) => {
-          const chosen = server.address === selectedAddress;
           const line = caption?.(server) ?? null;
           return (
-            <div
+            <li
               key={server.address}
-              role="row"
-              tabIndex={0}
-              aria-selected={chosen}
-              onClick={() => onSelect?.(server.address)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  onSelect?.(server.address);
-                }
-              }}
               className={cn(
-                "grid items-center gap-12 h-44 px-16 cursor-pointer",
-                // The last column is the actions of the selected row. It is
-                // `auto`, so it takes no width at all on the rows without them
-                // and the four columns left of it stay where they were.
+                "grid items-center gap-12 h-44 px-16",
+                // The last column is the actions. It is `auto`, so it measures
+                // the buttons themselves and the four columns left of it keep
+                // the widths the design gives them; the name is the only
+                // flexible one and truncates, which is what holds the row on
+                // one line down to the 1100 px minimum.
                 "grid-cols-[minmax(0,1fr)_auto_76px_56px_auto]",
-                "border-b border-line-subtle last:border-b-0 transition-colors",
-                chosen ? "bg-selected-overlay" : "hover:bg-surface-hover",
+                "border-b border-line-subtle last:border-b-0",
               )}
             >
               <span className="flex flex-col justify-center min-w-0">
@@ -168,13 +153,11 @@ export function ServerListBlock({
                 ) : null}
               </span>
               <Ping ms={server.pingMs} className="justify-end" />
-              <span className="flex items-center gap-6">
-                {chosen ? actions?.(server) : null}
-              </span>
-            </div>
+              <span className="flex items-center gap-6">{actions?.(server)}</span>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </section>
   );
 }

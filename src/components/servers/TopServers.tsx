@@ -22,16 +22,12 @@ const TOP_COUNT = 4;
  * player from the first screen, so it is dropped from the pool outright.
  *
  * --- slice: server actions ---
- * The selection is the Home screen's and is passed straight through: one row is
- * selected across all three blocks, so no block may hold that state itself.
+ * The row buttons are the Home screen's and are passed straight through: they
+ * start a client, which is the screen's business and not this block's.
  */
 export function TopServers({
-  selectedAddress,
-  onSelect,
   actions,
 }: {
-  selectedAddress?: string | null;
-  onSelect?: (address: string) => void;
   actions?: (server: ServerInfo) => ReactNode;
 }) {
   const { t } = useTranslation("home");
@@ -77,8 +73,6 @@ export function TopServers({
       title={t("topServers.busiest")}
       servers={rows}
       seeAll
-      selectedAddress={selectedAddress}
-      onSelect={onSelect}
       actions={actions}
     />
   );

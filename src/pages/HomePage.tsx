@@ -69,11 +69,6 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   // --- slice: game switch ---
   const [newClientOpen, setNewClientOpen] = useState(false);
-  // --- slice: server actions ---
-  // One selected row for the whole screen, not one per block: the buttons that
-  // appear on it act on a server, and two rows offering to start a client at
-  // once is two answers to a question with one.
-  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
   // --- slice: game switch ---
   // The hero belongs to the game the switcher is on. A player who owns both
@@ -236,10 +231,12 @@ export function HomePage() {
 
   // --- slice: server actions ---
   /**
-   * Connect and the menu, drawn on the selected row of any of the three blocks.
+   * Connect and the menu, drawn on every row of all three blocks.
    *
-   * The press stops at the button: the row under it is already the selected
-   * one, and letting the click through would only re-select it.
+   * They are the row's only press targets, so a player who can see a server
+   * can join it or star it from where they are. A server that did not answer
+   * the last scan keeps both, exactly as the details panel does: the press is
+   * how a player finds out whether it is back.
    */
   const rowActions = (server: ServerInfo) => (
     <>
@@ -248,10 +245,7 @@ export function HomePage() {
         variant="primary"
         icon={<Zap size={14} />}
         disabled={running !== null || launchClient.isPending}
-        onClick={(event) => {
-          event.stopPropagation();
-          connect(server);
-        }}
+        onClick={() => connect(server)}
       >
         {startingConnect && launchClient.variables?.connect === server.address
           ? tCommon("states.starting")
@@ -468,23 +462,15 @@ export function HomePage() {
         <ServerListBlock
           title={t("topServers.favorites")}
           servers={favorites}
-          selectedAddress={selectedAddress}
-          onSelect={setSelectedAddress}
           actions={rowActions}
         />
         <ServerListBlock
           title={t("topServers.history")}
           servers={history.rows}
-          selectedAddress={selectedAddress}
-          onSelect={setSelectedAddress}
           actions={rowActions}
           caption={lastConnected}
         />
-        <TopServers
-          selectedAddress={selectedAddress}
-          onSelect={setSelectedAddress}
-          actions={rowActions}
-        />
+        <TopServers actions={rowActions} />
       </div>
 
       {/* --- slice: game switch --- the dialog already opens on the active
