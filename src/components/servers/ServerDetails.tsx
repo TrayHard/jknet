@@ -1,4 +1,4 @@
-import { Check, Copy, Lock, Play, Users } from "lucide-react";
+import { Check, Copy, Lock, Play, RefreshCw, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,6 +28,18 @@ interface ServerDetailsProps {
    * list.
    */
   playersFailed: boolean;
+  // --- slice: servers robustness ---
+  /**
+   * Asks this server for its player list again.
+   *
+   * The two requests `get_server_status` sends cover a lost datagram and
+   * nothing beyond it, so a server that was reloading a map when the panel
+   * opened stays listless until something asks again. Without the button that
+   * something is the player deselecting the row and picking it back — and
+   * within the 15 s the query stays fresh, even that returns the cached
+   * refusal rather than a new question.
+   */
+  onRetryPlayers: () => void;
   onConnect: () => void;
   /** False when there is no default client to start. */
   canConnect: boolean;
@@ -52,6 +64,7 @@ export function ServerDetails({
   players,
   playersLoading,
   playersFailed,
+  onRetryPlayers,
   onConnect,
   canConnect,
   connecting,
@@ -134,6 +147,7 @@ export function ServerDetails({
         players={players}
         loading={playersLoading}
         failed={playersFailed}
+        onRetry={onRetryPlayers}
         remembered={server.lastPlayers}
         rememberedAge={rememberedAge(format, server.lastPlayersAt)}
       />
@@ -178,6 +192,7 @@ function PlayerList({
   players,
   loading,
   failed,
+  onRetry,
   remembered,
   rememberedAge,
 }: {
@@ -186,12 +201,15 @@ function PlayerList({
   // --- slice: servers robustness ---
   /** The live request went unanswered, retry included. */
   failed: boolean;
+  /** Asks the server again, past the freshness the query would honour. */
+  onRetry: () => void;
   /** The last list any scan got out of this server, from the cached row. */
   remembered: ServerPlayer[] | null;
   /** How long ago that list was taken, or `null` when there is no list. */
   rememberedAge: string | null;
 }) {
   const { t } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
 
   if (loading) {
     return (
@@ -212,14 +230,32 @@ function PlayerList({
   // the last list the launcher has with the time on it, or a sentence about
   // this server rather than about the network.
   if (failed) {
+    // The button goes with both halves of the refusal: a server that was
+    // reloading a map answers the next question, whether or not this launcher
+    // happens to remember an older list for it.
+    const again = (
+      <Button
+        size="sm"
+        variant="ghost"
+        icon={<RefreshCw size={14} />}
+        onClick={onRetry}
+        className="self-start -ml-8"
+      >
+        {tCommon("actions.tryAgain")}
+      </Button>
+    );
+
     if (remembered === null || remembered.length === 0) {
       return (
-        <p className="text-body-sm text-fg-muted">{t("details.playersClosed")}</p>
+        <div className="flex flex-col gap-6">
+          <p className="text-body-sm text-fg-muted">{t("details.playersClosed")}</p>
+          {again}
+        </div>
       );
     }
     const humans = remembered.filter((player) => !player.isBot);
     return (
-      <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto -mx-4">
+      <div className="flex flex-col gap-6 flex-1 min-h-0 -mx-4">
         <p className="px-4 text-label-xs text-fg-disabled">
           {rememberedAge === null
             ? t("details.playersRememberedUnknown")
@@ -230,8 +266,14 @@ function PlayerList({
             {t("details.onlyBots", { count: remembered.length - humans.length })}
           </p>
         ) : (
-          <PlayerRows players={humans} />
+          // The list scrolls, the button below it does not: a remembered list
+          // is as long as a live one, and a button that scrolls out of the
+          // panel is a button nobody finds.
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <PlayerRows players={humans} />
+          </div>
         )}
+        <div className="px-4">{again}</div>
       </div>
     );
   }

@@ -112,6 +112,17 @@ const STATUS_ATTEMPTS: u32 = 2;
 /// servers no longer list it either.
 const MISSED_REFRESH_LIMIT: u32 = 2;
 
+/// How many players one remembered list may keep.
+///
+/// The list is written into the cache document, which is read whole on every
+/// start, so its length is bounded here rather than left to whatever a server
+/// chooses to print. Sixty-four is twice the engine's own ceiling — the server
+/// clamps `sv_maxclients` to `MAX_CLIENTS`, which is 32
+/// (`codemp/server/sv_init.cpp:252`, `codemp/qcommon/q_shared.h:890`) — so no
+/// honest server ever reaches it, and one printing a made-up scoreboard cannot
+/// grow the file without bound.
+const MAX_REMEMBERED_PLAYERS: usize = 64;
+
 /// How many servers one refresh may ask for a player list.
 ///
 /// The second pass exists only for servers that hide `g_humanplayers`, and the
@@ -472,8 +483,20 @@ impl ServerInfo {
 
     // --- slice: servers robustness ---
     /// Stores a player list as the last one known for this address.
+    ///
+    /// Kept to [`MAX_REMEMBERED_PLAYERS`] entries: this list goes into the
+    /// cache document, and a row's size must not be whatever a server decided
+    /// to print. The head is the part kept, because a `getstatus` answer is in
+    /// slot order and the slots the game fills first are the ones a reader
+    /// cares about.
     pub fn remember_players(&mut self, players: &[protocol::StatusPlayer], at: &str) {
-        self.last_players = Some(players.iter().map(PlayerInfo::from_status).collect());
+        self.last_players = Some(
+            players
+                .iter()
+                .take(MAX_REMEMBERED_PLAYERS)
+                .map(PlayerInfo::from_status)
+                .collect(),
+        );
         self.last_players_at = Some(at.to_string());
     }
 
@@ -1703,28 +1726,33 @@ async fn resolve_bots_by_status(
 // --- slice: servers robustness ---
 /// Asks one master one question, and asks again when the answer is in doubt.
 ///
-/// Two things are in doubt: a master that said nothing at all, and a master
-/// whose datagrams stopped without the `\EOT` marker — the budget ended that
-/// list, so what arrived is a prefix of it and looks exactly like a short one.
-/// The second question is asked once, and both answers are merged: a master
-/// that is rotating its own list gives two overlapping halves rather than one
-/// of them.
+/// One thing is in doubt: a master whose datagrams stopped without the `\EOT`
+/// marker — the budget ended that list, so what arrived is a prefix of it and
+/// looks exactly like a short one. The second question is asked once, and both
+/// answers are merged: a master that is rotating its own list gives two
+/// overlapping halves rather than one of them.
+///
+/// A master that said nothing at all is not asked again. It has no prefix to
+/// finish, and silence is its steady state rather than a bad second:
+/// `masterjk3.ravensoft.com` never answers, so for Jedi Academy the second
+/// question would spend another whole [`MASTER_TIMEOUT`] on every refresh —
+/// and [`collect_addresses`] waits for the slowest master, so those 1.5 s land
+/// on **Get new list** in full.
 async fn ask_master(master: &str, protocol: u16) -> Result<Vec<SocketAddrV4>> {
-    let first = net::query_master(master, protocol, MASTER_TIMEOUT).await;
-    if matches!(&first, Ok(reply) if reply.complete) {
-        return first.map(|reply| reply.addresses);
-    }
+    let first = match net::query_master(master, protocol, MASTER_TIMEOUT).await {
+        Ok(reply) if reply.complete => return Ok(reply.addresses),
+        Ok(partial) => partial,
+        Err(silent) => return Err(silent),
+    };
 
     log::info!("master {master} protocol {protocol}: asking again");
-    let second = net::query_master(master, protocol, MASTER_TIMEOUT).await;
-    match (first, second) {
-        (Ok(first), Ok(second)) => {
+    match net::query_master(master, protocol, MASTER_TIMEOUT).await {
+        Ok(second) => {
             let mut merged: BTreeSet<SocketAddrV4> = first.addresses.into_iter().collect();
             merged.extend(second.addresses);
             Ok(merged.into_iter().collect())
         }
-        (Ok(only), Err(_)) | (Err(_), Ok(only)) => Ok(only.addresses),
-        (Err(first), Err(_)) => Err(first),
+        Err(_) => Ok(first.addresses),
     }
 }
 
@@ -2564,6 +2592,54 @@ mod tests {
         assert_eq!(found.len(), 1);
     }
 
+    // --- slice: servers robustness ---
+    /// A master that hears every question and answers none.
+    ///
+    /// The counter is the whole point of the stub: silence leaves no addresses
+    /// to reason from, so how many questions were spent on it is the only
+    /// thing the test can see.
+    async fn stub_deaf_master() -> (String, Arc<Mutex<usize>>) {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0")
+            .await
+            .expect("a socket");
+        let address = socket.local_addr().expect("an address").to_string();
+        let asked = Arc::new(Mutex::new(0usize));
+        let counter = Arc::clone(&asked);
+        tokio::spawn(async move {
+            let mut buffer = vec![0u8; 2048];
+            while let Ok(Ok((read, _))) = tokio::time::timeout(
+                Duration::from_millis(4_000),
+                socket.recv_from(&mut buffer),
+            )
+            .await
+            {
+                if String::from_utf8_lossy(&buffer[4..read]).starts_with("getservers ") {
+                    *counter.lock().expect("the counter") += 1;
+                }
+            }
+        });
+        (address, asked)
+    }
+
+    #[tokio::test]
+    async fn a_master_that_says_nothing_is_asked_once() {
+        // Not the rare case but every Jedi Academy refresh:
+        // `masterjk3.ravensoft.com` never answers. Silence carries no prefix
+        // for a second question to finish, and `collect_addresses` waits for
+        // the slowest master, so a retry here would put another whole
+        // MASTER_TIMEOUT on **Get new list** with nothing to win.
+        let (master, asked) = stub_deaf_master().await;
+
+        let failure = collect_addresses(&[master], &[26])
+            .await
+            .expect_err("nothing answered");
+        assert!(
+            failure.to_string().contains("no master server answered"),
+            "{failure}"
+        );
+        assert_eq!(*asked.lock().expect("the counter"), 1, "asked once");
+    }
+
     #[tokio::test]
     async fn a_master_that_answers_one_protocol_is_not_a_failed_refresh() {
         // A master that knows nothing about protocol 15 simply says nothing
@@ -2843,6 +2919,43 @@ mod tests {
         assert_eq!(read[0].last_players.as_ref().map(Vec::len), Some(2));
         assert_eq!(read[0].last_players.as_ref().unwrap()[0].name_clean, "Kyle");
         let _ = fs::remove_file(&file);
+    }
+
+    #[test]
+    fn a_remembered_player_list_is_kept_to_its_cap() {
+        // The cache document is read whole on every start, so a row may not
+        // grow to whatever a server prints. Nothing honest reaches the cap:
+        // the engine clamps `sv_maxclients` to 32, half of it.
+        let game = Game::JediAcademy;
+        let mut server = game_row(game, "10.0.0.1:29070", "\\hostname\\Loud\\clients\\2");
+
+        let scoreboard: String = (0..MAX_REMEMBERED_PLAYERS + 40)
+            .map(|slot| format!("1 40 \"Player{slot}\"\n"))
+            .collect();
+        let printed = protocol::parse_status_players(&scoreboard);
+        assert_eq!(printed.len(), MAX_REMEMBERED_PLAYERS + 40, "the stub prints them all");
+
+        server.apply_status(&printed, "2026-09-11T10:00:00Z");
+        let remembered = server.last_players.as_ref().expect("a list");
+        assert_eq!(remembered.len(), MAX_REMEMBERED_PLAYERS);
+        // The head is what stays: a `getstatus` answer is in slot order.
+        assert_eq!(remembered[0].name_clean, "Player0");
+        assert_eq!(
+            remembered[MAX_REMEMBERED_PLAYERS - 1].name_clean,
+            format!("Player{}", MAX_REMEMBERED_PLAYERS - 1)
+        );
+
+        // The counts still come off the whole answer: the cap is about what a
+        // row stores, not about how many players the browser says are there.
+        assert_eq!(server.humans, Some((MAX_REMEMBERED_PLAYERS + 40) as u16));
+
+        // An ordinary scoreboard is not touched by any of this.
+        let mut modest = game_row(game, "10.0.0.2:29070", "\\hostname\\Quiet\\clients\\2");
+        modest.apply_status(
+            &protocol::parse_status_players("12 70 \"Kyle\"\n3 55 \"Jan\"\n"),
+            "2026-09-11T10:00:00Z",
+        );
+        assert_eq!(modest.last_players.as_ref().map(Vec::len), Some(2));
     }
 
     #[test]
