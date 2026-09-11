@@ -72,6 +72,8 @@
   },
   "clientWindow": {
     "loading": "Client",
+    "loadingClient": "Loading the client…",
+    "close": "Close window",
     "notFound": "There is no client with this id. It may have been deleted.",
     "intro": "These controls write into the launch arguments of this client. A control left empty writes nothing, and the engine keeps its own value.",
     "notSet": "Not set",

@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { useParams } from "react-router";
@@ -17,13 +17,14 @@ import {
   type WindowCvar,
 } from "../components/client/useCvarEditor";
 import { TitleBar } from "../components/TitleBar";
-import type { SelectOption } from "../components/ui";
+import { Button, type SelectOption } from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
 import { cn } from "../lib/format";
 import type { Client } from "../lib/ipc";
 import { useClient, useEngines, useUpdateClient } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
+import { logWindow, logWindowFailure } from "../lib/windowLog";
 
 /**
  * The window that edits one client, at `#/client/<id>`.
@@ -41,6 +42,12 @@ import { isTauri } from "../lib/runtime";
  *
  * Outside Tauri the route renders in the tab, so the layout can be reviewed
  * with `npm run dev`. The commands fail there and the cards print why.
+ *
+ * The window is never blank. Before the record arrives it holds its title bar
+ * and an indicator; if the command is refused it holds the refusal and a
+ * button that closes the window. A window with nothing in it is a window with
+ * nothing to click either — it has no system frame — and it used to be the
+ * only thing a failure here could produce.
  */
 export function ClientWindowPage() {
   const { id = "" } = useParams();
@@ -55,8 +62,28 @@ export function ClientWindowPage() {
     if (!isTauri() || name === undefined) return;
     void getCurrentWindow()
       .setTitle(name)
-      .catch((e: unknown) => console.warn("cannot set the window title", e));
+      .catch((e: unknown) => logWindowFailure("setTitle", e));
   }, [name]);
+
+  // --- slice: client window ---
+  // Three lines, and between them they answer the whole of «the window opened
+  // and stayed empty»: whether React mounted at all, whether the record ever
+  // arrived, and what the core said instead. Without them a window that paints
+  // nothing writes nothing, which is the state this page was reported in.
+  useEffect(() => {
+    logWindow(`client window mounted for ${id}`);
+  }, [id]);
+
+  const clientId = client?.id;
+  useEffect(() => {
+    if (clientId === undefined) return;
+    logWindow(`client window has the record of ${clientId}`);
+  }, [clientId]);
+
+  useEffect(() => {
+    if (error === null || error === undefined) return;
+    logWindowFailure(`reading the client ${id}`, error);
+  }, [error, id]);
 
   return (
     <div className="flex flex-col h-full bg-app text-fg">
@@ -67,18 +94,62 @@ export function ClientWindowPage() {
       />
       <main className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex flex-col gap-16 p-16">
-          {error ? <Notice text={errorText(error)} /> : null}
+          {/* A refusal that arrived after the record did leaves the cards on
+              screen and states itself above them. A refusal instead of the
+              record takes the window over, because there is nothing else. */}
+          {error && client ? <Notice text={errorText(error)} /> : null}
           {client ? (
             <ClientCards client={client} />
+          ) : error ? (
+            <Failure text={errorText(error)} label={t("clientWindow.close")} />
           ) : isLoading ? (
-            <p className="text-body-sm text-fg-muted">
-              {t("clientWindow.loading")}
-            </p>
-          ) : error ? null : (
-            <Notice text={t("clientWindow.notFound")} />
+            <Loading text={t("clientWindow.loadingClient")} />
+          ) : (
+            <Failure
+              text={t("clientWindow.notFound")}
+              label={t("clientWindow.close")}
+            />
           )}
         </div>
       </main>
+    </div>
+  );
+}
+
+/** What the window holds while the record is on its way. */
+function Loading({ text }: { text: string }) {
+  return (
+    <p className="flex items-center gap-8 text-body-sm text-fg-muted">
+      <Loader2 size={16} className="text-fg-accent animate-spin shrink-0" />
+      {text}
+    </p>
+  );
+}
+
+/**
+ * A refusal with the way out next to it.
+ *
+ * The window draws its own title bar, so its close button is a React component
+ * like any other: a page that failed to mount takes the button with it. This
+ * one is for the page that mounted and has nothing to show — the player reads
+ * why and closes the window without hunting for Alt+F4.
+ */
+function Failure({ text, label }: { text: string; label: string }) {
+  return (
+    <div className="flex flex-col items-start gap-12">
+      <Notice text={text} />
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => {
+          if (!isTauri()) return;
+          void getCurrentWindow()
+            .close()
+            .catch((e: unknown) => logWindowFailure("close", e));
+        }}
+      >
+        {label}
+      </Button>
     </div>
   );
 }

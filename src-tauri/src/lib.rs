@@ -114,16 +114,30 @@ pub fn run() {
         // them stayed open would leave a process alive behind windows that
         // cannot reach anything else. Both events are handled: `CloseRequested`
         // is the ordinary path and `Destroyed` covers a close that skipped it.
+        //
+        // Both are logged for every window, not only for `main`. A window that
+        // refuses to close and a window that closed without the frontend
+        // noticing look the same from outside; the log tells them apart,
+        // because a click on the close button that reached the core leaves a
+        // `close requested` line with the label of the window it came from.
         .on_window_event(|window, event| {
-            if window.label() != "main" {
+            let label = window.label();
+            match event {
+                tauri::WindowEvent::CloseRequested { .. } => {
+                    log::info!("window {label}: close requested");
+                }
+                tauri::WindowEvent::Destroyed => {
+                    log::info!("window {label}: destroyed");
+                }
+                _ => return,
+            }
+            if label != "main" {
                 return;
             }
-            if matches!(
-                event,
-                tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
-            ) {
-                client_window::close_all(window.app_handle());
-            }
+            // Best effort by design: `close_all` logs whatever refuses to
+            // close and never panics, so the way out of the launcher cannot be
+            // blocked by a window that is already gone.
+            client_window::close_all(window.app_handle());
         })
         .setup(|app| {
             // Everything below needs the config root, and the config root needs
