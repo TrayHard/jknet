@@ -30,3 +30,6 @@ src-tauri/target
 *.njsproj
 *.sln
 *.sw?
+
+# Local convenience scripts: per-machine helpers, not part of the repository
+dev.cmd
