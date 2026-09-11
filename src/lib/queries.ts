@@ -33,6 +33,7 @@ import {
   launchIpc,
   levelshotsIpc,
   libraryIpc,
+  LIBRARY_CHANGED_EVENT,
   // --- slice: player profiles ---
   profilesIpc,
   serversIpc,
@@ -368,8 +369,20 @@ export function useLaunchPreview(
 
 export const profileKeys = {
   book: (clientId: string) => [...queryKeys.clients, clientId, "profiles"] as const,
-  models: (clientId: string) => [...queryKeys.clients, clientId, "models"] as const,
-  hilts: (clientId: string) => [...queryKeys.clients, clientId, "hilts"] as const,
+};
+
+/**
+ * What a client can offer a profile, keyed apart from the client's record.
+ *
+ * The skins and hilts come out of the pk3 files of a client, not out of its
+ * `client.json`, and the two change for different reasons: a volume slider
+ * writes a record a dozen times during one drag and moves no archive. Under
+ * `queryKeys.clients` every one of those writes would refetch the skin list.
+ */
+export const appearanceKeys = {
+  all: ["appearance"] as const,
+  models: (clientId: string) => ["appearance", clientId, "models"] as const,
+  hilts: (clientId: string) => ["appearance", clientId, "hilts"] as const,
 };
 
 /** The profiles of one client and which of them is the default. */
@@ -393,7 +406,7 @@ export function usePlayerModels(
   enabled: boolean,
 ): UseQueryResult<PlayerModel[]> {
   return useQuery({
-    queryKey: profileKeys.models(clientId),
+    queryKey: appearanceKeys.models(clientId),
     queryFn: () => profilesIpc.listPlayerModels(clientId),
     enabled,
     staleTime: Infinity,
@@ -407,12 +420,43 @@ export function useSaberHilts(
   enabled: boolean,
 ): UseQueryResult<SaberHilt[]> {
   return useQuery({
-    queryKey: profileKeys.hilts(clientId),
+    queryKey: appearanceKeys.hilts(clientId),
     queryFn: () => profilesIpc.listSaberHilts(clientId),
     enabled,
     staleTime: Infinity,
     retry: false,
   });
+}
+
+/**
+ * Refetches the skins and hilts when any window changes a client's files.
+ *
+ * The two lists never go stale by themselves — the archives of a client do not
+ * move on their own — but the Library screen of the main window installs a pk3
+ * and the profile form of the client window is what has to notice. The core
+ * drops its own cache on the same event, so the refetch is a memory read
+ * unless something really changed.
+ */
+export function useAppearanceEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen(LIBRARY_CHANGED_EVENT, () => {
+      void queryClient.invalidateQueries({ queryKey: appearanceKeys.all });
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [queryClient]);
 }
 
 /**

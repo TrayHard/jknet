@@ -11,7 +11,12 @@ import {
   type PlayerProfile,
   type SaberHilt,
 } from "../../lib/ipc";
-import { useGameInfo, useSaberHilts, useSaveProfile } from "../../lib/queries";
+import {
+  useAppearanceEvents,
+  useGameInfo,
+  useSaberHilts,
+  useSaveProfile,
+} from "../../lib/queries";
 import { Button, Input, Select, type SelectOption } from "../ui";
 import { SettingRow } from "./CvarControls";
 import { NicknameField } from "./NicknameField";
@@ -62,6 +67,9 @@ export function ProfileForm({
   const errorText = useErrorText();
   const save = useSaveProfile(client.id);
   const [draft, setDraft] = useState<PlayerProfile>(profile);
+  // A pk3 installed in the main window while this form is open carries skins
+  // and hilts this form should offer.
+  useAppearanceEvents();
 
   // --- slice: player profiles ---
   // Jedi Outcast ships no `ext_data/sabers/`, so there is no hilt to name and
