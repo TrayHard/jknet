@@ -16,7 +16,7 @@
     "created": "created {{date}}",
     "modFolder": "fs_game {{mod}}",
     "engineDetails": "About {{engine}}",
-    "openFolder": "Open folder",
+    "openFolder": "Mappa megnyitása",
     "delete": "Törlés",
     "settingsOf": "{{client}} beállításai",
     "settingsHint": "Név és modmappa",
