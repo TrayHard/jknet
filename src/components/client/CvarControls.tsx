@@ -110,9 +110,13 @@ export function CvarField({
   // when the value changes and never because the field lost focus, which is
   // the moment the old value is still what the cache holds.
   const focused = useRef(false);
+  // What was last sent. Enter and the blur that follows it are two commits of
+  // one edit, and the value of the query has not come back between them.
+  const sent = useRef<string | null>(null);
 
   useEffect(() => {
     if (focused.current) return;
+    sent.current = null;
     setDraft(value ?? "");
   }, [value]);
 
@@ -122,7 +126,8 @@ export function CvarField({
       setDraft(value ?? "");
       return;
     }
-    if (trimmed === (value ?? "")) return;
+    if (trimmed === (value ?? "") || trimmed === sent.current) return;
+    sent.current = trimmed;
     onCommit(trimmed === "" ? null : trimmed);
   };
 
@@ -203,9 +208,12 @@ const VOLUME_STEP = 0.1;
 export function CvarSlider({ id, value, ariaLabel, onCommit }: CvarSliderProps) {
   const [draft, setDraft] = useState(value ?? "");
   const dragging = useRef(false);
+  // Letting go of the thumb and losing focus are two commits of one drag.
+  const sent = useRef<string | null>(null);
 
   useEffect(() => {
     if (dragging.current) return;
+    sent.current = null;
     setDraft(value ?? "");
   }, [value]);
 
@@ -214,7 +222,8 @@ export function CvarSlider({ id, value, ariaLabel, onCommit }: CvarSliderProps) 
 
   const commit = () => {
     dragging.current = false;
-    if (draft === (value ?? "")) return;
+    if (draft === (value ?? "") || draft === sent.current) return;
+    sent.current = draft;
     onCommit(draft);
   };
 
