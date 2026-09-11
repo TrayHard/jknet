@@ -4,15 +4,19 @@
   "launchError": "{{message}} <0>Відкрийте екран «Клієнти»</0>, щоб указати папку гри або встановити рушій.",
   "hero": {
     "quickPlay": "Швидкий запуск",
+    "continue": "Continue",
+    "lastServer": "Last server",
     "inGame": "У грі",
     "running": "Запущено: {{client}}",
     "noClient": "Клієнта {{game}} ще немає",
     "runningText": "Запущено <0>{{age}}</0> тому, процес {{pid}}. Лаунчер відходить убік і не заважає грати.",
     "readyText": "Запустіть основний клієнт і виберіть сервер у меню гри.",
+    "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
     "noClientText": "Клієнт — це збірка рушія з власними файлами та налаштуваннями. Створіть клієнт, і {{game}} запуститься одним натисканням.",
     "createClient": "Створити клієнт {{game}}",
     "play": "Грати",
     "playHint": "Позначте клієнт як основний",
+    "connect": "Connect",
     "stop": "Зупинити",
     "manageClients": "Керувати клієнтами",
     "aMoment": "менше хвилини"
@@ -23,6 +27,8 @@
     "locate": "Вказати папку"
   },
   "topServers": {
+    "favorites": "Favorites",
+    "history": "History",
     "busiest": "Найлюдніші сервери",
     "emptyTitle": "У кеші ще немає серверів",
     "emptyText": "Відкрийте екран «Сервери» один раз, і найлюдніші з’являться тут.",
