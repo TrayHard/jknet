@@ -103,7 +103,9 @@
     "botHeading_one": "{{count}} BOT",
     "botHeading_other": "{{count}} BOTS",
     "botBadge": "BOT",
-    "playersError": "No player list: {{message}}"
+    "playersClosed": "This server does not publish its player list.",
+    "playersRemembered": "PLAYER LIST FROM {{age}} AGO",
+    "playersRememberedUnknown": "LAST KNOWN PLAYER LIST"
   },
   "ping": {
     "noAnswer": "No answer",
