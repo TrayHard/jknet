@@ -50,7 +50,6 @@
     "installVersion": "Instalar el motor {{version}}"
   },
   "engines": {
-    "heading": "Motores de {{game}}",
     "recommended": "Recomendado",
     "legacy": "Legacy"
   },

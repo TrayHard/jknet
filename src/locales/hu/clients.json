@@ -49,7 +49,6 @@
     "installVersion": "Motor telepítése: {{version}}"
   },
   "engines": {
-    "heading": "A {{game}} motorjai",
     "recommended": "Ajánlott",
     "legacy": "Legacy"
   },

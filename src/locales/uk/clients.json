@@ -51,7 +51,6 @@
     "installVersion": "Встановити рушій {{version}}"
   },
   "engines": {
-    "heading": "Рушії {{game}}",
     "recommended": "Рекомендований",
     "legacy": "Legacy"
   },
