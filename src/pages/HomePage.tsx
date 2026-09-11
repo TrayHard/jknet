@@ -117,6 +117,19 @@ export function HomePage() {
     defaultClient !== undefined && running === null && !launchClient.isPending;
 
   /**
+   * Which of the two hero buttons the player pressed, while it is starting.
+   *
+   * Connect and Play share one mutation, so `isPending` alone cannot tell them
+   * apart, and the launch in flight would put «Starting…» on whichever button
+   * the code asked first. The arguments say it instead: only Connect passes an
+   * address. Both buttons still go inactive together — the client starts once.
+   */
+  const startingConnect =
+    launchClient.isPending && launchClient.variables?.connect !== undefined;
+  const startingPlay =
+    launchClient.isPending && launchClient.variables?.connect === undefined;
+
+  /**
    * The server the hero offers to go back to, or nothing.
    *
    * It takes a client to connect, so a player who has none keeps the hero that
@@ -291,7 +304,7 @@ export function HomePage() {
                       disabled={!canPlay}
                       onClick={() => connect(continueServer)}
                     >
-                      {launchClient.isPending
+                      {startingConnect
                         ? tCommon("states.starting")
                         : t("hero.connect")}
                     </Button>
@@ -304,9 +317,7 @@ export function HomePage() {
                     onClick={play}
                     title={defaultClient ? undefined : t("hero.playHint")}
                   >
-                    {launchClient.isPending && continueServer === undefined
-                      ? tCommon("states.starting")
-                      : t("hero.play")}
+                    {startingPlay ? tCommon("states.starting") : t("hero.play")}
                   </Button>
                 </>
               )}

@@ -16,7 +16,7 @@
     "createClient": "Створити клієнт {{game}}",
     "play": "Грати",
     "playHint": "Позначте клієнт як основний",
-    "connect": "Connect",
+    "connect": "Підключитися",
     "stop": "Зупинити",
     "manageClients": "Керувати клієнтами",
     "aMoment": "менше хвилини"
@@ -27,8 +27,8 @@
     "locate": "Вказати папку"
   },
   "topServers": {
-    "favorites": "Favorites",
-    "history": "History",
+    "favorites": "Обране",
+    "history": "Історія",
     "busiest": "Найлюдніші сервери",
     "emptyTitle": "У кеші ще немає серверів",
     "emptyText": "Відкрийте екран «Сервери» один раз, і найлюдніші з’являться тут.",

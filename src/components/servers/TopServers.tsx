@@ -33,10 +33,12 @@ export function TopServers() {
     [cached.data],
   );
 
-  // Nothing has ever been fetched. This is the one empty state of the whole
-  // server section: Favorites and History are built from the same cache, so
-  // when it is empty they are empty too and the screen says it once.
-  if ((cached.data ?? []).length === 0) {
+  // Nothing to send the player to. This is the one empty state of the whole
+  // server section, and it belongs here because this pool is the widest of the
+  // three: Favorites and History are built from the same cache and cut down
+  // further, so an empty pool here would leave the screen with nothing at all
+  // under the hero.
+  if (rows.length === 0) {
     return (
       <EmptyState
         icon={<Play size={24} />}
@@ -54,9 +56,5 @@ export function TopServers() {
     );
   }
 
-  // A cache in which every server is bot-only leaves `rows` empty, and the
-  // block then draws nothing at all. That is deliberate: Favorites and History
-  // may well have rows above it, and «no servers in the cache yet» under two
-  // populated lists would be a plain lie.
   return <ServerListBlock title={t("topServers.busiest")} servers={rows} seeAll />;
 }
