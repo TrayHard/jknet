@@ -35,7 +35,6 @@ import {
   sameStoredFilters,
   sortServers,
   storedFilters,
-  totalBots,
   totalRealPlayers,
   type ServerFilters,
   type ServerTab,
@@ -61,7 +60,7 @@ import { useErrorText } from "../i18n/errors";
 import { useFormat } from "../i18n/useFormat";
 import { useGametypeLabels } from "../i18n/useGameLabels";
 import { cn } from "../lib/format";
-import type { Game, GameInfo, ServerInfo, ServersDoneEvent } from "../lib/ipc";
+import type { Game, GameInfo, ServerInfo } from "../lib/ipc";
 // --- slice: game switch ---
 import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
@@ -223,11 +222,10 @@ export function ServersPage() {
   const selected = visible.find((row) => row.address === selectedAddress);
   const status = useServerStatus(selected?.address ?? null);
 
-  // Both counts run over the whole tab, not the filtered list: the head of the
-  // subtitle already says "X of N servers", so the rest describes the tab
-  // rather than the current search box.
+  // Over the whole tab, not the filtered list: the subtitle answers «is it
+  // worth going in right now», and that question is about the servers of this
+  // game rather than about what the search box happens to hold.
   const playersOnline = useMemo(() => totalRealPlayers(inTab), [inTab]);
-  const botsOnline = useMemo(() => totalBots(inTab), [inTab]);
   /** Rows the bot switch takes off the table, for the empty state to name. */
   const hiddenBotOnly = useMemo(
     () => (filters.hideBotOnly ? inTab.filter(isBotOnly).length : 0),
@@ -319,13 +317,10 @@ export function ServersPage() {
           // --- slice: game switch --- the list is one game's, and the line
           // says which: two lists that look alike need naming apart.
           game: gameName(activeGame),
-          visible: visible.length,
           total: inTab.length,
           players: playersOnline,
-          bots: botsOnline,
           age: secondsAgo === null ? null : format.age(secondsAgo),
           scanning: scope.running,
-          progress: scope.progress,
         })}
         actions={
           <>
@@ -849,54 +844,50 @@ type ServersT = ReturnType<typeof useTranslation<"servers">>["t"];
 const DOT = " · ";
 
 /**
- * The line under the title: what is shown, out of what, and how fresh.
+ * The line under the title: how many people are playing, and how fresh that is.
  *
- * "Players" means people. The bots are named separately so the number nobody
- * can act on cannot be mistaken for the one they can.
+ * "Players" means people, and it goes first because it is the only number the
+ * player acts on — «is it worth going in right now». The server count follows
+ * it to name the list, then how long ago it was asked.
+ *
+ * --- slice: servers robustness ---
+ * Three counts used to sit here as well: «113 of 130», «148 bots hidden from
+ * counts» and «12 did not answer». None of them survived. The first two say
+ * what the filters above the table already say, and a server that did not
+ * answer is now a row of its own — muted, marked offline — so counting them in
+ * a sentence says it twice.
  *
  * --- slice: i18n ---
  * Each part is a whole message with its own placeholders and its own plural,
  * and the middot between them is punctuation. Nothing here glues half-sentences
- * together: «2 of 118 Jedi Academy servers» is one message, not «2», «of» and
- * «servers».
+ * together: «118 Jedi Academy servers» is one message, not «118» and «servers».
  */
 function describeCounts(
   t: ServersT,
   state: {
     /** Name of the active game, which is whose list this is. */
     game: string;
-    visible: number;
     total: number;
     players: number;
-    bots: number;
     /** How long ago the list was refreshed, already formatted, or `null`. */
     age: string | null;
     scanning: boolean;
-    progress: ServersDoneEvent | null;
   },
 ): string {
-  const { game, visible, total, players, bots, age, scanning, progress } = state;
+  const { game, total, players, age, scanning } = state;
+
+  if (total === 0) {
+    return scanning
+      ? [t("subtitle.empty", { game }), t("subtitle.scanning")].join(DOT)
+      : t("subtitle.empty", { game });
+  }
 
   const parts: string[] = [
-    total === 0
-      ? t("subtitle.empty", { game })
-      : visible === total
-        ? t("subtitle.all", { count: total, game })
-        : t("subtitle.some", { count: visible, total, game }),
+    t("subtitle.players", { count: players }),
+    t("subtitle.servers", { count: total, game }),
   ];
-
-  if (total > 0) parts.push(t("subtitle.players", { count: players }));
-  if (total > 0 && bots > 0) parts.push(t("subtitle.bots", { count: bots }));
-
-  if (scanning) {
-    parts.push(t("subtitle.scanning"));
-    return parts.join(DOT);
-  }
-
-  if (age !== null) parts.push(t("subtitle.refreshed", { age }));
-  if (progress !== null && progress.responded !== progress.total) {
-    parts.push(t("subtitle.silent", { count: progress.total - progress.responded }));
-  }
+  if (scanning) parts.push(t("subtitle.scanning"));
+  else if (age !== null) parts.push(t("subtitle.refreshed", { age }));
   return parts.join(DOT);
 }
 

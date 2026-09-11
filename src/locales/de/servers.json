@@ -10,16 +10,10 @@
     "empty": "Noch keine Server für {{game}}",
     "scanning": "checking servers",
     "refreshed": "vor {{age}} aktualisiert",
-    "all_one": "{{count}} Server für {{game}}",
-    "all_other": "{{count}} Server für {{game}}",
-    "some_one": "{{count}} von {{total}} Servern für {{game}}",
-    "some_other": "{{count}} von {{total}} Servern für {{game}}",
     "players_one": "{{count}} Spieler online",
     "players_other": "{{count}} Spieler online",
-    "bots_one": "{{count}} Bot aus den Zahlen ausgeblendet",
-    "bots_other": "{{count}} Bots aus den Zahlen ausgeblendet",
-    "silent_one": "{{count}} hat nicht geantwortet",
-    "silent_other": "{{count}} haben nicht geantwortet"
+    "servers_one": "{{count}} {{game}} server",
+    "servers_other": "{{count}} {{game}} servers"
   },
   "filters": {
     "mode": "Modus",
