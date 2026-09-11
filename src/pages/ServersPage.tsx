@@ -497,6 +497,11 @@ export function ServersPage() {
             // what to put there: the list the row remembers, or a sentence
             // about a server that publishes none.
             playersFailed={status.error !== null}
+            // --- slice: servers robustness ---
+            // `refetch` rather than invalidating the key: it asks past the
+            // 15 s the query stays fresh for, which is the whole point of a
+            // button the player pressed on purpose.
+            onRetryPlayers={() => void status.refetch()}
             // --- slice: game switch ---
             // Live even without a client: pressing it is how the player finds
             // out they need one, and the toast that says so offers to make it.
