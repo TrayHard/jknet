@@ -237,26 +237,41 @@ export function ServersPage() {
 
   // --- slice: servers browser ---
   /**
-   * **Refresh**: asks the addresses of the open tab again, nothing else.
+   * The addresses **Refresh** asks about on this tab.
    *
-   * All re-probes the rows on screen, Favorites and History the addresses the
-   * player saved, and LAN repeats the broadcast sweep. No master server takes
-   * part in any of it — that is the other button.
+   * All re-probes the rows on screen; Favorites and History ask about the
+   * addresses the player saved, whether or not a scan has ever seen them. The
+   * LAN tab has no address list at all — a broadcast is how it finds out.
+   */
+  const tabAddresses = useMemo(() => {
+    switch (tab) {
+      case "favorites":
+        return favoriteAddresses;
+      case "history":
+        return historyAddresses;
+      case "lan":
+        return [];
+      default:
+        return inTab.map((server) => server.address);
+    }
+  }, [tab, favoriteAddresses, historyAddresses, inTab]);
+
+  /**
+   * **Refresh**: asks this tab's servers again, and no master server.
+   *
+   * The engine draws the same line between its two buttons: `RefreshFilter`
+   * only re-pings what is already on screen (`codemp/ui/ui_main.c:10500`).
    */
   const refreshTab = () => {
     if (tab === "lan") {
       refresh.refreshLan();
       return;
     }
-    const addresses =
-      tab === "favorites"
-        ? favoriteAddresses
-        : tab === "history"
-          ? historyAddresses
-          : inTab.map((server) => server.address);
-    if (addresses.length === 0) return;
-    refresh.refreshAddresses(tab, addresses);
+    if (tabAddresses.length === 0) return;
+    refresh.refreshAddresses(tab, tabAddresses);
   };
+  /** Nothing to ask: an empty tab needs the other button, or a star first. */
+  const nothingToRefresh = tab !== "lan" && tabAddresses.length === 0;
 
   const toggleSort = (column: SortColumn) => {
     if (column === sortColumn) {
@@ -334,7 +349,7 @@ export function ServersPage() {
                 />
               }
               title={t("refreshHint")}
-              disabled={scope.running}
+              disabled={scope.running || nothingToRefresh}
               onClick={refreshTab}
             >
               {scope.running ? t("scanning") : t("refresh")}
