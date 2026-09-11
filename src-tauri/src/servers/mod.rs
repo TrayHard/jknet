@@ -25,6 +25,9 @@
 //! Each operation runs under a [`RefreshScope`], which every event carries: the
 //! screen keeps a loader per tab, and a scan of the Favorites tab must not
 //! freeze the All tab. Two scopes may run at once; the same scope may not.
+//! Two scopes of one game do end at the same cache document, though, so the
+//! file work of both goes under [`RefreshState::cache_lock`] — the probes stay
+//! side by side, the writes do not.
 //!
 //! Everything the launcher calls a player count is a count of people. Bots are
 //! carried alongside in [`ServerInfo::bots`] and shown as a suffix, never
@@ -152,7 +155,8 @@ pub enum RefreshScope {
 }
 
 // --- slice: servers browser ---
-/// The scopes an operation is running for right now.
+/// The scopes an operation is running for right now, and the write lock of
+/// each game's cache document.
 ///
 /// Long work is guarded in the core and not merely by a disabled button, the
 /// way `InstallState` guards an engine install: a second `invoke` from a
@@ -162,9 +166,36 @@ pub enum RefreshScope {
 #[derive(Debug, Default)]
 pub struct RefreshState {
     busy: Mutex<HashSet<(Game, RefreshScope)>>,
+    /// One lock per game, held only for the file work on
+    /// `cache\servers-<game>.json`. See [`RefreshState::cache_lock`].
+    cache_writes: [tokio::sync::Mutex<()>; Game::ALL.len()],
 }
 
 impl RefreshState {
+    /// The write lock of one game's cache document.
+    ///
+    /// Deliberately not the same lock as [`RefreshState::claim`], and taken
+    /// separately from it. The claim lets two tabs of one game scan at the same
+    /// time, which is the point of the scopes — but both scans end at the same
+    /// file, and [`refresh_servers`] replaces that file whole while
+    /// [`refresh_addresses`] reads it, merges into it and writes it back. This
+    /// lock makes each of those one step, so a merge can never read the
+    /// document before another operation's write and put its own copy back
+    /// after it: a stale snapshot laid over a fresh one is how a server the
+    /// masters have dropped comes back to life and survives a restart.
+    ///
+    /// It is a [`tokio::sync::Mutex`] because it is held across the file work
+    /// of an `async` command, and it is held for that alone: the master query
+    /// and the probe of a thousand addresses stay outside it, so the two scans
+    /// still run side by side on the wire.
+    fn cache_lock(&self, game: Game) -> &tokio::sync::Mutex<()> {
+        let at = Game::ALL
+            .iter()
+            .position(|known| *known == game)
+            .unwrap_or_default();
+        &self.cache_writes[at]
+    }
+
     /// Claims one scope of one game, or refuses because it is already running.
     fn claim(&self, game: Game, scope: RefreshScope) -> Result<RefreshGuard<'_>> {
         let mut busy = self
@@ -819,7 +850,10 @@ pub async fn refresh_servers(
         &timestamp::now_rfc3339(),
     )
     .await;
-    write_cache(&file, &collected);
+    // The probe is over before the lock is taken: a scan of the Favorites tab
+    // that is still on the wire is none of this command's business, and only
+    // the file the two of them share is.
+    write_cache_locked(refreshes.cache_lock(game), &file, &collected).await;
 
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
     let real_players: u32 = collected
@@ -905,7 +939,9 @@ pub async fn refresh_addresses(
         &timestamp::now_rfc3339(),
     )
     .await;
-    let document = merge_into_cache(&file, &answered);
+    // Read, merge and write as one step: a **Get new list** of the same game
+    // runs under its own claim and ends at this same file.
+    let document = merge_into_cache_locked(refreshes.cache_lock(game), &file, &answered).await;
 
     let mut rows = answered;
     rows.extend(silent_rows(game, &document, &wanted, &rows, &favorites));
@@ -1149,12 +1185,50 @@ fn merge_rows(document: &mut Vec<ServerInfo>, incoming: &[ServerInfo]) {
 /// already had, and an address nobody has ever seen does not become one: the
 /// cache is the record of servers that were there, not of addresses that were
 /// asked.
+///
+/// The read, the merge and the write are one step, and the caller runs them
+/// under the game's cache lock — see [`merge_into_cache_locked`].
 fn merge_into_cache(file: &PathBuf, answered: &[ServerInfo]) -> Vec<ServerInfo> {
     let mut document = read_cache(file);
     merge_rows(&mut document, answered);
     sort_rows(&mut document);
     write_cache(file, &document);
     document
+}
+
+// --- slice: servers browser ---
+/// [`merge_into_cache`] with the game's cache lock held around all of it.
+///
+/// The lock is what makes the read part of the step: without it a merge that
+/// read the document before a **Get new list** rewrote it would write its own
+/// copy back afterwards, and every server the masters had just dropped would
+/// return to the cache and outlive the launcher.
+///
+/// The merge still adds any address that answered, including one the masters
+/// never listed — a favourite on a private server is exactly that. That row is
+/// a fresh answer from the server itself, not a resurrection; a resurrection is
+/// an old snapshot written over a newer one, which is what the lock rules out.
+async fn merge_into_cache_locked(
+    lock: &tokio::sync::Mutex<()>,
+    file: &PathBuf,
+    answered: &[ServerInfo],
+) -> Vec<ServerInfo> {
+    let _writing = lock.lock().await;
+    merge_into_cache(file, answered)
+}
+
+// --- slice: servers browser ---
+/// [`write_cache`] with the game's cache lock held.
+///
+/// The other half of the rule: a whole-document write waits for a merge that is
+/// already under way instead of landing between its read and its write.
+async fn write_cache_locked(
+    lock: &tokio::sync::Mutex<()>,
+    file: &PathBuf,
+    servers: &[ServerInfo],
+) {
+    let _writing = lock.lock().await;
+    write_cache(file, servers);
 }
 
 // --- slice: servers browser ---
@@ -2192,6 +2266,127 @@ mod tests {
         assert_eq!(names["10.0.0.9:29070"], "Charlie", "appended");
         // And the document on disk says the same, not only the value returned.
         assert_eq!(read_cache(&file).len(), 3);
+        let _ = fs::remove_file(&file);
+    }
+
+    /// Host name of every row of a document, keyed by address.
+    fn cached_names(document: &[ServerInfo]) -> BTreeMap<String, String> {
+        document
+            .iter()
+            .map(|row| (row.address.clone(), row.hostname_clean.clone()))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_direct_probe_that_lands_last_does_not_bring_back_a_dropped_row() {
+        // **Get new list** and a **Refresh** of the Favorites tab are different
+        // scopes, so `claim` lets them run at the same time — and both of them
+        // end at `cache\servers-ja.json`. Here the merge lands last.
+        let game = Game::JediAcademy;
+        let file = std::env::temp_dir()
+            .join("jknet-test-cache-race-merge-last")
+            .join("servers-ja.json");
+        let _ = fs::remove_file(&file);
+        write_cache(
+            &file,
+            &[
+                game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
+                game_row(game, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
+            ],
+        );
+
+        let state = Arc::new(RefreshState::default());
+        // The full scan holds the lock: it has the answer of the masters and is
+        // about to write it, and Bravo is not on that answer any more.
+        let full_scan = state.cache_lock(game).lock().await;
+
+        let merging = tokio::spawn({
+            let state = Arc::clone(&state);
+            let file = file.clone();
+            let answered = vec![
+                game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\3\\g_humanplayers\\3"),
+                game_row(game, "10.0.0.9:29070", "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2"),
+            ];
+            async move { merge_into_cache_locked(state.cache_lock(game), &file, &answered).await }
+        });
+
+        // The Favorites refresh has its answers in hand and still cannot read
+        // the file. Without the lock it would have read it here — the two rows
+        // of the old document, Bravo included.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(read_cache(&file).len(), 2, "the merge is waiting, not writing");
+
+        write_cache(
+            &file,
+            &[game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\4\\g_humanplayers\\4")],
+        );
+        drop(full_scan);
+
+        let names = cached_names(&merging.await.expect("the merge finishes"));
+        assert!(
+            !names.contains_key("10.0.0.2:29070"),
+            "the merge read the fresh document, so the row the masters dropped stays dropped"
+        );
+        // A favourite the masters never listed is not a resurrection: that
+        // server answered this very probe, and the row is its own answer.
+        assert_eq!(names["10.0.0.9:29070"], "Charlie");
+        assert_eq!(names.len(), 2, "the fresh row and the one that answered");
+        assert_eq!(cached_names(&read_cache(&file)).len(), 2, "and so does the disk");
+        let _ = fs::remove_file(&file);
+    }
+
+    #[tokio::test]
+    async fn a_full_scan_that_lands_last_writes_the_masters_list_whole() {
+        // The mirror case: the Favorites refresh is in the middle of its
+        // read-merge-write and **Get new list** finishes second.
+        let game = Game::JediAcademy;
+        let file = std::env::temp_dir()
+            .join("jknet-test-cache-race-full-last")
+            .join("servers-ja.json");
+        let _ = fs::remove_file(&file);
+        write_cache(
+            &file,
+            &[
+                game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
+                game_row(game, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
+            ],
+        );
+
+        let state = Arc::new(RefreshState::default());
+        let merge = state.cache_lock(game).lock().await;
+
+        let writing = tokio::spawn({
+            let state = Arc::clone(&state);
+            let file = file.clone();
+            let collected = vec![game_row(
+                game,
+                "10.0.0.1:29070",
+                "\\hostname\\Alpha\\clients\\4\\g_humanplayers\\4",
+            )];
+            async move { write_cache_locked(state.cache_lock(game), &file, &collected).await }
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(read_cache(&file).len(), 2, "the full scan is waiting, not writing");
+
+        // The merge runs to its end untorn: nothing landed between its read and
+        // its write, so it loses nothing it had just learned.
+        let merged = merge_into_cache(
+            &file,
+            &[game_row(game, "10.0.0.9:29070", "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2")],
+        );
+        assert_eq!(merged.len(), 3);
+        drop(merge);
+
+        writing.await.expect("the full scan finishes");
+        let addresses: Vec<String> = read_cache(&file)
+            .iter()
+            .map(|row| row.address.clone())
+            .collect();
+        // The masters' list, whole and alone: Bravo is gone for good, and the
+        // favourite it did not list goes with it until the next Refresh of the
+        // Favorites tab asks that address again.
+        assert_eq!(addresses, vec!["10.0.0.1:29070".to_string()]);
         let _ = fs::remove_file(&file);
     }
 
