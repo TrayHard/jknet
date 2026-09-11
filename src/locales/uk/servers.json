@@ -40,7 +40,9 @@
     "favorites": "Обране",
     "history": "Історія",
     "lan": "Локальна мережа",
-    "lanHint": "Servers on your own network, found by broadcast"
+    "lanHint": "Servers on your own network, found by broadcast",
+    "hidden": "Hidden",
+    "hiddenHint": "Servers you took off the browser"
   },
   "columns": {
     "server": "СЕРВЕР",
@@ -80,6 +82,8 @@
     "favoritesText": "Натисніть зірку в рядку, щоб зберегти сервер тут.",
     "historyTitle": "Підключень ще не було",
     "historyText": "Сервери, до яких ви підключаєтеся, з’являються тут, найсвіжіші згори.",
+    "hiddenTitle": "Nothing is hidden",
+    "hiddenText": "Hide a server from the menu beside Connect and it waits here until you bring it back.",
     "noneTitle": "Серверів поки немає",
     "noneText": "Press Get new list to ask the master servers who is online.",
     "filteredTitle": "Під фільтри нічого не підходить",
@@ -112,6 +116,11 @@
     "botHeading_few": "{{count}} БОТИ",
     "botHeading_many": "{{count}} БОТІВ",
     "botHeading_other": "{{count}} БОТА"
+  },
+  "menu": {
+    "actions": "Server actions",
+    "hide": "Hide",
+    "unhide": "Unhide"
   },
   "ping": {
     "noAnswer": "Немає відповіді",

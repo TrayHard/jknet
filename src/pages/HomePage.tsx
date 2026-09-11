@@ -5,10 +5,13 @@ import { Link, useNavigate } from "react-router";
 
 import { GameFilesNotice } from "../components/GameFilesNotice";
 import { MapPreview } from "../components/MapPreview";
+// --- slice: server actions ---
+import { useMissingClientToast } from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
-import { realPlayers } from "../components/servers/filter";
+import { realPlayers, visibleServers } from "../components/servers/filter";
 import { ServerListBlock } from "../components/servers/ServerListBlock";
+import { ServerMenu } from "../components/servers/ServerMenu";
 import { TopServers } from "../components/servers/TopServers";
 import { Badge, Button } from "../components/ui";
 // --- slice: i18n ---
@@ -16,7 +19,12 @@ import { useErrorText } from "../i18n/errors";
 import { useFormat } from "../i18n/useFormat";
 import { cn } from "../lib/format";
 // --- slice: game switch ---
-import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
+import {
+  useActiveGame,
+  useConnectClient,
+  useDefaultClient,
+  useGameNames,
+} from "../lib/game";
 import type { Game, ServerInfo } from "../lib/ipc";
 import {
   useAddServerHistory,
@@ -61,6 +69,11 @@ export function HomePage() {
   const [error, setError] = useState<string | null>(null);
   // --- slice: game switch ---
   const [newClientOpen, setNewClientOpen] = useState(false);
+  // --- slice: server actions ---
+  // One selected row for the whole screen, not one per block: the buttons that
+  // appear on it act on a server, and two rows offering to start a client at
+  // once is two answers to a question with one.
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
 
   // --- slice: game switch ---
   // The hero belongs to the game the switcher is on. A player who owns both
@@ -69,6 +82,13 @@ export function HomePage() {
   const activeGame = useActiveGame();
   const { label: gameName } = useGameNames();
   const defaultClient = useDefaultClient();
+  // --- slice: server actions ---
+  // Connect is a quick connect: the client the player reached that very server
+  // with, and the default client only when there is no such record.
+  const connectClient = useConnectClient();
+  const missingClientToast = useMissingClientToast();
+  // --- slice: server actions --- «2 h ago» under a row of the History block.
+  const format = useFormat();
   // Home draws server rows from the cache alone: no refresh of its own, no
   // command of its own. Both pools below are the cached list read two ways.
   const cachedServers = useCachedServers();
@@ -82,7 +102,9 @@ export function HomePage() {
   /** Starred servers, the busiest first. */
   const favorites = useMemo(
     () =>
-      (cachedServers.data ?? [])
+      // --- slice: server actions --- a hidden row is off Home as it is off
+      // every tab of the browser but the one that undoes it.
+      visibleServers(cachedServers.data ?? [])
         .filter((row) => row.favorite)
         .sort((a, b) => realPlayers(b) - realPlayers(a))
         .slice(0, BLOCK_COUNT),
@@ -102,23 +124,30 @@ export function HomePage() {
    * Jedi Outcast entries from the Jedi Academy screen and back.
    */
   const history = useMemo(() => {
-    const rows = cachedServers.data ?? [];
-    if (rows.length === 0) return [];
+    const rows = visibleServers(cachedServers.data ?? []);
     const byAddress = new Map(rows.map((row) => [row.address, row]));
     const picked: ServerInfo[] = [];
+    // --- slice: server actions ---
+    // When the player was last on each of them, kept beside the rows rather
+    // than folded into them: a row is a `ServerInfo`, and the last time this
+    // player was somewhere is not something a server publishes.
+    const at = new Map<string, string>();
     for (const entry of settings.data?.serverHistory ?? []) {
       const row = byAddress.get(entry.address);
-      if (row !== undefined) picked.push(row);
+      if (row !== undefined) {
+        picked.push(row);
+        at.set(row.address, entry.lastConnected);
+      }
       if (picked.length === BLOCK_COUNT) break;
     }
-    return picked;
+    return { rows: picked, at };
   }, [cachedServers.data, settings.data?.serverHistory]);
 
   // --- slice: maps ---
   // The server Connect was last pressed on, when the browser still has that
   // row: the head of the history block, by the same rule. Written out because
   // an index into an empty array is `undefined` and the type does not say so.
-  const lastServer: ServerInfo | undefined = history[0];
+  const lastServer: ServerInfo | undefined = history.rows[0];
   const running = runningGame.data ?? null;
   const runningClient = clients.data?.find((client) => client.id === running?.clientId);
   const canPlay =
@@ -147,6 +176,13 @@ export function HomePage() {
   const continueServer =
     running === null && defaultClient !== undefined ? lastServer : undefined;
 
+  // --- slice: server actions ---
+  // The client that hero's Connect actually starts, which is what the line
+  // under it names. Defined whenever `continueServer` is: the rule falls back
+  // to the default client, and the hero is Continue only while there is one.
+  const continueClient =
+    continueServer === undefined ? undefined : connectClient(continueServer.address);
+
   /**
    * The server whose map the hero draws, or nothing.
    *
@@ -172,21 +208,79 @@ export function HomePage() {
   };
 
   /**
-   * Starts the default client on the last server.
+   * Starts a client on one server.
    *
    * The same two steps as **Connect** on the Servers screen, in the same
    * order: the address is recorded first and on its own, so the row keeps its
-   * place in the history even when the launch fails on a missing engine.
+   * place in the history even when the launch fails on a missing engine. The
+   * entry carries the client, so the next press reaches the same one.
    */
   const connect = (server: ServerInfo) => {
-    if (!defaultClient) return;
+    const client = connectClient(server.address);
+    // --- slice: server actions ---
+    // A row of this game with no client of this game: the press was reasonable
+    // and the answer is the step that fixes it, the same toast the Servers
+    // screen shows.
+    if (!client) {
+      missingClientToast(activeGame);
+      return;
+    }
     if (launchClient.isPending) return;
     setError(null);
-    addHistory.mutate(server.address);
+    addHistory.mutate({ address: server.address, clientId: client.id });
     launchClient.mutate(
-      { clientId: defaultClient.id, connect: server.address },
+      { clientId: client.id, connect: server.address },
       { onError: (e) => setError(errorText(e)) },
     );
+  };
+
+  // --- slice: server actions ---
+  /**
+   * Connect and the menu, drawn on the selected row of any of the three blocks.
+   *
+   * The press stops at the button: the row under it is already the selected
+   * one, and letting the click through would only re-select it.
+   */
+  const rowActions = (server: ServerInfo) => (
+    <>
+      <Button
+        size="sm"
+        variant="primary"
+        icon={<Zap size={14} />}
+        disabled={running !== null || launchClient.isPending}
+        onClick={(event) => {
+          event.stopPropagation();
+          connect(server);
+        }}
+      >
+        {startingConnect && launchClient.variables?.connect === server.address
+          ? tCommon("states.starting")
+          : t("topServers.connect")}
+      </Button>
+      <ServerMenu server={server} size="sm" />
+    </>
+  );
+
+  // --- slice: server actions ---
+  /**
+   * How long ago the player was last on one server of the History block.
+   *
+   * The block answers «take me back», and «yesterday» is half of that answer:
+   * a server the player left ten minutes ago and one they played on in March
+   * are two different offers, and the order alone does not say which is which.
+   *
+   * `null` for a row with no entry and for a timestamp that does not parse: a
+   * caption cannot say «some unknown time ago», so the row goes without one
+   * rather than with a wrong one.
+   */
+  const lastConnected = (server: ServerInfo) => {
+    const at = history.at.get(server.address);
+    if (at === undefined) return null;
+    const when = Date.parse(at);
+    if (Number.isNaN(when)) return null;
+    return t("topServers.lastConnected", {
+      age: format.age(Math.max(0, Math.floor((Date.now() - when) / 1_000))),
+    });
   };
 
   return (
@@ -265,8 +359,8 @@ export function HomePage() {
               <p className="text-body-md text-fg-secondary max-w-[560px]">
                 {running ? (
                   <RunningLine startedAt={running.startedAt} pid={running.pid} />
-                ) : continueServer && defaultClient ? (
-                  t("hero.continueText", { client: defaultClient.name })
+                ) : continueServer && continueClient ? (
+                  t("hero.continueText", { client: continueClient.name })
                 ) : defaultClient ? (
                   t("hero.readyText")
                 ) : (
@@ -371,9 +465,26 @@ export function HomePage() {
           hides when it has no rows, so a player with neither favourites nor
           history keeps the screen they had before. */}
       <div className="flex flex-col gap-24 pt-24">
-        <ServerListBlock title={t("topServers.favorites")} servers={favorites} />
-        <ServerListBlock title={t("topServers.history")} servers={history} />
-        <TopServers />
+        <ServerListBlock
+          title={t("topServers.favorites")}
+          servers={favorites}
+          selectedAddress={selectedAddress}
+          onSelect={setSelectedAddress}
+          actions={rowActions}
+        />
+        <ServerListBlock
+          title={t("topServers.history")}
+          servers={history.rows}
+          selectedAddress={selectedAddress}
+          onSelect={setSelectedAddress}
+          actions={rowActions}
+          caption={lastConnected}
+        />
+        <TopServers
+          selectedAddress={selectedAddress}
+          onSelect={setSelectedAddress}
+          actions={rowActions}
+        />
       </div>
 
       {/* --- slice: game switch --- the dialog already opens on the active

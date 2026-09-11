@@ -11,6 +11,8 @@ export { Button, type ButtonSize, type ButtonVariant } from "./Button";
 export { Dialog, type DialogVariant } from "./Dialog";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
+// --- slice: server actions ---
+export { Menu, type MenuItem, type MenuSize } from "./Menu";
 export { NavItem } from "./NavItem";
 export { RadioCard } from "./RadioCard";
 export {

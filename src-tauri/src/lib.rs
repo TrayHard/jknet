@@ -360,6 +360,8 @@ pub fn run() {
             servers::get_server_status,
             servers::set_server_favorite,
             servers::add_server_history,
+            // --- slice: server actions ---
+            servers::set_server_hidden,
             // --- slice: maps ---
             levelshots::get_levelshot,
             levelshots::rebuild_levelshots,

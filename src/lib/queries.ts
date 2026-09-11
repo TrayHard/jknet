@@ -894,12 +894,52 @@ export function useSetServerFavorite() {
   });
 }
 
-/** Records a connection. The History tab reads `serverHistory` from settings. */
+// --- slice: server actions ---
+/**
+ * Takes a server off the browser, or puts it back.
+ *
+ * The same shape as `useSetServerFavorite` above and for the same reason: the
+ * flag lives in the settings, the row carries a copy of it, and repainting the
+ * one row beats refetching a thousand.
+ */
+export function useSetServerHidden() {
+  const queryClient = useQueryClient();
+  const game = useActiveGame();
+  return useMutation({
+    mutationFn: ({ address, hidden }: { address: string; hidden: boolean }) =>
+      serversIpc.setServerHidden(address, hidden, game),
+    onSuccess: (settings, variables) => {
+      queryClient.setQueryData(queryKeys.settings, settings);
+      // Both lists, because a server on the desk next to the player is hidden
+      // by the same press and lives in the sweep's own list: the LAN tab holds
+      // rows that never enter the cached one, and a row that stayed put after
+      // **Hide** would read as a press that did nothing.
+      for (const key of [serverKeys.cached(game), serverKeys.lan(game)]) {
+        queryClient.setQueryData<ServerInfo[]>(key, (rows) =>
+          rows?.map((row) =>
+            row.address === variables.address
+              ? { ...row, hidden: variables.hidden }
+              : row,
+          ),
+        );
+      }
+    },
+  });
+}
+
+/**
+ * Records a connection. The History tab reads `serverHistory` from settings.
+ *
+ * --- slice: server actions ---
+ * `clientId` is the client the caller is about to start: the entry remembers
+ * it, and the next **Connect** on that row starts the same one.
+ */
 export function useAddServerHistory() {
   const queryClient = useQueryClient();
   const game = useActiveGame();
   return useMutation({
-    mutationFn: (address: string) => serversIpc.addServerHistory(address, game),
+    mutationFn: ({ address, clientId }: { address: string; clientId?: string }) =>
+      serversIpc.addServerHistory(address, clientId, game),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings, settings);
     },
@@ -931,8 +971,14 @@ export interface ServerRefresh {
   scopes: Record<ServerScope, ScopeRefresh>;
 }
 
-/** A tab nothing has scanned yet. */
-const IDLE_SCOPE: ScopeRefresh = {
+/**
+ * A tab nothing has scanned yet.
+ *
+ * --- slice: server actions ---
+ * Exported because the **Hidden** tab has no scan at all and never will: it is
+ * a view of the cached list, so this is its indicator for good.
+ */
+export const IDLE_SCOPE: ScopeRefresh = {
   running: false,
   error: null,
   progress: null,

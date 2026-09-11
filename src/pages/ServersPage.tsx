@@ -33,9 +33,11 @@ import {
   filtersAreDefault,
   isBotOnly,
   sameStoredFilters,
+  scopeOfTab,
   sortServers,
   storedFilters,
   totalRealPlayers,
+  visibleServers,
   type ServerFilters,
   type ServerTab,
   type SortColumn,
@@ -62,8 +64,9 @@ import { useGametypeLabels } from "../i18n/useGameLabels";
 import { cn } from "../lib/format";
 import type { Game, GameInfo, ServerInfo } from "../lib/ipc";
 // --- slice: game switch ---
-import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
+import { useActiveGame, useConnectClient, useGameNames } from "../lib/game";
 import {
+  IDLE_SCOPE,
   useAddServerHistory,
   useCachedServers,
   useGameInfo,
@@ -111,7 +114,10 @@ export function ServersPage() {
   const activeGame = useActiveGame();
   const gameInfo = useGameInfo(activeGame);
   const { label: gameName } = useGameNames();
-  const defaultClient = useDefaultClient();
+  // --- slice: server actions ---
+  // Connect is a quick connect: the client the player reached this very server
+  // with, and the default client of the game only when there is no such record.
+  const connectClient = useConnectClient();
   const missingClientToast = useMissingClientToast();
 
   const [tab, setTab] = useState<ServerTab>("all");
@@ -149,13 +155,25 @@ export function ServersPage() {
   // draws from the sweep's own list; every other tab draws from the list the
   // master servers filled.
   const lan = useLanServers();
-  const scope = refresh.scopes[tab];
+  // --- slice: server actions ---
+  // Four of the five tabs have a scan of their own; Hidden has none and shows
+  // the indicator of a tab that has never scanned, which is the truth about it.
+  const tabScope = scopeOfTab(tab);
+  const scope = tabScope === null ? IDLE_SCOPE : refresh.scopes[tabScope];
   /** Whether a sweep has finished, which is what "nothing here" then means. */
   const lanScanned = refresh.scopes.lan.refreshedAt !== null;
-  const source = useMemo(
-    () => (tab === "lan" ? lan : (cached.data ?? [])),
-    [tab, lan, cached.data],
-  );
+  const source = useMemo(() => {
+    if (tab === "lan") return lan;
+    const rows = cached.data ?? [];
+    // --- slice: server actions ---
+    // The Hidden tab is the only way back, so it has to see every row that can
+    // be hidden. A LAN server is one of them and its rows never enter the
+    // cached list, so they are added here — otherwise hiding the test server on
+    // the desk would put it somewhere with no button to bring it back.
+    if (tab !== "hidden") return rows;
+    const known = new Set(rows.map((row) => row.address));
+    return [...rows, ...lan.filter((row) => !known.has(row.address))];
+  }, [tab, lan, cached.data]);
   // The rows the screen works from. While this tab's scan runs they are the
   // ones it started with, so counts, tabs, filter options and the table agree
   // with each other and none of them moves under the cursor.
@@ -248,6 +266,10 @@ export function ServersPage() {
       case "history":
         return historyAddresses;
       case "lan":
+      // --- slice: server actions --- the Hidden tab asks nothing of the
+      // network: it is a view of the cached list, and the rows on it are ones
+      // the player has said they do not want checked.
+      case "hidden":
         return [];
       default:
         return inTab.map((server) => server.address);
@@ -265,8 +287,8 @@ export function ServersPage() {
       refresh.refreshLan();
       return;
     }
-    if (tabAddresses.length === 0) return;
-    refresh.refreshAddresses(tab, tabAddresses);
+    if (tabScope === null || tabAddresses.length === 0) return;
+    refresh.refreshAddresses(tabScope, tabAddresses);
   };
   /** Nothing to ask: an empty tab needs the other button, or a star first. */
   const nothingToRefresh = tab !== "lan" && tabAddresses.length === 0;
@@ -281,10 +303,12 @@ export function ServersPage() {
   };
 
   /**
-   * Records the address and starts the default client on it.
+   * Records the address and starts a client on it.
    *
    * History is written first and on its own: the player pressed Connect, so
    * the row belongs in History even when the launch fails on a missing engine.
+   * It carries the client as well, which is what makes the next press on this
+   * row reach the same one.
    */
   const connect = () => {
     if (selected === undefined) return;
@@ -292,7 +316,8 @@ export function ServersPage() {
     // The row belongs to the active game, so the client that reaches it is
     // that game's. Without one the press is answered by a toast that names the
     // game and offers to make the client, rather than by a dead button.
-    if (defaultClient === undefined) {
+    const client = connectClient(selected.address);
+    if (client === undefined) {
       missingClientToast(activeGame);
       return;
     }
@@ -300,9 +325,9 @@ export function ServersPage() {
     // from seeing "is already running" after their own double click.
     if (launchClient.isPending) return;
     setConnectError(null);
-    addHistory.mutate(selected.address);
+    addHistory.mutate({ address: selected.address, clientId: client.id });
     launchClient.mutate(
-      { clientId: defaultClient.id, connect: selected.address },
+      { clientId: client.id, connect: selected.address },
       { onError: (e) => setConnectError(errorText(e)) },
     );
   };
@@ -377,9 +402,16 @@ export function ServersPage() {
         // --- slice: servers browser ---
         // The strip counts the rows the screen is drawing, so a frozen table
         // and the number beside its tab cannot disagree.
+        //
+        // --- slice: server actions ---
+        // Hidden is the one tab whose rows the strip does not count: it draws
+        // the two lists merged, and All or Favorites counted over that merge
+        // would promise LAN servers the master list never holds. Hidden
+        // freezes nothing either, because it never scans, so both lists are
+        // read where they live and the counts stay the same on every tab.
         tabs={buildTabs(
           t,
-          tab === "lan" ? (cached.data ?? []) : view.rows,
+          tab === "lan" || tab === "hidden" ? (cached.data ?? []) : view.rows,
           tab === "lan" ? view.rows : lan,
           historyAddresses,
         )}
@@ -775,7 +807,9 @@ function SortHeader({
       {cell("map", t("columns.map"))}
       {cell("mode", t("columns.mode"))}
       {cell("players", t("columns.players"))}
-      {cell("ping", t("columns.ping"))}
+      {/* --- slice: server actions --- the heading sits over its values, and
+          the values of this column are left-aligned. */}
+      {cell("ping", t("columns.ping"), "justify-start")}
       {cell("mod", t("columns.mod"))}
     </div>
   );
@@ -819,13 +853,26 @@ function buildTabs(
   lanRows: ServerInfo[],
   historyAddresses: string[],
 ): TabDefinition<ServerTab>[] {
-  const known = new Set(servers.map((server) => server.address));
+  // --- slice: server actions ---
+  // Every count but the last one is over the rows that are shown somewhere: a
+  // hidden server is on the Hidden tab and on no other, so counting it under
+  // All would promise a row that is not there.
+  const shown = visibleServers(servers);
+  const known = new Set(shown.map((server) => server.address));
+  // A hidden LAN server is in neither list twice, so the count of the Hidden
+  // tab is the hidden rows of the main list plus the LAN rows that are not in
+  // it — otherwise the tab would read as empty while holding a row.
+  const seen = new Set(servers.map((server) => server.address));
+  const hidden =
+    servers.length -
+    shown.length +
+    lanRows.filter((row) => row.hidden && !seen.has(row.address)).length;
   return [
-    { id: "all", label: t("tabs.all"), count: servers.length },
+    { id: "all", label: t("tabs.all"), count: shown.length },
     {
       id: "favorites",
       label: t("tabs.favorites"),
-      count: servers.filter((server) => server.favorite).length,
+      count: shown.filter((server) => server.favorite).length,
     },
     {
       id: "history",
@@ -835,8 +882,18 @@ function buildTabs(
     {
       id: "lan",
       label: t("tabs.lan"),
-      count: lanRows.length,
+      count: visibleServers(lanRows).length,
       title: t("tabs.lanHint"),
+    },
+    // --- slice: server actions ---
+    // Always on the strip, count or no count: it is the only way back for a
+    // server the player hid, and a tab that appears once something is hidden is
+    // a tab nobody knows to look for beforehand.
+    {
+      id: "hidden",
+      label: t("tabs.hidden"),
+      count: hidden,
+      title: t("tabs.hiddenHint"),
     },
   ];
 }
@@ -907,6 +964,13 @@ function emptyTitle(
   if (tab === "lan") return lanScanned ? t("empty.lanNoneTitle") : t("empty.lanTitle");
   if (tab === "favorites") return t("empty.favoritesTitle");
   if (tab === "history") return t("empty.historyTitle");
+  // --- slice: server actions ---
+  // The filter row works on this tab like on any other, and **Hide bot-only**
+  // is on by default: a hidden bot server is a row the tab holds and the
+  // filters keep back, which is not the same sentence as «nothing is hidden».
+  if (tab === "hidden") {
+    return total === 0 ? t("empty.hiddenTitle") : t("empty.filteredTitle");
+  }
   return total === 0 ? t("empty.noneTitle") : t("empty.filteredTitle");
 }
 
@@ -924,6 +988,12 @@ function emptyText(
       return t("empty.favoritesText");
     case "history":
       return t("empty.historyText");
+    // --- slice: server actions ---
+    case "hidden":
+      if (total === 0) return t("empty.hiddenText");
+      return hiddenBotOnly > 0
+        ? t("empty.filteredBots", { count: hiddenBotOnly })
+        : t("empty.filteredText");
     default:
       if (total === 0) return t("empty.noneText");
       // A player who filtered everything away deserves to know that the bot

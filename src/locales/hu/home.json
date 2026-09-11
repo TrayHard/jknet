@@ -33,6 +33,8 @@
     "emptyTitle": "Még nincs szerver a gyorsítótárban",
     "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",
     "openServers": "Szerverek megnyitása",
-    "seeAll": "Összes szerver"
+    "seeAll": "Összes szerver",
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }
