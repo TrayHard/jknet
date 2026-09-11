@@ -12,6 +12,8 @@ import { Trans, useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router";
 
 import { AboutCard } from "../components/AboutCard";
+// --- slice: library cleanup ---
+import { JkhubCatalogCard } from "../components/JkhubCatalogCard";
 import { MapPicturesCard } from "../components/MapPicturesCard";
 // --- slice: account ---
 import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
@@ -131,6 +133,9 @@ export function SettingsPage() {
 
       {/* --- slice: maps --- */}
       <MapPicturesCard />
+
+      {/* --- slice: library cleanup --- */}
+      <JkhubCatalogCard />
 
       {/* --- slice: account --- */}
       <AccountCard />

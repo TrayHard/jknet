@@ -1,16 +1,12 @@
 {
   "title": "Bibliothek",
-  "subtitle": "Skins, Griffe, Maps und Mods, installiert in den Client Ihrer Wahl.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} Dateien · {{enabled}} aktiv · {{size}}",
-  "noEngine": "keine Engine",
   "searchPlaceholder": "Dateien durchsuchen",
   "browseJkhub": "JKHub durchsuchen",
   "addFiles": "Dateien hinzufügen",
   "pickTitle": "pk3-Dateien hinzufügen",
   "pickFilter": "Jedi-Academy-Archive",
   "clientBar": {
-    "label": "Client",
-    "hint": "Dateien werden nur in diesen Client installiert. Ein anderer Client mit derselben Engine behält seinen eigenen Satz. Hier stehen die Clients für {{game}}; für die anderen wechseln Sie das Spiel in der Seitenleiste."
+    "label": "Client"
   },
   "tabs": {
     "installed": "Installiert",

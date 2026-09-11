@@ -1,16 +1,12 @@
 {
   "title": "Biblioteka",
-  "subtitle": "Skiny, rękojeści, mapy i mody instalowane do wybranego klienta.",
-  "subtitleClient": "{{client}} · {{engine}} · plików: {{files}} · włączonych: {{enabled}} · {{size}}",
-  "noEngine": "brak silnika",
   "searchPlaceholder": "Szukaj plików",
   "browseJkhub": "Przeglądaj JKHub",
   "addFiles": "Dodaj pliki",
   "pickTitle": "Dodaj pliki pk3",
   "pickFilter": "Archiwa Jedi Academy",
   "clientBar": {
-    "label": "Klient",
-    "hint": "Pliki trafiają tylko do tego klienta. Inny klient na tym samym silniku ma własny zestaw. Wymienieni są tu klienci {{game}}; drugą grę wybiera przełącznik na pasku bocznym."
+    "label": "Klient"
   },
   "tabs": {
     "installed": "Zainstalowane",
