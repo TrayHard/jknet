@@ -730,6 +730,33 @@ export function useSetServerFavorite() {
   });
 }
 
+// --- slice: server actions ---
+/**
+ * Takes a server off the browser, or puts it back.
+ *
+ * The same shape as `useSetServerFavorite` above and for the same reason: the
+ * flag lives in the settings, the row carries a copy of it, and repainting the
+ * one row beats refetching a thousand.
+ */
+export function useSetServerHidden() {
+  const queryClient = useQueryClient();
+  const game = useActiveGame();
+  return useMutation({
+    mutationFn: ({ address, hidden }: { address: string; hidden: boolean }) =>
+      serversIpc.setServerHidden(address, hidden, game),
+    onSuccess: (settings, variables) => {
+      queryClient.setQueryData(queryKeys.settings, settings);
+      queryClient.setQueryData<ServerInfo[]>(serverKeys.cached(game), (rows) =>
+        rows?.map((row) =>
+          row.address === variables.address
+            ? { ...row, hidden: variables.hidden }
+            : row,
+        ),
+      );
+    },
+  });
+}
+
 /** Records a connection. The History tab reads `serverHistory` from settings. */
 export function useAddServerHistory() {
   const queryClient = useQueryClient();
