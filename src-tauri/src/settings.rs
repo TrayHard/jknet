@@ -255,6 +255,21 @@ pub struct ServerHistoryEntry {
     pub address: String,
     /// When Connect was last pressed, RFC 3339 in UTC.
     pub last_connected: String,
+    // --- slice: server actions ---
+    /// The client the player reached this server with, or `None`.
+    ///
+    /// What makes **Connect** a one-press button: a player who joins a
+    /// modded server with the client that carries the mod's files expects the
+    /// same client next time, and the default client of the game is a guess
+    /// that is wrong exactly where it matters. `None` on every entry written
+    /// before this field existed, and on one written by a caller that does not
+    /// know the client; the reader falls back to the default client then.
+    ///
+    /// The id is not checked against the client list here: a client may be
+    /// deleted or renamed long after the connection, and the screen already
+    /// has to handle an id that names nothing.
+    #[serde(default)]
+    pub client_id: Option<String>,
 }
 
 // --- slice: servers browser ---
@@ -724,6 +739,8 @@ mod tests {
             server_history: vec![ServerHistoryEntry {
                 address: "203.0.113.10:29070".into(),
                 last_connected: "2026-09-10T10:00:00Z".into(),
+                // --- slice: server actions ---
+                client_id: Some("everyday".into()),
             }],
             // --- slice: server actions ---
             hidden_servers: vec!["203.0.113.99:29070".into()],
@@ -900,6 +917,20 @@ mod tests {
         .expect("a document without the field parses");
         assert!(file.hidden_servers.is_empty());
         assert_eq!(file.favorite_servers.len(), 1);
+    }
+
+    #[test]
+    fn a_history_entry_written_before_the_client_field_reads_as_no_client() {
+        // Every installed launcher has a history of entries with two keys.
+        // Reading one as «client unknown» is what sends Connect to the default
+        // client, which is exactly what that press did before the field.
+        let file: Settings = serde_json::from_str(
+            r#"{"serverHistory":[
+                 {"address":"203.0.113.10:29070","lastConnected":"2026-09-10T10:00:00Z"}]}"#,
+        )
+        .expect("an entry without the field parses");
+        assert_eq!(file.server_history.len(), 1);
+        assert_eq!(file.server_history[0].client_id, None);
     }
 
     #[test]
