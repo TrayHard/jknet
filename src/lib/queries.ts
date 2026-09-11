@@ -33,6 +33,9 @@ import {
   launchIpc,
   levelshotsIpc,
   libraryIpc,
+  LIBRARY_CHANGED_EVENT,
+  // --- slice: player profiles ---
+  profilesIpc,
   serversIpc,
   settingsEvents,
   type AccountChanged,
@@ -68,8 +71,12 @@ import {
   type JkhubSort,
   type Levelshot,
   type LibraryItem,
+  type PlayerModel,
+  type PlayerProfile,
   type PresenceUpdated,
+  type ProfileBook,
   type RunningGame,
+  type SaberHilt,
   type ServerInfo,
   type ServerScope,
   type ServersBatchEvent,
@@ -262,8 +269,12 @@ export function useDeleteClient() {
 export const clientKeys = {
   cvars: (clientId: string, names: string) =>
     [...queryKeys.clients, clientId, "cvars", names] as const,
-  preview: (clientId: string) =>
-    [...queryKeys.clients, clientId, "preview"] as const,
+  // --- slice: player profiles ---
+  // The profile is part of the key: the preview of the window shows what
+  // **Play** would run, and the one under an open form shows what the profile
+  // being edited would run.
+  preview: (clientId: string, profileId?: string) =>
+    [...queryKeys.clients, clientId, "preview", profileId ?? ""] as const,
   // --- slice: clients page ---
   dir: (clientId: string) => [...queryKeys.clients, clientId, "dir"] as const,
 };
@@ -331,16 +342,164 @@ export function useWriteLaunchCvar() {
  *
  * `retry: false` because every way this fails is a refusal of the core — no
  * game folder, no such client — and asking twice changes none of them.
+ *
+ * --- slice: player profiles ---
+ * `profileId` names the profile to assume, and it is part of the key, so two
+ * profiles of one client never share an answer. Nothing passes it yet:
+ * `CommandPreview` asks for the line of the window as a whole, which is the
+ * default profile's, and the token line under an open profile form comes from
+ * `profileTokens` on the page instead — a draft nobody saved is not a profile
+ * the core could resolve. The argument is here for the **Connect…** dialog of
+ * B8, which starts a profile the player picks and wants the real line.
  */
 export function useLaunchPreview(
   clientId: string,
+  profileId?: string,
 ): UseQueryResult<LaunchPreview> {
   return useQuery({
-    queryKey: clientKeys.preview(clientId),
-    queryFn: () => launchIpc.previewLaunchArgs(clientId),
+    queryKey: clientKeys.preview(clientId, profileId),
+    queryFn: () => launchIpc.previewLaunchArgs(clientId, profileId),
     staleTime: Infinity,
     retry: false,
   });
+}
+
+// --- slice: player profiles -------------------------------------------------
+//
+// Profiles live under `queryKeys.clients` as well, so the invalidation the
+// client mutations already do covers them: the core emits `clients:changed`
+// after every profile write, and `useClientEvents` turns that into one
+// invalidation of the whole prefix.
+
+export const profileKeys = {
+  book: (clientId: string) => [...queryKeys.clients, clientId, "profiles"] as const,
+};
+
+/**
+ * What a client can offer a profile, keyed apart from the client's record.
+ *
+ * The skins and hilts come out of the pk3 files of a client, not out of its
+ * `client.json`, and the two change for different reasons: a volume slider
+ * writes a record a dozen times during one drag and moves no archive. Under
+ * `queryKeys.clients` every one of those writes would refetch the skin list.
+ */
+export const appearanceKeys = {
+  all: ["appearance"] as const,
+  models: (clientId: string) => ["appearance", clientId, "models"] as const,
+  hilts: (clientId: string) => ["appearance", clientId, "hilts"] as const,
+};
+
+/** The profiles of one client and which of them is the default. */
+export function useProfiles(clientId: string): UseQueryResult<ProfileBook> {
+  return useQuery({
+    queryKey: profileKeys.book(clientId),
+    queryFn: () => profilesIpc.listProfiles(clientId),
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * The skins this client can offer, read out of the archives it loads.
+ *
+ * Idle until the form that needs them is open: the first answer opens the
+ * retail archives and extracts two hundred icons, and a window that never
+ * shows a profile form must not pay for that.
+ */
+export function usePlayerModels(
+  clientId: string,
+  enabled: boolean,
+): UseQueryResult<PlayerModel[]> {
+  return useQuery({
+    queryKey: appearanceKeys.models(clientId),
+    queryFn: () => profilesIpc.listPlayerModels(clientId),
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** The saber hilts this client can offer. Empty for a game with none. */
+export function useSaberHilts(
+  clientId: string,
+  enabled: boolean,
+): UseQueryResult<SaberHilt[]> {
+  return useQuery({
+    queryKey: appearanceKeys.hilts(clientId),
+    queryFn: () => profilesIpc.listSaberHilts(clientId),
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * Refetches the skins and hilts when any window changes a client's files.
+ *
+ * The two lists never go stale by themselves — the archives of a client do not
+ * move on their own — but the Library screen of the main window installs a pk3
+ * and the profile form of the client window is what has to notice. The core
+ * drops its own cache on the same event, so the refetch is a memory read
+ * unless something really changed.
+ */
+export function useAppearanceEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen(LIBRARY_CHANGED_EVENT, () => {
+      void queryClient.invalidateQueries({ queryKey: appearanceKeys.all });
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [queryClient]);
+}
+
+/**
+ * The three writers of a profile document.
+ *
+ * Each answers with the whole document, which goes straight into the cache:
+ * the core is the one that decides which profile is the default after a
+ * delete, and a screen that guessed would draw the wrong badge for a moment.
+ */
+function useProfileWriter<TVariables>(
+  clientId: string,
+  write: (variables: TVariables) => Promise<ProfileBook>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: write,
+    onSuccess: (book) => {
+      queryClient.setQueryData(profileKeys.book(clientId), book);
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+export function useSaveProfile(clientId: string) {
+  return useProfileWriter(clientId, (profile: PlayerProfile) =>
+    profilesIpc.saveProfile(clientId, profile),
+  );
+}
+
+export function useDeleteProfile(clientId: string) {
+  return useProfileWriter(clientId, (profileId: string) =>
+    profilesIpc.deleteProfile(clientId, profileId),
+  );
+}
+
+export function useSetDefaultProfile(clientId: string) {
+  return useProfileWriter(clientId, (profileId: string | null) =>
+    profilesIpc.setDefaultProfile(clientId, profileId),
+  );
 }
 
 /**
@@ -610,11 +769,16 @@ export function useLaunchClient() {
       clientId,
       connect,
       extraArgs,
+      // --- slice: player profiles ---
+      // Left out by every caller today, which means the client's default
+      // profile. The Connect dialog is what will start sending one.
+      profileId,
     }: {
       clientId: string;
       connect?: string;
       extraArgs?: string[];
-    }) => launchIpc.launchClient(clientId, connect, extraArgs),
+      profileId?: string;
+    }) => launchIpc.launchClient(clientId, connect, extraArgs, profileId),
     onSuccess: (running) => {
       queryClient.setQueryData(launchKeys.runningGame, running);
     },

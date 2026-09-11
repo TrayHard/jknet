@@ -177,6 +177,68 @@
       "heading": "Command line preview",
       "text": "What the engine gets when this client starts: the folders of the launcher, then the arguments of the Settings screen, then the ones above. A server address is added at connect time and is not shown here.",
       "empty": "Nothing yet."
+    },
+    "profiles": {
+      "heading": "Player profiles",
+      "intro": "A profile is the name, the skin and the saber your character carries into the game. The default profile is the one Play and Connect start this client with.",
+      "empty": "No profiles yet. Create one and this client starts with it.",
+      "new": "New profile",
+      "edit": "Edit {{profile}}",
+      "remove": "Delete {{profile}}",
+      "makeDefault": "Set as default",
+      "noNickname": "No nickname",
+      "removeDialog": {
+        "title": "Delete {{profile}}?",
+        "body": "The nickname, the skin and the saber settings of this profile go with it. The client, its engine and its files stay as they are.",
+        "confirm": "Delete profile"
+      },
+      "form": {
+        "newHeading": "New profile",
+        "editHeading": "Profile {{profile}}",
+        "name": "Profile name",
+        "namePlaceholder": "Duel",
+        "nickname": "Nickname (name)",
+        "nicknamePlaceholder": "Padawan",
+        "nicknameHint": "Up to 36 bytes, colour codes included. A Latin letter costs one byte and a Cyrillic one costs two, so 36 Latin letters fit where 18 Cyrillic ones do. Type ^ and a digit from 0 to 9 to colour what follows it.",
+        "nicknameBytes": "{{used}}/{{max}} bytes",
+        "nicknameTooLong": "The server cuts a name over {{max}} bytes. Shorten it to save the profile.",
+        "nicknamePreview": "As other players read it",
+        "nicknameSaved": "Saved nicknames",
+        "nicknameSave": "Save nickname",
+        "skin": "Skin (model)",
+        "skinSearch": "Search a model",
+        "skinLoading": "Reading the archives of this client…",
+        "skinEmpty": "No skin with an icon in the archives of this client.",
+        "skinNoMatch": "No model matches {{query}}.",
+        "skinNone": "Not set",
+        "skinNoIcon": "No icon",
+        "saber1": "Saber hilt (saber1)",
+        "saber2": "Second hilt (saber2)",
+        "saber2None": "No second hilt",
+        "saberEmpty": "No hilt in the archives of this client.",
+        "color1": "Blade colour (color1)",
+        "color2": "Second blade colour (color2)",
+        "charColor": "Character tint (char_color)",
+        "charColorRed": "Red",
+        "charColorGreen": "Green",
+        "charColorBlue": "Blue",
+        "tokens": "What this profile adds to the command line",
+        "tokensEmpty": "Nothing: a field left empty leaves the cvar to the engine.",
+        "save": "Save profile",
+        "cancel": "Cancel"
+      },
+      "saberColors": {
+        "0": "Red",
+        "1": "Orange",
+        "2": "Yellow",
+        "3": "Green",
+        "4": "Blue",
+        "5": "Purple"
+      },
+      "saberTypes": {
+        "single": "One blade",
+        "staff": "Staff"
+      }
     }
   },
   "missingToast": {

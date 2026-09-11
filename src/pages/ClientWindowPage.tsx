@@ -12,6 +12,8 @@ import {
   CvarSlider,
   SettingRow,
 } from "../components/client/CvarControls";
+// --- slice: player profiles ---
+import { PlayerProfilesCard } from "../components/client/PlayerProfilesCard";
 import {
   useCvarEditor,
   type WindowCvar,
@@ -267,6 +269,15 @@ function ClientCards({ client }: { client: Client }) {
             onCommit={(value) => save({ fsGame: value ?? "" })}
           />
         </SettingRow>
+      </Card>
+
+      {/* --- slice: player profiles ---
+          Who the player is inside the game, as opposed to what the client is.
+          The block sits right after **Client** because the default profile is
+          a property of this client in the same way its mod folder is: it is
+          what the Play button starts with. */}
+      <Card heading={t("clientWindow.profiles.heading")}>
+        <PlayerProfilesCard client={client} />
       </Card>
 
       <Card heading={t("clientWindow.video.heading")}>

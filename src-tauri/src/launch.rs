@@ -133,6 +133,8 @@ use crate::engines;
 use crate::error::{AppError, Result};
 use crate::game::{Game, LaunchLayout};
 use crate::game_files;
+// --- slice: player profiles ---
+use crate::profiles;
 use crate::state::AppState;
 use crate::timestamp;
 
@@ -242,6 +244,11 @@ pub struct LaunchPlan<'a> {
     /// settings so that a client repeating a `+set` of the same cvar is the
     /// value the engine keeps.
     pub client_args: &'a [String],
+    // --- slice: player profiles ---
+    /// The nine `+set` of the player profile this launch uses, or nothing when
+    /// the client has no profile. They follow the client's own field, so a
+    /// profile wins over a `+set name` written there by hand.
+    pub profile_args: &'a [String],
     /// Tokens the caller passed for this run only.
     pub extra_args: &'a [String],
     /// `address:port` of a server to join straight away.
@@ -260,16 +267,17 @@ pub struct LaunchPlan<'a> {
 /// console runs it after everything is set.
 ///
 /// --- slice: client launch args ---
-/// The player's tokens arrive from three places and go out in this order: the
-/// **Extra launch arguments** setting, the client's own field, then whatever
-/// the caller passed for this one run. The order is the whole mechanism by
-/// which a client overrides a general value — `Com_StartupVariable` walks the
-/// `+` segments from left to right and overwrites the cvar on every match, so
-/// the last `+set` of a cvar is the one the engine keeps. Commands such as
-/// `+exec` and `+map` do not override each other at all: `Com_AddStartupCommands`
-/// appends every segment to the command buffer and they run in order. The
-/// section «Как движок разрешает повторы» of `docs/architecture.md` carries
-/// the file-and-line sources.
+/// The player's tokens arrive from four places and go out in this order: the
+/// **Extra launch arguments** setting, the client's own field, the player
+/// profile this launch uses, then whatever the caller passed for this one run.
+/// The order is the whole mechanism by which a later source overrides an
+/// earlier one — `Com_StartupVariable` walks the `+` segments from left to
+/// right and overwrites the cvar on every match, so the last `+set` of a cvar
+/// is the one the engine keeps. Commands such as `+exec` and `+map` do not
+/// override each other at all: `Com_AddStartupCommands` appends every segment
+/// to the command buffer and they run in order. The section «Как движок
+/// разрешает повторы» of `docs/architecture.md` carries the file-and-line
+/// sources.
 ///
 /// --- slice: game core ---
 /// The roots come from the game's own spec, because the two engines disagree
@@ -306,6 +314,8 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
 
     args.extend(plan.settings_args.iter().cloned());
     args.extend(plan.client_args.iter().cloned());
+    // --- slice: player profiles ---
+    args.extend(plan.profile_args.iter().cloned());
     args.extend(plan.extra_args.iter().cloned());
 
     if let Some(address) = plan.connect.map(str::trim).filter(|v| !v.is_empty()) {
@@ -840,6 +850,11 @@ struct LaunchInputs {
     home_dir: PathBuf,
     settings_args: Vec<String>,
     client_args: Vec<String>,
+    // --- slice: player profiles ---
+    /// The tokens of the player profile this launch uses, empty when there is
+    /// none. Resolved in [`resolve_launch`], so the preview and the launch
+    /// cannot disagree about which profile that is.
+    profile_args: Vec<String>,
     fs_game: Option<String>,
 }
 
@@ -856,18 +871,31 @@ impl LaunchInputs {
             fs_game: self.fs_game.as_deref(),
             settings_args: &self.settings_args,
             client_args: &self.client_args,
+            // --- slice: player profiles ---
+            profile_args: &self.profile_args,
             extra_args,
             connect,
         }
     }
 }
 
-/// Reads a client, its engine, its folders and both argument fields.
+/// Reads a client, its engine, its folders, both argument fields and the
+/// player profile this launch carries.
 ///
 /// Touches nothing: no folder is created, no junction is drawn and the
 /// executable is not looked for. Those belong to a launch, and the preview has
 /// to answer for a client whose engine is not installed yet.
-fn resolve_launch(state: &AppState, client_id: &str) -> Result<LaunchInputs> {
+///
+/// --- slice: player profiles ---
+/// `profile_id` names a profile of this client; `None` means the one the client
+/// launches with by default, which is what **Play** and **Connect** send. A
+/// client with no profiles adds no tokens at all. An id that names nothing is a
+/// refusal rather than a silent fall back to another profile.
+fn resolve_launch(
+    state: &AppState,
+    client_id: &str,
+    profile_id: Option<&str>,
+) -> Result<LaunchInputs> {
     let settings = state.settings()?;
     let paths = state.paths()?;
     let client = clients::read_record(&paths, client_id)?;
@@ -880,6 +908,11 @@ fn resolve_launch(state: &AppState, client_id: &str) -> Result<LaunchInputs> {
         .fs_game
         .clone()
         .or_else(|| engine.default_fs_game.map(str::to_string));
+    // --- slice: player profiles ---
+    let profile_args = profiles::read_book(&paths, &client.id)
+        .resolve(profile_id)?
+        .map(|profile| profiles::launch_tokens(profile, client.game))
+        .unwrap_or_default();
 
     Ok(LaunchInputs {
         client_dir: paths.client_dir(&client.id),
@@ -891,6 +924,8 @@ fn resolve_launch(state: &AppState, client_id: &str) -> Result<LaunchInputs> {
         // Split the same way the settings field is: one rule for both, so what
         // a player learns about quoting in one place holds in the other.
         client_args: split_args(&client.launch_args),
+        // --- slice: player profiles ---
+        profile_args,
         fs_game,
         game_data,
         engine,
@@ -915,6 +950,11 @@ pub struct LaunchPreview {
 // ---------------------------------------------------------------------------
 
 /// Starts the client, optionally connecting straight to a server.
+///
+/// --- slice: player profiles ---
+/// `profile_id` names the player profile to start with. Leaving it out takes
+/// the client's default profile, which is what the **Play** and **Connect**
+/// buttons do; a client with no profiles starts with no profile tokens.
 #[tauri::command]
 pub fn launch_client(
     app: AppHandle,
@@ -923,6 +963,7 @@ pub fn launch_client(
     client_id: String,
     connect: Option<String>,
     extra_args: Option<Vec<String>>,
+    profile_id: Option<String>,
 ) -> Result<RunningGame> {
     start_client(
         &app,
@@ -931,6 +972,7 @@ pub fn launch_client(
         &client_id,
         connect.as_deref(),
         &extra_args.unwrap_or_default(),
+        profile_id.as_deref(),
     )
 }
 
@@ -947,6 +989,7 @@ pub(crate) fn start_client(
     client_id: &str,
     connect: Option<&str>,
     extra_args: &[String],
+    profile_id: Option<&str>,
 ) -> Result<RunningGame> {
     if let Some(running) = launch.current()? {
         return Err(AppError::Launch(format!(
@@ -958,7 +1001,7 @@ pub(crate) fn start_client(
     // --- slice: client window ---
     // Read once, here and in the preview command, so the command line the
     // window shows and the one the process gets cannot drift apart.
-    let inputs = resolve_launch(state, client_id)?;
+    let inputs = resolve_launch(state, client_id, profile_id)?;
     let client = &inputs.client;
     let engine = inputs.engine;
     game_files::validate(client.game, &inputs.game_data)?;
@@ -1066,17 +1109,24 @@ pub fn get_running_game(launch: tauri::State<'_, LaunchState>) -> Result<Option<
 
 /// The command line this client would be started with, without starting it.
 ///
-/// The same roots, the same `fs_game` and the same two argument fields as a
-/// real launch, in the same order, and no `+connect`: the preview stands for
-/// the **Play** button, and joining a server is a different command line every
+/// The same roots, the same `fs_game` and the same argument fields as a real
+/// launch, in the same order, and no `+connect`: the preview stands for the
+/// **Play** button, and joining a server is a different command line every
 /// time. Nothing is created on disk, so a client whose engine has not been
 /// downloaded yet still shows what it would run.
+///
+/// --- slice: player profiles ---
+/// `profile_id` is the profile the preview should assume. Leaving it out takes
+/// the client's default one, exactly as **Play** does; the profile form sends
+/// the profile being edited, so the line under the form is the line that
+/// profile would start.
 #[tauri::command]
 pub fn preview_launch_args(
     state: tauri::State<'_, AppState>,
     client_id: String,
+    profile_id: Option<String>,
 ) -> Result<LaunchPreview> {
-    let inputs = resolve_launch(&state, &client_id)?;
+    let inputs = resolve_launch(&state, &client_id, profile_id.as_deref())?;
     let args = build_launch_args(&inputs.plan(&[], None));
     let warning = launch_warning(inputs.engine.id, &args).map(str::to_string);
     Ok(LaunchPreview { args, warning })
@@ -1200,6 +1250,8 @@ mod tests {
             fs_game: None,
             settings_args: &[],
             client_args: &[],
+            // --- slice: player profiles ---
+            profile_args: &[],
             extra_args: &[],
             connect: None,
         }
@@ -1351,6 +1403,90 @@ mod tests {
             .position(|token| token == "4")
             .expect("the client value");
         assert!(own > general, "the engine takes the later one: {args:?}");
+    }
+
+    // --- slice: player profiles ---
+
+    #[test]
+    fn the_profile_stands_after_the_client_and_before_the_tokens_of_one_run() {
+        // Four sources of player tokens now, and the order is the whole rule:
+        // the engine keeps the last `+set` of a cvar, so a profile overrides a
+        // `+set name` the player wrote into the client's own field, and the
+        // arguments of a single run still override the profile.
+        let game = Path::new("D:\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\duel\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\duel\\basepath");
+        let home = Path::new("C:\\JKNet\\clients\\duel\\home");
+        let settings_args = split_args("+set r_mode -1");
+        let client_args = split_args("+set name Padawan +exec duel.cfg");
+        let profile_args = crate::profiles::launch_tokens(
+            &crate::profiles::PlayerProfile {
+                id: "duel".to_string(),
+                name: "Duel".to_string(),
+                nickname: Some("Kyle Katarn".to_string()),
+                model: Some("kyle/red".to_string()),
+                saber1: Some("single_1".to_string()),
+                saber2: None,
+                color1: Some(3),
+                color2: None,
+                char_color: None,
+            },
+            Game::JediAcademy,
+        );
+        let extra_args = split_args("+set name Guest");
+
+        let mut with = plan(game, engine, base, home);
+        with.settings_args = &settings_args;
+        with.client_args = &client_args;
+        with.profile_args = &profile_args;
+        with.extra_args = &extra_args;
+        with.connect = Some("jkhub.org:29070");
+
+        let args = build_launch_args(&with);
+        assert_eq!(
+            &args[9..],
+            [
+                "+set", "r_mode", "-1",
+                "+set", "name", "Padawan",
+                "+exec", "duel.cfg",
+                "+set", "name", "Kyle Katarn",
+                "+set", "model", "kyle/red",
+                "+set", "saber1", "single_1",
+                "+set", "color1", "3",
+                "+set", "name", "Guest",
+                "+connect", "jkhub.org:29070",
+            ]
+        );
+
+        // The nickname with a space is one argument and carries no quotes of
+        // its own: `std::process::Command` puts them back, and the preview
+        // line does the same for the reader.
+        let spaced = args
+            .iter()
+            .position(|token| token == "Kyle Katarn")
+            .expect("the nickname of the profile");
+        let typed = args
+            .iter()
+            .position(|token| token == "Padawan")
+            .expect("the name the client's own field carries");
+        assert!(spaced > typed, "the profile wins over the client: {args:?}");
+        assert!(!args[spaced].contains('"'));
+    }
+
+    #[test]
+    fn a_client_with_no_profile_sends_no_profile_tokens() {
+        // Every client on every installed launcher is in this state, and the
+        // command line has to come out exactly as it did before profiles.
+        let game = Path::new("D:\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\duel\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\duel\\basepath");
+        let home = Path::new("C:\\JKNet\\clients\\duel\\home");
+        let client_args = split_args("+exec duel.cfg");
+
+        let mut without = plan(game, engine, base, home);
+        without.client_args = &client_args;
+        let args = build_launch_args(&without);
+        assert_eq!(&args[9..], ["+exec", "duel.cfg"]);
     }
 
     #[test]
