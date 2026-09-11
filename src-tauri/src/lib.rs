@@ -15,6 +15,7 @@
 //! | `engines`        | static registry of engine builds                |
 //! | `engine_install` | GitHub releases, downloads and archive unpacking |
 //! | `clients`        | named engine instances on disk                  |
+//! | `client_window`  | the separate window that edits one client       |
 //! | `servers`        | master server queries, ping and the server cache |
 //! | `launch`         | starting a client and watching it run           |
 //! | `launch_tokens`  | one cvar at a time inside a client's argument line |
@@ -26,6 +27,11 @@
 //! | `jkhub`          | browsing jkhub.org and installing its files     |
 
 mod account;
+// --- slice: client window ---
+// Opening, finding and closing the `client-<slug>` windows. Kept apart from
+// `clients` because it is about windows, not records, and `clients` has to
+// stay callable from a test with no Tauri runtime around it.
+mod client_window;
 mod clients;
 mod engine_install;
 mod engines;
@@ -101,6 +107,23 @@ pub fn run() {
         // --- slice: installer ---
         // `relaunch()` after the update installer hands control back.
         .plugin(tauri_plugin_process::init())
+        // --- slice: client window ---
+        // The launcher is one application with one way out. A client window
+        // has no navigation of its own, so a `main` that closed while two of
+        // them stayed open would leave a process alive behind windows that
+        // cannot reach anything else. Both events are handled: `CloseRequested`
+        // is the ordinary path and `Destroyed` covers a close that skipped it.
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if matches!(
+                event,
+                tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+            ) {
+                client_window::close_all(window.app_handle());
+            }
+        })
         .setup(|app| {
             // Everything below needs the config root, and the config root needs
             // an `AppHandle`, so the whole bootstrap lives in `setup`. Nothing
@@ -268,6 +291,7 @@ pub fn run() {
             clients::update_client,
             clients::delete_client,
             // --- slice: client window ---
+            client_window::open_client_window,
             launch_tokens::read_launch_cvars,
             launch_tokens::write_launch_cvar,
             launch::preview_launch_args,

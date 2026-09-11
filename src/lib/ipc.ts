@@ -338,6 +338,9 @@ export const ipc = {
   deleteClient: (id: string) => call<void>("delete_client", { id }),
 
   // --- slice: client window ---
+  /** Opens the `client-<id>` window, or raises the one already open. */
+  openClientWindow: (clientId: string) =>
+    call<void>("open_client_window", { clientId }),
   /**
    * Reads several cvars out of the launch arguments of one client.
    *

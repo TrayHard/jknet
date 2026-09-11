@@ -275,6 +275,10 @@ pub fn delete_client(
     }
     remove_client_dir(&dir)?;
     log::info!("deleted client {id}");
+    // --- slice: client window ---
+    // A window editing a client that no longer exists has nothing to show and
+    // every field in it would fail on save.
+    crate::client_window::close_for(&app, &id);
     emit_changed(&app, &id);
 
     // A deleted client must not stay the default one, of the launcher or of
