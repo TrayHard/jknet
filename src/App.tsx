@@ -46,12 +46,14 @@ export default function App() {
           language follows the settings document, and switching it must not
           unmount the screen the player is reading. */}
       <LanguageSync />
-      {/* Above the router: an engine install must survive a route change. */}
-      <GameEventsProvider>
-        {/* --- slice: friends --- */}
-        {/* The toast column both the update notice and an invitation share.
-            Outermost of the three, because the other two render into it. */}
-        <ToastsProvider>
+      {/* --- slice: friends --- */}
+      {/* The toast column the update notice, an invitation and a warning about
+          the command line all share. Outermost, because everything below
+          renders into it — the launch events included, which is why it sits
+          above `GameEventsProvider` and not inside it. */}
+      <ToastsProvider>
+        {/* Above the router: an engine install must survive a route change. */}
+        <GameEventsProvider>
           {/* --- slice: installer --- */}
           {/* Same reason, plus the toast host: the launcher's own download
               runs while the player keeps browsing servers. */}
@@ -87,8 +89,8 @@ export default function App() {
               </FriendsProvider>
             </AccountProvider>
           </AppUpdateProvider>
-        </ToastsProvider>
-      </GameEventsProvider>
+        </GameEventsProvider>
+      </ToastsProvider>
     </QueryClientProvider>
   );
 }
