@@ -473,8 +473,10 @@ function ClientCard({
 
         {/* One row of small buttons, never two, in the order a player reaches
             for them: what the build is doing, what the client is set to, the
-            one that destroys it, and the way to its files. */}
-        <div className="flex items-center gap-8 flex-nowrap pt-4">
+            one that destroys it, and the way to its files. `overflow-hidden`
+            keeps a row too wide for the card — a long locale on the minimum
+            window of 1100 px — inside it instead of spilling under Launch. */}
+        <div className="flex items-center gap-8 flex-nowrap pt-4 min-w-0 overflow-hidden">
           {engine && !engine.installable ? (
             <p className="text-body-sm text-fg-muted truncate">
               {engine.notInstallableReason ?? t("card.manualInstall")}
@@ -510,8 +512,11 @@ function ClientCard({
           <Button
             size="sm"
             variant="ghost"
-            className="shrink-0"
-            icon={<FolderOpen size={14} />}
+            // The only button of the row allowed to shrink: it sits at the
+            // periphery, so a row short of space clips this label instead of
+            // pushing the whole tail of the row out of the card.
+            className="min-w-0"
+            icon={<FolderOpen size={14} className="shrink-0" />}
             // `revealItemInDir` and not `openPath`: the permission of the
             // latter is scoped to `$APPLOCALDATA`, and `dataDirOverride` can
             // put the client folder anywhere on the disk. The price is that
@@ -524,7 +529,7 @@ function ClientCard({
             disabled={clientDir.data === undefined}
             title={clientDir.data ?? undefined}
           >
-            {t("card.openFolder")}
+            <span className="truncate">{t("card.openFolder")}</span>
           </Button>
         </div>
 
