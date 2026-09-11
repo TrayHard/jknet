@@ -115,7 +115,7 @@ export function filtersAreDefault(filters: ServerFilters): boolean {
  * `humans` is `null` only while `playersSource` is `unknown` — a server that
  * publishes no `g_humanplayers` and did not answer `getstatus` either. There
  * the server's own total is the best guess there is, and the row shows it
- * without a bot suffix rather than claiming an empty server.
+ * with a `?` beside it rather than claiming an empty server.
  */
 export function realPlayers(server: ServerInfo): number {
   return server.humans ?? server.clients;
