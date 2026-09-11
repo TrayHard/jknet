@@ -213,7 +213,7 @@ export function useCreateClient() {
   });
 }
 
-/** Renames a client, changes its mod folder, or both. */
+/** Renames a client, changes its mod folder or its launch arguments. */
 export function useUpdateClient() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -221,11 +221,13 @@ export function useUpdateClient() {
       clientId,
       name,
       fsGame,
+      launchArgs,
     }: {
       clientId: string;
       name?: string;
       fsGame?: string;
-    }) => ipc.updateClient(clientId, { name, fsGame }),
+      launchArgs?: string;
+    }) => ipc.updateClient(clientId, { name, fsGame, launchArgs }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
     },

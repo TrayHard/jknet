@@ -15,12 +15,19 @@ interface ClientSettingsDialogProps {
 }
 
 /**
- * The per-client dialog behind the gear on a card: name and mod folder.
+ * The per-client dialog behind the gear on a card: name, mod folder and
+ * launch arguments.
  *
- * The two fields are what a player may change after creating a client. The
+ * The three fields are what a player may change after creating a client. The
  * engine, the slug and the installed build are not editable: the slug is a
  * path other parts of the launcher stored, and the engine decides which
  * archive the Install button fetches.
+ *
+ * --- slice: client launch args ---
+ * The arguments go out after the general ones of the Settings screen, which
+ * is what makes a repeated `+set` of the same cvar the client's. There is no
+ * preview of the whole command line here: the roots the launcher sends are
+ * long paths, and the field is not the place to read them.
  */
 export function ClientSettingsDialog({
   client,
@@ -34,6 +41,7 @@ export function ClientSettingsDialog({
 
   const [name, setName] = useState(client.name);
   const [fsGame, setFsGame] = useState(client.fsGame ?? "");
+  const [launchArgs, setLaunchArgs] = useState(client.launchArgs);
   const [error, setError] = useState<string | null>(null);
 
   const canSave = name.trim().length > 0 && !updateClient.isPending;
@@ -42,7 +50,12 @@ export function ClientSettingsDialog({
     if (!canSave) return;
     setError(null);
     updateClient.mutate(
-      { clientId: client.id, name: name.trim(), fsGame: fsGame.trim() },
+      {
+        clientId: client.id,
+        name: name.trim(),
+        fsGame: fsGame.trim(),
+        launchArgs: launchArgs.trim(),
+      },
       {
         onSuccess: onClose,
         // The dialog stays open on a rejected mod folder: the player has to
@@ -119,6 +132,33 @@ export function ClientSettingsDialog({
               <span className="text-mono-sm" />,
               <span className="text-mono-sm" />,
               <span className="text-mono-sm" />,
+              <span className="text-mono-sm" />,
+              <span className="text-mono-sm" />,
+            ]}
+          />
+        </p>
+
+        {/* --- slice: client launch args --- */}
+        <label
+          className="block text-label-xs text-fg-muted pt-16 pb-8"
+          htmlFor="client-settings-launch-args"
+        >
+          {t("settingsDialog.launchArgs")}
+        </label>
+        <Input
+          id="client-settings-launch-args"
+          value={launchArgs}
+          placeholder={t("settingsDialog.launchArgsPlaceholder")}
+          onChange={(event) => setLaunchArgs(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") save();
+          }}
+        />
+        <p className="text-body-sm text-fg-muted pt-8">
+          <Trans
+            t={t}
+            i18nKey="settingsDialog.launchArgsHint"
+            components={[
               <span className="text-mono-sm" />,
               <span className="text-mono-sm" />,
             ]}

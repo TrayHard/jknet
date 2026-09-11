@@ -72,7 +72,9 @@ Everything else wraps.
 | `servers:empty.filteredBots` | `{{count}}` is the number of servers hidden by the bot switch. The sentence names the switch, which is `servers:filters.hideBotOnly` — use the same wording. |
 | `clients:card.meta` | `{{id}}` is a folder name, `{{date}}` is already formatted. Both are monospaced; keep the « · » between them. |
 | `clients:settingsDialog.modFolderHint` | Five monospaced spans: `+set fs_game`, `_`, `-`, `+` and the folder name. Do not translate what is inside them. |
-| `clients:launchWarning.*` | A toast shown after the game has already been started with an argument known to break it. `s_initsound` is a cvar name and `EternalJK` a project name; neither is translated. «The launch arguments» is the **Extra launch arguments** field of the **Settings** screen, so use the wording of `settings:launch.label`. |
+| `clients:settingsDialog.launchArgsHint` | Two monospaced spans, `+set` and `+exec`. Both are console commands and stay as they are. «The Settings screen» is the screen named by `nav:items.settings`. |
+| `settings:launch.order` | One monospaced span, `+set`. It sits under `settings:launch.hint` and says which of the two fields wins when both name the same cvar; «a client» is the entity, not a person. |
+| `clients:launchWarning.*` | A toast shown after the game has already been started with an argument known to break it. `s_initsound` is a cvar name and `EternalJK` a project name; neither is translated. «The launch arguments» covers both fields that carry them — **Extra launch arguments** on **Settings** and **Launch arguments** in **Client settings** — so keep it general and use the wording of `settings:launch.label`. |
 | `library:subtitleClient` | One line under the screen title, joined with « · ». It is truncated on a narrow window, so put the client name first. |
 | `library:categories.*` vs `library:categoryOne.*` | The first is the plural in the category rail, the second the singular on a card badge. Some languages need different words. |
 | `jkhub:details.ratingValue` | `{{value}}` is a rating out of five, already formatted; `{{count}}` is the number of reviews. |
