@@ -7,6 +7,7 @@ import { useErrorText } from "../i18n/errors";
 import { useFormat } from "../i18n/useFormat";
 // --- slice: game switch ---
 import { useActiveGame, useGameNames } from "../lib/game";
+import type { Game } from "../lib/ipc";
 import {
   useClearJkhubCache,
   useJkhubIndexStatus,
@@ -16,6 +17,13 @@ import {
 import { Button } from "./ui";
 
 // --- slice: library cleanup ---
+/** What a run of the card does, and the game it does it for. */
+type Job = {
+  what: "index" | "categories" | "cache";
+  /** `null` while the run belongs to both games, as emptying the cache does. */
+  game: Game | null;
+};
+
 /**
  * The JKHub catalog card of the Settings screen.
  *
@@ -41,44 +49,52 @@ export function JkhubCatalogCard() {
   const refreshCategories = useRefreshJkhubCategories();
   const clearCache = useClearJkhubCache();
 
-  const [busy, setBusy] = useState<"index" | "categories" | "cache" | null>(null);
+  const [busy, setBusy] = useState<Job | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
-  // One runner for the three: each is a promise, each locks every button while
-  // it runs, and each says what it did or why it could not.
-  const run = (
-    what: "index" | "categories" | "cache",
-    work: () => Promise<string | null>,
-  ) => {
-    setBusy(what);
+  // One runner for the three: each is a promise, each locks the buttons of the
+  // game it runs for, and each says what it did or why it could not. The job
+  // object is its own token, so a run that ends while the other game's run is
+  // in flight releases its own buttons and leaves that one alone.
+  const run = (job: Job, work: () => Promise<string | null>) => {
+    setBusy(job);
     setNote(null);
     setFailure(null);
     void work()
       .then((message) => setNote(message))
       .catch((error: unknown) => setFailure(errorText(error)))
-      .finally(() => setBusy(null));
+      .finally(() => setBusy((current) => (current === job ? null : current)));
   };
 
+  // The three take the game from the click, not from the render that answers:
+  // a player who switches the sidebar mid-crawl keeps the crawl on the game it
+  // was started for, and the card of the other game stays free.
+  //
   // The core answers the crawl, and the status line under the row picks the
   // new count and date up by itself, so the run adds nothing to say.
   const rebuild = () =>
-    run("index", async () => {
+    run({ what: "index", game }, async () => {
       await refreshIndex(game, true);
       return null;
     });
 
   const updateCategories = () =>
-    run("categories", async () => {
+    run({ what: "categories", game }, async () => {
       const answer = await refreshCategories(game);
       return t("jkhub.categoriesDone", { count: answer.categories.length });
     });
 
   const clear = () =>
-    run("cache", async () => {
+    run({ what: "cache", game: null }, async () => {
       await clearCache();
       return t("jkhub.cleared");
     });
+
+  // What this card is busy with: a run of the other game's catalog is none of
+  // its business, while emptying the shared cache folder is every card's.
+  const here =
+    busy && (busy.game === null || busy.game === game) ? busy.what : null;
 
   const state = status.data;
   const line = status.isLoading
@@ -107,21 +123,21 @@ export function JkhubCatalogCard() {
         <span className="flex items-center gap-8 shrink-0">
           <Button
             icon={<Network size={16} />}
-            disabled={busy !== null}
+            disabled={here !== null}
             title={t("jkhub.categoriesHint")}
             onClick={updateCategories}
           >
-            {busy === "categories"
+            {here === "categories"
               ? t("jkhub.updatingCategories")
               : t("jkhub.categories")}
           </Button>
           <Button
             icon={<RefreshCw size={16} />}
-            disabled={busy !== null || state?.building === true}
+            disabled={here !== null || state?.building === true}
             title={t("jkhub.rebuildHint")}
             onClick={rebuild}
           >
-            {busy === "index" ? t("jkhub.rebuilding") : t("jkhub.rebuild")}
+            {here === "index" ? t("jkhub.rebuilding") : t("jkhub.rebuild")}
           </Button>
         </span>
       </div>
@@ -131,12 +147,14 @@ export function JkhubCatalogCard() {
           <span className="text-body-md-medium text-fg">{t("jkhub.cache")}</span>
           <span className="text-body-sm text-fg-muted">{t("jkhub.cacheText")}</span>
         </span>
+        {/* The folder holds what both games downloaded, so a run of either
+            game holds this button — `busy`, not `here`. */}
         <Button
           icon={<FolderX size={16} />}
           disabled={busy !== null}
           onClick={clear}
         >
-          {busy === "cache" ? t("jkhub.clearing") : t("jkhub.clear")}
+          {here === "cache" ? t("jkhub.clearing") : t("jkhub.clear")}
         </Button>
       </div>
 
