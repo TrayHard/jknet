@@ -110,6 +110,15 @@
 //! the first one lives, `get_running_game` tells the interface what is up, and
 //! `stop_game` kills it. A watcher thread turns the exit into
 //! `launch:game-exited`.
+//!
+//! ## Arguments that break one build
+//!
+//! The player owns the command line, and the launcher never edits it. It does
+//! read it: [`launch_warning`] looks the assembled list over for a pair known
+//! to kill the engine about to receive it, and a hit becomes a WARN in the log
+//! and a `launch:warning` event the interface turns into a toast. There is one
+//! such pair today, `s_initsound 0` under EternalJK, and the constant that
+//! names it explains how it was found.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -142,6 +151,19 @@ pub struct GameStarted {
     /// there is no server to tell anybody about.
     #[serde(default)]
     pub connect: Option<String>,
+}
+
+/// Emitted when the command line about to start carries a known trap.
+///
+/// A warning, never a refusal and never a rewrite: the arguments are the
+/// player's, and a launcher that quietly edits them is a launcher whose
+/// **Extra launch arguments** field lies about what the game gets.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaunchWarning {
+    pub client_id: String,
+    /// Stable code the interface turns into a sentence of its own catalog.
+    pub code: String,
 }
 
 /// Emitted once the process is gone, however it went.
@@ -309,6 +331,71 @@ pub fn split_args(line: &str) -> Vec<String> {
         tokens.push(current);
     }
     tokens
+}
+
+// ---------------------------------------------------------------------------
+// Arguments that break a particular build
+// ---------------------------------------------------------------------------
+
+/// The one launch warning JKNet knows how to give.
+///
+/// EternalJK 1.5.8.5 dies with `0xC0000005` inside `eternaljk.x86.exe` right
+/// after the client's `CM_LoadMap` when the sound system was never started.
+/// The fault looked for a while like the build being too old for current
+/// Windows, because every test run of it carried `+set s_initsound 0` — a flag
+/// that had been left in the settings to keep test launches quiet. With the
+/// sound system on, the same build loads the same maps and plays. OpenJK and
+/// TaystJK tolerate the flag, which is why it went unnoticed for so long.
+///
+/// `+set s_volume 0` is the way to launch silently. It leaves the sound system
+/// running and every engine survives it.
+pub const ETERNALJK_S_INITSOUND: &str = "eternaljk_s_initsound";
+
+/// Engine id the warning above belongs to.
+const ETERNALJK_ID: &str = "eternaljk";
+
+/// The cvar that stops the sound system from starting at all.
+const S_INITSOUND: &str = "s_initsound";
+
+/// Reads the assembled command line for a pair known to break the engine that
+/// is about to read it, and names the warning to give.
+///
+/// The whole list is examined rather than the settings field alone: the same
+/// pair reaches the engine from **Extra launch arguments**, from the tokens a
+/// caller passes for one run, and from any future source of arguments, and all
+/// three end in [`build_launch_args`].
+pub fn launch_warning(engine_id: &str, args: &[String]) -> Option<&'static str> {
+    if engine_id == ETERNALJK_ID && disables_sound(args) {
+        return Some(ETERNALJK_S_INITSOUND);
+    }
+    None
+}
+
+/// True when the line turns the sound system off.
+///
+/// Any token that names the cvar counts, whatever put it there: `+set`,
+/// `+seta` and the bare `+s_initsound` all reach the same cvar, and the engine
+/// matches cvar names without regard to case.
+fn disables_sound(args: &[String]) -> bool {
+    args.windows(2)
+        .any(|pair| names_cvar(&pair[0], S_INITSOUND) && is_zero(&pair[1]))
+}
+
+/// True when the token is the cvar name, with or without the console `+`.
+fn names_cvar(token: &str, cvar: &str) -> bool {
+    token
+        .trim()
+        .trim_start_matches('+')
+        .eq_ignore_ascii_case(cvar)
+}
+
+/// True when the token is the value zero.
+///
+/// Quotes are stripped because a value may arrive already split by
+/// [`split_args`], which drops them, or straight from a caller that kept them.
+fn is_zero(token: &str) -> bool {
+    let value = token.trim().trim_matches('"');
+    value.parse::<f64>().is_ok_and(|number| number == 0.0)
 }
 
 /// Refuses an address that would smuggle extra console commands.
@@ -712,6 +799,27 @@ pub(crate) fn start_client(
         executable.display(),
         args.join(" ")
     );
+
+    // The arguments are the player's and stay exactly as written; this only
+    // says out loud what the log already shows. Sent before the spawn, so the
+    // warning stands whether or not the process lives long enough to answer.
+    if let Some(code) = launch_warning(engine.id, &args) {
+        log::warn!(
+            "{}: {} is starting with the sound system disabled ({S_INITSOUND} 0), \
+             which faults this build on the first map load",
+            client.id,
+            engine.name
+        );
+        if let Err(e) = app.emit(
+            "launch:warning",
+            LaunchWarning {
+                client_id: client.id.clone(),
+                code: code.to_string(),
+            },
+        ) {
+            log::warn!("cannot emit launch:warning: {e}");
+        }
+    }
 
     let child = spawn(&executable, &engine_dir, &args)?;
     let view = RunningGame {
@@ -1163,6 +1271,75 @@ mod tests {
         assert!(validate_address("").is_err());
         assert!(validate_address("   ").is_err());
         assert!(validate_address("127.0.0.1:29070 +quit").is_err());
+    }
+
+    /// Turns a command line into the token list the detector reads.
+    fn line(text: &str) -> Vec<String> {
+        split_args(text)
+    }
+
+    #[test]
+    fn eternaljk_started_without_sound_is_warned_about() {
+        assert_eq!(
+            launch_warning("eternaljk", &line("+set s_initsound 0")),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+        // The quotes survive when a caller passes tokens of its own instead of
+        // a line for `split_args` to take apart.
+        assert_eq!(
+            launch_warning(
+                "eternaljk",
+                &["+set".into(), "s_initsound".into(), "\"0\"".into()]
+            ),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+        // The cvar reaches the engine under several spellings, and the engine
+        // compares cvar names without regard to case.
+        assert_eq!(
+            launch_warning("eternaljk", &line("+seta S_InitSound 0")),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+        assert_eq!(
+            launch_warning("eternaljk", &line("+s_initsound 0")),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+        // Buried in a longer line, which is where it really turns up.
+        assert_eq!(
+            launch_warning(
+                "eternaljk",
+                &line("+set fs_game japlus +set s_initsound 0 +connect 127.0.0.1:29070")
+            ),
+            Some(ETERNALJK_S_INITSOUND)
+        );
+    }
+
+    #[test]
+    fn a_line_that_leaves_the_sound_system_alone_is_not_warned_about() {
+        assert_eq!(launch_warning("eternaljk", &line("")), None);
+        assert_eq!(launch_warning("eternaljk", &line("+set s_initsound 1")), None);
+        // The right way to launch silently: the sound system starts and the
+        // volume is zero.
+        assert_eq!(launch_warning("eternaljk", &line("+set s_volume 0")), None);
+        // A name that merely contains the cvar is a different cvar.
+        assert_eq!(
+            launch_warning("eternaljk", &line("+set s_initsoundx 0")),
+            None
+        );
+        // The cvar as the last token has no value to read.
+        assert_eq!(launch_warning("eternaljk", &line("+set s_initsound")), None);
+    }
+
+    #[test]
+    fn the_other_engines_are_left_alone() {
+        // OpenJK and TaystJK run fine with the sound system off, so the same
+        // line is not worth a word to a player of either.
+        for engine_id in ["openjk", "taystjk", "jamme", "jk2mv"] {
+            assert_eq!(
+                launch_warning(engine_id, &line("+set s_initsound 0")),
+                None,
+                "{engine_id}"
+            );
+        }
     }
 
     // --- slice: game core ---

@@ -47,6 +47,12 @@ pub struct AssetRule {
 /// player in the language of the interface — and the payload makes the pairing
 /// unrepresentable the wrong way round: there is no legacy build without a
 /// note, and no note hanging off a build that is fine.
+///
+/// No build in the registry is `Legacy` today. EternalJK was, on a reading of
+/// crash reports that turned out to blame the wrong thing — see the comment on
+/// its entry — and the variant stays because the next abandoned project is a
+/// question of when, not whether. The interface draws the badge and the note
+/// off it already; nothing but a registry entry is missing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EngineStatus {
@@ -134,18 +140,13 @@ impl Engine {
 /// | Engine | Status | Newest release | Windows 32-bit asset | Executable in it |
 /// | --- | --- | --- | --- | --- |
 /// | OpenJK | recommended | `latest`, rolling | `OpenJK-windows-x86.zip` | `openjk.x86.exe` |
-/// | EternalJK | legacy | `1.5.8.5`, 2020-06-15 | `eternaljk-win32-portable.zip` | `eternaljk.x86.exe` |
+/// | EternalJK | supported | `1.5.8.5`, 2020-06-15 | `eternaljk-win32-portable.zip` | `eternaljk.x86.exe` |
 /// | TaystJK | supported | `latest`, rolling | `TaystJK-windows-x86.zip` | `taystjk.x86.exe` |
 /// | jaMME | supported | `latest`, rolling | `jamme-windows-x86.zip` | `jamme.exe` |
 ///
 /// Two traps the rules exist for: the OpenJK release carries `OpenJO-*`
 /// archives for the *other* game next to its own, and TaystJK publishes an
 /// `-AddressSanitizer` build that is a debugging tool, not a game.
-///
-/// EternalJK is the one legacy entry. Its last release is from June 2020 and
-/// it faults on every map load on a current Windows machine — see the comment
-/// on the entry itself. It is still installable, and TaystJK, its maintained
-/// successor, is what the note points a player at.
 ///
 /// --- slice: game core ---
 /// The fifth entry plays the other game. JK2MV is the only live Jedi Outcast
@@ -187,16 +188,15 @@ const ENGINES: &[Engine] = &[
         description: "OpenJK with the modern multiplayer patches most servers expect.",
         executable: "eternaljk.x86.exe",
         repo: "eternalcodes/EternalJK",
-        // Last release 1.5.8.5 of 2020-06-15. On Windows 11 it faults with
-        // 0xC0000005 inside `eternaljk.x86.exe` right after the client's
-        // `CM_LoadMap`, on every map load and in every layout tried — Solo,
-        // `+map` and `+connect` to a local dedicated server alike — while
-        // OpenJK and TaystJK start from the same layout. It stays in the list
-        // and stays installable: a server that demands this build is still a
-        // reason to pick it.
-        status: EngineStatus::Legacy {
-            note_key: "engines.notes.eternaljk",
-        },
+        // Last release 1.5.8.5 of 2020-06-15, and a build people play every
+        // day. It was briefly marked legacy here over a fault on every map
+        // load — 0xC0000005 inside `eternaljk.x86.exe` right after the
+        // client's `CM_LoadMap` — which turned out to be one argument, not one
+        // engine: every one of those runs carried `+set s_initsound 0`. With
+        // the sound system on, the build loads maps and plays. OpenJK and
+        // TaystJK survive `s_initsound 0`, this one does not, so `launch.rs`
+        // warns when the command line about to start it contains that pair.
+        status: EngineStatus::Supported,
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
@@ -600,17 +600,13 @@ mod tests {
     }
 
     #[test]
-    fn eternaljk_is_the_one_legacy_build_and_stays_installable() {
-        // The mark exists to warn, not to hide: a server that demands this
-        // build is still a reason to pick it, so the entry keeps its archive
-        // rules and its Install button.
+    fn no_build_is_legacy_and_eternaljk_is_supported() {
+        // EternalJK carried the mark for a day on a crash that belonged to one
+        // launch argument, `s_initsound 0`, and not to the build. The warning
+        // for that pair lives in `launch.rs`; the registry says what it always
+        // should have: a working choice.
         let eternaljk = find("eternaljk").expect("eternaljk");
-        assert_eq!(
-            eternaljk.status,
-            EngineStatus::Legacy {
-                note_key: "engines.notes.eternaljk",
-            }
-        );
+        assert_eq!(eternaljk.status, EngineStatus::Supported);
         assert!(eternaljk.installable);
 
         let legacy: Vec<&str> = ENGINES
@@ -618,15 +614,17 @@ mod tests {
             .filter(|engine| matches!(engine.status, EngineStatus::Legacy { .. }))
             .map(|engine| engine.id)
             .collect();
-        assert_eq!(legacy, ["eternaljk"]);
+        assert!(legacy.is_empty(), "{legacy:?}");
     }
 
     #[test]
     fn every_note_key_is_a_key_of_the_english_client_catalog() {
         // The status travels to the screen as a key, so a key with no sentence
-        // behind it would reach the player as `engines.notes.eternaljk`. The
-        // catalog is read as text: matching the nesting of the JSON here would
-        // pull serde_json into the check for nothing.
+        // behind it would reach the player as `engines.notes.whatever`. No
+        // entry is legacy today, which makes this a guard for the next one
+        // rather than a check of the current list. The catalog is read as
+        // text: matching the nesting of the JSON here would pull serde_json
+        // into the check for nothing.
         let catalog = include_str!("../../src/locales/en/clients.json");
         for engine in ENGINES {
             let EngineStatus::Legacy { note_key } = engine.status else {
@@ -657,21 +655,24 @@ mod tests {
             serde_json::to_value(EngineStatus::Supported).expect("supported serializes");
         assert_eq!(supported, serde_json::json!({ "kind": "supported" }));
 
+        // No entry is legacy, so the shape of that branch is checked on a
+        // value built here. It is the branch most likely to be got wrong
+        // later, and the frontend reads `noteKey` off it.
         let legacy = serde_json::to_value(EngineStatus::Legacy {
-            note_key: "engines.notes.eternaljk",
+            note_key: "engines.notes.example",
         })
         .expect("legacy serializes");
         assert_eq!(
             legacy,
-            serde_json::json!({ "kind": "legacy", "noteKey": "engines.notes.eternaljk" })
+            serde_json::json!({ "kind": "legacy", "noteKey": "engines.notes.example" })
         );
 
         // And the whole entry carries it under `status`, camelCased with the
         // rest of the DTO.
         let entry = serde_json::to_value(find("eternaljk").expect("eternaljk"))
             .expect("the entry serializes");
-        assert_eq!(entry["status"]["kind"], "legacy");
-        assert_eq!(entry["status"]["noteKey"], "engines.notes.eternaljk");
+        assert_eq!(entry["status"]["kind"], "supported");
+        assert_eq!(entry["status"].get("noteKey"), None);
         assert_eq!(entry["notInstallableReason"], serde_json::Value::Null);
     }
 
