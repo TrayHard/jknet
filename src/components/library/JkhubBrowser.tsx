@@ -139,6 +139,11 @@ export function JkhubBrowser({
   // tab a minute ago.
   const [query, setQuery] = useState(() => typed.trim());
   const [openFile, setOpenFile] = useState<number | null>(null);
+  // --- slice: library cleanup ---
+  // Files an install answered «nothing to install here» about: a `.rar` and a
+  // record that links elsewhere. Keyed by file id, which is unique across both
+  // games, so a switch of game needs no clearing.
+  const [openOnly, setOpenOnly] = useState<ReadonlySet<number>>(() => new Set());
   const [result, setResult] = useState<JkhubInstallResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -261,6 +266,15 @@ export function JkhubBrowser({
               text: answer.files.join(", "),
             });
             return;
+          }
+          // --- slice: library cleanup ---
+          // Two of the answers say the entry has nothing to install: a `.rar`
+          // archive and a record that links to another site. A listing card
+          // names no archive, so this try is the first moment either is
+          // known — and from now on the card offers the site instead of an
+          // Install that would answer the same thing again.
+          if (answer.kind === "unsupported" || answer.kind === "external") {
+            setOpenOnly((current) => new Set(current).add(id));
           }
           // Everything else needs a decision, and the dialog is where the
           // buttons for it are.
@@ -519,6 +533,7 @@ export function JkhubBrowser({
                       names.get(card.categoryId ?? category?.id ?? 0)?.name
                     }
                     installed={installedIds.has(card.id)}
+                    openOnly={openOnly.has(card.id)}
                     progress={progress.get(card.id) ?? null}
                     busy={install.isPending}
                     onOpen={() => {
@@ -526,6 +541,7 @@ export function JkhubBrowser({
                       setOpenFile(card.id);
                     }}
                     onInstall={() => runInstall(card.id, false)}
+                    onOpenSite={() => openSite(card.id)}
                   />
                 ))}
               </ul>

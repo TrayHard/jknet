@@ -275,9 +275,10 @@ export function LibraryPage() {
   );
 
   // --- slice: library cleanup ---
-  // The box in the header is the only search on the screen: it filters the
-  // installed files, queries the JKHub catalogue and filters the updates,
-  // depending on the tab, and keeps what was typed across a switch.
+  // The box in the header is the only search on the screen: depending on the
+  // tab it filters the installed files or queries the JKHub catalogue, and it
+  // keeps what was typed across a switch. **Updates** has nothing to filter
+  // yet — the tab is an empty state — and the query is waiting for it.
   //
   // **Browse JKHub** answers out of the catalogue index, which the core may
   // not have yet. That is the one state the box switches itself off in, with
