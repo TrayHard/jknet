@@ -9,6 +9,7 @@
 //! whatever it collected when the budget runs out, because a browser that
 //! waits for the slowest server on the internet is a browser nobody uses.
 
+use std::collections::BTreeMap;
 use std::net::SocketAddrV4;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -191,6 +192,112 @@ pub async fn query_info(
         }
     }
     None
+}
+
+// --- slice: servers browser ---
+/// How many times a LAN sweep sends its `getinfo` to every port.
+///
+/// Two, as `CL_LocalServers_f` does (`codemp/client/cl_main.cpp:3361` in
+/// OpenJK `1a6a6434`). A broadcast datagram is the first thing a busy wireless
+/// access point drops, and one lost packet would cost the whole sweep.
+const BROADCAST_ATTEMPTS: u32 = 2;
+
+/// Broadcasts one `getinfo` and collects whoever answers.
+///
+/// This is what the engine's **Local** source does: the same out-of-band
+/// `getinfo` goes to several consecutive ports of the broadcast address, twice,
+/// and every server that hears it answers from its own address. One socket
+/// carries the whole sweep — the answers come back to the port the request
+/// left from, and `recv_from` names the sender, which is how an address is
+/// learned in the first place.
+///
+/// `targets` is an argument rather than something built here so a test can aim
+/// the sweep at four localhost ports and never touch the network. A duplicate
+/// answer — the second send reaching a server that already replied — is
+/// dropped: the first reply is the one whose round trip was measured.
+///
+/// Fails only when not a single datagram could be sent, which is a socket the
+/// operating system refused rather than a network with no servers on it.
+pub async fn scan_lan(
+    targets: &[SocketAddrV4],
+    budget: Duration,
+) -> Result<Vec<(SocketAddrV4, InfoReply)>> {
+    let socket = UdpSocket::bind("0.0.0.0:0")
+        .await
+        .map_err(|e| AppError::Network(format!("cannot open a UDP socket: {e}")))?;
+    socket
+        .set_broadcast(true)
+        .map_err(|e| AppError::Network(format!("cannot broadcast on this socket: {e}")))?;
+
+    // One challenge for the whole sweep: every answer echoes it, so a late
+    // datagram from the previous sweep is told apart from this one's.
+    let challenge = next_challenge();
+    let request = oob_packet(&format!("getinfo {challenge}"));
+    let started = Instant::now();
+    let mut sent = 0usize;
+    for _ in 0..BROADCAST_ATTEMPTS {
+        for target in targets {
+            match socket.send_to(&request, target).await {
+                Ok(_) => sent += 1,
+                Err(e) => log::warn!("cannot broadcast to {target}: {e}"),
+            }
+        }
+    }
+    if sent == 0 {
+        return Err(AppError::Network(
+            "the local network scan could not send a single datagram".into(),
+        ));
+    }
+
+    let deadline = started + budget;
+    let mut buffer = vec![0u8; MAX_DATAGRAM];
+    let mut found: BTreeMap<SocketAddrV4, InfoReply> = BTreeMap::new();
+    let mut errors = 0usize;
+
+    while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+        let (read, from) = match timeout(remaining, socket.recv_from(&mut buffer)).await {
+            Ok(Ok(received)) => received,
+            // Windows reports an ICMP "port unreachable" as an error on the
+            // next read of the socket that sent the datagram, and one socket
+            // carries the whole sweep: a port with nothing behind it would
+            // otherwise end the scan before the server on the next port
+            // answered. Reading on — but not forever, because more errors than
+            // datagrams sent means the socket itself is gone.
+            Ok(Err(e)) => {
+                errors += 1;
+                if errors > sent {
+                    log::warn!("the local network scan gave up after {errors} socket errors: {e}");
+                    break;
+                }
+                continue;
+            }
+            // The budget ran out, which is the ordinary end of a sweep.
+            Err(_) => break,
+        };
+        // IPv4 only, like the rest of the module: the socket is bound to
+        // `0.0.0.0`, so anything else here would be a surprise.
+        let std::net::SocketAddr::V4(from) = from else {
+            continue;
+        };
+        let elapsed = started.elapsed();
+        let Some(payload) = oob_payload(&buffer[..read]) else {
+            continue;
+        };
+        let (command, body) = split_command(payload);
+        if command != b"infoResponse" {
+            continue;
+        }
+        let infostring = protocol::decode_bytes(body);
+        if parse_infostring(&infostring).get("challenge") != Some(&challenge) {
+            continue;
+        }
+        found.entry(from).or_insert(InfoReply {
+            infostring,
+            ping_ms: elapsed.as_millis().min(u128::from(u32::MAX)) as u32,
+        });
+    }
+
+    Ok(found.into_iter().collect())
 }
 
 /// One answered `getstatus`: the server's own info string and its player list.
