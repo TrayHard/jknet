@@ -59,14 +59,16 @@ src/
                          GameEventsProvider, AppUpdateProvider, AboutCard,
                          MapPreview, MapPicturesCard, ToastsProvider,
                          FriendsProvider, AccountProvider
-  components/ui/         UI-кит: Button, Badge, Input, Select, Toggle, NavItem,
-                         EmptyState, RadioCard, StepBadges, Toast, Avatar, Dialog
+  components/ui/         UI-кит: Button, Badge, Input, Select, Menu, Toggle,
+                         NavItem, EmptyState, RadioCard, StepBadges, Toast,
+                         Avatar, Dialog
   components/client/     окно клиента: элементы под cvar, блок движка,
                          предпросмотр командной строки, полоса установки
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
                          JkhubIndexing, JkhubTree
-  components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs
+  components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs,
+                         меню действий у выделенного сервера
   components/account/    учётная запись: карточка Settings, кнопки провайдеров,
                          ожидание браузера
   components/friends/    экран Friends: строка, панель друга, заявки, presence.ts
