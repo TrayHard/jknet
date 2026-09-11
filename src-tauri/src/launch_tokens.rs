@@ -223,10 +223,13 @@ pub fn write_launch_cvar(
         None => None,
     };
 
-    let paths = state.paths()?;
-    let client = clients::read_record(&paths, &client_id)?;
-    let line = write_cvar(&client.launch_args, name, value);
-    clients::set_launch_args(&app, &state, &client_id, &line)
+    // The line the value goes into is read inside `edit_launch_args`, under
+    // the lock that saves the answer. Reading it here instead would make every
+    // control of the window a writer of a line it fetched earlier, and the
+    // slider would carry the resolution list's value back to what it was.
+    clients::edit_launch_args(&app, &state, &client_id, |args| {
+        write_cvar(args, name, value)
+    })
 }
 
 /// Refuses a cvar name that would not survive the command line.

@@ -34,7 +34,7 @@ use crate::error::{AppError, Result};
 use crate::game::Game;
 use crate::paths::{self, DataPaths};
 use crate::settings::Settings;
-use crate::state::AppState;
+use crate::state::{AppState, StepLock};
 use crate::timestamp;
 
 /// Longest client name the launcher accepts. Long names break the card layout
@@ -181,18 +181,24 @@ pub fn update_client(
     fs_game: Option<String>,
     launch_args: Option<String>,
 ) -> Result<Client> {
+    // What the player typed is checked before the lock: a refused value must
+    // not cost another window the wait, and it never reaches a record.
+    let name = name.map(|name| validate_name(&name)).transpose()?;
+    let fs_game = fs_game.map(|value| validate_fs_game(&value)).transpose()?;
+    let launch_args = launch_args.map(|line| line.trim().to_string());
+
     let paths = state.paths()?;
-    let mut client = read_record(&paths, &client_id)?;
-    if let Some(name) = name {
-        client.name = validate_name(&name)?;
-    }
-    if let Some(fs_game) = fs_game {
-        client.fs_game = validate_fs_game(&fs_game)?;
-    }
-    if let Some(launch_args) = launch_args {
-        client.launch_args = launch_args.trim().to_string();
-    }
-    write_record(&paths, &client)?;
+    let client = edit_record(state.client_records(), &paths, &client_id, |client| {
+        if let Some(name) = name {
+            client.name = name;
+        }
+        if let Some(fs_game) = fs_game {
+            client.fs_game = fs_game;
+        }
+        if let Some(launch_args) = launch_args {
+            client.launch_args = launch_args;
+        }
+    })?;
     log::info!(
         "updated client {}: name {:?}, fs_game {:?}, launch_args {:?}",
         client.id,
@@ -209,22 +215,54 @@ pub fn update_client(
 
 // --- slice: client window ---
 
-/// Replaces the launch arguments of a client and saves the record.
+/// Reads a client record, changes it and writes it back without anything else
+/// getting between the three steps.
+///
+/// The lock is what makes them one step. Commands are plain `fn`, so Tauri
+/// runs them on its pool of blocking threads: the window of a client and the
+/// card of that client in the main window can both be inside this function at
+/// the same moment, each holding a whole record built from its own read. The
+/// second write would then put back every field the first one had just
+/// changed, and nothing would report the loss — the player would simply find
+/// their mod folder as it was.
+///
+/// `edit` runs under the lock and does only what a record needs. Checking what
+/// the player typed belongs before the call.
+pub(crate) fn edit_record(
+    lock: &StepLock,
+    paths: &DataPaths,
+    client_id: &str,
+    edit: impl FnOnce(&mut Client),
+) -> Result<Client> {
+    let _step = lock.enter();
+    let mut client = read_record(paths, client_id)?;
+    edit(&mut client);
+    write_record(paths, &client)?;
+    Ok(client)
+}
+
+/// Rewrites the launch arguments of a client and saves the record.
 ///
 /// The `launch_args` half of [`update_client`], reachable from
 /// [`crate::launch_tokens`]: a control in the client window edits one cvar
 /// inside the line and the whole line comes back here, so there is one writer
 /// of `client.json` and one place that announces the change.
-pub(crate) fn set_launch_args(
+///
+/// `edit` receives the line as the record carries it, under the lock that
+/// saves the answer. A caller that read the line first and handed over a
+/// finished string would be writing the state of a moment ago over everything
+/// stored since.
+pub(crate) fn edit_launch_args(
     app: &AppHandle,
     state: &AppState,
     client_id: &str,
-    launch_args: &str,
+    edit: impl FnOnce(&str) -> String,
 ) -> Result<Client> {
     let paths = state.paths()?;
-    let mut client = read_record(&paths, client_id)?;
-    client.launch_args = launch_args.trim().to_string();
-    write_record(&paths, &client)?;
+    let client = edit_record(state.client_records(), &paths, client_id, |client| {
+        let line = edit(&client.launch_args);
+        client.launch_args = line.trim().to_string();
+    })?;
     log::info!(
         "updated client {}: launch_args {:?}",
         client.id,
@@ -270,10 +308,17 @@ pub fn delete_client(
 ) -> Result<()> {
     let paths = state.paths()?;
     let dir = paths.client_dir(&id);
-    if !dir.is_dir() {
-        return Err(AppError::NotFound(format!("client {id}")));
+    {
+        // --- slice: client window ---
+        // Under the lock of [`edit_record`]: a save that started a moment ago
+        // finishes before the folder goes, and one that starts after it finds
+        // no record to read instead of writing the folder back into existence.
+        let _step = state.client_records().enter();
+        if !dir.is_dir() {
+            return Err(AppError::NotFound(format!("client {id}")));
+        }
+        remove_client_dir(&dir)?;
     }
-    remove_client_dir(&dir)?;
     log::info!("deleted client {id}");
     // --- slice: client window ---
     // A window editing a client that no longer exists has nothing to show and
@@ -636,6 +681,82 @@ mod tests {
 
         remove_client_dir(&dir).expect("the client is deleted");
         assert!(!dir.exists());
+    }
+
+    // --- slice: client window ---
+
+    #[test]
+    fn two_windows_saving_one_client_keep_both_changes() {
+        // The record the player edits has two windows over it, and Tauri runs
+        // the commands of both on a pool of threads. Each save carries a whole
+        // record, so the one that writes second decides what every field holds
+        // — unless the read and the write are one step, which is the lock.
+        //
+        // Measured: with the `lock.enter()` of `edit_record` taken out, this
+        // test fails inside the first rounds — either a read lands on a file
+        // the other thread is halfway through writing, or a write puts back
+        // the field that thread had just changed.
+        const ROUNDS: usize = 100;
+
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        paths.ensure().expect("the data layout");
+        let client = Client {
+            id: "duel".to_string(),
+            name: "Duel".to_string(),
+            engine_id: "openjk".to_string(),
+            game: Game::JediAcademy,
+            engine_version: None,
+            created_at: timestamp::now_rfc3339(),
+            engine_installed_at: None,
+            engine_published_at: None,
+            fs_game: None,
+            launch_args: String::new(),
+        };
+        write_record(&paths, &client).expect("the record");
+
+        let lock = StepLock::default();
+        std::thread::scope(|scope| {
+            // The client window, through the cvar path of `write_launch_cvar`:
+            // every round rewrites the line the record carries right now.
+            scope.spawn(|| {
+                for round in 0..ROUNDS {
+                    let value = round.to_string();
+                    edit_record(&lock, &paths, &client.id, |record| {
+                        let line = crate::launch_tokens::write_cvar(
+                            &record.launch_args,
+                            "r_mode",
+                            Some(&value),
+                        );
+                        record.launch_args = line;
+                    })
+                    .expect("the cvar save");
+                }
+            });
+            // The card in the main window, through the `update_client` path.
+            scope.spawn(|| {
+                for round in 0..ROUNDS {
+                    let folder = format!("mod{round}");
+                    edit_record(&lock, &paths, &client.id, |record| {
+                        record.fs_game = Some(folder);
+                    })
+                    .expect("the mod folder save");
+                }
+            });
+        });
+
+        let saved = read_record(&paths, &client.id).expect("the record is readable");
+        assert_eq!(
+            crate::launch_tokens::read_cvar(&saved.launch_args, "r_mode"),
+            Some((ROUNDS - 1).to_string()),
+            "the last cvar the window wrote is in the record: {:?}",
+            saved.launch_args
+        );
+        assert_eq!(
+            saved.fs_game,
+            Some(format!("mod{}", ROUNDS - 1)),
+            "the last mod folder the card wrote is in the record"
+        );
     }
 
     #[test]
