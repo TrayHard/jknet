@@ -74,6 +74,10 @@ Everything else wraps.
 | `servers:details.botBadge` | A badge on one player's row, at most four characters. |
 | `servers:empty.filteredBots` | `{{count}}` is the number of servers hidden by the bot switch. The sentence names the switch, which is `servers:filters.hideBotOnly` — use the same wording. |
 | `clients:card.meta` | `{{id}}` is a folder name, `{{date}}` is already formatted. Both are monospaced; keep the « · » between them. |
+| `clients:enginePage.facts.*` | Sentences read from each project’s own README. Project names, cvar names (`s_initsound`), file names (`jamp.exe`) and mod folder names (`base`, `ja+`, `mme`) are identifiers and stay as they are; the words around them are yours. |
+| `clients:enginePage.factsExecutable`, `factsModFolder` | `{{file}}` is the name of an executable and `{{folder}}` the name of a folder on disk. Neither is translated. |
+| `clients:enginePage.versionsText` | Says where a build is installed from, which is a client and not this page. Do not promise a button the page does not have. |
+| `clients:newDialog.details` | A link under an engine tile, one or two words, opening the page about that build. |
 | `clients:clientWindow.*` | The separate window behind the gear on a client card. Every label in it ends with a cvar name in brackets — `r_mode`, `s_volume`, `com_maxfps` — and those are identifiers: keep them exactly, translate only the words in front. |
 | `clients:clientWindow.client.idHint` | One monospaced span, the folder name. Do not translate what is inside it. |
 | `clients:clientWindow.notSet` | Stands where a value would be when the client does not set that cvar at all. Two words at most: it is drawn inside a list the width of a field. |
@@ -98,6 +102,7 @@ Everything else wraps.
 | `errors:basepathOccupied` | `{{path}}` is a full Windows path ending in `basepath\base`. Do not translate it; the sentence has to read well with a long path in the middle of it. |
 | `account:providers.dev` | Used inside a sentence («signed in with …»), so it is lowercase. `account:providers.devLabel` is the same thing as a badge and is capitalised. |
 | `settings:language.systemWith` | `{{language}}` is the native name of the language the system would pick — «Русский», «Deutsch». It is never translated. |
+| `settings:about.engineIcons`, `about.engineIconBy` | The credit line of the About card: the engine icons come from the projects themselves. `{{author}}` is a nickname on a site and is never translated. The list of project names after the first key is built by the launcher. |
 | `settings:language.draft` | Shown under the **Language** card while `_status.json` names no reviewer. It describes the folder you are translating, so write it in that language even before the rest is checked. |
 
 ## How to check your work

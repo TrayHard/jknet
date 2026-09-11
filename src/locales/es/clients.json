@@ -39,6 +39,59 @@
     "recommended": "Recomendado",
     "legacy": "Legacy"
   },
+  "enginePage": {
+    "back": "All clients",
+    "notFound": "There is no engine with this id.",
+    "supported": "Supported",
+    "featuresHeading": "What it does",
+    "factsExecutable": "Runs {{file}} out of the client's own engine folder.",
+    "factsModFolder": "Starts in the {{folder}} mod folder, which a new client is given by itself.",
+    "linksHeading": "Links",
+    "repository": "Repository",
+    "releases": "All releases",
+    "homepage": "Project site",
+    "versionsHeading": "Versions",
+    "versionsText": "The newest builds JKNet can install, newest first. Installing one is done from a client, not from here.",
+    "versionsEmpty": "The project publishes no archive JKNet can install.",
+    "prerelease": "Pre-release",
+    "newClient": "New client with this engine",
+    "facts": {
+      "openjk": {
+        "compatible": "Continues the official engine and keeps compatibility with the games and their mods.",
+        "noFeatures": "Adds no features of its own and changes no balance: the project says so outright.",
+        "platforms": "Runs on today's machines: x86-64, ARM and Apple Silicon, Windows, Linux and macOS.",
+        "stable": "Jedi Academy single player and multiplayer are both stable.",
+        "outcast": "Jedi Outcast multiplayer is not supported, and the project points at JK2MV for it."
+      },
+      "eternaljk": {
+        "japro": "Brings the jaPRO changes into the engine and adds client-side work of its own.",
+        "release": "Last tagged build is 1.5.8.5 of 2020-06-15, and servers still expect it.",
+        "sound": "Crashes when the sound system is off. JKNet warns about s_initsound 0 before it starts the game.",
+        "steam": "The project suggests renaming the executable to jamp.exe for Steam; JKNet starts it by its own name and does not need that."
+      },
+      "taystjk": {
+        "upstreams": "Follows four projects at once: OpenJK, jaPRO, EternalJK and the Vulkan fork of EternalJK.",
+        "competitive": "Collects the quality of life work competitive servers ask for.",
+        "wiki": "Keeps its own feature list on the project site rather than in the repository.",
+        "mission": "States the same goals as OpenJK, in the same words."
+      },
+      "jamme": {
+        "what": "Jedi Academy Movie Maker's Edition: the q3mme demo tools on an OpenJK of May 2013.",
+        "playback": "Plays a demo under control: pause, seek, slow motion, a free camera and a chase camera.",
+        "capture": "Captures video with motion blur, in stereo 3D or for VR, to mp4, avi, png, jpg or tga.",
+        "override": "Overrides what the demo recorded: player name, saber colours and hilts, team, model, skies and textures.",
+        "mods": "Reads demos of base, base_enhanced, ja+ and ja++, lugormod, makermod and PRMod."
+      },
+      "jk2mv": {
+        "versions": "Multi Version: one executable plays all three retail builds of Jedi Outcast, 1.02, 1.03 and 1.04.",
+        "mods": "Runs most Jedi Outcast mods — maps, skins and code — and part of the Jedi Academy assets.",
+        "modern": "Modern resolutions, a widescreen interface, better gamma and the saber glow of the Jedi Academy engine.",
+        "downloads": "Fast HTTP downloads, with a dialog before anything is fetched.",
+        "fixes": "Fixes known security holes of the retail client and the EAX sound.",
+        "platforms": "Windows, Linux, macOS and FreeBSD, on x86, x86-64 and ARM."
+      }
+    }
+  },
   "newDialog": {
     "title": "Nuevo cliente",
     "text": "Un cliente es una compilación del motor con sus propios archivos y ajustes. Dele un nombre que reconozca en la lista de clientes.",
@@ -52,7 +105,8 @@
     "download": "Descargar el motor ahora",
     "downloadText": "Obtiene la compilación más reciente de GitHub. El progreso se muestra en la tarjeta del cliente.",
     "downloadSwitch": "Descargar el motor justo después de crear el cliente",
-    "create": "Crear cliente"
+    "create": "Crear cliente",
+    "details": "Details"
   },
   "clientWindow": {
     "loading": "Client",

@@ -94,6 +94,15 @@ pub struct Engine {
     /// that ever moves off GitHub needs one edit in one place and no string
     /// concatenation anywhere. A test below proves the two agree.
     pub repo_url: &'static str,
+    /// The page that lists every published build.
+    ///
+    /// The engine page links it next to the ten releases it shows: JKNet only
+    /// lists the archives it could install, and a player looking for an older
+    /// one or for a source tarball belongs on the project's own page.
+    pub releases_url: &'static str,
+    /// The project's own site, when its README names one. `None` otherwise —
+    /// a repository is not a site, and the page already links that.
+    pub homepage: Option<&'static str>,
     /// Who the project credits for its icon, when it credits anyone.
     ///
     /// The About card names it. JK2MV is the one build whose README hands the
@@ -175,6 +184,10 @@ const ENGINES: &[Engine] = &[
         executable: "openjk.x86.exe",
         repo: "JACoders/OpenJK",
         repo_url: "https://github.com/JACoders/OpenJK",
+        releases_url: "https://github.com/JACoders/OpenJK/releases",
+        // The README names `builds.openjk.org`, which serves nightly archives
+        // rather than describing the project. Not a site to send a player to.
+        homepage: None,
         icon_credit: None,
         status: EngineStatus::Recommended,
         installable: true,
@@ -203,6 +216,8 @@ const ENGINES: &[Engine] = &[
         executable: "eternaljk.x86.exe",
         repo: "eternalcodes/EternalJK",
         repo_url: "https://github.com/eternalcodes/EternalJK",
+        releases_url: "https://github.com/eternalcodes/EternalJK/releases",
+        homepage: Some("https://playja.pro"),
         icon_credit: None,
         // Last release 1.5.8.5 of 2020-06-15, and a build people play every
         // day. It was briefly marked legacy here over a fault on every map
@@ -238,6 +253,8 @@ const ENGINES: &[Engine] = &[
         executable: "taystjk.x86.exe",
         repo: "taysta/TaystJK",
         repo_url: "https://github.com/taysta/TaystJK",
+        releases_url: "https://github.com/taysta/TaystJK/releases",
+        homepage: Some("https://taysta.github.io/TaystJK/"),
         icon_credit: None,
         status: EngineStatus::Supported,
         installable: true,
@@ -265,6 +282,8 @@ const ENGINES: &[Engine] = &[
         executable: "jamme.exe",
         repo: "entdark/jaMME",
         repo_url: "https://github.com/entdark/jaMME",
+        releases_url: "https://github.com/entdark/jaMME/releases",
+        homepage: None,
         icon_credit: None,
         status: EngineStatus::Supported,
         installable: true,
@@ -294,6 +313,8 @@ const ENGINES: &[Engine] = &[
         executable: "jk2mvmp.exe",
         repo: "mvdevs/jk2mv",
         repo_url: "https://github.com/mvdevs/jk2mv",
+        releases_url: "https://github.com/mvdevs/jk2mv/releases",
+        homepage: Some("https://jk2mv.org"),
         // The README of the project hands the icon to this author by name.
         icon_credit: Some("Thoroughbred-Of-Sin"),
         // Recommended within its game; the status is read per game, so the two
@@ -781,10 +802,10 @@ mod tests {
     }
 
     #[test]
-    fn the_repository_link_of_every_engine_matches_its_repo() {
-        // Two spellings of one fact, so they are compared rather than trusted:
-        // the short form names the project in a log line, the link is what the
-        // About card and the engine page open.
+    fn the_links_of_every_engine_match_its_repo() {
+        // Three spellings of one fact, so they are compared rather than
+        // trusted: the short form names the project in a log line, the links
+        // are what the About card and the engine page open.
         for engine in ENGINES {
             assert_eq!(
                 engine.repo_url,
@@ -792,6 +813,27 @@ mod tests {
                 "{}",
                 engine.id
             );
+            assert_eq!(
+                engine.releases_url,
+                format!("{}/releases", engine.repo_url),
+                "{}",
+                engine.id
+            );
+        }
+    }
+
+    #[test]
+    fn every_link_of_the_registry_is_https() {
+        // The engine page hands these straight to the system browser. A plain
+        // `http` link in a build that ships to players is a downgrade nobody
+        // asked for, and both sites in the registry answer on TLS.
+        for engine in ENGINES {
+            for url in [Some(engine.repo_url), Some(engine.releases_url), engine.homepage]
+                .into_iter()
+                .flatten()
+            {
+                assert!(url.starts_with("https://"), "{}: {url}", engine.id);
+            }
         }
     }
 

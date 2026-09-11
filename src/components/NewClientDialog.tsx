@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
 import { useEngineNote } from "../i18n/useEngineNote";
 import type { Game } from "../lib/ipc";
+import { engineRoute } from "../lib/engines";
 // --- slice: game switch ---
 import {
   defaultClientPatch,
@@ -31,6 +33,14 @@ interface NewClientDialogProps {
    * sidebar. Given here, it wins over the active game and stops following it.
    */
   game?: Game;
+  /**
+   * Build to start on, when the dialog was opened about one.
+   *
+   * The engine page opens it from **New client with this engine**, and the
+   * player has just spent a screen reading about that build. Given here, it
+   * wins over the recommendation the dialog would otherwise preselect.
+   */
+  engineId?: string;
   onClose: () => void;
   onError: (message: string) => void;
 }
@@ -44,6 +54,7 @@ interface NewClientDialogProps {
  */
 export function NewClientDialog({
   game: requested,
+  engineId: requestedEngine,
   onClose,
   onError,
 }: NewClientDialogProps) {
@@ -65,7 +76,7 @@ export function NewClientDialog({
   const installEngine = useInstallEngine();
 
   const [name, setName] = useState("");
-  const [engineId, setEngineId] = useState("");
+  const [engineId, setEngineId] = useState(requestedEngine ?? "");
   const [makeDefault, setMakeDefault] = useState(false);
   const [downloadEngine, setDownloadEngine] = useState(true);
 
@@ -178,31 +189,49 @@ export function NewClientDialog({
         </label>
         <div className="grid grid-cols-2 gap-8">
           {engines.map((engine) => (
-            <button
+            // The tile and its **Details** link are two controls, so the link
+            // sits beside the button rather than inside it: an anchor nested
+            // in a button is invalid markup, and the click would pick the
+            // build as it went past on its way to the page.
+            <div
               key={engine.id}
-              type="button"
-              onClick={() => setEngineId(engine.id)}
               className={[
-                "flex flex-col items-start gap-4 rounded-md border p-12 text-left cursor-pointer",
-                "transition-colors duration-150",
+                "flex flex-col rounded-md border transition-colors duration-150",
                 engine.id === engineId
                   ? "border-line-accent bg-accent-subtle"
                   : "border-line bg-input hover:bg-surface-hover",
               ].join(" ")}
             >
-              <div className="flex items-center gap-8 flex-wrap">
-                <span className="text-body-md-medium text-fg">{engine.name}</span>
-                {/* One badge at most: a build is either the recommendation or
-                    the warning, never both. */}
-                {engine.status.kind === "recommended" ? (
-                  <Badge tone="accent">{t("engines.recommended")}</Badge>
-                ) : null}
-                {engine.status.kind === "legacy" ? (
-                  <Badge tone="warm">{t("engines.legacy")}</Badge>
-                ) : null}
-              </div>
-              <span className="text-body-sm text-fg-muted">{engine.description}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setEngineId(engine.id)}
+                className="flex flex-1 flex-col items-start gap-4 p-12 pb-4 text-left cursor-pointer"
+              >
+                <div className="flex items-center gap-8 flex-wrap">
+                  <span className="text-body-md-medium text-fg">{engine.name}</span>
+                  {/* One badge at most: a build is either the recommendation
+                      or the warning, never both. */}
+                  {engine.status.kind === "recommended" ? (
+                    <Badge tone="accent">{t("engines.recommended")}</Badge>
+                  ) : null}
+                  {engine.status.kind === "legacy" ? (
+                    <Badge tone="warm">{t("engines.legacy")}</Badge>
+                  ) : null}
+                </div>
+                <span className="text-body-sm text-fg-muted">
+                  {engine.description}
+                </span>
+              </button>
+              <Link
+                to={engineRoute(engine.id)}
+                // Leaving for the page is leaving the dialog: it is a modal
+                // over the screen behind it, and the route change unmounts it.
+                onClick={onClose}
+                className="px-12 pb-12 pt-4 text-body-sm text-fg-accent hover:underline"
+              >
+                {t("newDialog.details")}
+              </Link>
+            </div>
           ))}
         </div>
         {/* The note goes under the whole grid rather than inside one cell: it
