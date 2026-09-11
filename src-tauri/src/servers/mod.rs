@@ -32,8 +32,9 @@
 //! side by side, the writes do not.
 //!
 //! Everything the launcher calls a player count is a count of people. Bots are
-//! carried alongside in [`ServerInfo::bots`] and shown as a suffix, never
-//! added in. [`PlayersSource`] says how sure a given row is.
+//! carried alongside in [`ServerInfo::bots`] and counted apart, never added in:
+//! the row keeps them in its tooltip and the details panel spells them out.
+//! [`PlayersSource`] says how sure a given row is.
 //!
 //! Results do not wait for the slowest server: they are pushed to the window
 //! in batches through the `servers:batch` event while the refresh runs, and
@@ -273,6 +274,32 @@ impl Drop for RefreshGuard<'_> {
     }
 }
 
+// --- slice: server actions ---
+/// The two address lists of `settings.json` that mark a row.
+///
+/// Both are keyed by `ip:port` and neither comes from the server: a star and a
+/// hidden row are what the player did, so they are read once per operation and
+/// applied to every row it builds. One struct rather than two arguments because
+/// every function that decorates a row needs both and would otherwise thread
+/// two identical sets side by side.
+#[derive(Debug, Clone, Default)]
+pub struct Marks {
+    /// `favorite_servers`: the rows with a star on them.
+    favorites: HashSet<String>,
+    /// `hidden_servers`: the rows only the **Hidden** tab shows.
+    hidden: HashSet<String>,
+}
+
+impl Marks {
+    /// Reads both lists off a settings document.
+    fn of(settings: &Settings) -> Marks {
+        Marks {
+            favorites: settings.favorite_servers.iter().cloned().collect(),
+            hidden: settings.hidden_servers.iter().cloned().collect(),
+        }
+    }
+}
+
 /// One row of the browser.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -330,6 +357,19 @@ pub struct ServerInfo {
     pub ping_ms: u32,
     /// Starred by the player, from `favorite_servers` in the settings.
     pub favorite: bool,
+    // --- slice: server actions ---
+    /// Taken off the browser by the player, from `hidden_servers`.
+    ///
+    /// The core still scans the address and still writes the row: a master
+    /// server cannot be asked for «everything but these», and a row the player
+    /// may want back has to stay somewhere. The screen is what acts on the
+    /// flag — every tab but **Hidden** leaves such a row out, and so does the
+    /// Home screen.
+    ///
+    /// Set by [`ServerInfo::decorate`] alongside the star, so a cached row
+    /// picks up a change made since the scan that wrote it.
+    #[serde(default)]
+    pub hidden: bool,
     // --- slice: servers browser ---
     /// False when the last direct probe of this address got nothing back.
     ///
@@ -428,6 +468,8 @@ impl ServerInfo {
                 .unwrap_or_else(|| default_protocol(game)),
             ping_ms,
             favorite: false,
+            // --- slice: server actions ---
+            hidden: false,
             responded: true,
             // --- slice: servers robustness ---
             // A fresh answer has missed nothing, and the player list of this
@@ -454,9 +496,11 @@ impl ServerInfo {
         row
     }
 
-    /// Applies the flag that comes from the launcher, not from the server.
-    pub fn decorate(&mut self, favorites: &HashSet<String>) {
-        self.favorite = favorites.contains(&self.address);
+    /// Applies the flags that come from the launcher, not from the server.
+    pub fn decorate(&mut self, marks: &Marks) {
+        self.favorite = marks.favorites.contains(&self.address);
+        // --- slice: server actions ---
+        self.hidden = marks.hidden.contains(&self.address);
     }
 
     /// Records what a `getstatus` answer says about this server.
@@ -517,7 +561,7 @@ impl ServerInfo {
     ///
     /// Falls back to `clients` while the split is unknown: on a server that
     /// answers neither question, "someone is playing" is still truer than a
-    /// zero, and the row shows the number without a bot suffix.
+    /// zero, and the row shows the number with a `?` beside it.
     pub fn real_players(&self) -> u16 {
         self.humans.unwrap_or(self.clients)
     }
@@ -882,7 +926,7 @@ pub fn get_cached_servers(
     let settings = state.settings()?;
     let game = settings.game_or_active(game);
     let file = cache_file(&state, game)?;
-    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    let marks = Marks::of(&settings);
 
     let mut servers = read_cache(&file);
     // A cache written before the rule existed still holds the hidden mods.
@@ -897,7 +941,7 @@ pub fn get_cached_servers(
         // And the label is read from that game's table, so a 0.2 row keeps
         // saying Siege rather than being relabelled by whatever it decoded to.
         server.gametype_label = game.spec().gametype_label(server.gametype);
-        server.decorate(&favorites);
+        server.decorate(&marks);
     }
     sort_rows(&mut servers);
     Ok(servers)
@@ -945,7 +989,7 @@ pub async fn refresh_servers(
     let game = settings.game_or_active(game);
     let spec = game.spec();
     let file = cache_file(&state, game)?;
-    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    let marks = Marks::of(&settings);
     // --- slice: servers browser ---
     // Held for the whole refresh, so the second press of a button the window
     // failed to disable is refused here instead of on the wire.
@@ -981,7 +1025,7 @@ pub async fn refresh_servers(
         game,
         RefreshScope::All,
         addresses.clone(),
-        &favorites,
+        &marks,
         &timestamp::now_rfc3339(),
     )
     .await;
@@ -989,7 +1033,7 @@ pub async fn refresh_servers(
     // The document is the answers plus the rows of the addresses that stayed
     // silent and have not yet used up their grace.
     let mut collected = probe.servers;
-    let kept = keep_silent_rows(game, &cached, &addresses, &mut collected, &favorites);
+    let kept = keep_silent_rows(game, &cached, &addresses, &mut collected, &marks);
     sort_rows(&mut collected);
     // The probe is over before the lock is taken: a scan of the Favorites tab
     // that is still on the wire is none of this command's business, and only
@@ -1098,7 +1142,7 @@ fn keep_silent_rows(
     cached: &[ServerInfo],
     asked: &[SocketAddrV4],
     answered: &mut Vec<ServerInfo>,
-    favorites: &HashSet<String>,
+    marks: &Marks,
 ) -> SilentRows {
     let known: BTreeMap<&str, &ServerInfo> = cached
         .iter()
@@ -1134,7 +1178,7 @@ fn keep_silent_rows(
             counts.dropped += 1;
             continue;
         }
-        row.decorate(favorites);
+        row.decorate(marks);
         counts.silent += 1;
         answered.push(row);
     }
@@ -1189,7 +1233,7 @@ pub async fn refresh_addresses(
     let settings = state.settings()?;
     let game = settings.game_or_active(game);
     let file = cache_file(&state, game)?;
-    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    let marks = Marks::of(&settings);
     let _claim = refreshes.claim(game, scope)?;
 
     // Deduplicated but kept in the caller's order, and an address that does not
@@ -1211,7 +1255,7 @@ pub async fn refresh_addresses(
         game,
         scope,
         wanted.clone(),
-        &favorites,
+        &marks,
         &timestamp::now_rfc3339(),
     )
     .await
@@ -1226,7 +1270,7 @@ pub async fn refresh_addresses(
     remember_from_cache(&document, &mut answered);
 
     let mut rows = answered;
-    rows.extend(silent_rows(game, &document, &wanted, &rows, &favorites));
+    rows.extend(silent_rows(game, &document, &wanted, &rows, &marks));
     sort_rows(&mut rows);
 
     let elapsed_ms = started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
@@ -1270,9 +1314,9 @@ pub async fn refresh_lan(
 ) -> Result<Vec<ServerInfo>> {
     let settings = state.settings()?;
     let game = settings.game_or_active(game);
-    let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
+    let marks = Marks::of(&settings);
     let _claim = refreshes.claim(game, RefreshScope::Lan)?;
-    scan_lan(Some(&app), game, &broadcast_targets(game), &favorites).await
+    scan_lan(Some(&app), game, &broadcast_targets(game), &marks).await
 }
 
 // --- slice: servers browser ---
@@ -1294,7 +1338,7 @@ async fn scan_lan(
     app: Option<&tauri::AppHandle>,
     game: Game,
     targets: &[SocketAddrV4],
-    favorites: &HashSet<String>,
+    marks: &Marks,
 ) -> Result<Vec<ServerInfo>> {
     let started = Instant::now();
     let last_seen = timestamp::now_rfc3339();
@@ -1310,7 +1354,7 @@ async fn scan_lan(
                 reply.ping_ms,
                 &last_seen,
             );
-            row.decorate(favorites);
+            row.decorate(marks);
             row
         })
         .filter(|row| !is_hidden_mod(&row.mod_name))
@@ -1370,7 +1414,7 @@ async fn probe_addresses(
     game: Game,
     scope: RefreshScope,
     addresses: Vec<SocketAddrV4>,
-    favorites: &HashSet<String>,
+    marks: &Marks,
     last_seen: &str,
 ) -> ProbeOutcome {
     let total = addresses.len();
@@ -1404,7 +1448,7 @@ async fn probe_addresses(
             hidden += 1;
             continue;
         }
-        server.decorate(favorites);
+        server.decorate(marks);
         batch.push(server.clone());
         collected.push(server);
 
@@ -1598,7 +1642,7 @@ fn silent_rows(
     document: &[ServerInfo],
     wanted: &[SocketAddrV4],
     answered: &[ServerInfo],
-    favorites: &HashSet<String>,
+    marks: &Marks,
 ) -> Vec<ServerInfo> {
     let replied: HashSet<&str> = answered.iter().map(|row| row.address.as_str()).collect();
     let mut silent = Vec::new();
@@ -1616,7 +1660,7 @@ fn silent_rows(
             continue;
         }
         row.responded = false;
-        row.decorate(favorites);
+        row.decorate(marks);
         silent.push(row);
     }
     silent
@@ -1893,10 +1937,48 @@ pub fn set_server_favorite(
     let game = state.settings()?.game_or_active(game);
     let address = parse_address(game, &address)?.to_string();
     edit_settings(&state, |settings| {
-        settings.favorite_servers.retain(|kept| kept != &address);
-        if favorite {
-            settings.favorite_servers.push(address.clone());
-        }
+        set_membership(&mut settings.favorite_servers, &address, favorite);
+    })
+}
+
+// --- slice: server actions ---
+/// Puts an address in one of the settings lists, or takes it out.
+///
+/// Shared by the star and the hidden mark, which differ in nothing but the list
+/// they edit. Removing first is what keeps the list free of duplicates when a
+/// row is marked twice, and appending puts the newest entry last, which is the
+/// order `favorite_servers` has always had.
+fn set_membership(list: &mut Vec<String>, address: &str, member: bool) {
+    list.retain(|kept| kept != address);
+    if member {
+        list.push(address.to_string());
+    }
+}
+
+// --- slice: server actions ---
+/// Takes a server off the browser, or puts it back. Returns the settings so the
+/// frontend can update its cache without a second round trip.
+///
+/// The row is not deleted anywhere: `hidden_servers` is a list of addresses,
+/// exactly like `favorite_servers` above, and the cache keeps the server as it
+/// keeps every other. That is what lets the **Hidden** tab list what was hidden
+/// and put a row back with one press, and it is also the only thing that could
+/// work — the launcher cannot ask a master server for «everything but these».
+///
+/// The two lists are independent: hiding a starred server keeps the star, so
+/// unhiding it returns it to **Favorites** where the player left it.
+#[tauri::command]
+pub fn set_server_hidden(
+    state: tauri::State<'_, AppState>,
+    address: String,
+    hidden: bool,
+    // --- slice: game core --- completes an address typed without a port.
+    game: Option<Game>,
+) -> Result<Settings> {
+    let game = state.settings()?.game_or_active(game);
+    let address = parse_address(game, &address)?.to_string();
+    edit_settings(&state, |settings| {
+        set_membership(&mut settings.hidden_servers, &address, hidden);
     })
 }
 
@@ -1904,10 +1986,18 @@ pub fn set_server_favorite(
 ///
 /// The same address moves back to the front instead of appearing twice, and
 /// the tail beyond [`HISTORY_LIMIT`] is dropped.
+///
+/// --- slice: server actions ---
+/// `client_id` is the client the caller is about to start, and it is what makes
+/// the next **Connect** on this row a single press. A caller that does not know
+/// the client sends `None`, and the entry keeps the client it already had
+/// rather than forgetting it: the row was reached with that client once, and an
+/// overwrite with nothing would be a worse answer than a slightly old one.
 #[tauri::command]
 pub fn add_server_history(
     state: tauri::State<'_, AppState>,
     address: String,
+    client_id: Option<String>,
     // --- slice: game core --- completes an address typed without a port.
     game: Option<Game>,
 ) -> Result<Settings> {
@@ -1915,18 +2005,35 @@ pub fn add_server_history(
     let address = parse_address(game, &address)?.to_string();
     let now = timestamp::now_rfc3339();
     edit_settings(&state, |settings| {
-        settings
-            .server_history
-            .retain(|entry| entry.address != address);
-        settings.server_history.insert(
-            0,
-            ServerHistoryEntry {
-                address: address.clone(),
-                last_connected: now,
-            },
-        );
-        settings.server_history.truncate(HISTORY_LIMIT);
+        record_connection(&mut settings.server_history, &address, client_id, now);
     })
+}
+
+/// The edit [`add_server_history`] makes to the list, without the state around
+/// it: the address moves to the front, and the tail beyond [`HISTORY_LIMIT`]
+/// goes.
+fn record_connection(
+    history: &mut Vec<ServerHistoryEntry>,
+    address: &str,
+    client_id: Option<String>,
+    now: String,
+) {
+    let before = history
+        .iter()
+        .position(|entry| entry.address == address)
+        .map(|at| history.remove(at));
+    history.insert(
+        0,
+        ServerHistoryEntry {
+            address: address.to_string(),
+            last_connected: now,
+            // --- slice: server actions ---
+            client_id: client_id
+                .filter(|id| !id.trim().is_empty())
+                .or_else(|| before.and_then(|entry| entry.client_id)),
+        },
+    );
+    history.truncate(HISTORY_LIMIT);
 }
 
 #[cfg(test)]
@@ -1939,6 +2046,15 @@ mod tests {
 
     fn row(infostring: &str) -> ServerInfo {
         game_row(Game::JediAcademy, "81.19.210.136:29070", infostring)
+    }
+
+    /// --- slice: server actions --- the marks of a player who starred these
+    /// addresses and hid nothing, which is what most of these tests are about.
+    fn starred(addresses: &[&str]) -> Marks {
+        Marks {
+            favorites: addresses.iter().map(|a| (*a).to_string()).collect(),
+            hidden: HashSet::new(),
+        }
     }
 
     /// --- slice: game core --- one row of a named game and address.
@@ -2058,16 +2174,137 @@ mod tests {
 
     #[test]
     fn decorating_stars_the_addresses_the_player_saved() {
-        let mut starred = row(FULL_INFO);
+        let mut saved = row(FULL_INFO);
         let mut plain = row(FULL_INFO);
-        let favorites: HashSet<String> = ["81.19.210.136:29070".to_string()]
-            .into_iter()
-            .collect();
-        starred.decorate(&favorites);
+        let marks = starred(&["81.19.210.136:29070"]);
+        saved.decorate(&marks);
         plain.address = "1.2.3.4:29070".to_string();
-        plain.decorate(&favorites);
-        assert!(starred.favorite);
+        plain.decorate(&marks);
+        assert!(saved.favorite);
         assert!(!plain.favorite);
+    }
+
+    // --- slice: server actions ---
+
+    #[test]
+    fn decorating_hides_the_addresses_the_player_took_off_the_list() {
+        // Two independent lists on one row: a server can be starred and hidden
+        // at the same time, and hiding one is not unstarring it.
+        let marks = Marks {
+            favorites: ["81.19.210.136:29070".to_string()].into_iter().collect(),
+            hidden: ["81.19.210.136:29070".to_string()].into_iter().collect(),
+        };
+        let mut both = row(FULL_INFO);
+        both.decorate(&marks);
+        assert!(both.favorite);
+        assert!(both.hidden);
+
+        let mut other = row(FULL_INFO);
+        other.address = "1.2.3.4:29070".to_string();
+        other.decorate(&marks);
+        assert!(!other.hidden);
+
+        // And a row decorated against a document with no hidden list at all
+        // comes back visible rather than carrying whatever the cache held.
+        let mut stale = row(FULL_INFO);
+        stale.hidden = true;
+        stale.decorate(&starred(&[]));
+        assert!(!stale.hidden);
+    }
+
+    #[test]
+    fn the_marks_of_a_document_read_both_lists_apart() {
+        let settings = Settings {
+            favorite_servers: vec!["10.0.0.1:29070".into(), "10.0.0.2:29070".into()],
+            hidden_servers: vec!["10.0.0.2:29070".into()],
+            ..Settings::default()
+        };
+        let marks = Marks::of(&settings);
+        let mut both = game_row(Game::JediAcademy, "10.0.0.2:29070", FULL_INFO);
+        both.decorate(&marks);
+        assert!(both.favorite && both.hidden);
+
+        let mut starred_only = game_row(Game::JediAcademy, "10.0.0.1:29070", FULL_INFO);
+        starred_only.decorate(&marks);
+        assert!(starred_only.favorite && !starred_only.hidden);
+    }
+
+    #[test]
+    fn the_history_remembers_the_client_a_server_was_reached_with() {
+        let mut history: Vec<ServerHistoryEntry> = Vec::new();
+        record_connection(
+            &mut history,
+            "10.0.0.1:29070",
+            Some("japlus".into()),
+            "2026-09-11T10:00:00Z".into(),
+        );
+        assert_eq!(history[0].client_id.as_deref(), Some("japlus"));
+
+        // The same address moves back to the front rather than appearing twice,
+        // and a later connection with another client is what Connect follows.
+        record_connection(
+            &mut history,
+            "10.0.0.2:29070",
+            Some("everyday".into()),
+            "2026-09-11T11:00:00Z".into(),
+        );
+        record_connection(
+            &mut history,
+            "10.0.0.1:29070",
+            Some("basejka".into()),
+            "2026-09-11T12:00:00Z".into(),
+        );
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].address, "10.0.0.1:29070");
+        assert_eq!(history[0].client_id.as_deref(), Some("basejka"));
+
+        // A caller that does not name a client leaves the remembered one in
+        // place: the row was reached with it, and nothing has said otherwise.
+        record_connection(
+            &mut history,
+            "10.0.0.1:29070",
+            None,
+            "2026-09-11T13:00:00Z".into(),
+        );
+        assert_eq!(history[0].client_id.as_deref(), Some("basejka"));
+        assert_eq!(history[0].last_connected, "2026-09-11T13:00:00Z");
+    }
+
+    #[test]
+    fn the_history_keeps_the_newest_entries_and_drops_the_tail() {
+        let mut history: Vec<ServerHistoryEntry> = Vec::new();
+        for index in 0..HISTORY_LIMIT + 5 {
+            record_connection(
+                &mut history,
+                &format!("10.0.0.{}:29070", index + 1),
+                None,
+                "2026-09-11T10:00:00Z".into(),
+            );
+        }
+        assert_eq!(history.len(), HISTORY_LIMIT);
+        assert_eq!(
+            history[0].address,
+            format!("10.0.0.{}:29070", HISTORY_LIMIT + 5)
+        );
+    }
+
+    #[test]
+    fn hiding_a_server_adds_the_address_once_and_unhiding_takes_it_out() {
+        // The rule behind `set_server_hidden` and `set_server_favorite` alike:
+        // the command around it only resolves the address and writes the file.
+        let mut list: Vec<String> = Vec::new();
+        set_membership(&mut list, "10.0.0.2:29070", true);
+        set_membership(&mut list, "10.0.0.2:29070", true);
+        assert_eq!(list, vec!["10.0.0.2:29070".to_string()], "no duplicate");
+
+        set_membership(&mut list, "10.0.0.3:29070", true);
+        set_membership(&mut list, "10.0.0.2:29070", false);
+        assert_eq!(list, vec!["10.0.0.3:29070".to_string()]);
+
+        // Taking out an address that was never there is not an error: the
+        // **Unhide** press of a row somebody unhid in another window lands here.
+        set_membership(&mut list, "10.0.0.9:29070", false);
+        assert_eq!(list.len(), 1);
     }
 
     #[test]
@@ -2721,16 +2958,14 @@ mod tests {
         )
         .await;
         let silent = nowhere();
-        let favorites: HashSet<String> = [live.to_string(), silent.to_string()]
-            .into_iter()
-            .collect();
+        let marks = starred(&[&live.to_string(), &silent.to_string()]);
 
         let answered = probe_addresses(
             None,
             Game::JediAcademy,
             RefreshScope::Favorites,
             vec![live, silent],
-            &favorites,
+            &marks,
             "2026-09-11T00:00:00Z",
         )
         .await
@@ -2749,14 +2984,14 @@ mod tests {
     #[tokio::test]
     async fn an_address_that_said_nothing_keeps_what_was_last_known_about_it() {
         let silent = nowhere();
-        let favorites: HashSet<String> = [silent.to_string()].into_iter().collect();
+        let marks = starred(&[&silent.to_string()]);
         let known = vec![game_row(
             Game::JediAcademy,
             &silent.to_string(),
             "\\hostname\\Was here\\mapname\\mp/ffa3\\clients\\4\\g_humanplayers\\4",
         )];
 
-        let missing = silent_rows(Game::JediAcademy, &known, &[silent], &[], &favorites);
+        let missing = silent_rows(Game::JediAcademy, &known, &[silent], &[], &marks);
         assert_eq!(missing.len(), 1, "a favourite that vanishes looks like a bug");
         assert_eq!(missing[0].address, silent.to_string());
         assert!(!missing[0].responded, "the screen mutes it and drops the ping");
@@ -2766,7 +3001,7 @@ mod tests {
 
         // An address nobody has ever scanned has nothing to carry, so it names
         // itself and claims nothing else.
-        let unseen = silent_rows(Game::JediAcademy, &[], &[silent], &[], &favorites);
+        let unseen = silent_rows(Game::JediAcademy, &[], &[silent], &[], &marks);
         assert_eq!(unseen[0].hostname_clean, silent.to_string());
         assert_eq!(unseen[0].clients, 0);
         assert_eq!(unseen[0].last_seen, "");
@@ -2778,7 +3013,7 @@ mod tests {
             &silent.to_string(),
             "\\hostname\\Back up\\clients\\1\\g_humanplayers\\1",
         )];
-        assert!(silent_rows(Game::JediAcademy, &known, &[silent], &answered, &favorites).is_empty());
+        assert!(silent_rows(Game::JediAcademy, &known, &[silent], &answered, &marks).is_empty());
     }
 
     // --- slice: servers robustness ---
@@ -2825,7 +3060,7 @@ mod tests {
         let game = Game::JediAcademy;
         let live: SocketAddrV4 = "10.0.0.1:29070".parse().expect("an address");
         let gone: SocketAddrV4 = "10.0.0.2:29070".parse().expect("an address");
-        let favorites: HashSet<String> = [gone.to_string()].into_iter().collect();
+        let marks = starred(&[&gone.to_string()]);
         let cached = vec![
             game_row(game, &live.to_string(), "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
             game_row(game, &gone.to_string(), "\\hostname\\Bravo\\clients\\4\\g_humanplayers\\4"),
@@ -2837,7 +3072,7 @@ mod tests {
             &live.to_string(),
             "\\hostname\\Alpha\\clients\\2\\g_humanplayers\\2",
         )];
-        let first = keep_silent_rows(game, &cached, &[live, gone], &mut rows, &favorites);
+        let first = keep_silent_rows(game, &cached, &[live, gone], &mut rows, &marks);
         assert_eq!((first.silent, first.dropped), (1, 0));
         assert_eq!(rows.len(), 2, "the server that went quiet keeps its row");
         let muted = rows.iter().find(|row| row.address == gone.to_string()).unwrap();
@@ -2855,7 +3090,7 @@ mod tests {
             &live.to_string(),
             "\\hostname\\Alpha\\clients\\2\\g_humanplayers\\2",
         )];
-        let second = keep_silent_rows(game, &rows_of(&muted.clone(), &cached), &[live, gone], &mut rows, &favorites);
+        let second = keep_silent_rows(game, &rows_of(&muted.clone(), &cached), &[live, gone], &mut rows, &marks);
         assert_eq!((second.silent, second.dropped), (0, 1));
         assert_eq!(rows.len(), 1, "two misses in a row take the row off the list");
 
@@ -2863,7 +3098,7 @@ mod tests {
         // become a row: the cache records servers, not addresses.
         let stranger: SocketAddrV4 = "10.0.0.9:29070".parse().expect("an address");
         let mut rows: Vec<ServerInfo> = Vec::new();
-        let counts = keep_silent_rows(game, &cached, &[stranger], &mut rows, &favorites);
+        let counts = keep_silent_rows(game, &cached, &[stranger], &mut rows, &marks);
         assert_eq!((counts.silent, counts.dropped), (0, 0));
         assert!(rows.is_empty());
     }
@@ -3180,7 +3415,7 @@ mod tests {
             None,
             Game::JediAcademy,
             &[busy, quiet, nowhere()],
-            &HashSet::new(),
+            &Marks::default(),
         )
         .await
         .expect("the sweep runs");

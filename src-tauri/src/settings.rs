@@ -167,6 +167,19 @@ pub struct Settings {
     /// Servers the player connected to, newest first, capped at 50 entries by
     /// `add_server_history`.
     pub server_history: Vec<ServerHistoryEntry>,
+    // --- slice: server actions ---
+    /// Servers the player took off the browser, as `ip:port`.
+    ///
+    /// The opposite end of `favorite_servers` and stored the same way: a list
+    /// of addresses that belongs to the player, not to the server list, so it
+    /// survives every refresh and every cache wipe. A hidden row is still
+    /// scanned and still written to the cache — the launcher has no way to ask
+    /// a master server for «everything but these» — and it is the screen that
+    /// leaves it out of every tab but **Hidden**.
+    ///
+    /// A `settings.json` written before this field existed reads as an empty
+    /// list through the container's own `#[serde(default)]`.
+    pub hidden_servers: Vec<String>,
     // --- slice: servers browser ---
     /// The filter row of the Servers screen, as the player left it.
     pub server_filters: ServerFilters,
@@ -236,6 +249,8 @@ impl Default for Settings {
             extra_launch_args: String::new(),
             favorite_servers: Vec::new(),
             server_history: Vec::new(),
+            // --- slice: server actions ---
+            hidden_servers: Vec::new(),
             server_filters: ServerFilters::default(),
             // --- slice: player profiles ---
             saved_nicknames: Vec::new(),
@@ -255,6 +270,21 @@ pub struct ServerHistoryEntry {
     pub address: String,
     /// When Connect was last pressed, RFC 3339 in UTC.
     pub last_connected: String,
+    // --- slice: server actions ---
+    /// The client the player reached this server with, or `None`.
+    ///
+    /// What makes **Connect** a one-press button: a player who joins a
+    /// modded server with the client that carries the mod's files expects the
+    /// same client next time, and the default client of the game is a guess
+    /// that is wrong exactly where it matters. `None` on every entry written
+    /// before this field existed, and on one written by a caller that does not
+    /// know the client; the reader falls back to the default client then.
+    ///
+    /// The id is not checked against the client list here: a client may be
+    /// deleted or renamed long after the connection, and the screen already
+    /// has to handle an id that names nothing.
+    #[serde(default)]
+    pub client_id: Option<String>,
 }
 
 // --- slice: servers browser ---
@@ -467,6 +497,11 @@ pub struct SettingsPatch {
     pub extra_launch_args: Option<String>,
     pub favorite_servers: Option<Vec<String>>,
     pub server_history: Option<Vec<ServerHistoryEntry>>,
+    // --- slice: server actions ---
+    /// The whole list of hidden addresses, replaced in one go, the same shape
+    /// as `favorite_servers` above. `set_server_hidden` is the command that
+    /// edits one address; this field is what a caller with the whole list uses.
+    pub hidden_servers: Option<Vec<String>>,
     // --- slice: servers browser ---
     /// The whole filter row, replaced in one go. The screen edits one control
     /// at a time but sends the row it now shows, so a patch is never a partial
@@ -563,6 +598,10 @@ impl SettingsPatch {
         }
         if let Some(value) = self.server_history {
             settings.server_history = value;
+        }
+        // --- slice: server actions ---
+        if let Some(value) = self.hidden_servers {
+            settings.hidden_servers = value;
         }
         // --- slice: servers browser ---
         if let Some(value) = self.server_filters {
@@ -766,7 +805,11 @@ mod tests {
             server_history: vec![ServerHistoryEntry {
                 address: "203.0.113.10:29070".into(),
                 last_connected: "2026-09-10T10:00:00Z".into(),
+                // --- slice: server actions ---
+                client_id: Some("everyday".into()),
             }],
+            // --- slice: server actions ---
+            hidden_servers: vec!["203.0.113.99:29070".into()],
             // --- slice: servers browser ---
             server_filters: ServerFilters {
                 gametype: "3".into(),
@@ -926,6 +969,50 @@ mod tests {
         // A patch about something else leaves the row alone.
         patch(r#"{"closeOnLaunch":true}"#).apply(&mut settings);
         assert!(settings.server_filters.hide_passworded);
+    }
+
+    // --- slice: server actions ---
+
+    #[test]
+    fn a_settings_file_from_before_hidden_servers_reads_as_an_empty_list() {
+        // The field was added after the launcher shipped, so every installed
+        // `settings.json` is a file without it. Reading one as «no server is
+        // hidden» is what keeps the browser showing the list it showed before
+        // the update; anything else would be a screen that lost rows.
+        let file: Settings = serde_json::from_str(
+            r#"{"activeGame":"ja","favoriteServers":["203.0.113.10:29070"]}"#,
+        )
+        .expect("a document without the field parses");
+        assert!(file.hidden_servers.is_empty());
+        assert_eq!(file.favorite_servers.len(), 1);
+    }
+
+    #[test]
+    fn a_history_entry_written_before_the_client_field_reads_as_no_client() {
+        // Every installed launcher has a history of entries with two keys.
+        // Reading one as «client unknown» is what sends Connect to the default
+        // client, which is exactly what that press did before the field.
+        let file: Settings = serde_json::from_str(
+            r#"{"serverHistory":[
+                 {"address":"203.0.113.10:29070","lastConnected":"2026-09-10T10:00:00Z"}]}"#,
+        )
+        .expect("an entry without the field parses");
+        assert_eq!(file.server_history.len(), 1);
+        assert_eq!(file.server_history[0].client_id, None);
+    }
+
+    #[test]
+    fn the_hidden_list_is_replaced_whole_and_leaves_the_stars_alone() {
+        let mut settings = filled();
+        patch(r#"{"hiddenServers":["198.51.100.7:29070","198.51.100.8:29071"]}"#)
+            .apply(&mut settings);
+        assert_eq!(settings.hidden_servers.len(), 2);
+        // Two lists of addresses in one document: hiding a server is not
+        // unstarring it, and the screen shows both marks on the same row.
+        assert_eq!(settings.favorite_servers, vec!["203.0.113.10:29070".to_string()]);
+
+        patch(r#"{"closeOnLaunch":true}"#).apply(&mut settings);
+        assert_eq!(settings.hidden_servers.len(), 2);
     }
 
     #[test]

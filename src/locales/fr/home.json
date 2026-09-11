@@ -33,6 +33,8 @@
     "emptyTitle": "Aucun serveur dans le cache",
     "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",
     "openServers": "Ouvrir Serveurs",
-    "seeAll": "Tout voir"
+    "seeAll": "Tout voir",
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }

@@ -97,6 +97,14 @@ export interface Settings {
   favoriteServers: string[];
   /** Servers Connect was pressed on, newest first, capped at 50. */
   serverHistory: ServerHistoryEntry[];
+  // --- slice: server actions ---
+  /**
+   * Servers the player took off the browser, as `ip:port`.
+   *
+   * The core keeps scanning and caching them; the screen leaves such a row out
+   * of every tab but **Hidden** and off the Home screen.
+   */
+  hiddenServers: string[];
   // --- slice: servers browser ---
   /** The filter row of the Servers screen, as the player left it. */
   serverFilters: StoredServerFilters;
@@ -149,6 +157,9 @@ export interface SettingsPatch {
   extraLaunchArgs?: string;
   favoriteServers?: string[];
   serverHistory?: ServerHistoryEntry[];
+  // --- slice: server actions ---
+  /** The whole list; `setServerHidden` is what edits one address. */
+  hiddenServers?: string[];
   // --- slice: servers browser ---
   /** The whole filter row: send the row the screen now shows, not one key. */
   serverFilters?: StoredServerFilters;
@@ -172,6 +183,14 @@ export interface ServerHistoryEntry {
   address: string;
   /** RFC 3339 in UTC. */
   lastConnected: string;
+  // --- slice: server actions ---
+  /**
+   * The client the player reached this server with, or `null`.
+   *
+   * What **Connect** starts, when a client of that id still exists. `null` on
+   * entries written before the field, which fall back to the default client.
+   */
+  clientId: string | null;
 }
 
 // --- slice: servers browser ---
@@ -959,6 +978,15 @@ export interface ServerInfo {
   pingMs: number;
   /** Starred by the player. */
   favorite: boolean;
+  // --- slice: server actions ---
+  /**
+   * Taken off the browser by the player.
+   *
+   * The core still scans the address and still caches the row: a master server
+   * cannot be asked for «everything but these». Leaving such a row out is the
+   * screen's job — every tab but **Hidden** drops it, and so does Home.
+   */
+  hidden: boolean;
   // --- slice: servers browser ---
   /**
    * False when the last direct probe of this address got nothing back.
@@ -1087,8 +1115,22 @@ export const serversIpc = {
     call<ServerStatus>("get_server_status", { address, game: game ?? null }),
   setServerFavorite: (address: string, favorite: boolean, game?: Game) =>
     call<Settings>("set_server_favorite", { address, favorite, game: game ?? null }),
-  addServerHistory: (address: string, game?: Game) =>
-    call<Settings>("add_server_history", { address, game: game ?? null }),
+  // --- slice: server actions ---
+  /** Takes a server off the browser, or puts it back from the Hidden tab. */
+  setServerHidden: (address: string, hidden: boolean, game?: Game) =>
+    call<Settings>("set_server_hidden", { address, hidden, game: game ?? null }),
+  // --- slice: server actions ---
+  /**
+   * Records a connection. `clientId` is the client about to start, which is
+   * what the next **Connect** on that row uses; omitting it keeps whatever the
+   * entry already remembered.
+   */
+  addServerHistory: (address: string, clientId?: string, game?: Game) =>
+    call<Settings>("add_server_history", {
+      address,
+      clientId: clientId ?? null,
+      game: game ?? null,
+    }),
 };
 
 // ---------------------------------------------------------------------------
