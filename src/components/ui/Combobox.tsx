@@ -197,6 +197,12 @@ export function Combobox({
         return;
       case "Escape":
         event.preventDefault();
+        // --- slice: connect dialog ---
+        // The list closes and the Escape stops here. `Dialog` listens on the
+        // window, so without this one press would shut the popover and the
+        // modal around it, and the player would lose the form they were
+        // filling in because they dismissed a dropdown.
+        event.stopPropagation();
         closeAndReturn();
         return;
       case "Tab":
