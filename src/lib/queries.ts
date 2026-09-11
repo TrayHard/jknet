@@ -344,9 +344,13 @@ export function useWriteLaunchCvar() {
  * game folder, no such client — and asking twice changes none of them.
  *
  * --- slice: player profiles ---
- * `profileId` is the profile to assume. It is part of the key, so the preview
- * under an open profile form is that profile's line and the preview of the
- * window as a whole stays the default profile's.
+ * `profileId` names the profile to assume, and it is part of the key, so two
+ * profiles of one client never share an answer. Nothing passes it yet:
+ * `CommandPreview` asks for the line of the window as a whole, which is the
+ * default profile's, and the token line under an open profile form comes from
+ * `profileTokens` on the page instead — a draft nobody saved is not a profile
+ * the core could resolve. The argument is here for the **Connect…** dialog of
+ * B8, which starts a profile the player picks and wants the real line.
  */
 export function useLaunchPreview(
   clientId: string,
