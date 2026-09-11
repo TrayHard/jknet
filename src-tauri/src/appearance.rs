@@ -1390,6 +1390,67 @@ dual_1
         assert_eq!(names, ["assets1.pk3", "zzz_skins.pk3", "dl_extra.pk3"]);
     }
 
+    /// Reads the skins and hilts of the real installation and prints what it
+    /// cost.
+    ///
+    /// Hardcodes a path that exists on one machine, which is why it is
+    /// ignored. Run it with:
+    ///
+    /// ```text
+    /// cargo test --lib -- --ignored --nocapture reads_the_retail_archives
+    /// ```
+    #[test]
+    #[ignore]
+    fn reads_the_retail_archives() {
+        use std::time::Instant;
+
+        let base = Path::new("D:\\SteamLibrary\\steamapps\\common\\Jedi Academy\\GameData\\base");
+        let mut sources = Vec::new();
+        collect_from_folder(base, &mut sources);
+        assert!(!sources.is_empty(), "no archive in {}", base.display());
+
+        let temp = TempDir::new().expect("temp dir");
+        let dir = temp.path().join("skins");
+
+        let started = Instant::now();
+        let models = scan_models(&sources, &dir).expect("the skin list");
+        println!(
+            "{} skins from {} archives in {} ms",
+            models.len(),
+            sources.len(),
+            started.elapsed().as_millis()
+        );
+        for value in ["kyle", "kyle/red", "jedi_hf/siege"] {
+            let model = models
+                .iter()
+                .find(|model| model.value == value)
+                .unwrap_or_else(|| panic!("{value}"));
+            println!("{value}: {:?}", model.icon);
+            assert!(model.icon.is_some(), "{value} has no cached icon");
+        }
+        // The rule of the game's own menu, on the archive it was written for.
+        assert!(!models.iter().any(|model| model.model == "x-wing"));
+
+        let started = Instant::now();
+        let hilts = scan_hilts(&sources);
+        println!(
+            "{} hilts in {} ms: {}",
+            hilts.len(),
+            started.elapsed().as_millis(),
+            hilts
+                .iter()
+                .map(|hilt| format!("{} ({}, {})", hilt.id, hilt.name, hilt.saber_type))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        // Fifteen hilts are valid for multiplayer in the retail game: `Kyle`,
+        // `single_1`..`single_9` and `dual_1`..`dual_5`.
+        assert_eq!(hilts.len(), 15, "{hilts:?}");
+        let arbiter = hilts.iter().find(|hilt| hilt.id == "single_1").expect("single_1");
+        assert_eq!(arbiter.name, "Arbiter");
+        assert!(!hilts.iter().any(|hilt| hilt.id == "Luke"), "notInMP");
+    }
+
     #[test]
     fn an_unchanged_disk_has_the_same_signature() {
         let temp = TempDir::new().expect("temp dir");
