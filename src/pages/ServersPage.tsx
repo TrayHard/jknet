@@ -28,10 +28,13 @@ import {
   applyTab,
   DEFAULT_DIRECTION,
   DEFAULT_FILTERS,
+  DEFAULT_STORED_FILTERS,
   distinctValues,
   filtersAreDefault,
   isBotOnly,
+  sameStoredFilters,
   sortServers,
+  storedFilters,
   totalBots,
   totalRealPlayers,
   type ServerFilters,
@@ -58,7 +61,7 @@ import { useErrorText } from "../i18n/errors";
 import { useFormat } from "../i18n/useFormat";
 import { useGametypeLabels } from "../i18n/useGameLabels";
 import { cn } from "../lib/format";
-import type { GameInfo, ServerInfo, ServersDoneEvent } from "../lib/ipc";
+import type { Game, GameInfo, ServerInfo, ServersDoneEvent } from "../lib/ipc";
 // --- slice: game switch ---
 import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
@@ -71,6 +74,7 @@ import {
   useServerStatus,
   useSetServerFavorite,
   useSettings,
+  useUpdateSettings,
 } from "../lib/queries";
 
 /**
@@ -112,11 +116,34 @@ export function ServersPage() {
   const missingClientToast = useMissingClientToast();
 
   const [tab, setTab] = useState<ServerTab>("all");
-  const [filters, setFilters] = useState<ServerFilters>(DEFAULT_FILTERS);
   const [sortColumn, setSortColumn] = useState<SortColumn>("players");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+
+  // --- slice: servers browser ---
+  // The dropdowns and the switches live in `settings.json`, so the screen
+  // opens the way the player left it. The search box does not: a browser that
+  // opens on yesterday's search word looks like one that lost half the list.
+  const [search, setSearch] = useState("");
+  const updateSettings = useUpdateSettings();
+  const stored = settings.data?.serverFilters ?? DEFAULT_STORED_FILTERS;
+  const filters = useMemo<ServerFilters>(
+    () => ({ ...stored, search }),
+    [stored, search],
+  );
+  // The settings as of this render, for the effect on the game switch: that
+  // effect must not run again every time another writer touches the document.
+  const storedNow = useRef(stored);
+  storedNow.current = stored;
+  /** Applies a change and saves everything but the search box. */
+  const changeFilters = (next: ServerFilters) => {
+    setSearch(next.search);
+    const kept = storedFilters(next);
+    if (!sameStoredFilters(kept, storedNow.current)) {
+      updateSettings.mutate({ serverFilters: kept });
+    }
+  };
 
   // --- slice: servers browser ---
   // The rows of the open tab and the indicator that belongs to it. The LAN tab
@@ -149,15 +176,34 @@ export function ServersPage() {
   );
 
   // --- slice: game switch ---
-  // The selection and the filters are bound to the list they were made on: a
-  // mod folder and a gametype number mean different things in the two games —
-  // number 7 is Siege in Jedi Academy and CTF in Jedi Outcast — so carrying
-  // them over would hide rows for a reason nothing on screen explains. The
-  // tabs stay: All, Favorites and History mean the same in both.
+  // The selection and three of the filters are bound to the list they were
+  // made on: a mod folder and a gametype number mean different things in the
+  // two games — number 7 is Siege in Jedi Academy and CTF in Jedi Outcast — so
+  // carrying them over would hide rows for a reason nothing on screen explains.
+  // Players, bots and passwords mean the same in both and survive the switch,
+  // as do the tabs.
+  //
+  // The game is read off the settings rather than from `useActiveGame`, which
+  // answers Jedi Academy while the document loads: a switch that never happened
+  // must not clear a row the player saved.
+  const settledGame = settings.data?.activeGame;
+  const previousGame = useRef<Game | undefined>(undefined);
   useEffect(() => {
+    if (settledGame === undefined) return;
+    const before = previousGame.current;
+    previousGame.current = settledGame;
+    if (before === undefined || before === settledGame) return;
     setSelectedAddress(null);
-    setFilters(DEFAULT_FILTERS);
-  }, [activeGame]);
+    const forEitherGame = {
+      ...storedNow.current,
+      gametype: "any",
+      modName: "any",
+      protocol: "any",
+    };
+    if (!sameStoredFilters(forEitherGame, storedNow.current)) {
+      updateSettings.mutate({ serverFilters: forEitherGame });
+    }
+  }, [settledGame, updateSettings]);
 
   // --- slice: servers browser ---
   // The rows of the open tab before the filters: what the subtitle counts and
@@ -273,7 +319,7 @@ export function ServersPage() {
               placeholder={t("searchPlaceholder")}
               value={filters.search}
               onChange={(event) =>
-                setFilters({ ...filters, search: event.target.value })
+                changeFilters({ ...filters, search: event.target.value })
               }
               className="w-260"
             />
@@ -310,7 +356,7 @@ export function ServersPage() {
       <FilterRow
         servers={inTab}
         filters={filters}
-        onChange={setFilters}
+        onChange={changeFilters}
         gameInfo={gameInfo}
       />
 
@@ -635,6 +681,22 @@ function FilterRow({
           label={t("filters.hideBotOnlyHint")}
           checked={filters.hideBotOnly}
           onChange={(hideBotOnly) => onChange({ ...filters, hideBotOnly })}
+        />
+      </div>
+      {/* --- slice: servers browser ---
+          The lock in the row says a server has a door; this says whether the
+          player wants those rows on the list at all. */}
+      <div className="inline-flex items-center gap-8 h-36 pl-12 pr-8 rounded-md bg-input border border-line">
+        <span className="text-label-xs text-fg-muted shrink-0">
+          {t("filters.password")}
+        </span>
+        <span className="text-body-sm-medium text-fg shrink-0 whitespace-nowrap">
+          {t("filters.hidePassworded")}
+        </span>
+        <Toggle
+          label={t("filters.hidePasswordedHint")}
+          checked={filters.hidePassworded}
+          onChange={(hidePassworded) => onChange({ ...filters, hidePassworded })}
         />
       </div>
       <Button

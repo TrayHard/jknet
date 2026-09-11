@@ -5,7 +5,14 @@
  * the rules, so a wrong row on screen can be reasoned about without React.
  */
 
-import type { ServerInfo, ServerScope } from "../../lib/ipc";
+import type {
+  PlayersFilter,
+  ServerInfo,
+  ServerScope,
+  StoredServerFilters,
+} from "../../lib/ipc";
+
+export type { PlayersFilter, StoredServerFilters };
 
 // --- slice: servers browser ---
 /**
@@ -16,49 +23,71 @@ import type { ServerInfo, ServerScope } from "../../lib/ipc";
  */
 export type ServerTab = ServerScope;
 
-export type PlayersFilter = "any" | "not-empty" | "not-full";
-
-export interface ServerFilters {
+/**
+ * The filter row on screen: what the settings keep, plus the search box.
+ *
+ * --- slice: servers browser ---
+ * The stored half comes straight from `settings.json`, so the screen opens the
+ * way the player left it. The search box stays here and only here.
+ */
+export interface ServerFilters extends StoredServerFilters {
   /** Matched against the name, the map and the address. */
   search: string;
-  /** `gametype` as text, or `any`. */
-  gametype: string;
-  // --- slice: game core ---
-  /** `fs_game` value, or `any`. Called `game` until 0.3, when that name went
-   * to the game the server plays. This one is the mod. */
-  modName: string;
-  players: PlayersFilter;
-  /** Network protocol as text, or `any`. */
-  protocol: string;
-  /** Drops the servers where every client is a bot. On by default. */
-  hideBotOnly: boolean;
 }
 
 /**
- * The state the screen opens in and **Reset filters** returns to.
+ * The stored half of the row as a fresh install has it, and what
+ * **Reset filters** returns to.
  *
- * `hideBotOnly` starts on: a list where two thirds of the "players" are bots
- * is a list nobody can read, and the option is one click away in the filter
- * row for anyone who wants those servers back.
+ * The same values as `ServerFilters::default` in `src-tauri/src/settings.rs`,
+ * which is what a launcher whose settings have not loaded yet shows.
+ *
+ * `hideBotOnly` starts on: a list where two thirds of the "players" are bots is
+ * a list nobody can read, and the switch is one click away for anyone who wants
+ * those servers back. `hidePassworded` starts off: a password is a door the
+ * player may well have the key to.
  */
-export const DEFAULT_FILTERS: ServerFilters = {
-  search: "",
+export const DEFAULT_STORED_FILTERS: StoredServerFilters = {
   gametype: "any",
   modName: "any",
   players: "any",
   protocol: "any",
   hideBotOnly: true,
+  hidePassworded: false,
 };
+
+/** The state the screen opens in, search box included. */
+export const DEFAULT_FILTERS: ServerFilters = {
+  ...DEFAULT_STORED_FILTERS,
+  search: "",
+};
+
+/** The half of the row that goes into the settings. */
+export function storedFilters(filters: ServerFilters): StoredServerFilters {
+  const { search: _search, ...stored } = filters;
+  return stored;
+}
+
+/** True when two stored rows say the same thing, so nothing has to be written. */
+export function sameStoredFilters(
+  a: StoredServerFilters,
+  b: StoredServerFilters,
+): boolean {
+  return (
+    a.gametype === b.gametype &&
+    a.modName === b.modName &&
+    a.players === b.players &&
+    a.protocol === b.protocol &&
+    a.hideBotOnly === b.hideBotOnly &&
+    a.hidePassworded === b.hidePassworded
+  );
+}
 
 /** True when every filter is where it started, which disables **Reset filters**. */
 export function filtersAreDefault(filters: ServerFilters): boolean {
   return (
     filters.search.trim() === "" &&
-    filters.gametype === "any" &&
-    filters.modName === "any" &&
-    filters.players === "any" &&
-    filters.protocol === "any" &&
-    filters.hideBotOnly === DEFAULT_FILTERS.hideBotOnly
+    sameStoredFilters(storedFilters(filters), DEFAULT_STORED_FILTERS)
   );
 }
 
@@ -141,6 +170,18 @@ export function matchesBotOnly(server: ServerInfo, hide: boolean): boolean {
   return !hide || !isBotOnly(server);
 }
 
+// --- slice: servers browser ---
+/**
+ * True when the row survives the **Hide passworded** switch.
+ *
+ * `needpass` is the server's own key, the same one that puts the lock in the
+ * row. The lock stays either way: the switch is for a player who wants the
+ * locked servers out of the list, not for hiding that a server has a door.
+ */
+export function matchesPassword(server: ServerInfo, hide: boolean): boolean {
+  return !hide || !server.needpass;
+}
+
 /** Applies every dropdown and the search box. */
 export function applyFilters(
   servers: ServerInfo[],
@@ -151,6 +192,7 @@ export function applyFilters(
       matchesSearch(server, filters.search) &&
       matchesPlayers(server, filters.players) &&
       matchesBotOnly(server, filters.hideBotOnly) &&
+      matchesPassword(server, filters.hidePassworded) &&
       (filters.gametype === "any" ||
         String(server.gametype) === filters.gametype) &&
       (filters.modName === "any" || server.modName === filters.modName) &&
