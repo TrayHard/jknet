@@ -116,6 +116,7 @@ scripts/
   i18n-seed.mjs          разложение новых ключей по папкам языков
   i18n-allowlist.json    слова, которые компонент печатает без t()
   make-brand-assets.ps1  растровые копии знака из public/jknet_logo.png
+  make-engine-icons.ps1  значки движков из репозиториев проектов
   refresh-jkhub-categories.ps1
                          обход jkhub.org и перезапись снимка категорий
   refresh-jkhub-index.ps1
@@ -123,7 +124,12 @@ scripts/
 public/
   jknet_logo.png         мастер-файл знака, 846 px
   brand/                 копии знака 64, 128, 256 и 512 px для интерфейса
+  brand/engines/         значки движков по имени идентификатора из
+                         engines.rs: openjk.png, eternaljk.png, taystjk.png,
+                         jamme.png, jk2mv.png
 ```
+
+Значок движка лежит в `public/brand/engines/<engineId>.png`, где `<engineId>` — идентификатор из реестра `src-tauri/src/engines.rs`. Компонент `EngineLogo` берёт файл по этому соглашению, без импорта и без таблицы имён; если файла нет, он рисует две первые буквы названия движка. Значки пересобирает `scripts/make-engine-icons.ps1` из репозиториев самих проектов. Авторство перечисляет карточка **About** на экране **Settings**, туда его приносит поле `iconCredit` реестра.
 
 ## Модель сущностей
 

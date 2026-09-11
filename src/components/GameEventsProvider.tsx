@@ -2,7 +2,12 @@ import { createContext, use, useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useLaunchWarningText } from "../i18n/launchWarnings";
-import { useClientEvents, useLevelshotEvents, useSettings } from "../lib/queries";
+import {
+  useClientEvents,
+  useDefaultClientEvents,
+  useLevelshotEvents,
+  useSettings,
+} from "../lib/queries";
 import { useGameEvents, type GameEvents } from "../lib/useGameEvents";
 import { useToasts } from "./ToastsProvider";
 
@@ -31,6 +36,11 @@ export function GameEventsProvider({ children }: { children: ReactNode }) {
   // And `clients:changed`, for the same reason across windows rather than
   // across screens: the client window and the Clients screen show one record.
   useClientEvents();
+  // --- slice: clients page ---
+  // The default client is the same story one document over: the switch that
+  // moves it is in the client window, the badge that says so is on a card of
+  // the main one.
+  useDefaultClientEvents();
   useLaunchWarningToast(events.warning);
   return <GameEventsContext value={events}>{children}</GameEventsContext>;
 }

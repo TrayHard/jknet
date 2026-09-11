@@ -15,6 +15,7 @@ import { LanguageSync } from "./i18n/LanguageSync";
 import { isClientWindowHash } from "./lib/clientWindow";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ClientWindowPage } from "./pages/ClientWindowPage";
+import { EnginePage } from "./pages/EnginePage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { HomePage } from "./pages/HomePage";
 import { LibraryPage } from "./pages/LibraryPage";
@@ -91,6 +92,10 @@ export default function App() {
                         <Route path="/servers" element={<ServersPage />} />
                         <Route path="/library" element={<LibraryPage />} />
                         <Route path="/clients" element={<ClientsPage />} />
+                        {/* One build, inside the shell: the player came from
+                            a client card or an engine tile and goes back to
+                            the same screen, with the sidebar never gone. */}
+                        <Route path="/engines/:id" element={<EnginePage />} />
                         <Route path="/friends" element={<FriendsPage />} />
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="*" element={<HomePage />} />
