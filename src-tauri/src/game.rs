@@ -202,6 +202,21 @@ pub struct VersionSpec {
     pub marker: &'static str,
 }
 
+// --- slice: servers browser ---
+/// How many consecutive ports a LAN sweep asks, starting at
+/// [`GameSpec::server_port`].
+///
+/// A constant of both games rather than a field of [`GameSpec`], because both
+/// engines define `NUM_SERVER_PORTS` as 4 and nothing suggests a third game
+/// would differ: a dedicated server started on a machine that already runs one
+/// takes the next free port, and four is how far the engines look. Jedi
+/// Academy therefore sweeps 29070–29073 and Jedi Outcast 28070–28073.
+///
+/// `codemp/qcommon/qcommon.h:224` in OpenJK `1a6a6434`, and the byte-identical
+/// `src/qcommon/qcommon.h:259` in JK2MV 1.4.1. Move it into [`GameSpec`] the
+/// day a game disagrees.
+pub const LAN_PORT_COUNT: u16 = 4;
+
 /// Every constant that differs between Jedi Academy and Jedi Outcast.
 ///
 /// Read through [`Game::spec`]. Adding a third game means adding a table entry,

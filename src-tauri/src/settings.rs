@@ -131,6 +131,9 @@ pub struct Settings {
     /// Servers the player connected to, newest first, capped at 50 entries by
     /// `add_server_history`.
     pub server_history: Vec<ServerHistoryEntry>,
+    // --- slice: servers browser ---
+    /// The filter row of the Servers screen, as the player left it.
+    pub server_filters: ServerFilters,
 
     // --- slice: onboarding ---
     /// Whether the player has been through the three first-run steps. False by
@@ -184,6 +187,7 @@ impl Default for Settings {
             extra_launch_args: String::new(),
             favorite_servers: Vec::new(),
             server_history: Vec::new(),
+            server_filters: ServerFilters::default(),
             onboarding_completed: false,
             online_url: online::default_online_url().to_string(),
             online_token: None,
@@ -201,6 +205,63 @@ pub struct ServerHistoryEntry {
     /// When Connect was last pressed, RFC 3339 in UTC.
     pub last_connected: String,
 }
+
+// --- slice: servers browser ---
+/// The filter row of the Servers screen, kept between runs.
+///
+/// Dropdowns and switches only. The search box is deliberately not here: a
+/// browser that opens on yesterday's search word looks like a browser that lost
+/// half the servers. Neither is the open tab, for the same reason — the screen
+/// opens on **All**, which is what the player asked for last time they meant to
+/// look at a list of servers.
+///
+/// The core stores the values and does not judge them. A `gametype` no server
+/// on the list publishes simply matches nothing, and **Reset filters** is one
+/// click away; refusing it here would only move a harmless state into an error
+/// message. The single exception is the container-level `#[serde(default)]`,
+/// which is what lets a `settings.json` written before this field existed read
+/// as the defaults rather than as a filter row of empty strings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ServerFilters {
+    /// `gametype` as text, or `any`.
+    pub gametype: String,
+    /// `fs_game` folder of the server, or `any`.
+    pub mod_name: String,
+    /// `any`, `not-empty` or `not-full`.
+    pub players: String,
+    /// Network protocol as text, or `any`.
+    pub protocol: String,
+    /// Drop the servers where every client is a bot.
+    pub hide_bot_only: bool,
+    /// Drop the servers that ask for a password.
+    pub hide_passworded: bool,
+}
+
+impl Default for ServerFilters {
+    /// The row the screen opens in, and what **Reset filters** returns to.
+    ///
+    /// Written out rather than derived: `any` is not the zero of a `String`,
+    /// and `hide_bot_only` starts on — a list where two thirds of the
+    /// "players" are bots is a list nobody can read. Passworded servers stay
+    /// on the list by default: a password is a door the player may have a key
+    /// to, unlike a lobby of bots.
+    fn default() -> Self {
+        ServerFilters {
+            gametype: ANY_FILTER.to_string(),
+            mod_name: ANY_FILTER.to_string(),
+            players: ANY_FILTER.to_string(),
+            protocol: ANY_FILTER.to_string(),
+            hide_bot_only: true,
+            hide_passworded: false,
+        }
+    }
+}
+
+// --- slice: servers browser ---
+/// What a filter holds when it narrows nothing. The same word the dropdowns of
+/// the screen use as their value.
+const ANY_FILTER: &str = "any";
 
 impl Settings {
     /// Reads `settings.json`. A missing file yields the defaults; a corrupted
@@ -355,6 +416,11 @@ pub struct SettingsPatch {
     pub extra_launch_args: Option<String>,
     pub favorite_servers: Option<Vec<String>>,
     pub server_history: Option<Vec<ServerHistoryEntry>>,
+    // --- slice: servers browser ---
+    /// The whole filter row, replaced in one go. The screen edits one control
+    /// at a time but sends the row it now shows, so a patch is never a partial
+    /// row and a missing key cannot read as `any`.
+    pub server_filters: Option<ServerFilters>,
 
     // --- slice: onboarding ---
     pub onboarding_completed: Option<bool>,
@@ -440,6 +506,10 @@ impl SettingsPatch {
         }
         if let Some(value) = self.server_history {
             settings.server_history = value;
+        }
+        // --- slice: servers browser ---
+        if let Some(value) = self.server_filters {
+            settings.server_filters = value;
         }
         if let Some(value) = self.onboarding_completed {
             settings.onboarding_completed = value;
@@ -582,6 +652,15 @@ mod tests {
                 address: "203.0.113.10:29070".into(),
                 last_connected: "2026-09-10T10:00:00Z".into(),
             }],
+            // --- slice: servers browser ---
+            server_filters: ServerFilters {
+                gametype: "3".into(),
+                mod_name: "japlus".into(),
+                players: "not-empty".into(),
+                protocol: "26".into(),
+                hide_bot_only: true,
+                hide_passworded: true,
+            },
             onboarding_completed: true,
             online_url: "https://online.jknet.gg".into(),
             online_token: Some("0123456789abcdef".into()),
@@ -679,6 +758,57 @@ mod tests {
         let mut done = filled();
         patch(r#"{"defaultClientId":"duel"}"#).apply(&mut done);
         assert!(done.onboarding_completed);
+    }
+
+    // --- slice: servers browser ---
+
+    #[test]
+    fn a_settings_file_without_the_server_filters_reads_as_the_default_row() {
+        // Every launcher installed before the filter row was stored has such a
+        // file. The defaults are not the zero values of the fields, so a
+        // derived `Default` would open the screen on a row of empty strings
+        // that matches nothing.
+        let older: Settings = serde_json::from_str(r#"{"closeOnLaunch":true}"#)
+            .expect("an older document parses");
+        assert_eq!(older.server_filters.gametype, "any");
+        assert_eq!(older.server_filters.mod_name, "any");
+        assert_eq!(older.server_filters.players, "any");
+        assert_eq!(older.server_filters.protocol, "any");
+        assert!(older.server_filters.hide_bot_only, "bots stay hidden");
+        assert!(
+            !older.server_filters.hide_passworded,
+            "a password is a door the player may have a key to"
+        );
+
+        // A row with only one control written out reads the same way: the
+        // container-level default fills the rest control by control.
+        let partial: Settings =
+            serde_json::from_str(r#"{"serverFilters":{"hidePassworded":true}}"#)
+                .expect("a half-written row parses");
+        assert!(partial.server_filters.hide_passworded);
+        assert_eq!(partial.server_filters.gametype, "any");
+        assert!(partial.server_filters.hide_bot_only);
+    }
+
+    #[test]
+    fn the_filter_row_is_replaced_whole_and_nothing_else_moves() {
+        let mut settings = filled();
+        patch(
+            r#"{"serverFilters":{"gametype":"any","modName":"any","players":"any",
+                "protocol":"any","hideBotOnly":false,"hidePassworded":true}}"#,
+        )
+        .apply(&mut settings);
+        assert_eq!(settings.server_filters.gametype, "any");
+        assert!(!settings.server_filters.hide_bot_only);
+        assert!(settings.server_filters.hide_passworded);
+        // The star list and the history live in the same document and are not
+        // part of the filter row.
+        assert_eq!(settings.favorite_servers.len(), 1);
+        assert_eq!(settings.server_history.len(), 1);
+
+        // A patch about something else leaves the row alone.
+        patch(r#"{"closeOnLaunch":true}"#).apply(&mut settings);
+        assert!(settings.server_filters.hide_passworded);
     }
 
     #[test]
