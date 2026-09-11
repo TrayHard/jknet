@@ -4,15 +4,19 @@
   "launchError": "{{message}} A játék mappájának megadásához vagy a motor telepítéséhez <0>nyissa meg a Kliensek képernyőt</0>.",
   "hero": {
     "quickPlay": "Gyors játék",
+    "continue": "Continue",
+    "lastServer": "Last server",
     "inGame": "Játékban",
     "running": "Fut: {{client}}",
     "noClient": "Még nincs kliens a {{game}} játékhoz",
     "runningText": "Indítás óta: <0>{{age}}</0>, folyamat: {{pid}}. A JKNet félreáll, amíg Ön játszik.",
     "readyText": "Indítsa el az alapértelmezett klienst, és a játék menüjéből válasszon szervert.",
+    "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
     "noClientText": "A kliens a játékmotor egy változata saját fájlokkal és beállításokkal. Hozzon létre egyet, és a {{game}} egy gombnyomásra indul.",
     "createClient": "Kliens létrehozása a {{game}} játékhoz",
     "play": "Játék",
     "playHint": "Jelöljön ki egy klienst alapértelmezettként",
+    "connect": "Csatlakozás",
     "stop": "Leállítás",
     "manageClients": "Kliensek kezelése",
     "aMoment": "néhány másodperc"
@@ -23,6 +27,8 @@
     "locate": "Mappa megadása"
   },
   "topServers": {
+    "favorites": "Kedvencek",
+    "history": "Előzmények",
     "busiest": "Legnépesebb szerverek",
     "emptyTitle": "Még nincs szerver a gyorsítótárban",
     "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",
