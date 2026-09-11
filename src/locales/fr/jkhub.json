@@ -9,6 +9,7 @@
   },
   "search": {
     "placeholder": "Search the whole catalog",
+    "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
     "results_one": "{{count}} result in {{game}}",
     "results_many": "{{count}} results in {{game}}",
