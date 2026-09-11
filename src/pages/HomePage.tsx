@@ -16,7 +16,12 @@ import { useErrorText } from "../i18n/errors";
 import { useFormat } from "../i18n/useFormat";
 import { cn } from "../lib/format";
 // --- slice: game switch ---
-import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
+import {
+  useActiveGame,
+  useConnectClient,
+  useDefaultClient,
+  useGameNames,
+} from "../lib/game";
 import type { Game, ServerInfo } from "../lib/ipc";
 import {
   useAddServerHistory,
@@ -69,6 +74,10 @@ export function HomePage() {
   const activeGame = useActiveGame();
   const { label: gameName } = useGameNames();
   const defaultClient = useDefaultClient();
+  // --- slice: server actions ---
+  // Connect is a quick connect: the client the player reached that very server
+  // with, and the default client only when there is no such record.
+  const connectClient = useConnectClient();
   // Home draws server rows from the cache alone: no refresh of its own, no
   // command of its own. Both pools below are the cached list read two ways.
   const cachedServers = useCachedServers();
@@ -147,6 +156,13 @@ export function HomePage() {
   const continueServer =
     running === null && defaultClient !== undefined ? lastServer : undefined;
 
+  // --- slice: server actions ---
+  // The client that hero's Connect actually starts, which is what the line
+  // under it names. Defined whenever `continueServer` is: the rule falls back
+  // to the default client, and the hero is Continue only while there is one.
+  const continueClient =
+    continueServer === undefined ? undefined : connectClient(continueServer.address);
+
   /**
    * The server whose map the hero draws, or nothing.
    *
@@ -172,19 +188,21 @@ export function HomePage() {
   };
 
   /**
-   * Starts the default client on the last server.
+   * Starts a client on one server.
    *
    * The same two steps as **Connect** on the Servers screen, in the same
    * order: the address is recorded first and on its own, so the row keeps its
-   * place in the history even when the launch fails on a missing engine.
+   * place in the history even when the launch fails on a missing engine. The
+   * entry carries the client, so the next press reaches the same one.
    */
   const connect = (server: ServerInfo) => {
-    if (!defaultClient) return;
+    const client = connectClient(server.address);
+    if (!client) return;
     if (launchClient.isPending) return;
     setError(null);
-    addHistory.mutate(server.address);
+    addHistory.mutate({ address: server.address, clientId: client.id });
     launchClient.mutate(
-      { clientId: defaultClient.id, connect: server.address },
+      { clientId: client.id, connect: server.address },
       { onError: (e) => setError(errorText(e)) },
     );
   };
@@ -265,8 +283,8 @@ export function HomePage() {
               <p className="text-body-md text-fg-secondary max-w-[560px]">
                 {running ? (
                   <RunningLine startedAt={running.startedAt} pid={running.pid} />
-                ) : continueServer && defaultClient ? (
-                  t("hero.continueText", { client: defaultClient.name })
+                ) : continueServer && continueClient ? (
+                  t("hero.continueText", { client: continueClient.name })
                 ) : defaultClient ? (
                   t("hero.readyText")
                 ) : (

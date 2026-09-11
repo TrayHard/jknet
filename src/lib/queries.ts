@@ -757,12 +757,19 @@ export function useSetServerHidden() {
   });
 }
 
-/** Records a connection. The History tab reads `serverHistory` from settings. */
+/**
+ * Records a connection. The History tab reads `serverHistory` from settings.
+ *
+ * --- slice: server actions ---
+ * `clientId` is the client the caller is about to start: the entry remembers
+ * it, and the next **Connect** on that row starts the same one.
+ */
 export function useAddServerHistory() {
   const queryClient = useQueryClient();
   const game = useActiveGame();
   return useMutation({
-    mutationFn: (address: string) => serversIpc.addServerHistory(address, game),
+    mutationFn: ({ address, clientId }: { address: string; clientId?: string }) =>
+      serversIpc.addServerHistory(address, clientId, game),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings, settings);
     },

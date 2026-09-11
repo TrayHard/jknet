@@ -62,7 +62,7 @@ import { useGametypeLabels } from "../i18n/useGameLabels";
 import { cn } from "../lib/format";
 import type { Game, GameInfo, ServerInfo } from "../lib/ipc";
 // --- slice: game switch ---
-import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
+import { useActiveGame, useConnectClient, useGameNames } from "../lib/game";
 import {
   useAddServerHistory,
   useCachedServers,
@@ -111,7 +111,10 @@ export function ServersPage() {
   const activeGame = useActiveGame();
   const gameInfo = useGameInfo(activeGame);
   const { label: gameName } = useGameNames();
-  const defaultClient = useDefaultClient();
+  // --- slice: server actions ---
+  // Connect is a quick connect: the client the player reached this very server
+  // with, and the default client of the game only when there is no such record.
+  const connectClient = useConnectClient();
   const missingClientToast = useMissingClientToast();
 
   const [tab, setTab] = useState<ServerTab>("all");
@@ -281,10 +284,12 @@ export function ServersPage() {
   };
 
   /**
-   * Records the address and starts the default client on it.
+   * Records the address and starts a client on it.
    *
    * History is written first and on its own: the player pressed Connect, so
    * the row belongs in History even when the launch fails on a missing engine.
+   * It carries the client as well, which is what makes the next press on this
+   * row reach the same one.
    */
   const connect = () => {
     if (selected === undefined) return;
@@ -292,7 +297,8 @@ export function ServersPage() {
     // The row belongs to the active game, so the client that reaches it is
     // that game's. Without one the press is answered by a toast that names the
     // game and offers to make the client, rather than by a dead button.
-    if (defaultClient === undefined) {
+    const client = connectClient(selected.address);
+    if (client === undefined) {
       missingClientToast(activeGame);
       return;
     }
@@ -300,9 +306,9 @@ export function ServersPage() {
     // from seeing "is already running" after their own double click.
     if (launchClient.isPending) return;
     setConnectError(null);
-    addHistory.mutate(selected.address);
+    addHistory.mutate({ address: selected.address, clientId: client.id });
     launchClient.mutate(
-      { clientId: defaultClient.id, connect: selected.address },
+      { clientId: client.id, connect: selected.address },
       { onError: (e) => setConnectError(errorText(e)) },
     );
   };

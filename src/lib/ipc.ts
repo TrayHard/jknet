@@ -168,6 +168,14 @@ export interface ServerHistoryEntry {
   address: string;
   /** RFC 3339 in UTC. */
   lastConnected: string;
+  // --- slice: server actions ---
+  /**
+   * The client the player reached this server with, or `null`.
+   *
+   * What **Connect** starts, when a client of that id still exists. `null` on
+   * entries written before the field, which fall back to the default client.
+   */
+  clientId: string | null;
 }
 
 // --- slice: servers browser ---
@@ -953,8 +961,18 @@ export const serversIpc = {
   /** Takes a server off the browser, or puts it back from the Hidden tab. */
   setServerHidden: (address: string, hidden: boolean, game?: Game) =>
     call<Settings>("set_server_hidden", { address, hidden, game: game ?? null }),
-  addServerHistory: (address: string, game?: Game) =>
-    call<Settings>("add_server_history", { address, game: game ?? null }),
+  // --- slice: server actions ---
+  /**
+   * Records a connection. `clientId` is the client about to start, which is
+   * what the next **Connect** on that row uses; omitting it keeps whatever the
+   * entry already remembered.
+   */
+  addServerHistory: (address: string, clientId?: string, game?: Game) =>
+    call<Settings>("add_server_history", {
+      address,
+      clientId: clientId ?? null,
+      game: game ?? null,
+    }),
 };
 
 // ---------------------------------------------------------------------------

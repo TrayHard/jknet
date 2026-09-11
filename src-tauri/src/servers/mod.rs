@@ -1985,10 +1985,18 @@ pub fn set_server_hidden(
 ///
 /// The same address moves back to the front instead of appearing twice, and
 /// the tail beyond [`HISTORY_LIMIT`] is dropped.
+///
+/// --- slice: server actions ---
+/// `client_id` is the client the caller is about to start, and it is what makes
+/// the next **Connect** on this row a single press. A caller that does not know
+/// the client sends `None`, and the entry keeps the client it already had
+/// rather than forgetting it: the row was reached with that client once, and an
+/// overwrite with nothing would be a worse answer than a slightly old one.
 #[tauri::command]
 pub fn add_server_history(
     state: tauri::State<'_, AppState>,
     address: String,
+    client_id: Option<String>,
     // --- slice: game core --- completes an address typed without a port.
     game: Option<Game>,
 ) -> Result<Settings> {
@@ -1996,18 +2004,35 @@ pub fn add_server_history(
     let address = parse_address(game, &address)?.to_string();
     let now = timestamp::now_rfc3339();
     edit_settings(&state, |settings| {
-        settings
-            .server_history
-            .retain(|entry| entry.address != address);
-        settings.server_history.insert(
-            0,
-            ServerHistoryEntry {
-                address: address.clone(),
-                last_connected: now,
-            },
-        );
-        settings.server_history.truncate(HISTORY_LIMIT);
+        record_connection(&mut settings.server_history, &address, client_id, now);
     })
+}
+
+/// The edit [`add_server_history`] makes to the list, without the state around
+/// it: the address moves to the front, and the tail beyond [`HISTORY_LIMIT`]
+/// goes.
+fn record_connection(
+    history: &mut Vec<ServerHistoryEntry>,
+    address: &str,
+    client_id: Option<String>,
+    now: String,
+) {
+    let before = history
+        .iter()
+        .position(|entry| entry.address == address)
+        .map(|at| history.remove(at));
+    history.insert(
+        0,
+        ServerHistoryEntry {
+            address: address.to_string(),
+            last_connected: now,
+            // --- slice: server actions ---
+            client_id: client_id
+                .filter(|id| !id.trim().is_empty())
+                .or_else(|| before.and_then(|entry| entry.client_id)),
+        },
+    );
+    history.truncate(HISTORY_LIMIT);
 }
 
 #[cfg(test)]
@@ -2201,6 +2226,65 @@ mod tests {
         let mut starred_only = game_row(Game::JediAcademy, "10.0.0.1:29070", FULL_INFO);
         starred_only.decorate(&marks);
         assert!(starred_only.favorite && !starred_only.hidden);
+    }
+
+    #[test]
+    fn the_history_remembers_the_client_a_server_was_reached_with() {
+        let mut history: Vec<ServerHistoryEntry> = Vec::new();
+        record_connection(
+            &mut history,
+            "10.0.0.1:29070",
+            Some("japlus".into()),
+            "2026-09-11T10:00:00Z".into(),
+        );
+        assert_eq!(history[0].client_id.as_deref(), Some("japlus"));
+
+        // The same address moves back to the front rather than appearing twice,
+        // and a later connection with another client is what Connect follows.
+        record_connection(
+            &mut history,
+            "10.0.0.2:29070",
+            Some("everyday".into()),
+            "2026-09-11T11:00:00Z".into(),
+        );
+        record_connection(
+            &mut history,
+            "10.0.0.1:29070",
+            Some("basejka".into()),
+            "2026-09-11T12:00:00Z".into(),
+        );
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].address, "10.0.0.1:29070");
+        assert_eq!(history[0].client_id.as_deref(), Some("basejka"));
+
+        // A caller that does not name a client leaves the remembered one in
+        // place: the row was reached with it, and nothing has said otherwise.
+        record_connection(
+            &mut history,
+            "10.0.0.1:29070",
+            None,
+            "2026-09-11T13:00:00Z".into(),
+        );
+        assert_eq!(history[0].client_id.as_deref(), Some("basejka"));
+        assert_eq!(history[0].last_connected, "2026-09-11T13:00:00Z");
+    }
+
+    #[test]
+    fn the_history_keeps_the_newest_entries_and_drops_the_tail() {
+        let mut history: Vec<ServerHistoryEntry> = Vec::new();
+        for index in 0..HISTORY_LIMIT + 5 {
+            record_connection(
+                &mut history,
+                &format!("10.0.0.{}:29070", index + 1),
+                None,
+                "2026-09-11T10:00:00Z".into(),
+            );
+        }
+        assert_eq!(history.len(), HISTORY_LIMIT);
+        assert_eq!(
+            history[0].address,
+            format!("10.0.0.{}:29070", HISTORY_LIMIT + 5)
+        );
     }
 
     #[test]

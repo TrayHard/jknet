@@ -180,6 +180,59 @@ export function useDefaultClient(game?: Game): Client | undefined {
   return findDefaultClient(clients.data, settings.data, game ?? active);
 }
 
+// --- slice: server actions ---
+/**
+ * The client **Connect** starts on one server address.
+ *
+ * The client of the history entry first, then the default client of the game. A
+ * player who joined a modded server with the client that carries the mod's
+ * files means that client the next time too, and the default client is a guess
+ * that is wrong exactly where being wrong costs a failed connection.
+ *
+ * A remembered id is believed only while a client of that id still plays this
+ * game: clients are deleted and renamed, and settings are a separate document,
+ * so an id that names nothing has to fall back rather than leave the press dead.
+ */
+export function findConnectClient(
+  clients: Client[] | undefined,
+  settings: Settings | undefined,
+  game: Game,
+  address: string,
+): Client | undefined {
+  const remembered = (settings?.serverHistory ?? []).find(
+    (entry) => entry.address === address,
+  )?.clientId;
+  const known =
+    remembered == null || remembered.trim() === ""
+      ? undefined
+      : (clients ?? []).find(
+          (client) => client.id === remembered && client.game === game,
+        );
+  return known ?? findDefaultClient(clients, settings, game);
+}
+
+// --- slice: server actions ---
+/**
+ * The same rule bound to the loaded lists: an address in, a client out.
+ *
+ * A function rather than a value, because the screens ask about the row the
+ * player is pointing at and Home asks about several rows in one render.
+ */
+export function useConnectClient(
+  game?: Game,
+): (address: string) => Client | undefined {
+  const active = useActiveGame();
+  const clients = useClients();
+  const settings = useSettings();
+  const forGame = game ?? active;
+  const rows = clients.data;
+  const document = settings.data;
+  return useCallback(
+    (address: string) => findConnectClient(rows, document, forGame, address),
+    [rows, document, forGame],
+  );
+}
+
 /**
  * The patch that makes one client the default one of its game.
  *
