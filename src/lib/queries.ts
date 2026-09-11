@@ -70,10 +70,12 @@ import {
   type JkhubSort,
   type Levelshot,
   type LibraryItem,
+  type PlayerModel,
   type PlayerProfile,
   type PresenceUpdated,
   type ProfileBook,
   type RunningGame,
+  type SaberHilt,
   type ServerInfo,
   type ServerScope,
   type ServersBatchEvent,
@@ -366,6 +368,8 @@ export function useLaunchPreview(
 
 export const profileKeys = {
   book: (clientId: string) => [...queryKeys.clients, clientId, "profiles"] as const,
+  models: (clientId: string) => [...queryKeys.clients, clientId, "models"] as const,
+  hilts: (clientId: string) => [...queryKeys.clients, clientId, "hilts"] as const,
 };
 
 /** The profiles of one client and which of them is the default. */
@@ -374,6 +378,40 @@ export function useProfiles(clientId: string): UseQueryResult<ProfileBook> {
     queryKey: profileKeys.book(clientId),
     queryFn: () => profilesIpc.listProfiles(clientId),
     staleTime: Infinity,
+  });
+}
+
+/**
+ * The skins this client can offer, read out of the archives it loads.
+ *
+ * Idle until the form that needs them is open: the first answer opens the
+ * retail archives and extracts two hundred icons, and a window that never
+ * shows a profile form must not pay for that.
+ */
+export function usePlayerModels(
+  clientId: string,
+  enabled: boolean,
+): UseQueryResult<PlayerModel[]> {
+  return useQuery({
+    queryKey: profileKeys.models(clientId),
+    queryFn: () => profilesIpc.listPlayerModels(clientId),
+    enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** The saber hilts this client can offer. Empty for a game with none. */
+export function useSaberHilts(
+  clientId: string,
+  enabled: boolean,
+): UseQueryResult<SaberHilt[]> {
+  return useQuery({
+    queryKey: profileKeys.hilts(clientId),
+    queryFn: () => profilesIpc.listSaberHilts(clientId),
+    enabled,
+    staleTime: Infinity,
+    retry: false,
   });
 }
 

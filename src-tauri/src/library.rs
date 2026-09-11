@@ -1241,7 +1241,14 @@ pub(crate) fn write_provenance(
 }
 
 /// Tells an open Library screen that the client's files changed.
+///
+/// --- slice: player profiles ---
+/// And tells the skin list to forget what it found. A pk3 the player just
+/// enabled carries skins and hilts a profile may name, and the list is cached
+/// per client: without this the new skins would appear only after the file
+/// times of every source were compared again.
 pub(crate) fn notify(app: &tauri::AppHandle, client_id: &str) {
+    crate::appearance::forget(client_id);
     let payload = LibraryChanged {
         client_id: client_id.to_string(),
     };

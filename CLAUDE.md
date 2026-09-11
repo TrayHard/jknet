@@ -100,6 +100,7 @@ src-tauri/
                          слежение за процессом, остановка
   src/library.rs         файлы pk3 одного клиента в его папке home\
   src/profiles.rs        профили игрока клиента: profiles.json и токены запуска
+  src/appearance.rs      скины и рукоятки из архивов клиента, кеш иконок
   src/levelshots.rs      картинки карт из архивов игрока и кеш к ним
   src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,

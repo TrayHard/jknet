@@ -817,6 +817,31 @@ export interface ProfileBook {
   defaultProfileId: string | null;
 }
 
+/** `src-tauri/src/appearance.rs`: one skin a profile may name. */
+export interface PlayerModel {
+  /** What goes into the cvar `model`. */
+  value: string;
+  /** Folder under `models/players/`. */
+  model: string;
+  /** Suffix of `model_<variant>.skin`. */
+  variant: string;
+  /** Absolute path of the cached icon, or `null` when it could not be read. */
+  icon: string | null;
+  /** The archive the skin was found in. */
+  source: string;
+}
+
+/** `src-tauri/src/appearance.rs`: one saber hilt a profile may name. */
+export interface SaberHilt {
+  /** What goes into `saber1` or `saber2`: the name of the `.sab` block. */
+  id: string;
+  /** Name for the list, written out of the game's own string table. */
+  name: string;
+  /** `single`, `staff`, or the shape of a story saber. */
+  saberType: string;
+  source: string;
+}
+
 /** The value of `saber2` that means «no hilt in the second hand». */
 export const NO_SECOND_HILT = "none";
 
@@ -846,7 +871,26 @@ export const profilesIpc = {
     call<ProfileBook>("delete_profile", { clientId, profileId }),
   setDefaultProfile: (clientId: string, profileId: string | null) =>
     call<ProfileBook>("set_default_profile", { clientId, profileId }),
+  /** Every skin this client can offer, read out of the archives it loads. */
+  listPlayerModels: (clientId: string) =>
+    call<PlayerModel[]>("list_player_models", { clientId }),
+  /** Every saber hilt this client can offer. Empty for a game with none. */
+  listSaberHilts: (clientId: string) =>
+    call<SaberHilt[]>("list_saber_hilts", { clientId }),
 };
+
+/**
+ * Turns a cached skin icon into a URL the webview may load.
+ *
+ * The same mechanism as `levelshotUrl`: the asset protocol, scoped to
+ * `cache\skins\` and to each file the core hands over. Outside Tauri the
+ * function would throw, hence the guard — the browser preview draws the text
+ * tile instead of a broken image.
+ */
+export function skinIconUrl(path: string | null): string | null {
+  if (path === null || !isTauri()) return null;
+  return convertFileSrc(path);
+}
 // ---------------------------------------------------------------------------
 // --- slice: servers ---
 // ---------------------------------------------------------------------------
