@@ -10,13 +10,6 @@
     "stepCurrent": " (bieżący krok)",
     "stepUpcoming": " (nierozpoczęty)"
   },
-  "brand": {
-    "tagline": "Jeden launcher do multiplayera Jedi Academy.",
-    "promiseLaunch": "Uruchom dowolnego klienta jednym kliknięciem, ze Steam albo bez.",
-    "promiseClients": "Trzymaj obok siebie kilku klientów, każdego z własnymi modami.",
-    "promiseServers": "Znajdź aktywny serwer i dołącz do niego z launchera.",
-    "footer": "JKNet czyta pliki już zainstalowanej gry. Nigdy nie zapisuje niczego do folderu gry."
-  },
   "resolving": {
     "heading": "Gdzie jest zainstalowana gra?",
     "text": "JKNet potrzebuje folderu z plikami od base\\assets0.pk3 do assets3.pk3.",

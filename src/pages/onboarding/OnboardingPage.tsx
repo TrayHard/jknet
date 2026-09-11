@@ -5,7 +5,6 @@ import { useNavigate } from "react-router";
 // --- slice: i18n ---
 import { useErrorText } from "../../i18n/errors";
 import { useClients, useSettings } from "../../lib/queries";
-import { BrandPanel } from "./BrandPanel";
 import { StepAccount } from "./StepAccount";
 import { StepClient } from "./StepClient";
 import { StepGameFiles } from "./StepGameFiles";
@@ -20,6 +19,12 @@ import { initialStep, type OnboardingStep } from "./steps";
  * back to the download rather than to a folder they already chose — and a
  * player who deleted their only client is sent to make another one instead of
  * to an account screen with nothing to play.
+ *
+ * --- slice: servers robustness ---
+ * One column, the whole window. A brand panel used to stand to the left of the
+ * step with a tagline and three promises; it took 480 px away from the only
+ * thing the player is here to do and told them what they had already decided
+ * by installing the launcher.
  */
 export function OnboardingPage() {
   const errorText = useErrorText();
@@ -40,7 +45,6 @@ export function OnboardingPage() {
 
   return (
     <div className="flex h-full">
-      <BrandPanel />
       {step === null ? (
         <Resolving error={failure} />
       ) : step === 1 ? (
