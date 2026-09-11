@@ -34,6 +34,7 @@
     "emptyText": "Öffnen Sie den Bereich Server einmal, dann erscheinen die meistbesuchten hier.",
     "openServers": "Server öffnen",
     "seeAll": "Alle anzeigen",
-    "connect": "Connect"
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }

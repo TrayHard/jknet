@@ -34,6 +34,7 @@
     "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",
     "openServers": "Ouvrir Serveurs",
     "seeAll": "Tout voir",
-    "connect": "Connect"
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }

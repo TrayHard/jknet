@@ -34,6 +34,7 @@
     "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",
     "openServers": "Szerverek megnyitása",
     "seeAll": "Összes szerver",
-    "connect": "Connect"
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }

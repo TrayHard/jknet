@@ -34,6 +34,7 @@
     "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",
     "openServers": "Otwórz Serwery",
     "seeAll": "Zobacz wszystkie",
-    "connect": "Connect"
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }

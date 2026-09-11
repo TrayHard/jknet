@@ -35,6 +35,16 @@ interface ServerListBlockProps {
    * business and not this component's.
    */
   actions?: (server: ServerInfo) => ReactNode;
+  /**
+   * A second line under the name, or `null` for a row that has none.
+   *
+   * History is the block that uses it — when the player was last on that
+   * server — and the other two pass nothing, which is what keeps their rows
+   * one line tall. A caption rather than a column: the answer is a phrase in
+   * the language on screen, and it belongs to the row rather than to a heading
+   * the other two blocks would have to carry empty.
+   */
+  caption?: (server: ServerInfo) => string | null;
 }
 
 /**
@@ -63,6 +73,7 @@ export function ServerListBlock({
   selectedAddress = null,
   onSelect,
   actions,
+  caption,
 }: ServerListBlockProps) {
   const { t } = useTranslation("home");
   // --- slice: server actions ---
@@ -91,6 +102,7 @@ export function ServerListBlock({
       <div className="flex flex-col rounded-lg border border-line bg-surface overflow-hidden">
         {servers.map((server) => {
           const chosen = server.address === selectedAddress;
+          const line = caption?.(server) ?? null;
           return (
             <div
               key={server.address}
@@ -114,12 +126,17 @@ export function ServerListBlock({
                 chosen ? "bg-selected-overlay" : "hover:bg-surface-hover",
               )}
             >
-              <span className="flex items-center gap-6 min-w-0">
+              <span className="flex flex-col justify-center min-w-0">
                 <ServerName
                   raw={server.hostnameRaw}
                   clean={server.hostnameClean}
                   className="text-body-sm-medium text-fg"
                 />
+                {line === null ? null : (
+                  <span className="text-label-xs text-fg-disabled truncate">
+                    {line}
+                  </span>
+                )}
               </span>
               <Badge tone="accent">
                 {gametypes.label(server.game, server.gametype, server.gametypeLabel)}

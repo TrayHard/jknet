@@ -34,6 +34,7 @@
     "emptyText": "Abra la pantalla Servidores una vez y los más concurridos aparecerán aquí.",
     "openServers": "Abrir Servidores",
     "seeAll": "Ver todo",
-    "connect": "Connect"
+    "connect": "Connect",
+    "lastConnected": "{{age}} ago"
   }
 }
