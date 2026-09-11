@@ -33,7 +33,6 @@
   },
   "tabs": {
     "all": "Mind",
-    "trusted": "Megbízható",
     "favorites": "Kedvencek",
     "history": "Előzmények",
     "lan": "LAN",
@@ -50,7 +49,6 @@
   "row": {
     "addFavorite": "Hozzáadás a kedvencekhez",
     "removeFavorite": "Eltávolítás a kedvencekből",
-    "trusted": "Megbízható",
     "passwordRequired": "Jelszó szükséges",
     "countsTitle": "{{humans}} játékos, {{bots}} bot, {{slots}} hely",
     "countsUnknownTitle": "Összesen {{clients}} kliens van fenn; ez a szerver nem árulja el, hányan botok"
@@ -73,8 +71,6 @@
     "favoritesText": "Nyomja meg a csillagot a soron, és a szerver itt marad.",
     "historyTitle": "Még nincs csatlakozás",
     "historyText": "Amelyik szerverre csatlakozik, itt jelenik meg, a legfrissebb elöl.",
-    "trustedTitle": "Ebben a listában nincs megbízható szerver",
-    "trustedText": "A közösség által ajánlott szerverek listája üres ebben a változatban.",
     "noneTitle": "Még nincs szerver",
     "noneText": "Nyomja meg a Frissítés gombot, és a JKNet megkérdezi a mesterszervereket, ki van fenn.",
     "filteredTitle": "Nincs a szűrőknek megfelelő szerver",
@@ -83,7 +79,6 @@
     "filteredBots_other": "Lazítson a szűrőkön, vagy törölje a keresőmezőt. {{count}} szerveren csak botok játszanak; kapcsolja ki a Csak botosak rejtve beállítást, hogy lássa őket."
   },
   "details": {
-    "trusted": "MEGBÍZHATÓ",
     "password": "JELSZÓ",
     "copyAddress": "Cím másolása",
     "bots_one": "+{{count}} bot",

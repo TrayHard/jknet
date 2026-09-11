@@ -1,4 +1,4 @@
-import { ChevronRight, Play, ShieldCheck } from "lucide-react";
+import { ChevronRight, Play } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
@@ -17,14 +17,11 @@ const TOP_COUNT = 4;
 /**
  * The busiest servers, for the Home screen.
  *
- * Trusted servers win when the bundled list has any; otherwise the four
- * busiest ones stand in, because an empty block on the first screen tells a
- * player nothing. The data is whatever `cache\servers.json` holds, so this
- * costs no network call of its own.
+ * The data is whatever `cache\servers.json` holds, so this costs no network
+ * call of its own.
  *
  * Busiest means people. A server full of bots is not somewhere to send a
- * player from the first screen, so it is dropped from the fallback pool
- * outright; a trusted server keeps its place whatever is on it.
+ * player from the first screen, so it is dropped from the pool outright.
  */
 export function TopServers() {
   const { t } = useTranslation("home");
@@ -33,17 +30,11 @@ export function TopServers() {
 
   const rows = useMemo(() => {
     const all = cached.data ?? [];
-    const trusted = all.filter((server) => server.trusted);
-    const pool =
-      trusted.length > 0 ? trusted : all.filter((server) => !isBotOnly(server));
-    return [...pool]
+    return all
+      .filter((server) => !isBotOnly(server))
       .sort((a, b) => realPlayers(b) - realPlayers(a))
       .slice(0, TOP_COUNT);
   }, [cached.data]);
-
-  const heading = rows.some((server) => server.trusted)
-    ? t("topServers.trusted")
-    : t("topServers.busiest");
 
   if (rows.length === 0) {
     return (
@@ -66,7 +57,7 @@ export function TopServers() {
   return (
     <section className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
-        <h2 className="text-label-xs text-fg-muted">{heading}</h2>
+        <h2 className="text-label-xs text-fg-muted">{t("topServers.busiest")}</h2>
         <Link
           to="/servers"
           className="inline-flex items-center gap-2 text-body-sm-medium text-fg-accent hover:underline"
@@ -84,9 +75,6 @@ export function TopServers() {
               className="grid items-center gap-12 h-44 px-16 grid-cols-[minmax(0,1fr)_auto_76px_56px] border-b border-line-subtle last:border-b-0 hover:bg-surface-hover transition-colors"
             >
               <span className="flex items-center gap-6 min-w-0">
-                {server.trusted ? (
-                  <ShieldCheck size={14} className="text-fg-warm shrink-0" />
-                ) : null}
                 <ServerName
                   raw={server.hostnameRaw}
                   clean={server.hostnameClean}

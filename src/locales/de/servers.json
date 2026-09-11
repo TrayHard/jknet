@@ -33,7 +33,6 @@
   },
   "tabs": {
     "all": "Alle",
-    "trusted": "Geprüft",
     "favorites": "Favoriten",
     "history": "Verlauf",
     "lan": "LAN",
@@ -50,7 +49,6 @@
   "row": {
     "addFavorite": "Zu Favoriten hinzufügen",
     "removeFavorite": "Aus Favoriten entfernen",
-    "trusted": "Geprüft",
     "passwordRequired": "Passwort erforderlich",
     "countsTitle": "{{humans}} Spieler, {{bots}} Bots, {{slots}} Plätze",
     "countsUnknownTitle": "{{clients}} Teilnehmer; dieser Server nennt nicht, wie viele davon Bots sind"
@@ -73,8 +71,6 @@
     "favoritesText": "Drücken Sie den Stern in einer Zeile, um einen Server hier zu behalten.",
     "historyTitle": "Noch keine Verbindungen",
     "historyText": "Server, mit denen Sie sich verbinden, erscheinen hier, die neuesten zuerst.",
-    "trustedTitle": "Keine geprüften Server in dieser Liste",
-    "trustedText": "Die mitgelieferte Liste empfohlener Server der Community ist in diesem Build leer.",
     "noneTitle": "Noch keine Server",
     "noneText": "Drücken Sie Aktualisieren, um die Master-Server zu fragen, wer online ist.",
     "filteredTitle": "Keine Treffer für die Filter",
@@ -83,7 +79,6 @@
     "filteredBots_other": "Erweitern Sie die Filter oder leeren Sie das Suchfeld. Auf {{count}} Servern spielen nur Bots; schalten Sie Nur Bots ausblenden aus, um sie zu sehen."
   },
   "details": {
-    "trusted": "GEPRÜFT",
     "password": "PASSWORT",
     "copyAddress": "Adresse kopieren",
     "bots_one": "+{{count}} Bot",
