@@ -76,13 +76,39 @@
     "title": "Drop pk3 files to install them into {{client}}"
   },
   "conflicts": {
-    "notice": "{{count}} files change the same content. The engine loads the last one and ignores the rest.",
+    "notice": "{{count}} files override each other. For every shared path the game reads one file and skips the rest.",
     "see": "See what wins",
-    "title": "Files that change the same content",
-    "body": "{{files}} archives of {{client}} carry {{paths}} shared paths. The engine reads the last one it loads and ignores the rest.",
+    "title": "Files that override each other",
+    "body": "{{files}} files in {{client}} carry {{paths}} paths that another file carries too. The game reads one file per path.",
+    "ruleTitle": "How the game picks the winner",
+    "ruleOrder": "Inside one folder the game loads pk3 files by name, ignoring upper and lower case, and loads names that start with dl_ after every other name. Each file it loads goes in front of the ones before it, so the file loaded last is the one the game reads.",
+    "ruleDisable": "Disabling a file renames it on disk and takes it out of that order. The file stays in the client, and the switch on its card brings it back.",
+    "folderHint": "Only files in the same folder can override each other.",
+    "order": "Load order · the last file wins",
     "wins": "Wins",
     "hidden": "Hidden",
-    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the archives to see the rest."
+    "outcome": "Disable {{winner}} and {{next}} takes over this path. Disable a hidden file and the game keeps reading {{winner}}.",
+    "disableWinner": "Disable {{file}} and {{next}} takes over this path.",
+    "disableHidden": "Disable {{file}}. The game already skips it here.",
+    "kind": {
+      "shader": "Shader",
+      "model": "Model",
+      "sound": "Sound",
+      "texture": "Texture",
+      "map": "Map",
+      "ui": "Interface",
+      "other": "Other"
+    },
+    "kindHint": {
+      "shader": "How a surface is drawn: glow, transparency, movement.",
+      "model": "A model: a player, a weapon, an object.",
+      "sound": "A sound effect or a music track.",
+      "texture": "A picture on a surface or in the interface.",
+      "map": "A level the server can load.",
+      "ui": "A menu screen or the text inside it.",
+      "other": "Another file the game reads."
+    },
+    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the files to see the rest."
   },
   "remove": {
     "title": "Remove {{file}} from {{client}}?",
