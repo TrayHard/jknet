@@ -971,18 +971,22 @@ Cvar, которого в строке нет, дописывается в ко�
 
 | Строка | Кто пишет | Что означает |
 | --- | --- | --- |
+| `the client window client-<slug> is open, raising it` | `client_window.rs` | окно с этой меткой нашлось до постройки, команда поднимает его и заканчивает |
 | `opening the client window client-<slug> at index.html#/client/<slug>` | `client_window.rs` | команда дошла до постройки окна, адрес собран |
 | `opened the client window client-<slug>` | `client_window.rs` | `build()` вернул успех |
-| `cannot build the client window client-<slug>: …` | `client_window.rs` | `build()` вернул ошибку, дальше текст ошибки |
+| `the client window client-<slug> was already open` | `client_window.rs` | `build()` отказал с `WebviewLabelAlreadyExists`, команда поднимает окно с этой меткой и отвечает успехом |
+| `cannot build the client window client-<slug>: …` | `client_window.rs` | `build()` вернул другую ошибку, дальше текст ошибки |
 | `window client-<slug>: document at http://…#/client/<slug>` | `main.tsx` | webview загрузил документ, вот его настоящий маршрут |
 | `window client-<slug>: client window mounted for <slug>` | `ClientWindowPage.tsx` | React смонтировал страницу |
 | `window client-<slug>: client window has the record of <slug>` | `ClientWindowPage.tsx` | запись клиента пришла, карточки нарисованы |
-| `window client-<slug>: reading the client <slug> failed: …` | `ClientWindowPage.tsx` | команда отказала, тот же текст стоит в окне |
+| `window client-<slug>: reading the client <slug> failed: …` | `ClientWindowPage.tsx` | команда отказала, дальше английское сообщение отказа |
 | `window client-<slug>: close requested` | `lib.rs` | закрытие окна дошло до ядра |
 | `window client-<slug>: destroyed` | `lib.rs` | окно закрыто |
 | `window client-<slug>: close failed: …` | `TitleBar.tsx` | кнопка нажата, но команда окна отказала |
 
-Читайте журнал сверху вниз и ищите, где обрывается последовательность. Обрыв после первой строки означает, что не вернулся `build()`. Обрыв после `document at` означает, что упал фронтенд до монтирования. Строка `document at` с маршрутом `#/`, а не `#/client/<slug>`, означает, что окно перешло на маршрут главного окна.
+Одну и ту же ошибку окно и журнал печатают по-разному. В окно хук `useErrorText` ставит перевод по коду ошибки. В журнал уходит английское сообщение варианта `AppError`, его достаёт функция `errorMessage`. Тексты совпадают только у ошибок без ключа перевода: тогда хук печатает то же английское сообщение. Правило перевода описывает раздел [«Локализация»](#локализация).
+
+Читайте журнал сверху вниз и ищите, где обрывается последовательность. Обрыв после строки `opening the client window` означает, что не вернулся `build()`. Обрыв после `document at` означает, что упал фронтенд до монтирования. Строка `document at` с маршрутом `#/`, а не `#/client/<slug>`, означает, что окно перешло на маршрут главного окна.
 
 Инструменты разработчика доступны в каждом окне отладочной сборки по сочетанию `Ctrl+Shift+I`. Обработчик сочетания Tauri вставляет скриптом инициализации плагина `webview` под `cfg(any(debug_assertions, feature = "devtools"))`, то есть во все webview сразу (`tauri` 2.11.5, `src/webview/plugin.rs:205-226`). Сочетание вызывает команду `plugin:webview|internal_toggle_devtools`, и разрешение на неё входит в набор `core:webview:default`, а тот — в `core:default`, который стоит в файле `capabilities/client-window.json`. Отдельного разрешения добавлять не нужно.
 
