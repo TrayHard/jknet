@@ -310,6 +310,22 @@ pub struct GameSpec {
     /// [`crate::launch`].
     pub launch_layout: LaunchLayout,
 
+    // --- slice: player profiles ---
+    /// Whether the player picks a saber hilt in this game.
+    ///
+    /// Jedi Academy ships `ext_data/sabers/*.sab` and reads the hilt out of
+    /// `saber1` and `saber2`. The Jedi Outcast archives carry no
+    /// `ext_data/sabers/` folder at all, so there is nothing to choose from and
+    /// nothing for a player profile to write. Read by
+    /// [`crate::profiles::launch_tokens`], which drops both cvars for a game
+    /// that answers false, and by the profile form, which hides the two lists.
+    ///
+    /// Established by listing the four Jedi Outcast archives of a Steam copy on
+    /// 2026-09-11, not by reading the JK2MV source: multiplayer Jedi Outcast is
+    /// not in this workspace. A game with no hilt data cannot offer a hilt
+    /// whatever its engine registers.
+    pub has_saber_hilts: bool,
+
     /// Name prefix of the modules the engine loads out of `fs_basepath`
     /// itself, without going through its file system. `None` for a game whose
     /// engines load everything through the search path.
@@ -367,6 +383,8 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
 
     game_data_cvar: Some("fs_cdpath"),
     launch_layout: LaunchLayout::EngineIsBasepath,
+    // --- slice: player profiles ---
+    has_saber_hilts: true,
     basepath_module_prefix: None,
 };
 
@@ -430,6 +448,10 @@ static JEDI_OUTCAST: GameSpec = GameSpec {
     // it does read. That root is the client's own `basepath\`, whose `base` is
     // a junction to `<GameData>\base`.
     launch_layout: LaunchLayout::OwnBasepath,
+    // --- slice: player profiles ---
+    // No `ext_data/sabers/` in any of the four archives, so there is no hilt
+    // to name. A profile of this game writes neither `saber1` nor `saber2`.
+    has_saber_hilts: false,
     basepath_module_prefix: Some("jk2mvmenu"),
 };
 
@@ -514,6 +536,10 @@ pub struct GameInfo {
     /// Power Duel, and a list derived from whoever happens to be online would
     /// offer a different set of modes every refresh.
     pub gametypes: Vec<&'static str>,
+    // --- slice: player profiles ---
+    /// Whether the player picks a saber hilt in this game. False hides the two
+    /// hilt lists of the profile form, because there is nothing to put in them.
+    pub has_saber_hilts: bool,
 }
 
 /// Lists both games with the names and constants the interface prints.
@@ -534,6 +560,8 @@ pub fn list_games() -> Vec<GameInfo> {
                 steam_app_id: spec.steam_app_id,
                 server_port: spec.server_port,
                 gametypes: spec.gametypes.to_vec(),
+                // --- slice: player profiles ---
+                has_saber_hilts: spec.has_saber_hilts,
             }
         })
         .collect()
@@ -708,6 +736,23 @@ mod tests {
             Game::JediOutcast.spec().basepath_module_prefix,
             Some("jk2mvmenu")
         );
+    }
+
+    // --- slice: player profiles ---
+
+    #[test]
+    fn only_the_game_that_ships_hilt_data_lets_a_player_pick_one() {
+        // Jedi Academy carries `ext_data/sabers/*.sab`; the Jedi Outcast
+        // archives carry no such folder, so a profile of that game has no hilt
+        // to name and writes neither cvar.
+        assert!(Game::JediAcademy.spec().has_saber_hilts);
+        assert!(!Game::JediOutcast.spec().has_saber_hilts);
+
+        // And the interface reads the same table, so the profile form hides
+        // the two lists exactly where the tokens stop going out.
+        let games = list_games();
+        assert!(games[0].has_saber_hilts);
+        assert!(!games[1].has_saber_hilts);
     }
 
     #[test]
