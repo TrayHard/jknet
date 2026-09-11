@@ -8,10 +8,15 @@
  * before it asks `t`.
  *
  * A note may offer a way out, and the offer lives under the same key with
- * `Action` appended — `engines.notes.eternaljk` holds the warning,
- * `engines.notes.eternaljkAction` the label of the button next to it. The
- * offer is optional: a note with nothing to suggest simply has no sibling key,
- * and the caller draws no button.
+ * `Action` appended — `engines.notes.<build>` holds the warning,
+ * `engines.notes.<build>Action` the label of the button next to it. The offer
+ * is optional: a note with nothing to suggest simply has no sibling key, and
+ * the caller draws no button.
+ *
+ * No build in the registry is legacy today, so this returns `null` for every
+ * status the core currently sends. It stays because the machinery around it
+ * does — the badge, the note under the card, the button — and the next
+ * abandoned build is a registry entry and two catalog keys away.
  */
 
 import { useCallback } from "react";

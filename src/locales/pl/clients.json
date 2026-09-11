@@ -53,11 +53,7 @@
   "engines": {
     "heading": "Silniki {{game}}",
     "recommended": "Zalecany",
-    "legacy": "Legacy",
-    "notes": {
-      "eternaljk": "Last released in 2020. In our tests it crashes on every map load on current Windows systems. Use TaystJK, its maintained successor, unless a server requires EternalJK.",
-      "eternaljkAction": "Create a TaystJK client"
-    }
+    "legacy": "Legacy"
   },
   "newDialog": {
     "title": "Nowy klient",
@@ -87,5 +83,9 @@
     "title": "Brak klienta {{game}}",
     "text": "Utwórz go, a stanie się klientem, którym startuje ta gra. Klienci {{game}} są niezależni od klientów drugiej gry.",
     "action": "Utwórz klienta"
+  },
+  "launchWarning": {
+    "title": "Check the launch arguments",
+    "eternaljkSInitsound": "EternalJK crashes when the sound system is disabled (s_initsound 0). Remove it from the launch arguments."
   }
 }

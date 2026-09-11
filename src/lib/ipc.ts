@@ -550,11 +550,27 @@ export interface GameExited {
   exitCode: number | null;
 }
 
+/**
+ * Codes `launch:warning` can carry.
+ *
+ * One per combination of engine and argument the core knows to be fatal. The
+ * code is stable and the sentence behind it lives in the `clients` catalog,
+ * under `launchWarning.`, so the warning arrives in the language on screen.
+ */
+export type LaunchWarningCode = "eternaljk_s_initsound";
+
+/** Payload of `launch:warning`. */
+export interface LaunchWarning {
+  clientId: string;
+  code: LaunchWarningCode;
+}
+
 /** Event names the launch slice emits. */
 export const launchEvents = {
   installProgress: "launch:engine-install-progress",
   gameStarted: "launch:game-started",
   gameExited: "launch:game-exited",
+  warning: "launch:warning",
 } as const;
 
 export const launchIpc = {
