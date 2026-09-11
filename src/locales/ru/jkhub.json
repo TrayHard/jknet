@@ -8,7 +8,6 @@
     "name": "По имени"
   },
   "search": {
-    "placeholder": "Поиск по всему каталогу",
     "unavailable": "Поиску нужен каталог JKHub, а он ещё не готов.",
     "loaded": "Показано {{shown}} файлов из {{total}}. Уточните запрос или смените порядок, чтобы увидеть остальные.",
     "results_one": "{{count}} файл в игре {{game}}",
@@ -17,43 +16,22 @@
     "results_other": "{{count}} файла в игре {{game}}"
   },
   "refresh": "Обновить",
-  "fromCache": "Из кеша",
   "tree": {
     "heading": "Категории",
-    "update": "Обновить категории",
-    "updating": "Обновление…",
-    "updateHint": "Обойти дерево категорий JKHub заново. Стоит примерно двадцати запросов.",
     "expand": "Развернуть {{category}}",
     "collapse": "Свернуть {{category}}",
     "empty": "Категорий пока нет.",
     "noMatches": "Совпадений нет ни в одной категории."
   },
-  "scope": {
-    "category": "{{category}} · установка в клиент {{client}}",
-    "noCategory": "Выберите категорию · установка в клиент {{client}}"
-  },
   "index": {
-    "missing": "Каталог ещё не собран.",
-    "startingUp": "Собираем каталог JKHub…",
-    "building": "Собираем каталог JKHub {{done}} / {{total}}",
     "blockedTitle": "Собираем каталог JKHub",
     "blockedText": "JKNet читает список файлов, чтобы поиск охватывал все категории. Просмотр откроется, как только сборка закончится.",
     "blockedPages": "{{done}} из {{total}} страниц",
     "blockedLeft": "осталось около {{time}}",
     "stoppedTitle": "Сборка остановлена",
     "stoppedText": "Вкладке нужна локальная копия каталога JKHub: без неё нечего показывать и не по чему искать. Чтение занимает меньше минуты.",
-    "rebuild": "Пересобрать",
-    "rebuildHint": "Перечитать все страницы списков jkhub.org. Около 150 запросов и полторы минуты.",
     "updatedTitle": "Каталог обновлён",
     "currentTitle": "Каталог свежий",
-    "line_one": "Каталог собран {{time}} назад · {{count}} файл",
-    "line_few": "Каталог собран {{time}} назад · {{count}} файла",
-    "line_many": "Каталог собран {{time}} назад · {{count}} файлов",
-    "line_other": "Каталог собран {{time}} назад · {{count}} файла",
-    "lineDate_one": "Каталог собран {{date}} · {{count}} файл",
-    "lineDate_few": "Каталог собран {{date}} · {{count}} файла",
-    "lineDate_many": "Каталог собран {{date}} · {{count}} файлов",
-    "lineDate_other": "Каталог собран {{date}} · {{count}} файла",
     "blockedRequests_one": "{{count}} запрос",
     "blockedRequests_few": "{{count}} запроса",
     "blockedRequests_many": "{{count}} запросов",

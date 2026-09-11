@@ -1,16 +1,12 @@
 {
   "title": "Library",
-  "subtitle": "Skins, hilts, maps and mods, installed into the client you choose.",
-  "subtitleClient": "{{client}} · {{engine}} · {{files}} files · {{enabled}} enabled · {{size}}",
-  "noEngine": "no engine",
   "searchPlaceholder": "Search files",
   "browseJkhub": "Browse JKHub",
   "addFiles": "Add files",
   "pickTitle": "Add pk3 files",
   "pickFilter": "Jedi Academy archives",
   "clientBar": {
-    "label": "Client",
-    "hint": "Files are installed into this client only. Another client with the same engine keeps its own set. {{game}} clients are listed here; switch game in the sidebar for the other ones."
+    "label": "Client"
   },
   "tabs": {
     "installed": "Installed",

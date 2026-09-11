@@ -8,46 +8,28 @@
     "name": "Név"
   },
   "search": {
-    "placeholder": "Search the whole catalog",
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
     "results_one": "{{count}} result in {{game}}",
     "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Frissítés",
-  "fromCache": "Gyorsítótárból",
   "tree": {
     "heading": "Kategóriák",
-    "update": "Kategóriák frissítése",
-    "updating": "Frissítés…",
-    "updateHint": "Végigjárja a JKHub kategóriafáját. Körülbelül húsz kérést jelent.",
     "expand": "Kinyitás: {{category}}",
     "collapse": "Összecsukás: {{category}}",
     "empty": "Még nincsenek kategóriák.",
     "noMatches": "No category holds a match."
   },
-  "scope": {
-    "category": "{{category}} · telepítés ide: {{client}}",
-    "noCategory": "Válasszon kategóriát · telepítés ide: {{client}}"
-  },
   "index": {
-    "missing": "Catalog not indexed yet.",
-    "startingUp": "Indexing the JKHub catalog…",
-    "building": "Indexing the JKHub catalog {{done}} / {{total}}",
     "blockedTitle": "Indexing the JKHub catalog",
     "blockedText": "JKNet is reading the list of files so search covers every category. Browsing starts as soon as this finishes.",
     "blockedPages": "{{done}} of {{total}} pages",
     "blockedLeft": "about {{time}} left",
     "stoppedTitle": "Indexing stopped",
     "stoppedText": "The tab needs a local copy of the JKHub catalog before it can list or search. Reading it takes under a minute.",
-    "rebuild": "Rebuild",
-    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
     "updatedTitle": "Catalog updated",
     "currentTitle": "Catalog is current",
-    "line_one": "Catalog indexed {{time}} ago · {{count}} file",
-    "line_other": "Catalog indexed {{time}} ago · {{count}} files",
-    "lineDate_one": "Catalog indexed {{date}} · {{count}} file",
-    "lineDate_other": "Catalog indexed {{date}} · {{count}} files",
     "blockedRequests_one": "{{count}} request",
     "blockedRequests_other": "{{count}} requests",
     "stoppedToast_one": "Stopped after {{count}} request. The catalog is unchanged.",

@@ -50,6 +50,31 @@
     "count_many": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
     "count_other": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé."
   },
+  "jkhub": {
+    "title": "JKHub catalog",
+    "text": "The Browse JKHub tab lists and searches a local copy of the jkhub.org catalog. JKNet keeps that copy current by itself, and these actions are for the times it cannot.",
+    "catalog": "{{game}} catalog",
+    "reading": "Reading the catalog…",
+    "building": "Reading jkhub.org right now…",
+    "missing": "No catalog yet.",
+    "line_one": "{{count}} file, read {{date}}",
+    "line_many": "{{count}} files, read {{date}}",
+    "line_other": "{{count}} files, read {{date}}",
+    "rebuild": "Rebuild",
+    "rebuilding": "Rebuilding…",
+    "rebuildHint": "Read every listing page of jkhub.org again. About 150 requests and a minute and a half.",
+    "categories": "Update categories",
+    "updatingCategories": "Updating…",
+    "categoriesHint": "Walk the JKHub category tree again. Takes about twenty requests.",
+    "categoriesDone_one": "{{count}} category read from JKHub.",
+    "categoriesDone_many": "{{count}} categories read from JKHub.",
+    "categoriesDone_other": "{{count}} categories read from JKHub.",
+    "cache": "Downloaded pages and archives",
+    "cacheText": "File pages, listings and the archives JKNet downloaded to install. Clearing them costs nothing but reading the site again.",
+    "clear": "Clear JKHub cache",
+    "clearing": "Clearing…",
+    "cleared": "The JKHub cache is empty."
+  },
   "rest": {
     "title": "Le reste des paramètres n’est pas encore branché",
     "text": "Les sections Téléchargements et Apparence arrivent avec les fonctions qu’elles pilotent."
