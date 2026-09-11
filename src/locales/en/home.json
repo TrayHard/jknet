@@ -4,15 +4,19 @@
   "launchError": "{{message}} <0>Open the Clients screen</0> to set the game folder or install the engine.",
   "hero": {
     "quickPlay": "Quick play",
+    "continue": "Continue",
+    "lastServer": "Last server",
     "inGame": "In game",
     "running": "Running: {{client}}",
     "noClient": "No {{game}} client yet",
     "runningText": "Started <0>{{age}}</0> ago, process {{pid}}. The launcher steps aside while you play.",
     "readyText": "Start the default client and pick a server from the in-game menu.",
+    "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
     "noClientText": "A client is an engine build with its own files and settings. Make one and {{game}} is one press away.",
     "createClient": "Create a {{game}} client",
     "play": "Play",
     "playHint": "Mark a client as the default one",
+    "connect": "Connect",
     "stop": "Stop",
     "manageClients": "Manage clients",
     "aMoment": "a moment"
@@ -23,6 +27,8 @@
     "locate": "Locate files"
   },
   "topServers": {
+    "favorites": "Favorites",
+    "history": "History",
     "busiest": "Busiest servers",
     "emptyTitle": "No servers in the cache yet",
     "emptyText": "Open the Servers screen once and the busiest ones show up here.",

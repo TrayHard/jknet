@@ -66,6 +66,9 @@ Everything else wraps.
 | `common:values.empty` | An em dash standing in for a number that is not there. Leave it as it is. |
 | `common:actions.delete`, `disable`, `remove` | Three different actions, and they need three different words. `delete` destroys the thing, `disable` switches it off and leaves it in place, `remove` detaches it without destroying it — the button that ends a friendship is `remove`, not `delete`. `common:states.deleting` and `common:states.removing` follow the verb you picked for each. |
 | `common:actions.seeAll` | A general «show the whole list», reused by any screen that shortens one. Do not name what is being listed — the screen that needs a specific label has its own key, as `home:topServers.seeAll` does. |
+| `home:hero.continueText` | Names two buttons of the same block: use the exact wording you gave `home:hero.connect` and `home:hero.play`, or the sentence describes buttons the player cannot find. `{{client}}` is a name the player typed. |
+| `home:hero.lastServer` | The caption over a map picture, under 20 characters. It says what the picture is, so it is a label, not a sentence. |
+| `home:topServers.favorites`, `history` | Headings of two blocks of server rows on **Home**. They name the same two things as the tabs `servers:tabs.favorites` and `servers:tabs.history` — use the same words. |
 | `servers:subtitle.*` | Parts of one line, joined with « · ». Each is a whole clause; none of them may end in a full stop. |
 | `servers:columns.players` | Abbreviation of «players» — the column is 76 px. |
 | `servers:details.botBadge` | A badge on one player's row, at most four characters. |
