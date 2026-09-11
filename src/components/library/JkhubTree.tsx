@@ -161,9 +161,7 @@ export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeP
   };
 
   const header = (
-    <div className="flex items-center gap-8 pb-8">
-      <span className="text-label-xs text-fg-muted flex-1">{t("tree.heading")}</span>
-    </div>
+    <p className="text-label-xs text-fg-muted pb-8">{t("tree.heading")}</p>
   );
 
   return (
