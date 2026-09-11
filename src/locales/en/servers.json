@@ -2,6 +2,9 @@
   "title": "Servers",
   "searchPlaceholder": "Name, map or address",
   "refresh": "Refresh",
+  "refreshHint": "Ask the servers on this tab how they are doing right now",
+  "getNewList": "Get new list",
+  "getNewListHint": "Ask the master servers who is online, then check every address they name",
   "scanning": "Scanning",
   "subtitle": {
     "empty": "No {{game}} servers yet",
@@ -13,7 +16,7 @@
     "players_other": "{{count}} players online",
     "bots_one": "{{count}} bot hidden from counts",
     "bots_other": "{{count}} bots hidden from counts",
-    "asking": "asking the master servers",
+    "scanning": "checking servers",
     "refreshed": "refreshed {{age}} ago",
     "silent_one": "{{count}} did not answer",
     "silent_other": "{{count}} did not answer"
@@ -36,7 +39,7 @@
     "favorites": "Favorites",
     "history": "History",
     "lan": "LAN",
-    "lanHint": "LAN discovery is not available yet"
+    "lanHint": "Servers on your own network, found by broadcast"
   },
   "columns": {
     "server": "SERVER",
@@ -50,6 +53,8 @@
     "addFavorite": "Add to favorites",
     "removeFavorite": "Remove from favorites",
     "passwordRequired": "Password required",
+    "noResponse": "Offline",
+    "noResponseTitle": "This server did not answer the last check. The row shows what was last seen.",
     "countsTitle": "{{humans}} players, {{bots}} bots, {{slots}} slots",
     "countsUnknownTitle": "{{clients}} clients; this server does not say how many are bots"
   },
@@ -60,19 +65,22 @@
   },
   "alerts": {
     "masters": "Could not reach the master servers",
+    "refresh": "Could not check this tab",
     "cache": "The server cache is unavailable",
     "connect": "Could not start the client"
   },
   "empty": {
     "pickServer": "Select a server to see its players and connect.",
-    "lanTitle": "LAN discovery is not built yet",
-    "lanText": "Broadcast discovery on the local network arrives in a later task.",
+    "lanTitle": "Nothing found on this network yet",
+    "lanText": "Press Refresh to call out to the servers on your own network.",
+    "lanNoneTitle": "Nobody answered on this network",
+    "lanNoneText": "No server replied on this network. Start one on a machine here, or use the All tab.",
     "favoritesTitle": "No favorites yet",
     "favoritesText": "Press the star on a row to keep a server here.",
     "historyTitle": "No connections yet",
     "historyText": "Servers you connect to show up here, newest first.",
     "noneTitle": "No servers yet",
-    "noneText": "Press Refresh to ask the master servers who is online.",
+    "noneText": "Press Get new list to ask the master servers who is online.",
     "filteredTitle": "Nothing matches the filters",
     "filteredText": "Widen the filters, or clear the search box.",
     "filteredBots_one": "Widen the filters, or clear the search box. {{count}} server has bots and nobody else; turn off Hide bot-only to see it.",

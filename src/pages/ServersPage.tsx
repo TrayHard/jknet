@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Globe,
   RefreshCw,
   Search,
   Server as ServerIcon,
@@ -57,41 +58,36 @@ import { useErrorText } from "../i18n/errors";
 import { useFormat } from "../i18n/useFormat";
 import { useGametypeLabels } from "../i18n/useGameLabels";
 import { cn } from "../lib/format";
-import type { Game, GameInfo, ServerInfo, ServersDoneEvent } from "../lib/ipc";
+import type { GameInfo, ServerInfo, ServersDoneEvent } from "../lib/ipc";
 // --- slice: game switch ---
 import { useActiveGame, useDefaultClient, useGameNames } from "../lib/game";
 import {
   useAddServerHistory,
   useCachedServers,
   useGameInfo,
+  useLanServers,
   useLaunchClient,
   useServerRefresh,
   useServerStatus,
   useSetServerFavorite,
   useSettings,
 } from "../lib/queries";
-import { isTauri } from "../lib/runtime";
-
-/**
- * When the screen refreshes by itself.
- *
- * One refresh is around 230 UDP probes and four seconds, so opening the tab
- * for the third time in a minute must not start a third scan. The timestamp
- * lives outside the component because the route unmounts on every navigation.
- */
-const AUTO_REFRESH_AFTER_MS = 60_000;
-// --- slice: game switch ---
-// One stamp per game: the two lists come from different master servers, so a
-// refresh of Jedi Academy says nothing about how fresh the Jedi Outcast list is.
-const lastAutoRefresh: Partial<Record<Game, number>> = {};
 
 /**
  * Servers: the browser over the two Quake 3 master servers.
  *
- * The screen renders the cached list first, then fills in live rows as
- * `servers:batch` events arrive, which is why the table is never empty while
- * a scan runs. Filters, tabs and sorting are pure functions in
- * `components/servers/filter.ts`; this file only holds the state.
+ * The screen opens on the cached list and scans nothing until the player asks.
+ * The engine's own browser behaves the same way — `UI_DoServerRefresh` returns
+ * at once unless a menu command set `refreshActive` (`codemp/ui/ui_main.c:10457`,
+ * OpenJK `1a6a6434`) — and two hundred UDP probes are not something to do
+ * behind somebody's back every time a route mounts.
+ *
+ * --- slice: servers browser ---
+ * Two buttons, as in the game: **Get new list** asks the master servers and
+ * probes what they return, **Refresh** re-probes the addresses of the tab that
+ * is open. Every tab scans under its own scope and keeps its own loader, so one
+ * tab's scan never freezes another's list. Filters, tabs and sorting are pure
+ * functions in `components/servers/filter.ts`; this file only holds the state.
  */
 export function ServersPage() {
   const { t } = useTranslation("servers");
@@ -122,48 +118,33 @@ export function ServersPage() {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
 
-  const startRefresh = refresh.refresh;
-  const attempted = useRef(false);
-  // The scan waits for the list on disk. It is a few milliseconds away, and
-  // starting without it would leave the screen holding an empty table for the
-  // four seconds the scan takes — the skeleton belongs to the first run of a
-  // fresh install, not to every visit.
-  const cacheSettled = !cached.isPending;
-  // --- slice: game switch ---
-  // The switch is a new list to fetch, so the screen asks for it as if it had
-  // just been opened. `attempted` is reset by the game as well, which is what
-  // makes the first look at Jedi Outcast scan instead of showing an empty
-  // table until the player presses Refresh.
-  const attemptedFor = useRef<Game | null>(null);
-  useEffect(() => {
-    if (attemptedFor.current !== activeGame) {
-      attemptedFor.current = activeGame;
-      attempted.current = false;
-    }
-    if (attempted.current || !isTauri() || !cacheSettled) return;
-    // A scan of the game the player just left is still in flight, and the core
-    // runs one at a time. Waiting costs nothing: this effect runs again the
-    // moment that scan ends.
-    if (refresh.running) return;
-    attempted.current = true;
-    const last = lastAutoRefresh[activeGame] ?? 0;
-    if (Date.now() - last < AUTO_REFRESH_AFTER_MS) return;
-    lastAutoRefresh[activeGame] = Date.now();
-    startRefresh();
-  }, [startRefresh, cacheSettled, activeGame, refresh.running]);
-
-  const live = useMemo(() => cached.data ?? [], [cached.data]);
-  // The rows the whole screen works from. While a scan runs they are the ones
-  // it started with, so counts, tabs, filter options and the table agree with
-  // each other and none of them moves under the cursor.
+  // --- slice: servers browser ---
+  // The rows of the open tab and the indicator that belongs to it. The LAN tab
+  // draws from the sweep's own list; every other tab draws from the list the
+  // master servers filled.
+  const lan = useLanServers();
+  const scope = refresh.scopes[tab];
+  /** Whether a sweep has finished, which is what "nothing here" then means. */
+  const lanScanned = refresh.scopes.lan.refreshedAt !== null;
+  const source = useMemo(
+    () => (tab === "lan" ? lan : (cached.data ?? [])),
+    [tab, lan, cached.data],
+  );
+  // The rows the screen works from. While this tab's scan runs they are the
+  // ones it started with, so counts, tabs, filter options and the table agree
+  // with each other and none of them moves under the cursor.
   //
   // --- slice: game switch --- the hold is dropped when the game changes: rows
   // held from a Jedi Academy scan have no business under a Jedi Outcast list.
-  const held = useHeldRows(live, refresh.running, activeGame);
-  const view = scanView(live, held, refresh.running);
-  const all = view.rows;
+  // It is dropped on a tab change for the same reason.
+  const held = useHeldRows(source, scope.running, `${activeGame}:${tab}`);
+  const view = scanView(source, held, scope.running);
   const historyAddresses = useMemo(
     () => (settings.data?.serverHistory ?? []).map((entry) => entry.address),
+    [settings.data],
+  );
+  const favoriteAddresses = useMemo(
+    () => settings.data?.favoriteServers ?? [],
     [settings.data],
   );
 
@@ -178,29 +159,58 @@ export function ServersPage() {
     setFilters(DEFAULT_FILTERS);
   }, [activeGame]);
 
+  // --- slice: servers browser ---
+  // The rows of the open tab before the filters: what the subtitle counts and
+  // what the empty state reasons about.
+  const inTab = useMemo(
+    () => applyTab(view.rows, tab, historyAddresses),
+    [view.rows, tab, historyAddresses],
+  );
   const visible = useMemo(() => {
-    const inTab = applyTab(all, tab, historyAddresses);
     const filtered = applyFilters(inTab, filters);
     // History keeps its own order: the point of the tab is when, not how busy.
     return tab === "history"
       ? filtered
       : sortServers(filtered, sortColumn, sortDirection);
-  }, [all, tab, historyAddresses, filters, sortColumn, sortDirection]);
+  }, [inTab, tab, filters, sortColumn, sortDirection]);
 
   const selected = visible.find((row) => row.address === selectedAddress);
   const status = useServerStatus(selected?.address ?? null);
 
-  // Both counts run over the whole list, not the filtered one: the head of the
-  // subtitle already says "X of N servers", so the rest describes the network
+  // Both counts run over the whole tab, not the filtered list: the head of the
+  // subtitle already says "X of N servers", so the rest describes the tab
   // rather than the current search box.
-  const playersOnline = useMemo(() => totalRealPlayers(all), [all]);
-  const botsOnline = useMemo(() => totalBots(all), [all]);
+  const playersOnline = useMemo(() => totalRealPlayers(inTab), [inTab]);
+  const botsOnline = useMemo(() => totalBots(inTab), [inTab]);
   /** Rows the bot switch takes off the table, for the empty state to name. */
   const hiddenBotOnly = useMemo(
-    () => (filters.hideBotOnly ? all.filter(isBotOnly).length : 0),
-    [all, filters.hideBotOnly],
+    () => (filters.hideBotOnly ? inTab.filter(isBotOnly).length : 0),
+    [inTab, filters.hideBotOnly],
   );
-  const secondsAgo = useSecondsSince(refresh.refreshedAt);
+  const secondsAgo = useSecondsSince(scope.refreshedAt);
+
+  // --- slice: servers browser ---
+  /**
+   * **Refresh**: asks the addresses of the open tab again, nothing else.
+   *
+   * All re-probes the rows on screen, Favorites and History the addresses the
+   * player saved, and LAN repeats the broadcast sweep. No master server takes
+   * part in any of it — that is the other button.
+   */
+  const refreshTab = () => {
+    if (tab === "lan") {
+      refresh.refreshLan();
+      return;
+    }
+    const addresses =
+      tab === "favorites"
+        ? favoriteAddresses
+        : tab === "history"
+          ? historyAddresses
+          : inTab.map((server) => server.address);
+    if (addresses.length === 0) return;
+    refresh.refreshAddresses(tab, addresses);
+  };
 
   const toggleSort = (column: SortColumn) => {
     if (column === sortColumn) {
@@ -249,12 +259,12 @@ export function ServersPage() {
           // says which: two lists that look alike need naming apart.
           game: gameName(activeGame),
           visible: visible.length,
-          total: all.length,
+          total: inTab.length,
           players: playersOnline,
           bots: botsOnline,
           age: secondsAgo === null ? null : format.age(secondsAgo),
-          scanning: refresh.running,
-          progress: refresh.progress,
+          scanning: scope.running,
+          progress: scope.progress,
         })}
         actions={
           <>
@@ -267,24 +277,38 @@ export function ServersPage() {
               }
               className="w-260"
             />
+            {/* --- slice: servers browser ---
+                Two buttons, as in the game menu: this one re-asks the servers
+                already on the tab, the next one goes to the master servers. */}
             <Button
               icon={
                 <RefreshCw
                   size={16}
-                  className={refresh.running ? "animate-spin" : undefined}
+                  className={scope.running ? "animate-spin" : undefined}
                 />
               }
-              disabled={refresh.running}
-              onClick={startRefresh}
+              title={t("refreshHint")}
+              disabled={scope.running}
+              onClick={refreshTab}
             >
-              {refresh.running ? t("scanning") : t("refresh")}
+              {scope.running ? t("scanning") : t("refresh")}
             </Button>
+            {tab === "all" ? (
+              <Button
+                icon={<Globe size={16} />}
+                title={t("getNewListHint")}
+                disabled={scope.running}
+                onClick={refresh.getNewList}
+              >
+                {t("getNewList")}
+              </Button>
+            ) : null}
           </>
         }
       />
 
       <FilterRow
-        servers={all}
+        servers={inTab}
         filters={filters}
         onChange={setFilters}
         gameInfo={gameInfo}
@@ -294,15 +318,27 @@ export function ServersPage() {
         className="mt-16"
         value={tab}
         onChange={setTab}
-        tabs={buildTabs(t, all, historyAddresses)}
+        // --- slice: servers browser ---
+        // The strip counts the rows the screen is drawing, so a frozen table
+        // and the number beside its tab cannot disagree.
+        tabs={buildTabs(
+          t,
+          tab === "lan" ? (cached.data ?? []) : view.rows,
+          tab === "lan" ? view.rows : lan,
+          historyAddresses,
+        )}
       />
 
-      {refresh.error !== null ? (
+      {scope.error !== null ? (
         <Alert
-          title={t("alerts.masters")}
-          detail={refresh.error}
+          title={tab === "all" ? t("alerts.masters") : t("alerts.refresh")}
+          detail={scope.error}
           action={
-            <Button size="sm" icon={<RefreshCw size={14} />} onClick={startRefresh}>
+            <Button
+              size="sm"
+              icon={<RefreshCw size={14} />}
+              onClick={tab === "all" ? refresh.getNewList : refreshTab}
+            >
               {tCommon("actions.retry")}
             </Button>
           }
@@ -339,11 +375,18 @@ export function ServersPage() {
                 <EmptyState
                   className="mt-24"
                   icon={<ServerIcon size={24} />}
-                  title={emptyTitle(t, tab, all.length)}
-                  text={emptyText(t, tab, all.length, hiddenBotOnly)}
+                  title={emptyTitle(t, tab, inTab.length, lanScanned)}
+                  text={emptyText(t, tab, inTab.length, hiddenBotOnly, lanScanned)}
                   action={
-                    tab === "all" && all.length === 0 ? (
-                      <Button icon={<RefreshCw size={16} />} onClick={startRefresh}>
+                    // --- slice: servers browser ---
+                    // An empty All tab is a launcher that has never asked the
+                    // masters, so the button offered is the one that does.
+                    tab === "all" && inTab.length === 0 ? (
+                      <Button icon={<Globe size={16} />} onClick={refresh.getNewList}>
+                        {t("getNewList")}
+                      </Button>
+                    ) : tab === "lan" && !lanScanned ? (
+                      <Button icon={<RefreshCw size={16} />} onClick={refreshTab}>
                         {t("refresh")}
                       </Button>
                     ) : undefined
@@ -371,7 +414,7 @@ export function ServersPage() {
           {view.frozen ? (
             <ScanOverlay
               label={(() => {
-                const scan = scanLabel(respondedSoFar(live, held), refresh.progress);
+                const scan = scanLabel(respondedSoFar(source, held), scope.progress);
                 return t(`scan.${scan.kind}`, {
                   count: scan.count,
                   total: scan.total,
@@ -444,20 +487,20 @@ function ScanOverlay({ label }: { label: string }) {
 function useHeldRows(
   live: ServerInfo[],
   scanning: boolean,
-  game: Game,
+  // --- slice: game switch --- the game, and — slice: servers browser — the
+  // tab: a switch mid-scan is what this guards. The old list would otherwise
+  // stay frozen on screen under a loader counting somebody else's answers.
+  list: string,
 ): ServerInfo[] | null {
   const held = useRef<ServerInfo[] | null>(null);
   const wasScanning = useRef(false);
-  // --- slice: game switch ---
-  // A switch mid-scan is the case this guards: the old list would otherwise
-  // stay frozen on screen under a loader counting the new game's answers.
-  const heldGame = useRef(game);
+  const heldList = useRef(list);
 
-  if (heldGame.current !== game) {
-    heldGame.current = game;
-    // Nothing held: the rows of the new game are the ones to draw, and they
-    // are not moving — the scan still in flight belongs to the game the
-    // player left, and its batches land in that game's list.
+  if (heldList.current !== list) {
+    heldList.current = list;
+    // Nothing held: the rows of the list now on screen are the ones to draw,
+    // and they are not moving — a scan still in flight belongs to the list the
+    // player left, and its batches land there.
     held.current = null;
   } else if (scanning !== wasScanning.current) {
     wasScanning.current = scanning;
@@ -686,10 +729,17 @@ function Alert({
   );
 }
 
-/** The tab strip with its counts. */
+/**
+ * The tab strip with its counts.
+ *
+ * --- slice: servers browser ---
+ * `lanRows` is a list of its own: those rows come from a broadcast sweep and
+ * never enter the one the master servers filled.
+ */
 function buildTabs(
   t: ServersT,
   servers: ServerInfo[],
+  lanRows: ServerInfo[],
   historyAddresses: string[],
 ): TabDefinition<ServerTab>[] {
   const known = new Set(servers.map((server) => server.address));
@@ -708,7 +758,7 @@ function buildTabs(
     {
       id: "lan",
       label: t("tabs.lan"),
-      disabled: true,
+      count: lanRows.length,
       title: t("tabs.lanHint"),
     },
   ];
@@ -762,7 +812,7 @@ function describeCounts(
   if (total > 0 && bots > 0) parts.push(t("subtitle.bots", { count: bots }));
 
   if (scanning) {
-    parts.push(t("subtitle.asking"));
+    parts.push(t("subtitle.scanning"));
     return parts.join(DOT);
   }
 
@@ -773,8 +823,15 @@ function describeCounts(
   return parts.join(DOT);
 }
 
-function emptyTitle(t: ServersT, tab: ServerTab, total: number): string {
-  if (tab === "lan") return t("empty.lanTitle");
+function emptyTitle(
+  t: ServersT,
+  tab: ServerTab,
+  total: number,
+  // --- slice: servers browser --- a LAN tab nobody has swept yet and one that
+  // swept and found nothing are two different sentences.
+  lanScanned: boolean,
+): string {
+  if (tab === "lan") return lanScanned ? t("empty.lanNoneTitle") : t("empty.lanTitle");
   if (tab === "favorites") return t("empty.favoritesTitle");
   if (tab === "history") return t("empty.historyTitle");
   return total === 0 ? t("empty.noneTitle") : t("empty.filteredTitle");
@@ -785,10 +842,11 @@ function emptyText(
   tab: ServerTab,
   total: number,
   hiddenBotOnly: number,
+  lanScanned: boolean,
 ): string {
   switch (tab) {
     case "lan":
-      return t("empty.lanText");
+      return lanScanned ? t("empty.lanNoneText") : t("empty.lanText");
     case "favorites":
       return t("empty.favoritesText");
     case "history":

@@ -2,9 +2,14 @@
   "title": "Serveurs",
   "searchPlaceholder": "Nom, carte ou adresse",
   "refresh": "Actualiser",
+  "refreshHint": "Ask the servers on this tab how they are doing right now",
+  "getNewList": "Get new list",
+  "getNewListHint": "Ask the master servers who is online, then check every address they name",
   "scanning": "Recherche",
   "subtitle": {
     "empty": "Aucun serveur {{game}}",
+    "scanning": "checking servers",
+    "refreshed": "actualisé il y a {{age}}",
     "all_one": "{{count}} serveur {{game}}",
     "all_many": "{{count}} serveurs {{game}}",
     "all_other": "{{count}} serveurs {{game}}",
@@ -17,8 +22,6 @@
     "bots_one": "{{count}} bot exclu du décompte",
     "bots_many": "{{count}} bots exclus du décompte",
     "bots_other": "{{count}} bots exclus du décompte",
-    "asking": "interrogation des serveurs maîtres",
-    "refreshed": "actualisé il y a {{age}}",
     "silent_one": "{{count}} n’a pas répondu",
     "silent_many": "{{count}} n’ont pas répondu",
     "silent_other": "{{count}} n’ont pas répondu"
@@ -41,7 +44,7 @@
     "favorites": "Favoris",
     "history": "Historique",
     "lan": "LAN",
-    "lanHint": "La détection sur le réseau local n’est pas encore disponible"
+    "lanHint": "Servers on your own network, found by broadcast"
   },
   "columns": {
     "server": "SERVEUR",
@@ -55,6 +58,8 @@
     "addFavorite": "Ajouter aux favoris",
     "removeFavorite": "Retirer des favoris",
     "passwordRequired": "Mot de passe requis",
+    "noResponse": "Offline",
+    "noResponseTitle": "This server did not answer the last check. The row shows what was last seen.",
     "countsTitle": "{{humans}} joueurs, {{bots}} bots, {{slots}} places",
     "countsUnknownTitle": "{{clients}} connectés ; ce serveur n’indique pas combien sont des bots"
   },
@@ -65,19 +70,22 @@
   },
   "alerts": {
     "masters": "Serveurs maîtres injoignables",
+    "refresh": "Could not check this tab",
     "cache": "Le cache des serveurs n’est pas disponible",
     "connect": "Impossible de lancer le client"
   },
   "empty": {
     "pickServer": "Choisissez un serveur pour voir ses joueurs et vous y connecter.",
-    "lanTitle": "La détection LAN n’existe pas encore",
-    "lanText": "La détection par diffusion sur le réseau local arrive plus tard.",
+    "lanTitle": "Nothing found on this network yet",
+    "lanText": "Press Refresh to call out to the servers on your own network.",
+    "lanNoneTitle": "Nobody answered on this network",
+    "lanNoneText": "No server replied on this network. Start one on a machine here, or use the All tab.",
     "favoritesTitle": "Aucun favori",
     "favoritesText": "Appuyez sur l’étoile d’une ligne pour garder un serveur ici.",
     "historyTitle": "Aucune connexion",
     "historyText": "Les serveurs auxquels vous vous connectez apparaissent ici, du plus récent au plus ancien.",
     "noneTitle": "Aucun serveur",
-    "noneText": "Appuyez sur Actualiser pour demander aux serveurs maîtres qui est en ligne.",
+    "noneText": "Press Get new list to ask the master servers who is online.",
     "filteredTitle": "Aucun résultat pour ces filtres",
     "filteredText": "Élargissez les filtres, ou videz le champ de recherche.",
     "filteredBots_one": "Élargissez les filtres, ou videz le champ de recherche. {{count}} serveur n’a que des bots ; désactivez Masquer les bots seuls pour le voir.",
@@ -87,21 +95,21 @@
   "details": {
     "password": "MOT DE PASSE",
     "copyAddress": "Copier l’adresse",
-    "bots_one": "+{{count}} bot",
-    "bots_many": "+{{count}} bots",
-    "bots_other": "+{{count}} bots",
     "botsUnknown": "bots inconnus",
     "botsUnknownTitle": "Ce serveur ne publie pas son nombre de bots et n’a pas répondu à getstatus",
     "connect": "Se connecter",
     "noPlayers": "Personne ne joue.",
+    "botBadge": "BOT",
+    "playersError": "Pas de liste des joueurs : {{message}}",
+    "bots_one": "+{{count}} bot",
+    "bots_many": "+{{count}} bots",
+    "bots_other": "+{{count}} bots",
     "onlyBots_one": "Personne ne joue : {{count}} bot est seul ici.",
     "onlyBots_many": "Personne ne joue : {{count}} bots sont seuls ici.",
     "onlyBots_other": "Personne ne joue : {{count}} bots sont seuls ici.",
     "botHeading_one": "{{count}} BOT",
     "botHeading_many": "{{count}} BOTS",
-    "botHeading_other": "{{count}} BOTS",
-    "botBadge": "BOT",
-    "playersError": "Pas de liste des joueurs : {{message}}"
+    "botHeading_other": "{{count}} BOTS"
   },
   "ping": {
     "noAnswer": "Sans réponse",
