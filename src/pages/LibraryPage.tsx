@@ -56,6 +56,7 @@ import {
   useAddLibraryFiles,
   useClients,
   useEngines,
+  useJkhubIndexStatus,
   useLibrary,
   useLibraryConflicts,
   useRemoveLibraryItem,
@@ -85,6 +86,9 @@ const SORT_IDS: SortMode[] = ["recent", "name", "size"];
 export function LibraryPage() {
   const { t } = useTranslation("library");
   const { t: tCommon } = useTranslation("common");
+  // --- slice: library cleanup --- one search box serves the three tabs, and
+  // the reason it can be off belongs to the JKHub catalogue.
+  const { t: tJkhub } = useTranslation("jkhub");
   const errorText = useErrorText();
   const format = useFormat();
   const clients = useClients();
@@ -291,6 +295,19 @@ export function LibraryPage() {
       })
     : t("subtitle");
 
+  // --- slice: library cleanup ---
+  // The box in the header is the only search on the screen: it filters the
+  // installed files, queries the JKHub catalogue and filters the updates,
+  // depending on the tab, and keeps what was typed across a switch.
+  //
+  // **Browse JKHub** answers out of the catalogue index, which the core may
+  // not have yet. That is the one state the box switches itself off in, with
+  // the reason in its tooltip — off only while that tab is open, because the
+  // files of a client do not depend on jkhub.org. Reading the status here is
+  // a second reader of the entry the tab already holds, not a second request.
+  const indexStatus = useJkhubIndexStatus(activeGame, tab === "jkhub");
+  const searchOff = tab === "jkhub" && indexStatus.data?.available === false;
+
   const queryError = clients.error ?? items.error ?? conflicts.error ?? null;
   const failure = error ?? (queryError ? errorText(queryError) : null);
   const busy = addFiles.isPending || setEnabled.isPending || removeItem.isPending;
@@ -312,6 +329,8 @@ export function LibraryPage() {
               placeholder={t("searchPlaceholder")}
               value={search}
               className="w-232"
+              disabled={searchOff}
+              title={searchOff ? tJkhub("search.unavailable") : undefined}
               onChange={(event) => setSearch(event.target.value)}
             />
             <Button icon={<ExternalLink size={16} />} onClick={browseJkhub}>
@@ -417,6 +436,7 @@ export function LibraryPage() {
           clientId={clientId}
           clientName={client?.name ?? t("fallback.theClient")}
           installed={all}
+          search={search}
         />
       ) : (
         <EmptyState

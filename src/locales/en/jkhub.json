@@ -8,7 +8,6 @@
     "name": "Name"
   },
   "search": {
-    "placeholder": "Search the whole catalog",
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "results_one": "{{count}} result in {{game}}",
     "results_other": "{{count}} results in {{game}}",
