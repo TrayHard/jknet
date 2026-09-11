@@ -2,8 +2,13 @@ import type { ReactNode } from "react";
 
 interface PageHeaderProps {
   title: string;
-  /** One line under the title saying what the screen is for. */
-  subtitle: string;
+  /**
+   * One line under the title saying what the screen is for.
+   *
+   * Left out on a screen whose controls say it already: an empty line under a
+   * heading is a gap, not a subtitle.
+   */
+  subtitle?: string;
   /** Buttons aligned to the right of the title. */
   actions?: ReactNode;
 }
@@ -25,7 +30,9 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
     <div className="flex flex-wrap items-start gap-16 pb-24">
       <div className="flex-1 basis-[260px] min-w-0 flex flex-col gap-4">
         <h1 className="text-display-lg text-fg">{title}</h1>
-        <p className="text-body-md text-fg-secondary">{subtitle}</p>
+        {subtitle ? (
+          <p className="text-body-md text-fg-secondary">{subtitle}</p>
+        ) : null}
       </div>
       {actions ? (
         <div className="flex items-center gap-8 pt-4 ml-auto">{actions}</div>

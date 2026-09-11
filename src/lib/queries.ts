@@ -1868,6 +1868,24 @@ export function useCancelJkhubIndex() {
   );
 }
 
+// --- slice: library cleanup ---
+/**
+ * Empties the whole JKHub cache folder: pages, file cards, downloaded
+ * archives and the catalogue index of both games.
+ *
+ * The **Clear JKHub cache** action of the Settings screen. Nothing is lost
+ * that the site cannot serve again, and every shipped build carries a snapshot
+ * of the catalogue, so the tab still lists after it. Every key of the module
+ * is dropped, because the core just deleted what answered them.
+ */
+export function useClearJkhubCache() {
+  const queryClient = useQueryClient();
+  return useCallback(async () => {
+    await jkhubIpc.clearCache();
+    await queryClient.invalidateQueries({ queryKey: jkhubKeys.all });
+  }, [queryClient]);
+}
+
 export function useJkhubDownloadProgress(): Map<number, JkhubDownloadProgress> {
   const [progress, setProgress] = useState<Map<number, JkhubDownloadProgress>>(
     () => new Map(),

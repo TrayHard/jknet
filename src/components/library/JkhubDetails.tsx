@@ -1,5 +1,4 @@
 import {
-  AlertTriangle,
   ArrowDownCircle,
   Check,
   Download,
@@ -128,11 +127,6 @@ export function JkhubDetails({
               {file.version ? <Badge tone="accent">v{file.version}</Badge> : null}
               {file.categoryName ? (
                 <Badge tone="neutral">{file.categoryName}</Badge>
-              ) : null}
-              {file.stale ? (
-                <Badge tone="warm" icon={<AlertTriangle size={12} />}>
-                  {t("fromCache")}
-                </Badge>
               ) : null}
             </div>
 

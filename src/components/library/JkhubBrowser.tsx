@@ -4,14 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useToasts } from "../ToastsProvider";
-import {
-  Badge,
-  Button,
-  EmptyState,
-  Input,
-  Select,
-  type SelectOption,
-} from "../ui";
+import { Button, EmptyState, Select, type SelectOption } from "../ui";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
 // --- slice: jkhub index startup ---
@@ -19,7 +12,6 @@ import { JkhubIndexing } from "./JkhubIndexing";
 import { JkhubTree } from "./JkhubTree";
 // --- slice: i18n ---
 import { useErrorText } from "../../i18n/errors";
-import { useFormat } from "../../i18n/useFormat";
 import { useActiveGame, useGameNames } from "../../lib/game";
 import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
@@ -52,9 +44,6 @@ const MAX_SHOWN = 100;
 /** How long the search waits after a keystroke before it asks the core. */
 const DEBOUNCE_MS = 150;
 
-/** An index older than this is described by its date rather than its age. */
-const A_DAY = 24 * 60 * 60;
-
 /**
  * What the grid is scoped to, and who decided it.
  *
@@ -79,8 +68,8 @@ export type Scope =
  * themselves. The tab has to open somewhere and opens on the first category
  * with files of its own — `Audio`, 44 of the 3 324 Jedi Academy files — and a
  * search that stayed inside that would answer «nothing matches» to almost
- * every word typed into a box that says it searches the whole catalog. Finding
- * a file in a category nobody opened is what the local index is for.
+ * every word typed into the search box of the screen. Finding a file in a
+ * category nobody opened is what the local index is for.
  *
  * Picking a category narrows the search to it, which is what the counts in the
  * tree are for; **Show all categories** widens it again.
@@ -104,6 +93,15 @@ interface JkhubBrowserProps {
   clientName: string;
   /** Files already in that client, for the Installed badge. */
   installed: LibraryItem[];
+  // --- slice: library cleanup ---
+  /**
+   * What the screen's search box holds, raw.
+   *
+   * The tab has no box of its own: one field in the header serves all three
+   * tabs, so a query survives a switch between them. The debounce below this
+   * stays here, because it is this tab that pays for a keystroke.
+   */
+  search: string;
 }
 
 /**
@@ -118,22 +116,34 @@ interface JkhubBrowserProps {
  * --- slice: jkhub index ---
  * Both the listing and the search come from the local catalogue index rather
  * than from a page of the site, which is what makes a query find a file in a
- * category nobody opened. The core keeps that index current on its own; the
- * only thing this screen does about it is say how old it is and offer to read
- * jkhub.org again.
+ * category nobody opened. The core keeps that index current on its own, and
+ * **Refresh** asks for a top-up outright. How old the index is, a full rebuild
+ * of it and a walk of the category tree live on the Settings screen, with the
+ * other caches.
  */
-export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserProps) {
+export function JkhubBrowser({
+  clientId,
+  clientName,
+  installed,
+  search: typed,
+}: JkhubBrowserProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
-  const format = useFormat();
   const gameNames = useGameNames();
   const [scope, setScope] = useState<Scope | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
   const [shown, setShown] = useState(PAGE);
-  const [typed, setTyped] = useState("");
-  const [query, setQuery] = useState("");
+  // Opening the tab with a word already in the box searches for it at once:
+  // the wait below is for the next keystroke, not for text typed on another
+  // tab a minute ago.
+  const [query, setQuery] = useState(() => typed.trim());
   const [openFile, setOpenFile] = useState<number | null>(null);
+  // --- slice: library cleanup ---
+  // Files an install answered «nothing to install here» about: a `.rar` and a
+  // record that links elsewhere. Keyed by file id, which is unique across both
+  // games, so a switch of game needs no clearing.
+  const [openOnly, setOpenOnly] = useState<ReadonlySet<number>>(() => new Set());
   const [result, setResult] = useState<JkhubInstallResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -204,7 +214,6 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   const cards = search.data?.cards ?? [];
   const total = search.data?.total ?? 0;
   const counts = query ? (search.data?.categoryCounts ?? {}) : null;
-  const stale = search.data?.stale || categories.data?.stale;
   const canLoadMore =
     shown < Math.min(total, MAX_SHOWN) && !search.isFetching;
 
@@ -228,28 +237,15 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   // Whether there is a catalogue to list, to search and to type at. The rule
   // is the core's — `index::browsable` — and the screen only reads it. Until
   // the core has answered, the tab behaves as though it can browse: the status
-  // arrives within a frame or two, and a search box that switches itself off
-  // and on again in that time is worse than one that is briefly hopeful.
+  // arrives within a frame or two, and a waiting panel that appears and goes
+  // again in that time is worse than one that is briefly hopeful.
+  //
+  // --- slice: library cleanup --- the search box reads the same answer from
+  // `LibraryPage`, where the box now lives.
   const browsable = status.data?.available !== false;
   // The event is the fresher of the two; the answer of the status is what a tab
   // opened halfway through a crawl has instead of the events it missed.
   const step = indexing.get(game) ?? status.data?.progress ?? null;
-
-  const indexLine = () => {
-    if (building && step) {
-      return t("index.building", { done: step.done, total: step.total });
-    }
-    if (building) return t("index.startingUp");
-    const state = status.data;
-    if (!state?.available) return t("index.missing");
-    if (state.age < A_DAY) {
-      return t("index.line", { time: format.age(state.age), count: state.files });
-    }
-    return t("index.lineDate", {
-      date: format.date(state.updatedAt),
-      count: state.files,
-    });
-  };
 
   const runInstall = (id: number, replace: boolean) => {
     if (!clientId) {
@@ -270,6 +266,15 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
               text: answer.files.join(", "),
             });
             return;
+          }
+          // --- slice: library cleanup ---
+          // Two of the answers say the entry has nothing to install: a `.rar`
+          // archive and a record that links to another site. A listing card
+          // names no archive, so this try is the first moment either is
+          // known — and from now on the card offers the site instead of an
+          // Install that would answer the same thing again.
+          if (answer.kind === "unsupported" || answer.kind === "external") {
+            setOpenOnly((current) => new Set(current).add(id));
           }
           // Everything else needs a decision, and the dialog is where the
           // buttons for it are.
@@ -301,11 +306,12 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
   // **Refresh** reads jkhub.org for what the catalogue index does not know
   // yet, and re-reads the open file page with it. It deliberately leaves the
   // category tree alone — that walk is twenty requests and has its own action
-  // in the tree header.
+  // on the Settings screen.
   //
   // `full` is the crawl of every listing page. The core reaches for it on its
-  // own when the cheap path cannot do the job, and **Rebuild** is the way a
-  // player asks for it outright.
+  // own when the cheap path cannot do the job; **Rebuild** on the Settings
+  // screen is the way a player asks for it outright, and so is **Try again**
+  // on the waiting panel below.
   const runRefresh = (full: boolean) => {
     setRefreshing(true);
     setFailure(null);
@@ -357,6 +363,9 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
       .finally(() => setRefreshing(false));
   };
 
+  // --- slice: library cleanup ---
+  // All that is left of **Update categories** on this tab: the way out of a
+  // tab with no tree at all. The action itself lives on the Settings screen.
   const runUpdateCategories = () => {
     setUpdatingTree(true);
     setFailure(null);
@@ -429,33 +438,13 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             categories={tree}
             selected={scoped}
             onSelect={(entry) => setScope({ kind: "picked", category: entry })}
-            onUpdate={runUpdateCategories}
-            updating={updatingTree}
             counts={counts}
           />
         </aside>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-12 pb-12">
-            <Input
-              icon={<Search size={16} />}
-              placeholder={t("search.placeholder")}
-              value={typed}
-              className="w-232"
-              // --- slice: jkhub index startup ---
-              // Nothing to search yet, so the box says so by being off rather
-              // than by answering «nothing matches» to every word. The panel
-              // below the bar is where the reason and the progress are.
-              disabled={!browsable}
-              title={browsable ? undefined : t("search.unavailable")}
-              onChange={(event) => setTyped(event.target.value)}
-            />
             <span className="flex-1" />
-            {stale ? (
-              <Badge tone="warm" icon={<AlertTriangle size={12} />}>
-                {t("fromCache")}
-              </Badge>
-            ) : null}
             <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
             <Select
               ariaLabel={t("sort.label")}
@@ -476,44 +465,28 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
             </Button>
           </div>
 
-          <p className="text-body-sm text-fg-muted">
-            {/* The category name comes from jkhub.org: data, not copy. */}
-            {query
-              ? t("search.results", {
-                  count: total,
-                  game: gameNames.label(game),
-                })
-              : category
-                ? t("scope.category", { category: category.name, client: clientName })
-                : t("scope.noCategory", { client: clientName })}
-          </p>
-
-          <p className="flex items-center gap-8 text-label-xs text-fg-muted pb-12 pt-4">
-            <span>{indexLine()}</span>
-            <button
-              type="button"
-              onClick={() => runRefresh(true)}
-              disabled={refreshing || building}
-              title={t("index.rebuildHint")}
-              className={
-                refreshing || building
-                  ? "text-fg-muted cursor-default"
-                  : "text-fg-muted hover:text-fg cursor-pointer"
-              }
-            >
-              {t("index.rebuild")}
-            </button>
-          </p>
+          {/* --- slice: library cleanup ---
+              How many files answered, and nothing else. The line that named
+              the category and the client, and the one that dated the index
+              and offered to rebuild it, are gone: the tree already says which
+              category is open, and the catalogue is kept current by the core
+              and by the Settings screen. */}
+          {query ? (
+            <p className="text-body-sm text-fg-muted pb-12">
+              {t("search.results", { count: total, game: gameNames.label(game) })}
+            </p>
+          ) : null}
 
           {/* --- slice: jkhub index startup ---
               Nothing to list and nothing to search: no crawl of this machine
               and no copy inside the build. The grid would sit empty while a
               crawl ran behind it, which reads as a broken screen rather than
               as a wait, so the wait takes its place — with the progress, the
-              reason and one button to stop it. The bar above stays, with its
-              search box switched off: the catalogue is what is missing, not
-              the tab. Every shipped build carries a snapshot, so this is a
-              safety net and not the normal first run. */}
+              reason and one button to stop it. The bar above stays, and so
+              does the search box in the header of the screen — switched off
+              while this tab is open, because the catalogue is what is
+              missing, not the tab. Every shipped build carries a snapshot, so
+              this is a safety net and not the normal first run. */}
           {!browsable ? (
             <JkhubIndexing
               building={building}
@@ -560,6 +533,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
                       names.get(card.categoryId ?? category?.id ?? 0)?.name
                     }
                     installed={installedIds.has(card.id)}
+                    openOnly={openOnly.has(card.id)}
                     progress={progress.get(card.id) ?? null}
                     busy={install.isPending}
                     onOpen={() => {
@@ -567,6 +541,7 @@ export function JkhubBrowser({ clientId, clientName, installed }: JkhubBrowserPr
                       setOpenFile(card.id);
                     }}
                     onInstall={() => runInstall(card.id, false)}
+                    onOpenSite={() => openSite(card.id)}
                   />
                 ))}
               </ul>
