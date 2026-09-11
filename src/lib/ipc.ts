@@ -439,10 +439,22 @@ export interface AddResult {
   skipped: SkippedFile[];
 }
 
+/** What kind of content sits at a conflicting internal path. */
+export type ConflictKind =
+  | "shader"
+  | "model"
+  | "sound"
+  | "texture"
+  | "map"
+  | "ui"
+  | "other";
+
 /** One internal path that more than one enabled archive carries. */
 export interface LibraryConflict {
   path: string;
   folder: string;
+  /** What the path holds, read by the core out of the path itself. */
+  kind: ConflictKind;
   /** Item ids in the engine's load order. */
   files: string[];
   /** The item the engine actually reads: the last one loaded. */
