@@ -62,7 +62,8 @@ src/
   components/ui/         UI-кит: Button, Badge, Input, Select, Toggle, NavItem,
                          EmptyState, RadioCard, StepBadges, Toast, Avatar, Dialog
   components/client/     окно клиента: элементы под cvar, блок движка,
-                         предпросмотр командной строки, полоса установки
+                         предпросмотр командной строки, полоса установки,
+                         профили игрока: список, форма, сетка скинов, никнейм
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
                          JkhubIndexing, JkhubTree
