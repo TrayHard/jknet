@@ -30,7 +30,8 @@
     "title": "Lancement",
     "label": "Arguments de lancement supplémentaires",
     "placeholder": "+set r_fullscreen 0 +set r_mode 4",
-    "hint": "Ajoutés à chaque client, exactement comme dans un raccourci. Exemple : <0>+set r_fullscreen 0 +set r_mode 4</0>. Les guillemets droits gardent ensemble une valeur qui contient un espace."
+    "hint": "Ajoutés à chaque client, exactement comme dans un raccourci. Exemple : <0>+set r_fullscreen 0 +set r_mode 4</0>. Les guillemets droits gardent ensemble une valeur qui contient un espace.",
+    "order": "The arguments of a client stand after these, so a client that repeats a <0>+set</0> of the same cvar is the value the game takes."
   },
   "onboarding": {
     "title": "Configuration initiale",
@@ -41,13 +42,13 @@
     "title": "Cache",
     "mapPictures": "Images des cartes",
     "reading": "Lecture de l’index…",
-    "count_one": "{{count}} carte a une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
-    "count_many": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
-    "count_other": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
     "perGame": "{{count}} {{game}}",
     "lastRebuild": "Dernière reconstruction : {{maps}} images depuis {{sources}} fichiers en {{elapsed}}.",
     "rebuild": "Reconstruire",
-    "rebuilding": "Reconstruction…"
+    "rebuilding": "Reconstruction…",
+    "count_one": "{{count}} carte a une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
+    "count_many": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé.",
+    "count_other": "{{count}} cartes ont une image, lue dans les fichiers pk3 que vous possédez déjà. Rien n’est téléchargé."
   },
   "rest": {
     "title": "Le reste des paramètres n’est pas encore branché",

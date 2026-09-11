@@ -76,7 +76,10 @@
     "namePlaceholder": "Quotidien",
     "modFolder": "Dossier du mod (fs_game)",
     "modFolderHint": "Le client démarre dans ce dossier de son répertoire personnel, passé en <0>+set fs_game</0>. Lettres, chiffres, <1>_</1>, <2>-</2> et <3>+</3> uniquement. Laissez vide pour <4>{{folder}}</4>, le dossier par défaut de {{engine}}.",
-    "engineFallback": "le moteur"
+    "engineFallback": "le moteur",
+    "launchArgs": "Launch arguments",
+    "launchArgsPlaceholder": "+set r_mode 4 +exec duel.cfg",
+    "launchArgsHint": "This client adds these after the arguments of the Settings screen: a repeated <0>+set</0> of the same cvar wins, while commands such as <1>+exec</1> add up and run in the order they stand. Double quotes keep a value with a space together."
   },
   "missingToast": {
     "title": "Aucun client {{game}}",
