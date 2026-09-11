@@ -958,7 +958,12 @@ function emptyTitle(
   if (tab === "favorites") return t("empty.favoritesTitle");
   if (tab === "history") return t("empty.historyTitle");
   // --- slice: server actions ---
-  if (tab === "hidden") return t("empty.hiddenTitle");
+  // The filter row works on this tab like on any other, and **Hide bot-only**
+  // is on by default: a hidden bot server is a row the tab holds and the
+  // filters keep back, which is not the same sentence as «nothing is hidden».
+  if (tab === "hidden") {
+    return total === 0 ? t("empty.hiddenTitle") : t("empty.filteredTitle");
+  }
   return total === 0 ? t("empty.noneTitle") : t("empty.filteredTitle");
 }
 
@@ -978,7 +983,10 @@ function emptyText(
       return t("empty.historyText");
     // --- slice: server actions ---
     case "hidden":
-      return t("empty.hiddenText");
+      if (total === 0) return t("empty.hiddenText");
+      return hiddenBotOnly > 0
+        ? t("empty.filteredBots", { count: hiddenBotOnly })
+        : t("empty.filteredText");
     default:
       if (total === 0) return t("empty.noneText");
       // A player who filtered everything away deserves to know that the bot
