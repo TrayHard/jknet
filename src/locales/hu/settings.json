@@ -59,6 +59,8 @@
     "version": "Verzió: {{version}}",
     "versionUnknown": "Ismeretlen verzió",
     "license": "GPL-3.0-or-later",
+    "engineIcons": "Engine icons belong to their projects, all released under GPL-2.0:",
+    "engineIconBy": "icon by {{author}}",
     "check": "Frissítés keresése",
     "install": "Telepítés és újraindítás"
   }

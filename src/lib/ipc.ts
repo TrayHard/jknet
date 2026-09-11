@@ -262,6 +262,10 @@ export interface Engine {
   description: string;
   executable: string;
   repo: string;
+  /** The repository as a link, for the About card and the engine page. */
+  repoUrl: string;
+  /** Who the project credits for its icon, when it credits anyone. */
+  iconCredit: string | null;
   /** Recommended, merely supported, or legacy with a note saying why. */
   status: EngineStatus;
   /** False when the project publishes no archive JKNet can install. */

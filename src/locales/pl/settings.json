@@ -61,6 +61,8 @@
     "version": "Wersja {{version}}",
     "versionUnknown": "Wersja nieznana",
     "license": "GPL-3.0-or-later",
+    "engineIcons": "Engine icons belong to their projects, all released under GPL-2.0:",
+    "engineIconBy": "icon by {{author}}",
     "check": "Sprawdź aktualizacje",
     "install": "Zainstaluj i uruchom ponownie"
   }
