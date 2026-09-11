@@ -345,6 +345,27 @@ fn default_protocol(game: Game) -> u16 {
         .unwrap_or(PROTOCOL_VERSION)
 }
 
+/// Whether the browser keeps a server running this mod folder out of sight.
+///
+/// Movie Battles II is a global mod with a launcher and a content pipeline of
+/// its own: its servers demand files the launcher does not manage and refuse a
+/// client that joins without them, so a row the player cannot connect to is
+/// worse than no row. Until JKNet supports the mod, those servers are dropped
+/// where they are read — on a refresh and on the cache written before this
+/// rule existed — so no tab, count or subtitle sees them.
+///
+/// The whole folder name is compared, not a prefix: `mbii2` is somebody else's
+/// mod and stays on the list. To bring the servers back, delete this function
+/// and its two call sites; to hide another mod, add it here.
+fn is_hidden_mod(mod_name: &str) -> bool {
+    mod_name.eq_ignore_ascii_case("mbii")
+}
+
+/// Drops the rows of [`is_hidden_mod`] from a list read off the disk.
+fn drop_hidden_mods(servers: &mut Vec<ServerInfo>) {
+    servers.retain(|server| !is_hidden_mod(&server.mod_name));
+}
+
 /// Reads one key of an info string as a number, or `None` when it is missing
 /// or is not a number at all.
 fn number<T: std::str::FromStr>(info: &BTreeMap<String, String>, key: &str) -> Option<T> {
@@ -559,6 +580,8 @@ pub fn get_cached_servers(
     let favorites: HashSet<String> = settings.favorite_servers.into_iter().collect();
 
     let mut servers = read_cache(&file);
+    // A cache written before the rule existed still holds the hidden mods.
+    drop_hidden_mods(&mut servers);
     for server in &mut servers {
         // A document written by 0.2 has no game on its rows, and serde fills
         // the field with the default. Since it is the Jedi Academy document,
@@ -651,6 +674,11 @@ pub async fn refresh_servers(
             reply.ping_ms,
             &last_seen,
         );
+        // Dropped before the batch and before `collected`, so a hidden mod
+        // reaches neither the window nor the cache this refresh writes.
+        if is_hidden_mod(&server.mod_name) {
+            continue;
+        }
         server.decorate(&favorites);
         batch.push(server.clone());
         collected.push(server);
@@ -1038,6 +1066,47 @@ mod tests {
         // `needpass` is a number in the protocol, so a word means "not set".
         assert!(!server.needpass);
         assert_eq!(server.mod_name, "base");
+    }
+
+    #[test]
+    fn a_refresh_drops_the_mod_folder_the_browser_hides() {
+        // What the loop in `refresh_servers` asks of every answer, in the
+        // three spellings an operator may have typed into `fs_game`.
+        for spelling in ["mbii", "MBII", "MbII"] {
+            let server = row(&format!("\\clients\\4\\game\\{spelling}"));
+            assert_eq!(server.mod_name, spelling);
+            assert!(is_hidden_mod(&server.mod_name), "{spelling} must be hidden");
+        }
+    }
+
+    #[test]
+    fn a_mod_that_merely_looks_alike_stays_on_the_list() {
+        // The whole folder name is compared: a prefix match would take
+        // somebody else's mod down with it.
+        for spelling in ["mbii2", "japlus", "base", "mb2", ""] {
+            assert!(!is_hidden_mod(spelling), "{spelling} must stay");
+        }
+    }
+
+    #[test]
+    fn a_cached_row_of_a_hidden_mod_never_reaches_the_screen() {
+        // The rule runs on the way out of the cache as well, because a file
+        // written before it existed still holds those rows.
+        let file = std::env::temp_dir().join("jknet-test-hidden-mod-cache.json");
+        write_cache(
+            &file,
+            &[
+                row("\\clients\\4\\game\\MBII"),
+                row("\\clients\\4\\game\\japlus"),
+            ],
+        );
+
+        let mut read = read_cache(&file);
+        assert_eq!(read.len(), 2, "the cache holds both rows");
+        drop_hidden_mods(&mut read);
+        assert_eq!(read.len(), 1);
+        assert_eq!(read[0].mod_name, "japlus");
+        let _ = fs::remove_file(&file);
     }
 
     #[test]
