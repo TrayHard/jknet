@@ -10,13 +10,6 @@
     "stepCurrent": " (jelenlegi lépés)",
     "stepUpcoming": " (még nem kezdődött el)"
   },
-  "brand": {
-    "tagline": "Egyetlen indítóprogram a Jedi Academy többjátékos módjához.",
-    "promiseLaunch": "Indítson bármelyik klienst egy kattintással, a Steam segítségével vagy anélkül.",
-    "promiseClients": "Tartson több klienst egymás mellett, mindegyiket saját modokkal.",
-    "promiseServers": "Keressen élő szervert, és csatlakozzon hozzá a JKNet ablakából.",
-    "footer": "A JKNet a már meglévő játékfájljait olvassa. A játék mappájába soha nem ír."
-  },
   "resolving": {
     "heading": "Hová van telepítve a játék?",
     "text": "Arra a mappára van szükség, amely a base\\assets0.pk3 és az assets3.pk3 közötti fájlokat tartalmazza.",

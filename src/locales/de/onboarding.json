@@ -10,13 +10,6 @@
     "stepCurrent": " (aktueller Schritt)",
     "stepUpcoming": " (nicht begonnen)"
   },
-  "brand": {
-    "tagline": "Ein Launcher für den Mehrspielermodus von Jedi Academy.",
-    "promiseLaunch": "Jeden Client mit einem Klick starten, mit oder ohne Steam.",
-    "promiseClients": "Mehrere Clients nebeneinander halten, jeden mit eigenen Mods.",
-    "promiseServers": "Einen laufenden Server finden und ihm aus dem Launcher beitreten.",
-    "footer": "JKNet liest die Spieldateien, die Sie schon besitzen. Es schreibt nie in den Ordner des Spiels."
-  },
   "resolving": {
     "heading": "Wo ist das Spiel installiert?",
     "text": "JKNet braucht den Ordner, in dem base\\assets0.pk3 bis assets3.pk3 liegen.",
