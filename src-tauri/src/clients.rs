@@ -341,9 +341,37 @@ pub fn delete_client(
             settings.default_client_id.clone()
         };
         settings.save(&state)?;
-        state.set_settings(settings)?;
+        state.set_settings(settings.clone())?;
+        // --- slice: clients page ---
+        // The Play button of the Home screen and the badge on a card both read
+        // this, and neither went through `update_settings` to learn about it.
+        crate::settings::emit_default_clients(&app, &settings);
     }
     Ok(())
+}
+
+// --- slice: clients page ---
+/// Returns the folder of one client: `clients\<slug>\`.
+///
+/// The **Open folder** button of a card is the only caller, and it hands the
+/// answer to the `opener` plugin. Built here rather than on the frontend out of
+/// `dataRoot` because `dataDirOverride` moves that root and the slug is a
+/// detail of this module: a path assembled on the screen would be a second
+/// copy of a layout only `paths.rs` is allowed to know.
+///
+/// The record is read first, so an id that names nothing is a refusal rather
+/// than a path to a folder that is not there.
+#[tauri::command]
+pub fn client_dir(state: tauri::State<'_, AppState>, client_id: String) -> Result<String> {
+    folder_of(&state.paths()?, &client_id)
+}
+
+/// The body of [`client_dir`], with the layout handed in instead of read out
+/// of the state. A `tauri::State` cannot be built outside a running app, and
+/// this is the part a test can hold a real folder against.
+fn folder_of(paths: &DataPaths, client_id: &str) -> Result<String> {
+    let client = read_record(paths, client_id)?;
+    Ok(paths.client_dir(&client.id).display().to_string())
 }
 
 // --- slice: game core ---
@@ -778,5 +806,60 @@ mod tests {
             );
         }
         assert!(validate_fs_game(&"x".repeat(MAX_FS_GAME_LEN + 1)).is_err());
+    }
+
+    // --- slice: clients page ---
+
+    #[test]
+    fn the_folder_of_a_client_is_read_out_and_never_made() {
+        // What **Open folder** hands to the `opener` plugin. Three things are
+        // asked of it: the path is the one the layout owns, it stays inside
+        // the data folder wherever `dataDirOverride` put that, and an id that
+        // names nothing is refused instead of pointing somewhere.
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        paths.ensure().expect("the data layout");
+        let client = Client {
+            id: "duel".to_string(),
+            name: "Duel".to_string(),
+            engine_id: "openjk".to_string(),
+            game: Game::JediAcademy,
+            engine_version: None,
+            created_at: timestamp::now_rfc3339(),
+            engine_installed_at: None,
+            engine_published_at: None,
+            fs_game: None,
+            launch_args: String::new(),
+        };
+        write_record(&paths, &client).expect("the record");
+
+        let answer = folder_of(&paths, &client.id).expect("the folder of a client");
+        assert_eq!(Path::new(&answer), paths.client_dir(&client.id));
+        assert!(
+            Path::new(&answer).starts_with(&paths.root),
+            "the answer stays inside the data folder: {answer}"
+        );
+
+        let error = folder_of(&paths, "ghost").expect_err("an unknown client is refused");
+        assert!(matches!(error, AppError::NotFound(_)), "{error}");
+
+        // Neither call creates anything: the folder of the one client that
+        // was written is all there is under `clients\`.
+        let mut made: Vec<String> = fs::read_dir(&paths.clients)
+            .expect("the clients folder")
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        made.sort();
+        assert_eq!(made, vec![client.id.clone()]);
+        assert!(
+            !paths.client_engine_dir(&client.id).exists(),
+            "a path is an answer, not an installed client"
+        );
     }
 }

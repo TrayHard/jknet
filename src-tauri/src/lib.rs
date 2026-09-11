@@ -310,6 +310,8 @@ pub fn run() {
             clients::create_client,
             clients::update_client,
             clients::delete_client,
+            // --- slice: clients page ---
+            clients::client_dir,
             // --- slice: client window ---
             client_window::open_client_window,
             launch_tokens::read_launch_cvars,

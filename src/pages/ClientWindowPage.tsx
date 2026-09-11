@@ -17,12 +17,20 @@ import {
   type WindowCvar,
 } from "../components/client/useCvarEditor";
 import { TitleBar } from "../components/TitleBar";
-import { Button, type SelectOption } from "../components/ui";
+import { Badge, Button, type SelectOption } from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
 import { cn } from "../lib/format";
+// --- slice: clients page ---
+import { defaultClientPatch, resolveDefaultClientId, useGameNames } from "../lib/game";
 import type { Client } from "../lib/ipc";
-import { useClient, useEngines, useUpdateClient } from "../lib/queries";
+import {
+  useClient,
+  useEngines,
+  useSettings,
+  useUpdateClient,
+  useUpdateSettings,
+} from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { logWindow, logWindowFailure } from "../lib/windowLog";
 
@@ -224,6 +232,21 @@ function ClientCards({ client }: { client: Client }) {
           />
         </SettingRow>
 
+        {/* --- slice: clients page ---
+            **Make default** used to be a button on the card of the Clients
+            screen, where it sat among actions that start and delete things.
+            Being the default client is a property of the client, like its name
+            and its mod folder, so it belongs in this card. The badge on the
+            card is what the main window keeps of it, and the core announces
+            the change with `settings:default-clients` so that badge follows
+            this row in the same instant. */}
+        <SettingRow
+          label={t("clientWindow.client.default")}
+          hint={t("clientWindow.client.defaultHint")}
+        >
+          <DefaultClientRow client={client} />
+        </SettingRow>
+
         <SettingRow label={t("clientWindow.client.engine")}>
           <ClientEngineRow client={client} engine={engine} />
         </SettingRow>
@@ -410,6 +433,61 @@ function ClientCards({ client }: { client: Client }) {
         <CommandPreview clientId={client.id} />
       </Card>
     </>
+  );
+}
+
+// --- slice: clients page ---
+/**
+ * Whether the Play button of this game starts this client, and the one button
+ * that makes it so.
+ *
+ * A button and not a switch, because there is no second position: switching
+ * the default off would leave the game with a Play button that starts nothing,
+ * and the way to move it is to make another client the default instead.
+ */
+function DefaultClientRow({ client }: { client: Client }) {
+  const { t } = useTranslation("clients");
+  const errorText = useErrorText();
+  const { label } = useGameNames();
+  const settings = useSettings();
+  const updateSettings = useUpdateSettings();
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const isDefault = resolveDefaultClientId(settings.data, client.game) === client.id;
+
+  if (isDefault) {
+    return (
+      <span className="flex items-center gap-8">
+        <Badge tone="accent">{t("card.default")}</Badge>
+        <span className="text-body-sm text-fg-muted">
+          {t("clientWindow.client.isDefault", { game: label(client.game) })}
+        </span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-8">
+      <Button
+        size="sm"
+        disabled={settings.data === undefined || updateSettings.isPending}
+        onClick={() => {
+          setFailure(null);
+          // One field, one patch: the document on disk keeps everything this
+          // window never read.
+          updateSettings.mutate(defaultClientPatch(client), {
+            onError: (e) => setFailure(errorText(e)),
+          });
+        }}
+      >
+        {t("clientWindow.client.makeDefault")}
+      </Button>
+      {failure !== null ? (
+        <span role="alert" className="text-body-sm text-fg-danger">
+          {failure}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

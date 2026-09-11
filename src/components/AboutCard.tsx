@@ -2,12 +2,19 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { AlertTriangle, Check, Download, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { useEngines } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { useAppUpdateContext } from "./AppUpdateProvider";
 import { Button } from "./ui";
 
 /** The license the launcher is released under, as GitHub renders it. */
 const LICENSE_URL = "https://github.com/TrayHard/jknet/blob/main/LICENSE";
+
+/** Opens a link in the system browser, and says nothing when it cannot. */
+function openExternal(url: string) {
+  if (!isTauri()) return;
+  void openUrl(url).catch(() => undefined);
+}
 
 /**
  * The About card at the bottom of Settings: which build is running and
@@ -26,13 +33,6 @@ export function AboutCard() {
   const newVersion = update?.newVersion ?? null;
   const supported = update?.supported ?? false;
 
-  // A failed open is swallowed: the line is a pointer, and the card already
-  // owes the player an answer about updates, not about the browser.
-  const openLicense = () => {
-    if (!isTauri()) return;
-    void openUrl(LICENSE_URL).catch(() => undefined);
-  };
-
   return (
     <section className="rounded-lg border border-line bg-surface p-16 mb-24">
       <h2 className="text-heading-sm text-fg pb-4">{t("about.title")}</h2>
@@ -50,12 +50,16 @@ export function AboutCard() {
           <p className="text-body-sm text-fg-muted pt-8">
             <button
               type="button"
-              onClick={openLicense}
+              // A failed open is swallowed: the line is a pointer, and the card
+              // already owes the player an answer about updates, not about the
+              // browser.
+              onClick={() => openExternal(LICENSE_URL)}
               className="cursor-pointer hover:text-fg-accent hover:underline"
             >
               {t("about.license")}
             </button>
           </p>
+          <EngineIconCredits />
         </div>
         {newVersion !== null ? (
           <Button
@@ -82,6 +86,43 @@ export function AboutCard() {
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Who the engine icons belong to.
+ *
+ * Built from the registry rather than written out: a build added to
+ * `src-tauri/src/engines.rs` brings its own name, its own repository link and,
+ * where the project names one, the author it credits for the icon. A credit
+ * list that has to be edited by hand is a credit list that goes out of date.
+ */
+function EngineIconCredits() {
+  const { t } = useTranslation("settings");
+  const engines = useEngines();
+  const list = engines.data ?? [];
+  if (list.length === 0) return null;
+
+  return (
+    <p className="text-body-sm text-fg-muted pt-8">
+      {t("about.engineIcons")}{" "}
+      {list.map((engine, index) => (
+        <span key={engine.id}>
+          {index > 0 ? ", " : ""}
+          <button
+            type="button"
+            onClick={() => openExternal(engine.repoUrl)}
+            className="cursor-pointer hover:text-fg-accent hover:underline"
+          >
+            {engine.name}
+          </button>
+          {engine.iconCredit !== null
+            ? ` (${t("about.engineIconBy", { author: engine.iconCredit })})`
+            : ""}
+        </span>
+      ))}
+      {"."}
+    </p>
   );
 }
 

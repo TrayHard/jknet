@@ -262,6 +262,14 @@ export interface Engine {
   description: string;
   executable: string;
   repo: string;
+  /** The repository as a link, for the About card and the engine page. */
+  repoUrl: string;
+  /** The page that lists every published build. */
+  releasesUrl: string;
+  /** The project's own site, when its README names one. */
+  homepage: string | null;
+  /** Who the project credits for its icon, when it credits anyone. */
+  iconCredit: string | null;
   /** Recommended, merely supported, or legacy with a note saying why. */
   status: EngineStatus;
   /** False when the project publishes no archive JKNet can install. */
@@ -317,6 +325,25 @@ export const clientEvents = {
   changed: "clients:changed",
 } as const;
 
+// --- slice: clients page ---
+
+/** Payload of `settings:default-clients`. */
+export interface DefaultClientsChanged {
+  defaultClientIds: Partial<Record<Game, string>>;
+}
+
+/**
+ * Events the settings module emits.
+ *
+ * The default client of a game is written in one window and drawn in another:
+ * the switch lives in the client window, the **DEFAULT** badge on the card of
+ * the Clients screen. Each window keeps its own query cache, so the write has
+ * to be announced the way `clients:changed` announces a record.
+ */
+export const settingsEvents = {
+  defaultClients: "settings:default-clients",
+} as const;
+
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
@@ -367,6 +394,10 @@ export const ipc = {
       launchArgs: changes.launchArgs ?? null,
     }),
   deleteClient: (id: string) => call<void>("delete_client", { id }),
+
+  // --- slice: clients page ---
+  /** The folder of one client, `clients\<slug>\`, for **Open folder**. */
+  clientDir: (clientId: string) => call<string>("client_dir", { clientId }),
 
   // --- slice: client window ---
   /** Opens the `client-<id>` window, or raises the one already open. */

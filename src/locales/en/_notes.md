@@ -73,7 +73,14 @@ Everything else wraps.
 | `servers:columns.players` | Abbreviation of «players» — the column is 76 px. |
 | `servers:details.botBadge` | A badge on one player's row, at most four characters. |
 | `servers:empty.filteredBots` | `{{count}}` is the number of servers hidden by the bot switch. The sentence names the switch, which is `servers:filters.hideBotOnly` — use the same wording. |
-| `clients:card.meta` | `{{id}}` is a folder name, `{{date}}` is already formatted. Both are monospaced; keep the « · » between them. |
+| `clients:card.created`, `clients:card.modFolder` | Two of the parts of the second line of a client card, joined with « · » by the code. Each is a fragment, not a sentence: no capital at the start and no full stop at the end. `{{date}}` is already formatted for the language and `{{mod}}` is a folder name; `fs_game` is an identifier and stays. |
+| `clients:removeDialog.*` | The question in front of **Delete** on a client card. The folder of the client is deleted for good, so the body has to say so plainly; do not soften it. `{{client}}` is a name the player typed and `{{engine}}` a project name. Use the same verb here as in `common:actions.delete`. |
+| `clients:card.openFolder` | Shows the folder of the client in the file manager. The button is narrow: two words at most. |
+| `clients:clientWindow.client.default*`, `makeDefault`, `isDefault` | The row that decides which client the **Play** button of a game starts. Name the button the same way in both places it is mentioned, and keep «Play» as `home:hero.play` prints it in your language. `{{game}}` is Jedi Academy or Jedi Outcast and is never translated. |
+| `clients:enginePage.facts.*` | Sentences read from each project’s own README. Project names, cvar names (`s_initsound`), file names (`jamp.exe`) and mod folder names (`base`, `ja+`, `mme`) are identifiers and stay as they are; the words around them are yours. |
+| `clients:enginePage.factsExecutable`, `factsModFolder` | `{{file}}` is the name of an executable and `{{folder}}` the name of a folder on disk. Neither is translated. |
+| `clients:enginePage.versionsText` | Says where a build is installed from, which is a client and not this page. Do not promise a button the page does not have. |
+| `clients:newDialog.details` | A link under an engine tile, one or two words, opening the page about that build. |
 | `clients:clientWindow.*` | The separate window behind the gear on a client card. Every label in it ends with a cvar name in brackets — `r_mode`, `s_volume`, `com_maxfps` — and those are identifiers: keep them exactly, translate only the words in front. |
 | `clients:clientWindow.client.idHint` | One monospaced span, the folder name. Do not translate what is inside it. |
 | `clients:clientWindow.notSet` | Stands where a value would be when the client does not set that cvar at all. Two words at most: it is drawn inside a list the width of a field. |
@@ -98,6 +105,7 @@ Everything else wraps.
 | `errors:basepathOccupied` | `{{path}}` is a full Windows path ending in `basepath\base`. Do not translate it; the sentence has to read well with a long path in the middle of it. |
 | `account:providers.dev` | Used inside a sentence («signed in with …»), so it is lowercase. `account:providers.devLabel` is the same thing as a badge and is capitalised. |
 | `settings:language.systemWith` | `{{language}}` is the native name of the language the system would pick — «Русский», «Deutsch». It is never translated. |
+| `settings:about.engineIcons`, `about.engineIconBy` | The credit line of the About card: the engine icons come from the projects themselves. `{{author}}` is a nickname on a site and is never translated. The list of project names after the first key is built by the launcher. |
 | `settings:language.draft` | Shown under the **Language** card while `_status.json` names no reviewer. It describes the folder you are translating, so write it in that language even before the rest is checked. |
 
 ## How to check your work
