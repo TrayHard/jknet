@@ -20,6 +20,7 @@
 //! | `launch`         | starting a client and watching it run           |
 //! | `launch_tokens`  | one cvar at a time inside a client's argument line |
 //! | `library`        | pk3 files of one client, in its `home\` folder  |
+//! | `profiles`       | player profiles of one client: nickname, skin, hilts |
 //! | `levelshots`     | map pictures extracted from the player's pk3 files |
 //! | `online`         | JKNet Online: its wire types and its HTTP client |
 //! | `account`        | signing in to the service and owning the account |
@@ -56,6 +57,11 @@ mod library;
 // one connection pool serves both.
 mod online;
 mod paths;
+// --- slice: player profiles ---
+// The fourth entity: who the player is inside the game. Kept apart from
+// `clients` for the same reason `client_window` is — one module, one document
+// — and it has to stay callable from a test with no Tauri runtime around it.
+mod profiles;
 mod servers;
 mod settings;
 mod state;
@@ -318,6 +324,11 @@ pub fn run() {
             launch_tokens::write_launch_cvar,
             launch::preview_launch_args,
             launch::launch_client,
+            // --- slice: player profiles ---
+            profiles::list_profiles,
+            profiles::save_profile,
+            profiles::delete_profile,
+            profiles::set_default_profile,
             // --- slice: library ---
             library::list_library,
             library::inspect_pk3,

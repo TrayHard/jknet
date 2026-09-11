@@ -171,6 +171,19 @@ pub struct Settings {
     /// The filter row of the Servers screen, as the player left it.
     pub server_filters: ServerFilters,
 
+    // --- slice: player profiles ---
+    /// Nicknames the player saved, newest first.
+    ///
+    /// One list for the whole launcher rather than one per client: a nickname
+    /// is who the player is, and a player who made it up once should find it in
+    /// every profile of every client. The profiles themselves belong to a
+    /// client and live in `clients\<slug>\profiles.json`.
+    ///
+    /// Written whole by a patch, like `favorite_servers` above: the field is
+    /// small, the writer is one form, and merging two lists of free text has no
+    /// rule worth inventing.
+    pub saved_nicknames: Vec<String>,
+
     // --- slice: onboarding ---
     /// Whether the player has been through the three first-run steps. False by
     /// default, which is also what a settings file written before this field
@@ -224,6 +237,8 @@ impl Default for Settings {
             favorite_servers: Vec::new(),
             server_history: Vec::new(),
             server_filters: ServerFilters::default(),
+            // --- slice: player profiles ---
+            saved_nicknames: Vec::new(),
             onboarding_completed: false,
             online_url: online::default_online_url().to_string(),
             online_token: None,
@@ -458,6 +473,12 @@ pub struct SettingsPatch {
     /// row and a missing key cannot read as `any`.
     pub server_filters: Option<ServerFilters>,
 
+    // --- slice: player profiles ---
+    /// The saved nicknames, replaced in one go. Trimmed, deduplicated without
+    /// regard to case and capped by [`SettingsPatch::apply`], so a form that
+    /// simply prepends a name cannot grow the list without end.
+    pub saved_nicknames: Option<Vec<String>>,
+
     // --- slice: onboarding ---
     pub onboarding_completed: Option<bool>,
 
@@ -547,6 +568,10 @@ impl SettingsPatch {
         if let Some(value) = self.server_filters {
             settings.server_filters = value;
         }
+        // --- slice: player profiles ---
+        if let Some(value) = self.saved_nicknames {
+            settings.saved_nicknames = clean_nicknames(value);
+        }
         if let Some(value) = self.onboarding_completed {
             settings.onboarding_completed = value;
         }
@@ -594,6 +619,45 @@ impl SettingsPatch {
 /// Drops a value that is blank once trimmed.
 fn non_empty(value: Option<String>) -> Option<String> {
     value.filter(|text| !text.trim().is_empty())
+}
+
+// --- slice: player profiles ---
+
+/// Longest nickname the list stores. `MAX_NETNAME` of the engine: the server
+/// cuts a longer one before anybody reads it.
+const MAX_NICKNAME_LEN: usize = 36;
+
+/// Most nicknames the list holds. The form prepends, so the oldest one falls
+/// off the end rather than the list growing for ever.
+const MAX_NICKNAMES: usize = 50;
+
+/// Trims, drops the blanks, keeps the first of each spelling and caps the
+/// length.
+///
+/// Case is ignored when comparing, and the spelling that arrived first is the
+/// one kept: a player who saves `Kyle` and then `kyle` meant one name, and the
+/// list is theirs to read rather than a log of what they typed. Colour codes
+/// make two names different, which is right — `^1Kyle` and `^2Kyle` are two
+/// different things on a server.
+fn clean_nicknames(values: Vec<String>) -> Vec<String> {
+    let mut seen: Vec<String> = Vec::new();
+    let mut kept: Vec<String> = Vec::new();
+    for value in values {
+        let value = value.trim();
+        if value.is_empty() || value.chars().count() > MAX_NICKNAME_LEN {
+            continue;
+        }
+        let key = value.to_lowercase();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        kept.push(value.to_string());
+        if kept.len() == MAX_NICKNAMES {
+            break;
+        }
+    }
+    kept
 }
 
 // --- slice: game core ---
@@ -710,6 +774,8 @@ mod tests {
                 hide_bot_only: true,
                 hide_passworded: true,
             },
+            // --- slice: player profiles ---
+            saved_nicknames: vec!["^1Kyle".into(), "Padawan".into()],
             onboarding_completed: true,
             online_url: "https://online.jknet.gg".into(),
             online_token: Some("0123456789abcdef".into()),
@@ -1226,5 +1292,44 @@ mod tests {
         let mut settings = filled();
         patch(r#"{"onlineUrl":null}"#).apply(&mut settings);
         assert_eq!(settings.online_url, "https://online.jknet.gg");
+    }
+
+    // --- slice: player profiles ---
+
+    #[test]
+    fn the_saved_nicknames_are_one_list_for_the_whole_launcher() {
+        let mut settings = filled();
+        patch(r#"{"savedNicknames":["  ^1Kyle  ","Padawan"]}"#).apply(&mut settings);
+        assert_eq!(settings.saved_nicknames, ["^1Kyle", "Padawan"]);
+        // A patch of one field touches nothing else, profiles included: those
+        // live beside the client they belong to, not in this document.
+        assert_eq!(settings.favorite_servers, filled().favorite_servers);
+
+        // A document written before the field existed reads as an empty list.
+        let older: Settings =
+            serde_json::from_str(r#"{"activeGame":"ja"}"#).expect("an older document parses");
+        assert!(older.saved_nicknames.is_empty());
+    }
+
+    #[test]
+    fn a_nickname_is_saved_once_however_it_was_typed() {
+        // One name, two spellings: the list is what the player reads back, not
+        // a log of what they typed. Colour codes do make two names, because
+        // `^1Kyle` and `^2Kyle` are two different things on a server.
+        assert_eq!(
+            clean_nicknames(vec![
+                "Kyle".into(),
+                " kyle ".into(),
+                "^1Kyle".into(),
+                "   ".into(),
+            ]),
+            ["Kyle", "^1Kyle"]
+        );
+        // The engine cuts a name to `MAX_NETNAME`, so a longer one is not a
+        // name anybody would see.
+        assert_eq!(clean_nicknames(vec!["x".repeat(MAX_NICKNAME_LEN + 1)]), Vec::<String>::new());
+        // And the list cannot grow without end under a form that prepends.
+        let many: Vec<String> = (0..MAX_NICKNAMES + 10).map(|n| format!("name{n}")).collect();
+        assert_eq!(clean_nicknames(many).len(), MAX_NICKNAMES);
     }
 }
