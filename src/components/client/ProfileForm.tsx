@@ -1,6 +1,6 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Loader2, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
@@ -30,6 +30,7 @@ import { SettingRow } from "./CvarControls";
 import { MAX_NICKNAME_BYTES, NicknameField, nicknameBytes } from "./NicknameField";
 import { SkinPicker } from "./SkinPicker";
 import { Slider } from "./Slider";
+import { useUnsavedGuard } from "./UnsavedGuard";
 
 /** The tint the sliders start on when the player switches the tint on. */
 const DEFAULT_TINT: CharColor = { red: 255, green: 255, blue: 255 };
@@ -77,6 +78,8 @@ export function ProfileForm({
   const errorText = useErrorText();
   const save = useSaveProfile(client.id);
   const [draft, setDraft] = useState<PlayerProfile>(profile);
+  // --- slice: profiles polish ---
+  const guard = useUnsavedGuard();
   // A pk3 installed in the main window while this form is open carries skins
   // and hilts this form should offer.
   useAppearanceEvents();
@@ -90,6 +93,17 @@ export function ProfileForm({
 
   const edit = (changes: Partial<PlayerProfile>) =>
     setDraft((current) => ({ ...current, ...changes }));
+
+  // --- slice: profiles polish ---
+  // The draft against what the form opened on: the window asks this before it
+  // closes and the Cancel button asks it before it goes back to the list.
+  const dirty = !sameProfile(draft, profile);
+  useEffect(() => {
+    guard.setDirty(dirty);
+    // A form taken off the screen leaves no unsaved edits behind it, whether
+    // it was saved, cancelled or replaced.
+    return () => guard.setDirty(false);
+  }, [guard, dirty]);
 
   const tokens = profileTokens(draft, hasHilts);
   // --- slice: profiles polish ---
@@ -109,7 +123,14 @@ export function ProfileForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (!ready) return;
-        save.mutate(draft, { onSuccess: () => onDone() });
+        save.mutate(draft, {
+          onSuccess: () => {
+            // Saved edits are not unsaved ones, and `onDone` unmounts this
+            // form before the effect above could say so.
+            guard.setDirty(false);
+            onDone();
+          },
+        });
       }}
     >
       <h3 className="text-label-xs text-fg-muted">
@@ -237,7 +258,16 @@ export function ProfileForm({
       ) : null}
 
       <div className="flex items-center gap-8 justify-end">
-        <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+        {/* --- slice: profiles polish ---
+            The way back to the list, and therefore the way to another
+            profile: the list is what this form replaced. A draft nobody
+            saved is worth a question before it goes. */}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => guard.ask(onDone)}
+        >
           {t("clientWindow.profiles.form.cancel")}
         </Button>
         <Button type="submit" size="sm" disabled={!ready}>
@@ -249,6 +279,35 @@ export function ProfileForm({
 }
 
 // --- slice: profiles polish ---
+
+/**
+ * Whether two profiles say the same thing.
+ *
+ * Field by field rather than by comparing their JSON: the draft is built here
+ * and the stored profile comes off the wire, and two objects with the same
+ * fields in a different order have different JSON. Keep the list in step with
+ * {@link PlayerProfile} — a field missing here is a field whose edit the
+ * window would let a player lose without asking.
+ */
+function sameProfile(a: PlayerProfile, b: PlayerProfile): boolean {
+  return (
+    a.name === b.name &&
+    a.nickname === b.nickname &&
+    a.model === b.model &&
+    a.saber1 === b.saber1 &&
+    a.saber2 === b.saber2 &&
+    a.color1 === b.color1 &&
+    a.color2 === b.color2 &&
+    a.tokensOverride === b.tokensOverride &&
+    sameTint(a.charColor, b.charColor)
+  );
+}
+
+/** The tint of two profiles, `null` for «no opinion» included. */
+function sameTint(a: CharColor | null, b: CharColor | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.red === b.red && a.green === b.green && a.blue === b.blue;
+}
 
 /**
  * Whether this profile launches by its hand-written line rather than by its

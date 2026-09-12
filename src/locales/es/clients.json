@@ -191,6 +191,12 @@
         "body": "The nickname, the skin and the saber settings of this profile go with it. The client, its engine and its files stay as they are.",
         "confirm": "Delete profile"
       },
+      "unsaved": {
+        "title": "Discard changes?",
+        "body": "This profile has edits that were never saved. Leaving now loses them.",
+        "discard": "Discard changes",
+        "keep": "Keep editing"
+      },
       "form": {
         "newHeading": "New profile",
         "editHeading": "Profile {{profile}}",
