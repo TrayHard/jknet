@@ -298,7 +298,8 @@ export function Menu({
         }}
         onKeyDown={onTriggerKeyDown}
         className={cn(
-          "inline-flex items-center justify-center shrink-0",
+          // --- slice: selection context menu ---
+          "inline-flex items-center justify-center shrink-0 select-none",
           "border transition-colors duration-150 cursor-pointer",
           "disabled:cursor-not-allowed disabled:text-fg-disabled",
           open
@@ -327,7 +328,9 @@ export function Menu({
                 maxHeight: anchor.maxHeight,
               }}
               className={cn(
-                "z-50 min-w-[180px] max-w-[320px] overflow-y-auto py-4",
+                // --- slice: selection context menu --- a list of actions is
+                // a list to press, never one to drag a cursor through.
+                "z-50 min-w-[180px] max-w-[320px] overflow-y-auto py-4 select-none",
                 "bg-elevated border border-line rounded-md shadow-popover",
               )}
             >

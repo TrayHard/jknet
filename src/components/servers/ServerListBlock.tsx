@@ -7,6 +7,8 @@ import { Link } from "react-router";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo } from "../../lib/ipc";
+// --- slice: selection context menu ---
+import { hasTextSelection } from "../../lib/selection";
 import { Badge } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
@@ -125,8 +127,20 @@ export function ServerListBlock({
               // only when the row itself has the focus. A key event bubbles
               // whatever the click does, and Enter on **Connect** must not
               // start a client and walk off the screen at the same time.
+              //
+              // --- slice: selection context menu ---
+              // The drag that copied the name of a server ends as a click on
+              // the row. It was a selection, so it stays one and the player
+              // keeps the screen they were reading from.
               tabIndex={onOpen === undefined ? undefined : 0}
-              onClick={onOpen === undefined ? undefined : () => onOpen(server)}
+              onClick={
+                onOpen === undefined
+                  ? undefined
+                  : () => {
+                      if (hasTextSelection()) return;
+                      onOpen(server);
+                    }
+              }
               onKeyDown={
                 onOpen === undefined
                   ? undefined

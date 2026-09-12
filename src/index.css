@@ -128,13 +128,40 @@
     font-family: var(--font-sans);
     font-size: 14px;
     line-height: 20px;
-    /* The window has no decorations, so nothing should look selectable
-       except real text fields. */
-    user-select: none;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
   }
 
+  /*
+   * What must not be selectable — and nothing beyond it.
+   *
+   * The rule used to sit on `body`, which forbade selecting the address of a
+   * server, the path of a client, the command line of the preview and the text
+   * of an error: everything a player reads in order to copy it somewhere. The
+   * list below names what a drag across it would only smear — the controls,
+   * the drag region of the title bar and the icons — and leaves the text of
+   * cards, panels and rows to the player.
+   *
+   * The kit says the same thing a second time, as `select-none` on `Button`,
+   * `NavItem`, `Tabs`, `Menu`, `Toggle`, `RadioCard` and `Badge`: a component
+   * that carries the rule travels with it, while this block covers the plain
+   * `button` a screen writes by hand.
+   *
+   * `[data-tauri-drag-region]` is the one that has to be here rather than in a
+   * component: a selection started on the title bar is a window that does not
+   * move when it is dragged.
+   */
+  button,
+  [role="tab"],
+  [role="menuitem"],
+  [role="switch"],
+  [data-tauri-drag-region],
+  svg {
+    user-select: none;
+  }
+
+  /* Inside a control that forbids selection — a `label` around a field, say —
+     the field itself is still text to edit. */
   input,
   textarea {
     user-select: text;

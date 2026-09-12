@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo } from "../../lib/ipc";
+// --- slice: selection context menu ---
+import { hasTextSelection } from "../../lib/selection";
 import { Badge, type BadgeTone } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
@@ -78,7 +80,14 @@ export function ServerRow({
       role="row"
       tabIndex={0}
       aria-selected={selected}
-      onClick={onSelect}
+      // --- slice: selection context menu ---
+      // A drag across the row selects its text and ends here as a click. The
+      // player was copying an address, not choosing a server, so the row lets
+      // that one press through.
+      onClick={() => {
+        if (hasTextSelection()) return;
+        onSelect();
+      }}
       onKeyDown={(event) => {
         // --- slice: servers home tweaks ---
         // Only when the row itself has the focus. The star and the eye sit
