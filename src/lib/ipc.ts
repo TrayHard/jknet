@@ -1625,8 +1625,18 @@ export interface JkhubFile {
   categoryId: number | null;
   categoryName: string | null;
   author: JkhubAuthor | null;
-  /** Plain text from JSON-LD. Never render it as HTML: there is no sanitizer. */
+  /** Plain text from JSON-LD, with its HTML entities resolved. */
   description: string;
+  /**
+   * --- slice: jkhub details ---
+   * The same description with the author's markup, rebuilt by the core out of
+   * an allowlist of tags (`src-tauri/src/jkhub/richtext.rs`). This is the one
+   * string of the launcher that may go through `dangerouslySetInnerHTML`, and
+   * only because no element, attribute or address reaches it that the core did
+   * not write itself. Empty when the theme moved the block, and then the plain
+   * copy above is what the window prints.
+   */
+  descriptionHtml: string;
   submittedAt: string | null;
   updatedAt: string | null;
   version: string | null;

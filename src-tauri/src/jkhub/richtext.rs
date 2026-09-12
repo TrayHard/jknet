@@ -75,6 +75,17 @@ const DROPPED: &[&str] = &[
     "canvas", "link", "meta", "head", "title", "base", "frame", "frameset",
 ];
 
+/// What every picture of a description is written with, after its `alt`.
+///
+/// Both values are the launcher's, not the page's. jkhub.org answers `403` to
+/// a request for one of its own screenshots that carries a `Referer`, and the
+/// window's origin is `tauri://localhost` — so a picture without this loads on
+/// the site and fails here. The screenshots of the dialog carry the same
+/// policy, and so does `index.html` for the page as a whole; this repeats it
+/// on the element because the markup is inserted as a string and no React prop
+/// reaches it.
+const PICTURE_ATTRS: &str = "\" loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" />";
+
 /// Class of the notice the site appends to every description.
 ///
 /// The same seven-hundred-character disclaimer sits at the end of every file
@@ -147,7 +158,7 @@ fn render_element(element: ElementRef<'_>, out: &mut String) {
             escape_attr(&src, out);
             out.push_str("\" alt=\"");
             escape_attr(element.value().attr("alt").unwrap_or_default(), out);
-            out.push_str("\" />");
+            out.push_str(PICTURE_ATTRS);
         }
         "a" => {
             let Some(href) = element.value().attr("href").and_then(link_url) else {
@@ -188,7 +199,9 @@ fn push_video(id: &str, out: &mut String) {
     escape_attr(id, out);
     out.push_str("\"><img src=\"https://img.youtube.com/vi/");
     escape_attr(id, out);
-    out.push_str("/hqdefault.jpg\" alt=\"\" /></a>");
+    out.push_str("/hqdefault.jpg\" alt=\"");
+    out.push_str(PICTURE_ATTRS);
+    out.push_str("</a>");
 }
 
 /// Whether an element is the notice the site appends to every description.
@@ -475,7 +488,8 @@ mod tests {
         );
         assert_eq!(
             sanitize_fragment("<img src='//jkhub.org/shot.jpg' alt='a map'>"),
-            "<img src=\"https://jkhub.org/shot.jpg\" alt=\"a map\" />"
+            "<img src=\"https://jkhub.org/shot.jpg\" alt=\"a map\" loading=\"lazy\" \
+             decoding=\"async\" referrerpolicy=\"no-referrer\" />"
         );
         assert_eq!(
             sanitize_fragment("<img src='http://jkhub.org/shot.jpg'>"),
@@ -493,7 +507,8 @@ mod tests {
         assert_eq!(
             clean,
             "<a class=\"jkhub-video\" href=\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\">\
-             <img src=\"https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg\" alt=\"\" /></a>"
+             <img src=\"https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg\" alt=\"\" \
+             loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" /></a>"
         );
         assert!(!clean.contains("<iframe"), "no frame reaches the window");
     }
