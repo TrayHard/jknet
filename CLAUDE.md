@@ -58,7 +58,8 @@ src/
                          NewClientDialog, GameFilesNotice, MissingClientToast,
                          GameEventsProvider, AppUpdateProvider, AboutCard,
                          MapPreview, MapPicturesCard, ToastsProvider,
-                         FriendsProvider, AccountProvider
+                         FriendsProvider, AccountProvider, EngineLogo,
+                         OtherClientsMenu: меню клиентов в герое Home
   components/ui/         UI-кит: Button, Badge, Input, Select, Combobox, Menu,
                          Toggle, NavItem, EmptyState, RadioCard, StepBadges,
                          Toast, Avatar, Dialog
