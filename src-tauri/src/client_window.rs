@@ -18,12 +18,13 @@
 //!
 //! ## Lifetime
 //!
-//! A client window never outlives the launcher. Closing `main` closes every
+//! A client window never outlives the launcher. Closing `main` destroys every
 //! one of them ([`close_all`], wired to the window event in `lib.rs`), because
 //! an app whose last visible window is a settings page nobody can navigate out
 //! of is an app that looks like it failed to quit. Deleting a client closes
 //! its window for the same reason, and `closeOnLaunch` hides and shows them
-//! along with the main window.
+//! along with the main window — `hide`, not `close`, so nothing in this
+//! section touches it.
 //!
 //! ## Diagnostics
 //!
@@ -195,18 +196,36 @@ pub fn close_for(app: &AppHandle, client_id: &str) {
     }
 }
 
-/// Closes every client window.
+/// Destroys every client window.
 ///
-/// Called when `main` goes away. `close` rather than `destroy`: the window has
-/// nothing to ask the player about, and `close` is what the frontend listeners
-/// see coming.
+/// Called when `main` goes away.
+///
+/// --- slice: profiles polish ---
+/// `destroy` and not `close`, and the difference is now the whole point.
+/// `close` raises `CloseRequested` in the window (`tauri-2.11.5`,
+/// `window/mod.rs:1793-1796`), and the client window answers that event with a
+/// guard that always prevents the default and, over an unsaved profile, opens
+/// a **Discard changes?** dialog. Sent while `main` is on its way out, that
+/// question would be asked of a window nobody is looking at — one that may be
+/// minimised or was hidden by `closeOnLaunch` — and the process would stay
+/// alive behind it waiting for an answer, which is the exact thing this
+/// function exists to prevent. `destroy` emits no event and takes the window
+/// down (`window/mod.rs:1798-1801`).
+///
+/// The cost is the honest one: an unsaved profile in a client window is lost
+/// when the player quits the launcher. Quitting is not the moment to hold the
+/// application open over a form in another window; the two ordinary ways out
+/// of that form — **Cancel** and closing the client window itself — still ask.
+///
+/// [`close_for`] keeps `close`, because a window closed one at a time is a
+/// window the player is looking at and can answer for.
 pub fn close_all(app: &AppHandle) {
     for (label, window) in app.webview_windows() {
         if !is_client_label(&label) {
             continue;
         }
-        if let Err(e) = window.close() {
-            log::warn!("cannot close {label}: {e}");
+        if let Err(e) = window.destroy() {
+            log::warn!("cannot destroy {label}: {e}");
         }
     }
 }

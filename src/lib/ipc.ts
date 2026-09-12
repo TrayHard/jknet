@@ -852,6 +852,17 @@ export interface PlayerProfile {
   color1: number | null;
   color2: number | null;
   charColor: CharColor | null;
+  // --- slice: profiles polish ---
+  /**
+   * The whole `+set` line, written by hand, instead of the one the fields
+   * build.
+   *
+   * `null` is the ordinary case: the line is assembled from the fields above.
+   * A string is a line the player edited, and it is what the launch carries —
+   * the fields are then a record of where the line came from, not of what it
+   * says. **Reset to fields** sends `null` and the assembling starts again.
+   */
+  tokensOverride: string | null;
 }
 
 // --- slice: connect dialog ---
@@ -862,8 +873,16 @@ export interface PlayerProfile {
  * *stored* profile is found and listed by. The **Connect…** dialog fills these
  * fields in, presses **Connect** and is done: nothing reaches `profiles.json`.
  * The core checks them at the same gate a saved profile passes.
+ *
+ * --- slice: profiles polish ---
+ * `tokensOverride` is left out as well: the dialog has fields and no token
+ * line of its own, and its **Extra arguments** row is already the place to
+ * type a token the fields have no control for.
  */
-export type InlineProfile = Omit<PlayerProfile, "id" | "name">;
+export type InlineProfile = Omit<
+  PlayerProfile,
+  "id" | "name" | "tokensOverride"
+>;
 
 /** `src-tauri/src/profiles.rs`: `clients\<slug>\profiles.json`. */
 export interface ProfileBook {
