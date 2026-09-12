@@ -4,7 +4,7 @@ import { cn } from "../../lib/format";
 
 /**
  * The game's colour palette, `g_color_table` in
- * `shared/qcommon/q_color.cpp:36-47` of OpenJK `1a6a6434`.
+ * `shared/qcommon/q_color.c:19-29` of OpenJK `1a6a6434`.
  *
  * The table is the engine's own and is copied straight: a name the player
  * writes in the launcher has to look the way it will look on the server, and a

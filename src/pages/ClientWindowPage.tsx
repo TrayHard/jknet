@@ -158,6 +158,12 @@ export function ClientWindowPage() {
  * `destroy` and not `close`: `close` asks again, arrives back here, and the
  * window never shuts. It is in `capabilities/client-window.json` for this one
  * call.
+ *
+ * One close never reaches this guard: quitting the launcher. `close_all` in
+ * the core destroys the client windows outright, so an unsaved profile is lost
+ * with the application rather than holding it open behind a dialog in a window
+ * the player may have minimised. The two ordinary ways out of the form —
+ * **Cancel** and closing this window — are the ones that ask.
  */
 function CloseGuard() {
   const guard = useUnsavedGuard();

@@ -133,8 +133,10 @@ use crate::engines;
 use crate::error::{AppError, Result};
 use crate::game::{Game, LaunchLayout};
 use crate::game_files;
+use crate::paths::DataPaths;
 // --- slice: player profiles ---
 use crate::profiles;
+use crate::settings::Settings;
 use crate::state::AppState;
 use crate::timestamp;
 
@@ -537,6 +539,78 @@ fn warn_past_engine_limits(client_id: &str, args: &[String]) {
             "{client_id}: the command line is {length} bytes, \
              the engine reads the first {MAX_STRING_CHARS}"
         );
+    }
+}
+
+/// --- slice: profiles polish ---
+/// What a client's command line spends of the one buffer the engine reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LineBudget {
+    /// Size of the assembled line in bytes, counted the way `main()` counts it.
+    pub bytes: usize,
+    /// Bytes of it the engine reads at all: `MAX_STRING_CHARS`.
+    pub limit: usize,
+}
+
+impl LineBudget {
+    /// Whether the engine would drop the tail of this line.
+    pub fn is_past(self) -> bool {
+        self.bytes > self.limit
+    }
+}
+
+/// Measures the command line this client would start with, were its player
+/// profile to add these tokens.
+///
+/// `MAX_STRING_CHARS` is one budget for the whole line rather than a limit on
+/// any single field, which is what a per-field check gets wrong: the three
+/// roots, `fs_game`, the **Extra launch arguments** setting, the client's own
+/// argument field and the profile all spend from it. `Q_strcat`
+/// (`shared/qcommon/q_string.c:199-213` of OpenJK `1a6a6434`) drops what does
+/// not fit without a word — its `Com_Error` is commented out — and the token
+/// that goes missing first is the last one written, which [`build_launch_args`]
+/// has deliberately made `+connect`.
+///
+/// The answer is a floor and never an overstatement. Three pieces are left
+/// out: the game data root while no game folder is picked, the `fs_game` an
+/// unknown engine would add of its own, and `+connect`, which belongs to one
+/// launch and not to a stored profile. All three only ever add bytes, which is
+/// what lets a caller refuse on this number without refusing a line that would
+/// have fitted.
+pub fn line_budget(
+    paths: &DataPaths,
+    settings: &Settings,
+    client: &clients::Client,
+    profile_args: &[String],
+) -> LineBudget {
+    let game_data = PathBuf::from(settings.game_data_path(client.game).unwrap_or_default());
+    let fs_game = client.fs_game.clone().or_else(|| {
+        engines::find(&client.engine_id)
+            .and_then(|engine| engine.default_fs_game)
+            .map(str::to_string)
+    });
+    let settings_args = split_args(&settings.extra_launch_args);
+    let client_args = split_args(&client.launch_args);
+    let engine_dir = paths.client_engine_dir(&client.id);
+    let base_dir = paths.client_basepath_dir(&client.id);
+    let home_dir = paths.client_home_dir(&client.id);
+
+    let args = build_launch_args(&LaunchPlan {
+        game: client.game,
+        game_data: &game_data,
+        engine_dir: &engine_dir,
+        base_dir: &base_dir,
+        home_dir: &home_dir,
+        fs_game: fs_game.as_deref(),
+        settings_args: &settings_args,
+        client_args: &client_args,
+        profile_args,
+        extra_args: &[],
+        connect: None,
+    });
+    LineBudget {
+        bytes: engine_command_line(&args).len(),
+        limit: MAX_STRING_CHARS,
     }
 }
 
