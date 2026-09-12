@@ -10,10 +10,21 @@
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Aktualisieren",
+  "sections": {
+    "maps": "Maps",
+    "skins": "Skins & Player Models",
+    "sabers": "Sabers",
+    "guns": "Guns",
+    "npcs": "NPCs",
+    "vehicles": "Vehicles",
+    "singlePlayer": "Single Player",
+    "audio": "Audio"
+  },
   "tree": {
     "heading": "Kategorien",
     "expand": "{{category}} aufklappen",
@@ -56,6 +67,7 @@
   },
   "card": {
     "open": "{{title}} öffnen",
+    "byAuthor": "Search for everything by {{author}}",
     "installed": "Installiert",
     "install": "Installieren",
     "reinstall": "Neu installieren",

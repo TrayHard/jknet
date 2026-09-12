@@ -61,6 +61,15 @@ pub struct JkhubCategory {
     /// is how a container such as Maps (71) behaves.
     pub has_files: bool,
     pub url: String,
+    /// Key of the launcher section this node is, for a node of the tree the
+    /// screen draws; `None` for a raw site category.
+    ///
+    /// The screen names a section from `sections.<key>` of `jkhub.json` rather
+    /// than from `name`: the eight sections are the launcher's own, and the
+    /// site's spelling of them is not. The table behind the key lives in
+    /// [`super::sections`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
 }
 
 /// The answer of `jkhub_categories`.
