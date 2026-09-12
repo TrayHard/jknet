@@ -1,11 +1,12 @@
-import { AlertTriangle, Trash2 } from "lucide-react";
+import { AlertTriangle, Power, PowerOff, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import type { LibraryItem } from "../../lib/ipc";
-import { Badge, Toggle } from "../ui";
+// --- slice: selection context menu ---
+import { Badge, Toggle, useContextMenu, type MenuItem } from "../ui";
 import { categoryInfo } from "./categories";
 
 interface LibraryCardProps {
@@ -31,9 +32,46 @@ export function LibraryCard({
   busy = false,
 }: LibraryCardProps) {
   const { t } = useTranslation("library");
+  const { t: tCommon } = useTranslation("common");
   const format = useFormat();
   const info = categoryInfo(item.category);
   const Icon = info.icon;
+
+  // --- slice: selection context menu ---
+  // The two controls the card already carries: the switch that loads the
+  // archive into the client and the bin that takes it out. There is no third
+  // line, because the launcher has no command that opens the folder of one
+  // file — the folder it could show is the client's, which the card does not
+  // know about.
+  const menu = useContextMenu<LibraryItem>({
+    ariaLabel: t("card.actions"),
+    items: (): MenuItem[] => [
+      item.enabled
+        ? {
+            id: "disable",
+            label: tCommon("actions.disable"),
+            icon: <PowerOff size={14} />,
+            disabled: busy,
+          }
+        : {
+            id: "enable",
+            label: tCommon("actions.enable"),
+            icon: <Power size={14} />,
+            disabled: busy,
+          },
+      {
+        id: "remove",
+        label: tCommon("actions.remove"),
+        icon: <Trash2 size={14} />,
+        danger: true,
+        disabled: busy,
+      },
+    ],
+    onSelect: (id) => {
+      if (id === "remove") onRemove();
+      else onToggle(id === "enable");
+    },
+  });
 
   return (
     <li
@@ -42,7 +80,10 @@ export function LibraryCard({
         "transition-colors duration-150",
         item.enabled ? "border-line" : "border-line-subtle",
       )}
+      // --- slice: selection context menu ---
+      onContextMenu={(event) => menu.open(event, item)}
     >
+      {menu.menu}
       <div
         className={cn(
           "flex items-center justify-center h-96 bg-elevated",

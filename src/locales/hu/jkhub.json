@@ -10,10 +10,21 @@
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Frissítés",
+  "sections": {
+    "maps": "Maps",
+    "skins": "Skins & Player Models",
+    "sabers": "Sabers",
+    "guns": "Guns",
+    "npcs": "NPCs",
+    "vehicles": "Vehicles",
+    "singlePlayer": "Single Player",
+    "audio": "Audio"
+  },
   "tree": {
     "heading": "Kategóriák",
     "expand": "Kinyitás: {{category}}",
@@ -56,6 +67,7 @@
   },
   "card": {
     "open": "Megnyitás: {{title}}",
+    "byAuthor": "Search for everything by {{author}}",
     "installed": "Telepítve",
     "install": "Telepítés",
     "reinstall": "Újratelepítés",
@@ -85,6 +97,14 @@
     "versions": "Verziók",
     "downloading": "Letöltés… {{received}}",
     "downloadingOf": "Letöltés… {{received}} / {{total}}"
+  },
+  "download": {
+    "fallbackTitle": "JKHub file",
+    "starting": "Asking JKHub for the archive…",
+    "unpacking": "Unpacking the archive…",
+    "installedInto": "Installed into {{client}}, folder {{folder}}",
+    "openFolder": "Open folder",
+    "answered": "Nothing installed. The file window says why and what to do."
   },
   "install": {
     "pickClient": "Előbb válasszon fent egy klienst: a fájl mindig egy kliensbe kerül.",

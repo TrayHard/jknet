@@ -12,6 +12,8 @@ import { bootstrapI18n } from "./i18n";
 import { readSystemLocale } from "./i18n/useSystemLocale";
 import { errorMessage, ipc } from "./lib/ipc";
 import { isTauri } from "./lib/runtime";
+// --- slice: selection context menu ---
+import { blockNativeContextMenu } from "./lib/selection";
 // --- slice: client window ---
 import { logWindow } from "./lib/windowLog";
 import "./index.css";
@@ -25,6 +27,13 @@ if (isTauri()) void startLogging().catch(() => undefined);
 // Before anything decides which tree to render: which window this document is
 // and what route it got. See `logDocument`.
 logDocument();
+
+// --- slice: selection context menu ---
+// Every window of the launcher runs this same bundle, so one call here takes
+// the webview's own context menu off the main window and off every client
+// window. It is bound before React mounts, because a right click that lands
+// during the first frame must not open **View page source** either.
+blockNativeContextMenu();
 
 // A rejection that got this far is a window with nothing in it, so it says so
 // rather than ending as an unhandled promise nobody sees.

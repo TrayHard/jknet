@@ -61,6 +61,15 @@ pub struct JkhubCategory {
     /// is how a container such as Maps (71) behaves.
     pub has_files: bool,
     pub url: String,
+    /// Key of the launcher section this node is, for a node of the tree the
+    /// screen draws; `None` for a raw site category.
+    ///
+    /// The screen names a section from `sections.<key>` of `jkhub.json` rather
+    /// than from `name`: the eight sections are the launcher's own, and the
+    /// site's spelling of them is not. The table behind the key lives in
+    /// [`super::sections`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
 }
 
 /// The answer of `jkhub_categories`.
@@ -206,9 +215,20 @@ pub struct JkhubFile {
     pub category_name: Option<String>,
     pub author: Option<JkhubAuthor>,
     /// Plain text: the JSON-LD copy of the description, with the markup of
-    /// the site removed. The launcher has no HTML sanitizer and renders this
-    /// as paragraphs, never as markup.
+    /// the site removed and its HTML entities resolved. What the catalogue
+    /// index searches, and what the window falls back to when the block below
+    /// is empty.
     pub description: String,
+    /// --- slice: jkhub details ---
+    /// The same description with the author's markup kept, rebuilt from the
+    /// allowlist in [`super::richtext`]. Safe to render: no element, attribute
+    /// or address reaches this string unless that file names it.
+    ///
+    /// Empty when the theme moved the block. `serde(default)` because a file
+    /// page cached by an older build has no such key, and a cache that fails
+    /// to read is a page fetched again for nothing.
+    #[serde(default)]
+    pub description_html: String,
     pub submitted_at: Option<String>,
     pub updated_at: Option<String>,
     pub version: Option<String>,
@@ -289,6 +309,15 @@ pub struct JkhubInstallResult {
     pub client_id: String,
     /// Folder inside `home\` the files went to: `base` or the client's mod.
     pub folder: String,
+    /// --- slice: jkhub details ---
+    /// That same folder as a path on disk, so the toast of a finished install
+    /// can reveal the pk3 in the file manager without the screen stitching a
+    /// path together out of the client's directory and two names.
+    ///
+    /// `None` for the one outcome where nothing was written: a record that
+    /// points at another site is resolved before a folder is ever touched.
+    #[serde(default)]
+    pub folder_path: Option<String>,
     #[serde(flatten)]
     pub outcome: JkhubInstallOutcome,
 }
@@ -320,6 +349,14 @@ pub struct DownloadProgress {
     pub received: u64,
     /// Zero when the server sent no length.
     pub total: u64,
+    /// --- slice: jkhub details ---
+    /// Name of the archive coming down, as it will land on disk.
+    ///
+    /// The progress card names what it is fetching, and this is the one place
+    /// that knows: `files.jkhub.org` sends no `Content-Disposition`, so the
+    /// name is read out of the address and nothing on the screen has it until
+    /// the install answers.
+    pub file_name: String,
 }
 
 /// Payload of `jkhub:installed`.
@@ -389,6 +426,7 @@ mod tests {
             file_id: 1486,
             client_id: "everyday".into(),
             folder: "base".into(),
+            folder_path: Some("C:\\clients\\everyday\\home\\base".into()),
             outcome: JkhubInstallOutcome::Installed {
                 files: vec!["saber.pk3".into()],
             },
@@ -397,5 +435,6 @@ mod tests {
         assert_eq!(json["kind"], "installed");
         assert_eq!(json["files"][0], "saber.pk3");
         assert_eq!(json["fileId"], 1486);
+        assert_eq!(json["folderPath"], "C:\\clients\\everyday\\home\\base");
     }
 }

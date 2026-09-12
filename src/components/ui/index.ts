@@ -14,7 +14,9 @@ export { Dialog, type DialogVariant } from "./Dialog";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 // --- slice: server actions ---
-export { Menu, type MenuItem, type MenuSize } from "./Menu";
+// --- slice: selection context menu --- `useContextMenu`: the same list,
+// opened by a right click instead of the three dots.
+export { Menu, useContextMenu, type MenuItem, type MenuSize } from "./Menu";
 export { NavItem } from "./NavItem";
 export { RadioCard } from "./RadioCard";
 export {

@@ -20,8 +20,11 @@
     "engineDetails": "О движке {{engine}}",
     "openFolder": "Открыть папку",
     "delete": "Удалить",
+    "settings": "Настройки",
     "settingsOf": "Настройки клиента {{client}}",
     "settingsHint": "Открывает клиента в отдельном окне",
+    "makeDefault": "Сделать клиентом по умолчанию",
+    "actions": "Действия с клиентом",
     "installedOn": "установлен {{date}}",
     "manualInstall": "Эту сборку устанавливают вручную."
   },
@@ -186,6 +189,7 @@
       "edit": "Изменить {{profile}}",
       "remove": "Удалить {{profile}}",
       "makeDefault": "Сделать основным",
+      "actions": "Действия с профилем",
       "noNickname": "Без никнейма",
       "removeDialog": {
         "title": "Удалить {{profile}}?",

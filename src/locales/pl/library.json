@@ -46,7 +46,8 @@
     "conflict": "Konflikt",
     "enable": "Włącz {{file}}",
     "remove": "Usuń {{file}}",
-    "removeHint": "Usuń z tego klienta"
+    "removeHint": "Usuń z tego klienta",
+    "actions": "File actions"
   },
   "empty": {
     "noClientsTitle": "Brak klientów {{game}}",
@@ -84,9 +85,9 @@
     "ruleTitle": "How the game picks the winner",
     "ruleOrder": "Inside one folder the game loads pk3 files by name, ignoring upper and lower case, and loads names that start with dl_ after every other name. Each file it loads goes in front of the ones before it, so the file loaded last is the one the game reads.",
     "ruleDisable": "Disabling a file renames it on disk and takes it out of that order. The file stays in the client, and the switch on its card brings it back.",
+    "ruleToggle": "Info",
     "folderHint": "Only files in the same folder can override each other.",
     "order": "Load order · the last file wins",
-    "outcome": "Disable {{winner}} and {{next}} takes over this path. Disable a hidden file and the game keeps reading {{winner}}.",
     "disableWinner": "Disable {{file}} and {{next}} takes over this path.",
     "disableHidden": "Disable {{file}}. The game already skips it here.",
     "kind": {

@@ -35,10 +35,10 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 
 | Скрипт | Что переписывает | Чего стоит |
 | --- | --- | --- |
-| `refresh-jkhub-categories.ps1` | `categories-ja.json` и `categories-jo.json`: дерево категорий | около 40 запросов, 20 с |
-| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 193 запроса, около 25 с |
+| `refresh-jkhub-categories.ps1` | `categories-ja.json` и `categories-jo.json`: дерево категорий восьми разделов | 21 запрос, 13 с |
+| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 135 запросов, около 22 с |
 
-Второй скрипт читает вшитое дерево, поэтому идёт после первого. В цикле их не запускают: jkhub.org — чужой сервер.
+Второй скрипт читает вшитое дерево, поэтому идёт после первого. В цикле их не запускают: jkhub.org — чужой сервер. Оба обходят только восемь разделов каталога; таблица разделов лежит в `src-tauri/src/jkhub/sections.rs`.
 
 ## Структура
 
@@ -58,7 +58,8 @@ src/
                          NewClientDialog, GameFilesNotice, MissingClientToast,
                          GameEventsProvider, AppUpdateProvider, AboutCard,
                          MapPreview, MapPicturesCard, ToastsProvider,
-                         FriendsProvider, AccountProvider
+                         FriendsProvider, AccountProvider, EngineLogo,
+                         OtherClientsMenu
   components/ui/         UI-кит: Button, Badge, Input, Select, Combobox, Menu,
                          Toggle, NavItem, EmptyState, RadioCard, StepBadges,
                          Toast, Avatar, Dialog
@@ -67,7 +68,7 @@ src/
                          профили игрока: список, форма, сетка скинов, никнейм
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
-                         JkhubIndexing, JkhubTree
+                         JkhubDownloadToasts, JkhubIndexing, JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs,
                          меню действий у выделенного сервера, окно
                          «Подключиться…»
@@ -83,8 +84,12 @@ src/
   lib/useGameEvents.ts   подписка на события установки движка и запуска игры
   lib/useAppUpdate.ts    проверка, загрузка и установка обновления лаунчера
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
+  lib/selection.ts       выделение текста и отключение контекстного меню
+                         webview
   lib/format.ts          cn, shortenPath и чистые функции форматирования,
                          которым передают локаль
+  lib/jkhubDownloads.ts  ход установки файла JKHub вне React: его пишет
+                         useJkhubInstall, читает карточка в колонке тостов
   lib/devOnline.ts       подмена команд друзей вызовами к заглушке JKNet
                          Online вне Tauri
 src-tauri/
@@ -109,6 +114,7 @@ src-tauri/
   src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
                          снимок дерева категорий в сборке, разборщики страниц,
+                         очистка описания файла по списку разрешённых тегов,
                          индекс каталога и поиск по нему, сборка индекса при
                          старте, скачивание и установка в клиента
   resources/jkhub/       categories-*.json — дерево категорий, index-*.json —
@@ -182,6 +188,8 @@ public/
 - Вызов Tauri из фронтенда закрывайте проверкой `isTauri` из `lib/runtime.ts`. Команда `npm run dev` открывает тот же код в браузере, где `window.__TAURI_INTERNALS__` нет и любой вызов бросает `TypeError`.
 - Ошибки возвращайте вариантом `AppError` из `src-tauri/src/error.rs`. Строку в `Err` не пишите: вариант делает журнал доступным для поиска.
 - Разрешения в `src-tauri/capabilities/default.json` добавляйте по одному, только под то, что действительно вызываете.
+- Класс `select-none` ставьте только интерактивным элементам: кнопкам, вкладкам, пунктам меню, переключателям, полосе заголовка и иконкам. Текст, который игрок читает, — имя сервера, путь, адрес, командная строка, сообщение об ошибке — обязан выделяться и копироваться. Компоненты UI-кита несут класс сами, а селекторы для элементов, написанных руками, лежат в блоке `@layer base` файла `src/index.css`. Правило `user-select: none` на `body` не возвращайте. Подробности — в разделе [«Выделение текста»](docs/architecture.md#выделение-текста).
+- Контекстное меню берите из UI-кита: хук `useContextMenu` в `src/components/ui/Menu.tsx` рисует тот же список, что кнопка с тремя точками, и открывает его в точке курсора. Второе меню не пишите и штатное меню WebView2 не возвращайте: его гасит `blockNativeContextMenu` из `src/lib/selection.ts`. Пункты меню вызывают обработчики уже существующих кнопок; новую команду ядра ради пункта меню не заводите.
 - Выпадающий список берите из UI-кита: `Select` в `src/components/ui/Select.tsx`, а для длинного списка — `Combobox` в `src/components/ui/Combobox.tsx`: тот же вид и поле поиска внутри поповера. Нативный `<select>` не применяйте: его попап рисует система, а не страница, и WebView2 красит его белым поверх светлого текста. Правило `color-scheme: dark` в `src/index.css` — только страховка на случай нативного контрола, который всё-таки появится.
 - Маршрутизация работает на `HashRouter`. Ссылки вида `#/servers` переживают перезагрузку окна, обычные пути — нет.
 - Логи пишет `tauri-plugin-log` в `logs\` внутри папки данных. Туда же попадают `console.warn` и `console.error` фронтенда: их пересылает `src/main.tsx`.

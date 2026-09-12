@@ -18,8 +18,11 @@
     "engineDetails": "About {{engine}}",
     "openFolder": "Mappa megnyitása",
     "delete": "Törlés",
+    "settings": "Settings",
     "settingsOf": "{{client}} beállításai",
     "settingsHint": "Név és modmappa",
+    "makeDefault": "Make default",
+    "actions": "Client actions",
     "installedOn": "telepítve {{date}}",
     "manualInstall": "Ezt a változatot kézzel kell telepíteni."
   },
@@ -184,6 +187,7 @@
       "edit": "Edit {{profile}}",
       "remove": "Delete {{profile}}",
       "makeDefault": "Set as default",
+      "actions": "Profile actions",
       "noNickname": "No nickname",
       "removeDialog": {
         "title": "Delete {{profile}}?",

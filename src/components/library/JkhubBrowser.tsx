@@ -7,6 +7,9 @@ import { useToasts } from "../ToastsProvider";
 import { Button, EmptyState, Select, type SelectOption } from "../ui";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
+// --- slice: jkhub catalog ---
+import { byAuthor } from "./jkhubQuery";
+import { useSectionName } from "./jkhubSections";
 // --- slice: jkhub index startup ---
 import { JkhubIndexing } from "./JkhubIndexing";
 import { JkhubTree } from "./JkhubTree";
@@ -65,19 +68,19 @@ export type Scope =
  * The category a search is narrowed to, or null for the whole game.
  *
  * A query is answered out of the whole catalogue unless the player narrowed it
- * themselves. The tab has to open somewhere and opens on the first category
- * with files of its own — `Audio`, 44 of the 3 324 Jedi Academy files — and a
- * search that stayed inside that would answer «nothing matches» to almost
- * every word typed into the search box of the screen. Finding a file in a
- * category nobody opened is what the local index is for.
+ * themselves. The tab has to open somewhere and opens on the first section —
+ * `Maps`, about 730 of the 2 600 Jedi Academy files — and a search that stayed
+ * inside that would answer «nothing matches» to a great many words typed into
+ * the search box of the screen. Finding a file in a section nobody opened is
+ * what the local index is for.
  *
  * Picking a category narrows the search to it, which is what the counts in the
  * tree are for; **Show all categories** widens it again.
  *
  * ```ts
- * searchScope({ kind: "landed", category: audio }, "")     // audio.id
- * searchScope({ kind: "landed", category: audio }, "kyle") // null
- * searchScope({ kind: "picked", category: audio }, "kyle") // audio.id
+ * searchScope({ kind: "landed", category: maps }, "")     // maps.id
+ * searchScope({ kind: "landed", category: maps }, "kyle") // null
+ * searchScope({ kind: "picked", category: maps }, "kyle") // maps.id
  * searchScope({ kind: "all" }, "kyle")                     // null
  * ```
  */
@@ -102,6 +105,15 @@ interface JkhubBrowserProps {
    * stays here, because it is this tab that pays for a keystroke.
    */
   search: string;
+  // --- slice: jkhub catalog ---
+  /**
+   * Writes into that box.
+   *
+   * The tab needs it for one action: a click on an author's name searches for
+   * everything by them, and the query it builds has to land where the player
+   * can see and edit it.
+   */
+  onSearch: (query: string) => void;
 }
 
 /**
@@ -126,11 +138,14 @@ export function JkhubBrowser({
   clientName,
   installed,
   search: typed,
+  onSearch,
 }: JkhubBrowserProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const gameNames = useGameNames();
+  // --- slice: jkhub catalog --- the eight sections are named by the launcher.
+  const sectionName = useSectionName();
   const [scope, setScope] = useState<Scope | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
   const [shown, setShown] = useState(PAGE);
@@ -185,17 +200,21 @@ export function JkhubBrowser({
     setOpenFile(null);
   }, [game]);
 
-  // The first category with files of its own is the landing page of the tab:
-  // the two roots hold nothing themselves, and neither does Maps. It is filled
-  // in while nothing is chosen — after a change of game, and after a walk of
-  // the tree that no longer holds the category which was picked in it. A scope
-  // the player chose, `all` included, is left where it is.
+  // The first section is the landing page of the tab. It is filled in while
+  // nothing is chosen — after a change of game, and after a walk of the tree
+  // that no longer holds the category which was picked in it. A scope the
+  // player chose, `all` included, is left where it is.
+  //
+  // --- slice: jkhub catalog ---
+  // The tree is eight flat sections now, every one of them selectable, so the
+  // landing is `Maps` and not the first leaf that happened to have files of
+  // its own. That used to be `Audio`, 44 files of the 3 324 the site has.
   const tree = useMemo(() => categories.data?.categories ?? [], [categories.data]);
   useEffect(() => {
     if (tree.length === 0) return;
     if (scope?.kind === "all") return;
     if (scope != null && tree.some((entry) => entry.id === scope.category.id)) return;
-    const first = tree.find((entry) => entry.hasFiles && entry.parentId != null);
+    const first = tree.find((entry) => entry.hasFiles);
     setScope(first ? { kind: "landed", category: first } : { kind: "all" });
   }, [tree, scope]);
 
@@ -222,6 +241,14 @@ export function JkhubBrowser({
     for (const entry of tree) map.set(entry.id, entry);
     return map;
   }, [tree]);
+
+  // --- slice: jkhub catalog ---
+  // What a card prints under its title: the section of the launcher, in the
+  // player's language. Nothing when the tree has not arrived yet.
+  const sectionOf = (id: number) => {
+    const found = names.get(id);
+    return found ? sectionName(found) : undefined;
+  };
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();
@@ -297,6 +324,12 @@ export function JkhubBrowser({
     if (!isTauri()) return;
     void jkhubIpc.open(id).catch((e: unknown) => setFailure(errorText(e)));
   };
+
+  // --- slice: jkhub catalog ---
+  // A click on an author writes the operator into the box of the screen and
+  // lets the ordinary search answer it: the tab keeps no author of its own,
+  // so the query stays visible, editable and shareable.
+  const searchAuthor = (author: string) => onSearch(byAuthor(typed, author));
 
   const reveal = (path: string) => {
     if (!isTauri()) return;
@@ -444,7 +477,14 @@ export function JkhubBrowser({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-12 pb-12">
-            <span className="flex-1" />
+            {/* --- slice: jkhub catalog ---
+                The one line about the search box, which lives in the header
+                of the screen and belongs to all three tabs. It sits here
+                because the operator does: on the other two tabs the box is a
+                plain filter. */}
+            <span className="flex-1 min-w-0 text-body-sm text-fg-muted truncate">
+              {t("search.hint")}
+            </span>
             <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
             <Select
               ariaLabel={t("sort.label")}
@@ -511,7 +551,7 @@ export function JkhubBrowser({
               }
               text={
                 elsewhere
-                  ? t("empty.elsewhereText", { category: category.name })
+                  ? t("empty.elsewhereText", { category: sectionName(category) })
                   : t("empty.filteredText")
               }
               action={
@@ -524,14 +564,27 @@ export function JkhubBrowser({
             />
           ) : (
             <>
-              <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">
+              {/* --- slice: jkhub catalog ---
+                  Columns follow the width of this list, not of the window.
+                  The breakpoints that used to be here — `md` and `xl` — are
+                  measured against the window, while the grid sits inside a
+                  `flex-1` beside a 232 px rail: a window wide enough for five
+                  columns still got three, and one just under `xl` dropped to
+                  two while the list still had room for three. 216 px is the
+                  width a card has in the design at three columns on a
+                  1280 px window, and `auto-fill` keeps that the minimum
+                  rather than the fixed size: a card never stretches past its
+                  share of the row, and a row with two cards in it leaves the
+                  rest of the columns empty instead of widening them.
+                  `min(216px,100%)` is the floor of the floor — a container
+                  narrower than one card gives one column that fits, not one
+                  column that overflows. */}
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(216px,100%),1fr))] gap-12">
                 {cards.map((card) => (
                   <JkhubCard
                     key={card.id}
                     card={card}
-                    categoryName={
-                      names.get(card.categoryId ?? category?.id ?? 0)?.name
-                    }
+                    categoryName={sectionOf(card.categoryId ?? category?.id ?? 0)}
                     installed={installedIds.has(card.id)}
                     openOnly={openOnly.has(card.id)}
                     progress={progress.get(card.id) ?? null}
@@ -542,6 +595,7 @@ export function JkhubBrowser({
                     }}
                     onInstall={() => runInstall(card.id, false)}
                     onOpenSite={() => openSite(card.id)}
+                    onAuthor={searchAuthor}
                   />
                 ))}
               </ul>
@@ -579,6 +633,7 @@ export function JkhubBrowser({
           onInstall={(replace) => runInstall(openFile, replace)}
           onOpenSite={() => openSite(openFile)}
           onRevealArchive={reveal}
+          onAuthor={searchAuthor}
         />
       ) : null}
     </>

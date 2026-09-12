@@ -64,7 +64,8 @@
   },
   "row": {
     "join": "Приєднатися",
-    "joining": "Запуск…"
+    "joining": "Запуск…",
+    "actions": "Friend actions"
   },
   "panel": {
     "status": "Стан",

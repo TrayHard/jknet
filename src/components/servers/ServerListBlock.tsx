@@ -7,9 +7,13 @@ import { Link } from "react-router";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo } from "../../lib/ipc";
+// --- slice: selection context menu ---
+import { hasTextSelection } from "../../lib/selection";
 import { Badge } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
+// --- slice: selection context menu ---
+import { useServerContextMenu } from "./ServerMenu";
 import { ServerName } from "./ServerName";
 
 interface ServerListBlockProps {
@@ -93,6 +97,10 @@ export function ServerListBlock({
   const { t: tServers } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");
   const gametypes = useGametypeLabels();
+  // --- slice: selection context menu ---
+  // One layer for the block: the same three actions the dots at the end of
+  // the row carry, from anywhere in it.
+  const rowMenu = useServerContextMenu();
 
   if (servers.length === 0) return null;
 
@@ -125,8 +133,24 @@ export function ServerListBlock({
               // only when the row itself has the focus. A key event bubbles
               // whatever the click does, and Enter on **Connect** must not
               // start a client and walk off the screen at the same time.
+              //
+              // --- slice: selection context menu ---
+              // The drag that copied the name of a server ends as a click on
+              // the row. It was a selection, so it stays one and the player
+              // keeps the screen they were reading from.
               tabIndex={onOpen === undefined ? undefined : 0}
-              onClick={onOpen === undefined ? undefined : () => onOpen(server)}
+              onClick={
+                onOpen === undefined
+                  ? undefined
+                  : () => {
+                      if (hasTextSelection()) return;
+                      onOpen(server);
+                    }
+              }
+              // --- slice: selection context menu ---
+              // A right click anywhere in the row, buttons included: it opens
+              // the same list as the dots and leads nowhere.
+              onContextMenu={(event) => rowMenu.open(event, server)}
               onKeyDown={
                 onOpen === undefined
                   ? undefined
@@ -226,6 +250,8 @@ export function ServerListBlock({
           );
         })}
       </ul>
+      {/* --- slice: selection context menu --- one list for the block. */}
+      {rowMenu.menu}
     </section>
   );
 }
