@@ -186,8 +186,24 @@ fn render_element(element: ElementRef<'_>, out: &mut Sink) {
     // An embedded video is the one element that changes shape: the launcher
     // window is not a place to run someone else's player, so the frame becomes
     // a link to the video with the still the site itself publishes for it.
+    //
+    // --- slice: library polish ---
+    // The address is read from `data-embed-src` as well as from `src`, and
+    // that is where jkhub.org actually keeps it: the theme of Invision
+    // Community ships the frame empty and lets its own JavaScript fill `src`
+    // in the browser. Nothing here runs JavaScript, so every video of every
+    // description was being dropped — all three of «Music Replacement Pack:
+    // Star Wars Visions» (file 4471) among them, which is the page the
+    // complaint came from. The wrappers the theme puts around the frame —
+    // `div.ipsEmbeddedVideo`, and a `div` with a `data-controller` on it —
+    // need no rule of their own: an unknown element is unwrapped and the
+    // walk reaches the frame inside it.
     if name == "iframe" {
-        if let Some(id) = element.value().attr("src").and_then(youtube_id) {
+        let source = element
+            .value()
+            .attr("src")
+            .or_else(|| element.value().attr("data-embed-src"));
+        if let Some(id) = source.and_then(youtube_id) {
             push_video(&id, &mut out.html);
         }
         return;
@@ -220,6 +236,14 @@ fn render_element(element: ElementRef<'_>, out: &mut Sink) {
                 render_children(element, out);
                 return;
             };
+            // --- slice: library polish ---
+            // The other shape an embed arrives in: a placeholder the site
+            // means to replace with a player, and a bare address the editor
+            // never got to. Both become the same card as a frame does.
+            if let Some(id) = video_of_link(element, &href) {
+                push_video(&id, &mut out.html);
+                return;
+            }
             out.html.push_str("<a href=\"");
             escape_attr(&href, &mut out.html);
             out.html.push_str("\">");
@@ -255,6 +279,31 @@ fn push_video(id: &str, out: &mut String) {
     out.push_str("/hqdefault.jpg\" alt=\"");
     out.push_str(PICTURE_ATTRS);
     out.push_str("</a>");
+}
+
+/// The video an anchor stands for, or nothing when it is a word with a link
+/// on it.
+///
+/// --- slice: library polish ---
+/// Two shapes, both made by the editor of Invision Community:
+///
+/// * an anchor the site marked as an embed it will swap for a player —
+///   `data-embedcontent` is what the theme writes today, `data-embed` what
+///   older posts carry;
+/// * an anchor that is the address and nothing else, which is a link the
+///   author pasted and the editor never converted.
+///
+/// An anchor with words in it stays a link. The author wrote a sentence, and
+/// a thumbnail in place of one would be the launcher rewriting prose.
+fn video_of_link(element: ElementRef<'_>, href: &str) -> Option<String> {
+    let value = element.value();
+    let marked = value.attr("data-embedcontent").is_some() || value.attr("data-embed").is_some();
+    let text = element.text().collect::<String>();
+    let text = text.trim();
+    // Against the resolved address and against the one the page wrote, so a
+    // scheme-relative `//youtu.be/…` still reads as bare.
+    let bare = text == href || value.attr("href").is_some_and(|raw| raw.trim() == text);
+    (marked || bare).then(|| youtube_id(href)).flatten()
 }
 
 /// Whether an element is the notice the site appends to every description.
@@ -571,6 +620,72 @@ mod tests {
         assert_eq!(sanitize_fragment("<iframe src='https://evil.example/x'></iframe>"), "");
         assert_eq!(sanitize_fragment("<iframe src='/local'></iframe>"), "");
         assert_eq!(sanitize_fragment("<iframe></iframe>"), "");
+        assert_eq!(
+            sanitize_fragment("<iframe data-embed-src='https://evil.example/x'></iframe>"),
+            "",
+            "the lazy attribute is held to the same hosts as the plain one"
+        );
+    }
+
+    /// --- slice: library polish ---
+    /// The markup jkhub.org actually serves, copied out of file 4471 — the
+    /// page whose three previews the window showed nothing of. The theme
+    /// ships the frame with no `src` at all and fills it in the browser;
+    /// nothing here runs its JavaScript, so the address has to be read where
+    /// the server left it.
+    #[test]
+    fn a_lazily_loaded_embed_is_read_from_data_embed_src() {
+        let clean = sanitize_fragment(
+            "<div class=\"ipsEmbeddedVideo\" contenteditable=\"false\"><div>\
+             <iframe allowfullscreen=\"\" frameborder=\"0\" height=\"150\" \
+             title=\"The Twin Star Destroyer\" width=\"200\" \
+             data-embed-src=\"https://www.youtube-nocookie.com/embed/k6aUNGhUE0c?feature=oembed\">\
+             </iframe></div></div>",
+        );
+        assert_eq!(
+            clean,
+            "<a class=\"jkhub-video\" href=\"https://www.youtube.com/watch?v=k6aUNGhUE0c\">\
+             <img src=\"https://img.youtube.com/vi/k6aUNGhUE0c/hqdefault.jpg\" alt=\"\" \
+             loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" /></a>"
+        );
+        assert!(!clean.contains("<iframe"), "no frame reaches the window");
+    }
+
+    /// --- slice: library polish ---
+    /// The two anchors that are an embed rather than a word with a link on
+    /// it, and the one that is neither.
+    #[test]
+    fn an_anchor_becomes_a_card_when_it_is_the_embed_and_not_a_word() {
+        let card = "<a class=\"jkhub-video\" href=\"https://www.youtube.com/watch?v=k6aUNGhUE0c\">\
+                    <img src=\"https://img.youtube.com/vi/k6aUNGhUE0c/hqdefault.jpg\" alt=\"\" \
+                    loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" /></a>";
+        assert_eq!(
+            sanitize_fragment(
+                "<a href='https://www.youtube.com/watch?v=k6aUNGhUE0c' \
+                 data-embedcontent=''>The Twin Star Destroyer</a>"
+            ),
+            card,
+            "the site said it would put a player here"
+        );
+        assert_eq!(
+            sanitize_fragment(
+                "<a href='https://youtu.be/k6aUNGhUE0c'>https://youtu.be/k6aUNGhUE0c</a>"
+            ),
+            card,
+            "an address pasted as an address loses no words to the card"
+        );
+        assert_eq!(
+            sanitize_fragment(
+                "<a href='https://www.youtube.com/watch?v=k6aUNGhUE0c'>watch the trailer</a>"
+            ),
+            "<a href=\"https://www.youtube.com/watch?v=k6aUNGhUE0c\">watch the trailer</a>",
+            "a sentence with a link on it stays a sentence"
+        );
+        assert_eq!(
+            sanitize_fragment("<a href='https://jkhub.org/x' data-embedcontent=''>x</a>"),
+            "<a href=\"https://jkhub.org/x\">x</a>",
+            "and an embed of anything but a video is left as the link it is"
+        );
     }
 
     #[test]
