@@ -87,7 +87,6 @@
     "ruleToggle": "Info",
     "folderHint": "Only files in the same folder can override each other.",
     "order": "Load order · the last file wins",
-    "outcome": "Disable {{winner}} and {{next}} takes over this path. Disable a hidden file and the game keeps reading {{winner}}.",
     "disableWinner": "Disable {{file}} and {{next}} takes over this path.",
     "disableHidden": "Disable {{file}}. The game already skips it here.",
     "kind": {

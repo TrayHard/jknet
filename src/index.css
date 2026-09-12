@@ -187,8 +187,9 @@
  * the elements: they come out of a string, and a class attribute cannot be
  * put on them.
  *
- * The one class that does arrive is `jkhub-video`, and the core writes it
- * itself for the still that replaces an embedded player.
+ * Two classes do arrive, and the core writes both of them itself:
+ * `jkhub-video` for the still that replaces an embedded player, and
+ * `jkhub-cut` for the end of a description that ran past its size limit.
  */
 @layer components {
   .jkhub-richtext {
@@ -331,5 +332,16 @@
     border-width: 14px 0 14px 24px;
     border-color: transparent transparent transparent var(--color-text-primary);
     filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6));
+  }
+
+  /* The end of a description the core cut at its size limit. Three dots and
+     no words: the string comes out of Rust, which has no locale. The rule
+     turns them into a line a reader recognises as "there was more". */
+  .jkhub-richtext .jkhub-cut {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border-default);
+    color: var(--color-text-muted);
+    letter-spacing: 4px;
   }
 }

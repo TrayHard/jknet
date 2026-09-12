@@ -506,6 +506,10 @@ pub fn parse_file_page(html: &str, id: u32, slug: &str) -> Result<JkhubFile> {
 ///
 /// This costs no request: the page is the one the screenshots and the
 /// counters were already read from.
+///
+/// The length of the result is the page's to decide, so it is capped like the
+/// text copies around it: `richtext::MAX_HTML` cuts a runaway description
+/// between two elements and marks the end of what survived.
 fn description_html(document: &Html) -> String {
     document
         .select(&sel("div.ipsType_richText.ipsType_break"))
