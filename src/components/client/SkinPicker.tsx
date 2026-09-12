@@ -1,4 +1,4 @@
-import { Blocks, Loader2, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -12,7 +12,7 @@ import {
   type ModelPart,
   type PlayerModel,
 } from "../../lib/ipc";
-import { usePlayerModels } from "../../lib/queries";
+import { useAssembledPreview, usePlayerModels } from "../../lib/queries";
 import { Input } from "../ui";
 
 // --- slice: connect dialog ---
@@ -21,15 +21,22 @@ import { Input } from "../ui";
  *
  * `md` is the profile form of the client window, which owns its page. `sm` is
  * the **Connect…** dialog, where the grid is one field of a modal that also
- * has to hold a nickname, two hilts, an argument field and a command line — so
- * the tiles shrink rather than the dialog growing past the window.
+ * has to hold a nickname, the saber controls, an argument field and a command
+ * line — so the tiles shrink rather than the dialog growing past the window.
  */
 export type SkinPickerSize = "sm" | "md";
 
 /** What each size measures, in the pixel scale of the design tokens. */
-const SIZES: Record<SkinPickerSize, { icon: string; column: string; list: string }> = {
-  sm: { icon: "size-44", column: "52px", list: "max-h-160" },
-  md: { icon: "size-64", column: "72px", list: "max-h-232" },
+const SIZES: Record<
+  SkinPickerSize,
+  { icon: string; column: string; list: string; card: string }
+> = {
+  // --- slice: skins and hilts ---
+  // The card is the icon three times over, because the composed preview is
+  // three square rows stacked: a frame of any other shape would either
+  // letterbox the picture or cut a row off it.
+  sm: { icon: "size-44", column: "52px", list: "max-h-160", card: "w-44 h-132" },
+  md: { icon: "size-64", column: "72px", list: "max-h-232", card: "w-64 h-192" },
 };
 
 /**
@@ -47,10 +54,18 @@ const SIZES: Record<SkinPickerSize, { icon: string; column: string; list: string
  *
  * --- slice: assembled skins ---
  * Six of the models are not picked whole but built out of a head, a torso and
- * a pair of legs. They stand in the same grid, marked **Assembled**, and
- * picking one opens three rows of parts under it. The value is assembled on
- * every click, so the token preview and the profile always hold a whole
- * `<model>/<head>|<torso>|<legs>` and never a half-made one.
+ * a pair of legs. Picking one opens three rows of parts under it, and the
+ * value is assembled on every click, so the token preview and the profile
+ * always hold a whole `<model>/<head>|<torso>|<legs>` and never a half-made
+ * one.
+ *
+ * --- slice: skins and hilts ---
+ * Those six stand in a group of their own, **Custom characters**, under the
+ * grid of whole skins, and each wears a picture of the character it is
+ * currently set to rather than the icon of its head. Among the whole skins
+ * they were a tile that looked like the others and behaved differently, and
+ * the head icon alone was a cut-out face over a dark surface. The picture is
+ * composed by the core; see `appearance::compose_preview`.
  */
 export function SkinPicker({
   clientId,
@@ -90,6 +105,12 @@ export function SkinPicker({
     );
   }, [models.data, query]);
 
+  // --- slice: skins and hilts ---
+  // Two groups out of one list, because the two are picked differently: a
+  // whole skin is one click and a character is a click plus three rows.
+  const stock = found.filter((model) => model.parts === null);
+  const characters = found.filter((model) => model.parts !== null);
+
   // The assembled model the value names, if it names one the client still
   // carries. A profile written when a mod was installed keeps its value after
   // the mod is gone; then there is no panel to open and the grid shows no tile
@@ -104,6 +125,17 @@ export function SkinPicker({
     }
     return null;
   }, [models.data, value]);
+
+  // --- slice: skins and hilts ---
+  // The picture of the combination being built. Only one combination is ever
+  // being built, so one query answers both the card in the group and the
+  // panel under it. While it is in flight the card keeps the picture of the
+  // combination the list opened on, which is the same character in different
+  // clothes rather than an empty frame.
+  const composed = useAssembledPreview(
+    clientId,
+    building === null ? null : assembledSkinValue(building.picked),
+  );
 
   if (models.error) {
     return (
@@ -151,35 +183,60 @@ export function SkinPicker({
             <Tile
               selected={value === null}
               caption={t("clientWindow.profiles.form.skinNone")}
-              icon={metrics.icon}
+              frame={metrics.icon}
               onSelect={() => onChange(null)}
             />
-            {found.map((model) => (
+            {stock.map((model) => (
               <SkinTile
-                key={model.parts === null ? model.value : `${model.model}/|`}
+                key={model.value}
                 model={model}
-                // An assembled model is one tile however its parts are set,
-                // so it answers for every value that names it.
-                selected={
-                  model.parts === null
-                    ? model.value === value
-                    : building?.model === model.model
-                }
-                picked={
-                  building?.model === model.model ? building.picked : null
-                }
-                icon={metrics.icon}
-                onSelect={() => {
-                  // Clicking the tile of the model already being assembled
-                  // keeps the parts the player chose. `model.value` carries
-                  // the first part of each row, and a second click that threw
-                  // a choice away would be a trap.
-                  if (building?.model === model.model) return;
-                  onChange(model.value);
-                }}
+                selected={model.value === value}
+                frame={metrics.icon}
+                onSelect={() => onChange(model.value)}
               />
             ))}
           </div>
+
+          {characters.length === 0 ? null : (
+            <div className="flex flex-col gap-4">
+              <span className="text-label-xs text-fg-muted">
+                {t("clientWindow.profiles.form.skinCustom")}
+              </span>
+              <div
+                role="radiogroup"
+                aria-label={t("clientWindow.profiles.form.skinCustom")}
+                className="flex gap-8 overflow-x-auto p-8 rounded-md border border-line bg-input"
+              >
+                {characters.map((model) => (
+                  <CharacterCard
+                    key={model.model}
+                    model={model}
+                    // A character is one card however its parts are set, so
+                    // it answers for every value that names it.
+                    selected={building?.model === model.model}
+                    preview={
+                      building?.model === model.model
+                        ? (composed.data ?? model.preview)
+                        : model.preview
+                    }
+                    picked={
+                      building?.model === model.model ? building.picked : null
+                    }
+                    frame={metrics.card}
+                    onSelect={() => {
+                      // Clicking the card of the character already being
+                      // built keeps the parts the player chose. `model.value`
+                      // carries the first part of each row, and a second
+                      // click that threw a choice away would be a trap.
+                      if (building?.model === model.model) return;
+                      onChange(model.value);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {found.length === 0 ? (
             <p className="text-body-sm text-fg-muted">
               {t("clientWindow.profiles.form.skinNoMatch", { query: query.trim() })}
@@ -189,7 +246,9 @@ export function SkinPicker({
             <PartsPanel
               parts={building.parts}
               picked={building.picked}
-              icon={metrics.icon}
+              preview={composed.data ?? null}
+              frame={metrics.icon}
+              card={metrics.card}
               tintBelow={tintBelow}
               onChange={(next) => onChange(assembledSkinValue(next))}
             />
@@ -222,53 +281,65 @@ const ROWS = [
 ] as const;
 
 /**
- * The head, the torso and the legs of the assembled model that is selected.
+ * The head, the torso and the legs of the character that is selected.
  *
  * One row of icons each, the current part lit, and the value rebuilt on every
  * click — there is no **Apply**, because a half-assembled value is not a thing
  * the cvar can hold. The colour of a jedi is not here: the game takes it from
  * `char_color_*`, which the profile owns as three sliders of its own.
+ *
+ * --- slice: skins and hilts ---
+ * The picture of what the three rows add up to stands beside them, so the
+ * player sees the character and not only the parts. It is the same composed
+ * file the card in the group above wears.
  */
 function PartsPanel({
   parts,
   picked,
-  icon,
+  preview,
+  frame,
+  card,
   tintBelow,
   onChange,
 }: {
   parts: NonNullable<PlayerModel["parts"]>;
   picked: AssembledSkin;
-  icon: string;
+  preview: string | null;
+  frame: string;
+  card: string;
   tintBelow: boolean;
   onChange: (value: AssembledSkin) => void;
 }) {
   const { t } = useTranslation("clients");
 
   return (
-    <div className="flex flex-col gap-8 rounded-md border border-line bg-input p-8">
-      {/* The word the tile has no room for. */}
-      <p className="flex items-center gap-4 text-label-xs text-fg-accent">
-        <Blocks size={12} className="shrink-0" />
-        {t("clientWindow.profiles.form.skinAssembled")}
-        <span className="text-fg-muted normal-case tracking-normal">
-          {picked.model}
-        </span>
-      </p>
-      {ROWS.map((row) => (
-        <PartRow
-          key={row.key}
-          label={t(row.label)}
-          parts={parts[row.key]}
-          value={picked[row.field]}
-          icon={icon}
-          onSelect={(id) => onChange({ ...picked, [row.field]: id })}
-        />
-      ))}
-      {tintBelow ? (
-        <p className="text-body-sm text-fg-muted">
-          {t("clientWindow.profiles.form.skinPartsTint")}
+    <div className="flex gap-8 rounded-md border border-line bg-input p-8">
+      <Picture
+        src={preview}
+        frame={card}
+        alt={t("clientWindow.profiles.form.skinPreview", { model: picked.model })}
+      />
+      <div className="flex-1 min-w-0 flex flex-col gap-8">
+        <p className="text-label-xs text-fg-accent">
+          {t("clientWindow.profiles.form.skinAssembled")}
+          <span className="text-fg-muted normal-case tracking-normal"> {picked.model}</span>
         </p>
-      ) : null}
+        {ROWS.map((row) => (
+          <PartRow
+            key={row.key}
+            label={t(row.label)}
+            parts={parts[row.key]}
+            value={picked[row.field]}
+            frame={frame}
+            onSelect={(id) => onChange({ ...picked, [row.field]: id })}
+          />
+        ))}
+        {tintBelow ? (
+          <p className="text-body-sm text-fg-muted">
+            {t("clientWindow.profiles.form.skinPartsTint")}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -278,13 +349,13 @@ function PartRow({
   label,
   parts,
   value,
-  icon,
+  frame,
   onSelect,
 }: {
   label: string;
   parts: ModelPart[];
   value: string;
-  icon: string;
+  frame: string;
   onSelect: (id: string) => void;
 }) {
   // A part the client no longer carries still stands in the value, so it keeps
@@ -305,7 +376,7 @@ function PartRow({
             key={part.id}
             part={part}
             selected={part.id === value}
-            icon={icon}
+            frame={frame}
             onSelect={() => onSelect(part.id)}
           />
         ))}
@@ -313,7 +384,7 @@ function PartRow({
           <PartTile
             part={{ id: value, icon: null }}
             selected
-            icon={icon}
+            frame={frame}
             onSelect={() => onSelect(value)}
           />
         ) : null}
@@ -326,38 +397,28 @@ function PartRow({
 function PartTile({
   part,
   selected,
-  icon,
+  frame,
   onSelect,
 }: {
   part: ModelPart;
   selected: boolean;
-  icon: string;
+  frame: string;
   onSelect: () => void;
 }) {
-  const { t } = useTranslation("clients");
-  const url = skinIconUrl(part.icon);
-
   return (
     <Tile
       selected={selected}
       caption={partCaption(part.id)}
       title={part.id}
-      icon={icon}
+      frame={frame}
       onSelect={onSelect}
-      picture={
-        url === null ? (
-          <span className="text-label-xs text-fg-muted text-center px-4">
-            {t("clientWindow.profiles.form.skinNoIcon")}
-          </span>
-        ) : (
-          <img
-            src={url}
-            alt=""
-            loading="lazy"
-            className={cn(icon, "object-cover rounded-sm")}
-          />
-        )
-      }
+      // --- slice: skins and hilts ---
+      // A part icon is a cut-out limb: whatever the artist removed is
+      // transparent, and over the dark surface of the page the head read as a
+      // hole. The plate is the one light ground of the launcher and the very
+      // colour the core paints behind the composed preview.
+      plate
+      picture={<Picture src={part.icon} frame={frame} />}
     />
   );
 }
@@ -373,102 +434,143 @@ function partCaption(id: string): string {
   return underscore < 0 ? id : id.slice(underscore + 1);
 }
 
-/** One skin of the grid: its icon when there is one, its name when there is not. */
+/** One whole skin of the grid: its icon when there is one, its name when not. */
 function SkinTile({
   model,
   selected,
-  picked,
-  icon,
+  frame,
   onSelect,
 }: {
   model: PlayerModel;
   selected: boolean;
-  /**
-   * --- slice: assembled skins ---
-   * The parts the value names, when this tile is the assembled model that is
-   * selected. The tile then wears the head the player chose rather than the
-   * one the list opens on, which is also the picture the game itself falls
-   * back to for a three-part skin.
-   */
-  picked: AssembledSkin | null;
-  icon: string;
+  frame: string;
   onSelect: () => void;
 }) {
-  const { t } = useTranslation("clients");
-  const assembled = model.parts !== null;
-  const head =
-    picked === null
-      ? null
-      : (model.parts?.heads.find((part) => part.id === picked.head) ?? null);
-  const url = skinIconUrl(head === null ? model.icon : head.icon);
-  const caption = assembled
-    ? model.model
-    : model.variant === "default"
-      ? model.model
-      : `${model.model}/${model.variant}`;
-  // What the cvar would hold: the parts the player picked when this is the
-  // assembled model they are building, and the list's own value otherwise.
-  const value =
-    picked === null ? model.value : assembledSkinValue(picked);
+  const caption =
+    model.variant === "default" ? model.model : `${model.model}/${model.variant}`;
 
   return (
     <Tile
       selected={selected}
       caption={caption}
-      title={
-        assembled
-          ? `${t("clientWindow.profiles.form.skinAssembled")} · ${value}`
-          : value
-      }
-      icon={icon}
+      title={model.value}
+      frame={frame}
       onSelect={onSelect}
-      badge={assembled ? <Blocks size={12} /> : undefined}
+      picture={<Picture src={model.icon} frame={frame} />}
+    />
+  );
+}
+
+// --- slice: skins and hilts ---
+
+/**
+ * One character of the **Custom characters** group.
+ *
+ * Portrait and not square, because the picture is a head over a torso over a
+ * pair of legs and that is the shape a person has. The card wears the
+ * combination the value names as soon as one is picked, so the group is a row
+ * of characters and not a row of faces.
+ */
+function CharacterCard({
+  model,
+  selected,
+  preview,
+  picked,
+  frame,
+  onSelect,
+}: {
+  model: PlayerModel;
+  selected: boolean;
+  /** The composed picture, or `null` when none of the icons could be read. */
+  preview: string | null;
+  /** The parts the value names, when this is the character being built. */
+  picked: AssembledSkin | null;
+  frame: string;
+  onSelect: () => void;
+}) {
+  const { t } = useTranslation("clients");
+  // What the cvar would hold: the parts the player picked when this is the
+  // character they are building, and the list's own value otherwise.
+  const value = picked === null ? model.value : assembledSkinValue(picked);
+
+  return (
+    <Tile
+      selected={selected}
+      caption={model.model}
+      title={`${t("clientWindow.profiles.form.skinAssembled")} · ${value}`}
+      frame={frame}
+      plate
+      onSelect={onSelect}
       picture={
-        url === null ? (
-          <span className="text-label-xs text-fg-muted text-center px-4">
-            {t("clientWindow.profiles.form.skinNoIcon")}
-          </span>
-        ) : (
-          <img
-            src={url}
-            alt=""
-            loading="lazy"
-            className={cn(icon, "object-cover rounded-sm")}
-          />
-        )
+        <Picture
+          src={preview}
+          frame={frame}
+          alt={t("clientWindow.profiles.form.skinPreview", { model: model.model })}
+        />
       }
     />
   );
 }
 
-/** The shell every tile of the grid shares, the «Not set» one included. */
+/**
+ * A cached picture of the core, or the words that stand in for one.
+ *
+ * `alt` is empty for an icon that repeats its own caption — a screen reader
+ * would read `kyle` twice — and carries the character's name for a composed
+ * preview, which is the one picture here that says something the caption does
+ * not.
+ */
+function Picture({
+  src,
+  frame,
+  alt = "",
+}: {
+  src: string | null;
+  frame: string;
+  alt?: string;
+}) {
+  const { t } = useTranslation("clients");
+  const url = skinIconUrl(src);
+
+  if (url === null) {
+    return (
+      <span className="text-label-xs text-fg-muted text-center px-4">
+        {t("clientWindow.profiles.form.skinNoIcon")}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt={alt}
+      loading="lazy"
+      className={cn(frame, "object-cover rounded-sm")}
+    />
+  );
+}
+
+/** The shell every tile and card shares, the «Not set» one included. */
 function Tile({
   selected,
   caption,
   title,
   picture,
-  badge,
-  icon,
+  frame,
+  plate = false,
   onSelect,
 }: {
   selected: boolean;
   caption: string;
   title?: string;
   picture?: React.ReactNode;
-  /**
-   * --- slice: assembled skins ---
-   * A mark in the corner of the picture, for a tile that is not what the rest
-   * of the grid is.
-   *
-   * A glyph and not the word **Assembled**: the tiles are 44 px wide in the
-   * **Connect…** dialog and 64 px in the client window, and the word is about
-   * 56 px at the smallest size the design tokens carry. It would be cut in
-   * both. The word itself is on the button's tooltip and over the panel the
-   * tile opens, where there is a line to put it on.
-   */
-  badge?: React.ReactNode;
   /** Tailwind size class of the picture, from the grid's own metrics. */
-  icon: string;
+  frame: string;
+  /**
+   * --- slice: skins and hilts ---
+   * Whether the picture sits on the light plate. On for anything that may
+   * carry an alpha channel of its own: a part icon and a composed preview.
+   */
+  plate?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -488,22 +590,12 @@ function Tile({
     >
       <span
         className={cn(
-          "relative flex items-center justify-center rounded-sm bg-elevated overflow-hidden",
-          icon,
+          "relative flex items-center justify-center rounded-sm overflow-hidden",
+          plate ? "bg-icon-plate" : "bg-elevated",
+          frame,
         )}
       >
         {picture}
-        {badge === undefined ? null : (
-          <span
-            aria-hidden="true"
-            className={cn(
-              "absolute top-2 right-2 flex items-center justify-center",
-              "size-16 rounded-sm bg-accent-subtle text-fg-accent",
-            )}
-          >
-            {badge}
-          </span>
-        )}
       </span>
       <span className="w-full text-label-xs text-fg-secondary text-center truncate">
         {caption}

@@ -425,6 +425,9 @@ export const appearanceKeys = {
   all: ["appearance"] as const,
   models: (clientId: string) => ["appearance", clientId, "models"] as const,
   hilts: (clientId: string) => ["appearance", clientId, "hilts"] as const,
+  // --- slice: skins and hilts ---
+  preview: (clientId: string, value: string) =>
+    ["appearance", clientId, "preview", value] as const,
 };
 
 /**
@@ -476,6 +479,30 @@ export function useSaberHilts(
     queryKey: appearanceKeys.hilts(clientId),
     queryFn: () => profilesIpc.listSaberHilts(clientId),
     enabled,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+// --- slice: skins and hilts ---
+/**
+ * The composed picture of one combination of head, torso and legs.
+ *
+ * Keyed by the whole value, so every combination the player tries is composed
+ * once and comes back from memory afterwards. The core caches the file as
+ * well, which is what makes the second launcher run free.
+ *
+ * `null` — a value that is not an assembled skin — never reaches the core: the
+ * query is idle, and the caller draws whatever it drew before.
+ */
+export function useAssembledPreview(
+  clientId: string,
+  value: string | null,
+): UseQueryResult<string | null> {
+  return useQuery({
+    queryKey: appearanceKeys.preview(clientId, value ?? ""),
+    queryFn: () => profilesIpc.assembledSkinPreview(clientId, value ?? ""),
+    enabled: clientId !== "" && value !== null,
     staleTime: Infinity,
     retry: false,
   });

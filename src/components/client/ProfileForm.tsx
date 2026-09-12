@@ -1,32 +1,19 @@
-import type { UseQueryResult } from "@tanstack/react-query";
-import { Loader2, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { cn, commandLine } from "../../lib/format";
-import {
-  NO_SECOND_HILT,
-  SABER_COLORS,
-  type CharColor,
-  type Client,
-  type PlayerProfile,
-  type SaberHilt,
-} from "../../lib/ipc";
+import { type CharColor, type Client, type PlayerProfile } from "../../lib/ipc";
 import {
   useAppearanceEvents,
   useGameInfo,
   useSaberHilts,
   useSaveProfile,
 } from "../../lib/queries";
-import {
-  Button,
-  Input,
-  Select,
-  type SelectOption,
-  type SelectSize,
-} from "../ui";
+import { Button, Input } from "../ui";
 import { SettingRow } from "./CvarControls";
+import { HiltFields } from "./HiltFields";
 import { MAX_NICKNAME_BYTES, NicknameField, nicknameBytes } from "./NicknameField";
 import { SkinPicker } from "./SkinPicker";
 import { Slider } from "./Slider";
@@ -186,49 +173,16 @@ export function ProfileForm({
         />
       </SettingRow>
 
-      {hasHilts ? (
-        <>
-          <SettingRow label={t("clientWindow.profiles.form.saber1")}>
-            <HiltSelect
-              value={draft.saber1}
-              hilts={hilts.data ?? []}
-              label={t("clientWindow.profiles.form.saber1")}
-              onChange={(value) => edit({ saber1: value })}
-            />
-          </SettingRow>
-
-          <SettingRow label={t("clientWindow.profiles.form.saber2")}>
-            <HiltSelect
-              value={draft.saber2}
-              hilts={hilts.data ?? []}
-              label={t("clientWindow.profiles.form.saber2")}
-              extra={[
-                {
-                  value: NO_SECOND_HILT,
-                  label: t("clientWindow.profiles.form.saber2None"),
-                },
-              ]}
-              onChange={(value) => edit({ saber2: value })}
-            />
-          </SettingRow>
-
-          <HiltsNotice hilts={hilts} />
-        </>
-      ) : null}
-
-      <SettingRow label={t("clientWindow.profiles.form.color1")}>
-        <ColorSelect
-          value={draft.color1}
-          label={t("clientWindow.profiles.form.color1")}
-          onChange={(value) => edit({ color1: value })}
-        />
-      </SettingRow>
-
-      <SettingRow label={t("clientWindow.profiles.form.color2")}>
-        <ColorSelect
-          value={draft.color2}
-          label={t("clientWindow.profiles.form.color2")}
-          onChange={(value) => edit({ color2: value })}
+      {/* --- slice: skins and hilts ---
+          One row for the whole saber instead of four. The shape decides how
+          many hilts there are to name and how many blades there are to
+          colour, and the four values only ever made sense together. */}
+      <SettingRow label={t("clientWindow.profiles.form.saber")}>
+        <HiltFields
+          values={draft}
+          hilts={hilts}
+          hasHilts={hasHilts}
+          onChange={(values) => edit(values)}
         />
       </SettingRow>
 
@@ -394,175 +348,6 @@ function TokenLine({
           : t("clientWindow.profiles.form.tokensHint")}
       </p>
     </div>
-  );
-}
-
-/**
- * What the hilt list is doing, when it is not simply a list.
- *
- * --- slice: profiles polish ---
- * The skin grid owns its query and draws three states of it — reading,
- * failed, and genuinely empty. The hilt lists were handed `hilts.data ?? []`
- * and drew one: two `Select`s holding **Not set** and nothing else. A refused
- * `list_saber_hilts` and an archive with no hilt in it looked exactly alike,
- * and because the query is `retry: false` with `staleTime: Infinity`, the
- * first refusal was the last word until the window was reopened. That is the
- * whole of the report «the skins are there and the hilts are not», the other
- * half being the archive scan that used to give up on its first bad entry.
- *
- * So the same three states, and a way out of the third: **Try again** refetches
- * rather than asking the player to close the window.
- */
-export function HiltsNotice({ hilts }: { hilts: UseQueryResult<SaberHilt[]> }) {
-  const { t } = useTranslation("clients");
-  const errorText = useErrorText();
-
-  if (hilts.error) {
-    return (
-      <div
-        role="alert"
-        className="flex items-center gap-8 flex-wrap text-body-sm text-fg-danger"
-      >
-        <span className="break-words">{errorText(hilts.error)}</span>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          icon={<RotateCcw size={14} />}
-          disabled={hilts.isFetching}
-          onClick={() => void hilts.refetch()}
-        >
-          {t("clientWindow.profiles.form.saberRetry")}
-        </Button>
-      </div>
-    );
-  }
-  if (hilts.isLoading) {
-    return (
-      <p className="flex items-center gap-8 text-body-sm text-fg-muted">
-        <Loader2 size={14} className="text-fg-accent animate-spin shrink-0" />
-        {t("clientWindow.profiles.form.saberLoading")}
-      </p>
-    );
-  }
-  if ((hilts.data ?? []).length === 0) {
-    return (
-      <p className="text-body-sm text-fg-muted">
-        {t("clientWindow.profiles.form.saberEmpty")}
-      </p>
-    );
-  }
-  return null;
-}
-
-/**
- * One hilt list, with «Not set» in front and whatever else the caller adds.
- *
- * --- slice: connect dialog ---
- * Exported because the **Connect…** dialog offers the same two hilts over the
- * same values: the list a player learns in the client window is the list they
- * meet again before joining a server.
- */
-export function HiltSelect({
-  value,
-  hilts,
-  label,
-  extra = [],
-  size,
-  onChange,
-}: {
-  value: string | null;
-  hilts: SaberHilt[];
-  label: string;
-  extra?: SelectOption[];
-  size?: SelectSize;
-  onChange: (value: string | null) => void;
-}) {
-  const { t } = useTranslation("clients");
-  const shape = (hilt: SaberHilt) => {
-    if (hilt.saberType === "single") {
-      return t("clientWindow.profiles.saberTypes.single");
-    }
-    if (hilt.saberType === "staff") {
-      return t("clientWindow.profiles.saberTypes.staff");
-    }
-    // The dozen shapes only story sabers use have no word of their own: the
-    // value of `saberType` is what the file says and what a mod author reads.
-    return hilt.saberType;
-  };
-  // «Not set» is an option and not only the placeholder: a list whose empty
-  // state is unreachable would let a player pick a hilt and never take it
-  // back, and the profile would go on writing a cvar they no longer want.
-  const options: SelectOption[] = [
-    { value: "", label: t("clientWindow.notSet") },
-    ...extra,
-    ...hilts.map((hilt) => ({
-      value: hilt.id,
-      label: `${hilt.name} · ${shape(hilt)}`,
-    })),
-  ];
-  // A hilt a mod once provided and no longer does still stands in the profile,
-  // so it keeps a place of its own: dropping it would show the list as empty
-  // over a cvar that is set, and the next change would silently be a second one.
-  if (value !== null && !options.some((option) => option.value === value)) {
-    options.push({ value, label: value });
-  }
-
-  return (
-    <Select
-      value={value ?? ""}
-      options={options}
-      ariaLabel={label}
-      size={size}
-      placeholder={t("clientWindow.notSet")}
-      onChange={(next) => onChange(next === "" ? null : next)}
-    />
-  );
-}
-
-/**
- * The catalog key of each blade colour, by the number the cvar takes.
- *
- * A table of literals rather than a key built at run time, so a renamed key
- * fails `npm run typecheck` instead of printing itself on the screen. The
- * index is the value of `color1`, which is `saber_colors_t` of the engine.
- */
-const SABER_COLOR_KEYS = [
-  "clientWindow.profiles.saberColors.0",
-  "clientWindow.profiles.saberColors.1",
-  "clientWindow.profiles.saberColors.2",
-  "clientWindow.profiles.saberColors.3",
-  "clientWindow.profiles.saberColors.4",
-  "clientWindow.profiles.saberColors.5",
-] as const;
-
-/** The six blade colours of the engine, by the number the cvar takes. */
-function ColorSelect({
-  value,
-  label,
-  onChange,
-}: {
-  value: number | null;
-  label: string;
-  onChange: (value: number | null) => void;
-}) {
-  const { t } = useTranslation("clients");
-  const options: SelectOption[] = [
-    { value: "", label: t("clientWindow.notSet") },
-    ...SABER_COLOR_KEYS.slice(0, SABER_COLORS.length).map((key, index) => ({
-      value: String(index),
-      label: t(key),
-    })),
-  ];
-
-  return (
-    <Select
-      value={value === null ? "" : String(value)}
-      options={options}
-      ariaLabel={label}
-      placeholder={t("clientWindow.notSet")}
-      onChange={(next) => onChange(next === "" ? null : Number(next))}
-    />
   );
 }
 
