@@ -9,6 +9,7 @@ import { ClientEngineRow } from "../components/client/ClientEngineRow";
 import { CommandPreview } from "../components/client/CommandPreview";
 import {
   CvarField,
+  CvarNameField,
   CvarSelect,
   CvarSlider,
   SettingRow,
@@ -457,10 +458,9 @@ function ClientCards({ client }: { client: Client }) {
           htmlFor="client-window-player"
           hint={t("clientWindow.player.hint")}
         >
-          <CvarField
+          <CvarNameField
             id="client-window-player"
             value={cvars.read("name")}
-            maxLength={31}
             placeholder={t("clientWindow.player.namePlaceholder")}
             onCommit={(value) => cvars.write("name", value)}
           />
