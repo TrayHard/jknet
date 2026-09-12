@@ -12,7 +12,7 @@ import { ServerName } from "./ServerName";
 
 /**
  * Column widths of the design: star 16, name fills the rest, the trust and
- * lock marks 40, map 116, mode 60, players 76, ping 56, mod 60. One constant
+ * lock marks 24, map 116, mode 60, players 76, ping 56, mod 60. One constant
  * so the header, the rows and the skeleton cannot drift apart.
  *
  * The design gives the players column 52 px, which holds `12/32` and nothing
@@ -24,10 +24,17 @@ import { ServerName } from "./ServerName";
  * --- slice: servers home tweaks ---
  * A ninth column closes the row: the eye that takes a server off the browser.
  * It is 16 px, the width of the star that opens the row, so the two one-press
- * marks of a row frame it rather than each finding a size of their own.
+ * marks of a row frame it rather than each finding a size of their own. The
+ * column keeps its width whether the eye shows or not, because a mark that
+ * appears on hover must not move the eight columns beside it.
+ *
+ * That column and the gap before it cost the name 28 px at the 1280 px the
+ * window opens with (`src-tauri/tauri.conf.json`), so the mark column gives
+ * 16 of them back: it carries one optional 14 px lock and had 40 px to do it
+ * in. Widen it again when the trust mark lands beside the lock.
  */
 export const ROW_COLUMNS =
-  "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px 16px";
+  "16px minmax(0, 1fr) 24px 116px 60px 76px 56px 60px 16px";
 
 /** Which badge tone a game type gets, so the modes stay apart at a glance. */
 const MODE_TONE: Record<number, BadgeTone> = {
@@ -86,7 +93,9 @@ export function ServerRow({
       }}
       style={{ gridTemplateColumns: ROW_COLUMNS }}
       className={cn(
-        "grid items-center gap-12 h-40 px-12 rounded-md cursor-pointer",
+        // --- slice: servers home tweaks --- `group`, so the eye at the end
+        // can read the hover of the whole row rather than of itself.
+        "group grid items-center gap-12 h-40 px-12 rounded-md cursor-pointer",
         "transition-colors duration-100",
         selected
           ? "bg-selected-overlay text-fg"
@@ -175,7 +184,15 @@ export function ServerRow({
           The row carries it now, at the end where the star at the other end
           answers the opposite question. Which way it goes is the row's own
           `hidden` flag, so the button reads **Unhide** on the Hidden tab and
-          nowhere else — the same rule the menu item follows. */}
+          nowhere else — the same rule the menu item follows.
+
+          It shows on the row the pointer is over and on its own focus, and
+          not on the other forty rows: hiding a server is a rare answer, and
+          forty eyes down the right edge of a table read as a column of data.
+          Hidden by `opacity`, never by `hidden` or a condition, so the track
+          under it stays and the row does not reflow on hover. Focus counts
+          because the keyboard reaches this button by Tab, which is not a
+          hover, and a control nobody can see is a control nobody presses. */}
       <button
         type="button"
         title={server.hidden ? t("menu.unhide") : t("menu.hide")}
@@ -189,6 +206,8 @@ export function ServerRow({
         }}
         className={cn(
           "flex items-center justify-center size-16 cursor-pointer",
+          "opacity-0 transition-opacity duration-100",
+          "group-hover:opacity-100 focus-visible:opacity-100",
           server.hidden
             ? "text-fg-accent hover:text-fg"
             : "text-fg-disabled hover:text-fg-muted",

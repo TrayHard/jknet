@@ -144,12 +144,24 @@ export function ServersPage() {
   // selection. The panel opens on it even when this screen's own filters hide
   // the row: Home shows a starred server whatever the bot switch says, and a
   // link that lands on an empty panel reads as a link that did nothing.
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const requested = params.get("select");
   const [openedFromHome, setOpenedFromHome] = useState<string | null>(null);
   /** Selects a row the player pressed, which is nobody's link. */
   const selectRow = (address: string) => {
     setSelectedAddress(address);
+    setOpenedFromHome(null);
+  };
+  /**
+   * Opens a tab, and lets go of the link that brought the player here.
+   *
+   * The link keeps the panel open through the filters of this screen, and a
+   * tab is a filter the player set by hand after arriving: **Favorites** with
+   * a server that is in nobody's favourites draws a table with no selected
+   * row beside a panel that still shows one.
+   */
+  const changeTab = (next: ServerTab) => {
+    setTab(next);
     setOpenedFromHome(null);
   };
 
@@ -255,27 +267,41 @@ export function ServersPage() {
   // because that is the tab the address is certain to belong to — Favorites
   // and History would answer a press on the busiest server with «not in your
   // list», and the player pressed a server, not a tab.
+  //
+  // The parameter goes back out of the address once it has been read. It is
+  // an instruction for the arrival, not a property of the screen, and one
+  // left in `#/servers?select=...` would reopen the panel on that server
+  // every time the player came back to the browser from elsewhere. What the
+  // link asked for lives on in `openedFromHome` until the player selects
+  // another row or opens another tab.
   useEffect(() => {
     if (requested === null) return;
     setSelectedAddress(requested);
     setOpenedFromHome(requested);
     setTab("all");
-  }, [requested]);
+    const rest = new URLSearchParams(params);
+    rest.delete("select");
+    setParams(rest, { replace: true });
+  }, [requested, params, setParams]);
 
   // --- slice: servers home tweaks ---
   // The address this launcher has never had a row for: ask about it. The row
   // is normally in the cache already, because Home draws from the same one —
   // this covers a link that outlived the list behind it. One probe per
   // address, so a cache that answers with nothing does not become a loop.
+  //
+  // Off `openedFromHome` rather than off the parameter, because the parameter
+  // leaves the address as soon as it is read and the cache is often still
+  // loading at that moment.
   const probeAddresses = refresh.refreshAddresses;
   const probed = useRef<string | null>(null);
   useEffect(() => {
-    if (requested === null || !cached.isSuccess) return;
-    if (probed.current === requested) return;
-    if (cached.data.some((row) => row.address === requested)) return;
-    probed.current = requested;
-    probeAddresses("one", [requested]);
-  }, [requested, cached.isSuccess, cached.data, probeAddresses]);
+    if (openedFromHome === null || !cached.isSuccess) return;
+    if (probed.current === openedFromHome) return;
+    if (cached.data.some((row) => row.address === openedFromHome)) return;
+    probed.current = openedFromHome;
+    probeAddresses("one", [openedFromHome]);
+  }, [openedFromHome, cached.isSuccess, cached.data, probeAddresses]);
 
   // --- slice: servers browser ---
   // The rows of the open tab before the filters: what the subtitle counts and
@@ -486,7 +512,7 @@ export function ServersPage() {
       <Tabs
         className="mt-16"
         value={tab}
-        onChange={setTab}
+        onChange={changeTab}
         // --- slice: servers browser ---
         // The strip counts the rows the screen is drawing, so a frozen table
         // and the number beside its tab cannot disagree.
