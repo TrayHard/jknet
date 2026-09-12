@@ -1459,7 +1459,8 @@ pub async fn list_player_models(
     state: tauri::State<'_, AppState>,
     client_id: String,
 ) -> Result<Vec<PlayerModel>> {
-    let (found, fresh) = models_of(&app, &state, &client_id).await?;
+    let inputs = resolve(&state, &client_id)?;
+    let (found, fresh) = models_of(&app, inputs, &client_id).await?;
     if fresh {
         let assembled = found.iter().filter(|model| model.parts.is_some()).count();
         log::info!(
@@ -1477,10 +1478,9 @@ pub async fn list_player_models(
 /// question to find three icons, adds no second line per click.
 async fn models_of(
     app: &AppHandle,
-    state: &tauri::State<'_, AppState>,
+    inputs: Inputs,
     client_id: &str,
 ) -> Result<(Vec<PlayerModel>, bool)> {
-    let inputs = resolve(state, client_id)?;
     if let Some(answer) = cached(&MODEL_CACHE, client_id, &inputs.signature) {
         allow_icons(app, &answer);
         return Ok((answer, false));
@@ -1519,7 +1519,12 @@ pub async fn assembled_skin_preview(
     let Some((model, picks)) = split_assembled(&value) else {
         return Ok(None);
     };
-    let (found, _) = models_of(&app, &state, &client_id).await?;
+    // One `resolve` for both halves of the work: the sources are read off the
+    // disk to answer «which archives does this client load», and doing that
+    // twice per click on a part would be twice per click on a part.
+    let inputs = resolve(&state, &client_id)?;
+    let dir = inputs.cache_dir.clone();
+    let (found, _) = models_of(&app, inputs, &client_id).await?;
     let Some(entry) = found
         .iter()
         .find(|entry| entry.model == model && entry.parts.is_some())
@@ -1546,7 +1551,6 @@ pub async fn assembled_skin_preview(
         .collect();
     let [head, torso, legs] = <[Option<PathBuf>; 3]>::try_from(icons).expect("three rows");
 
-    let dir = resolve(&state, &client_id)?.cache_dir;
     let model = model.to_string();
     let picks = picks.map(str::to_string);
     let composed = blocking("the character preview", move || {
@@ -1888,8 +1892,10 @@ mod tests {
         );
         assert!(dir.join("jedi_hm__head_a1.jpg").is_file());
         assert!(dir.join("jedi_hm__lower_a1.jpg").is_file());
-        // The whole skin beside it is not an assembled one.
+        // The whole skin beside it is not an assembled one, and has no
+        // composed preview: there is nothing to compose.
         assert!(models[0].parts.is_none());
+        assert_eq!(models[0].preview, None);
     }
 
     // --- slice: skins and hilts ---
@@ -2009,16 +2015,6 @@ mod tests {
             icons_of(assembled).any(|path| path == file.display().to_string()),
             "the preview is handed to the window"
         );
-
-        // An ordinary skin has no preview: there is nothing to compose.
-        let ordinary = models
-            .iter()
-            .find(|model| model.parts.is_none())
-            .or(Some(assembled))
-            .expect("a model");
-        if ordinary.parts.is_none() {
-            assert_eq!(ordinary.preview, None);
-        }
 
         // A second scan reuses the file rather than composing it again.
         let made = fs::metadata(&file).expect("the preview").modified().ok();
