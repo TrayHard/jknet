@@ -33,6 +33,7 @@ use tauri::AppHandle;
 use crate::clients::{self, Client};
 use crate::error::{AppError, Result};
 use crate::launch::{names_cvar, split_args};
+use crate::profiles::MAX_NICKNAME_LEN;
 use crate::state::AppState;
 
 /// Longest cvar name the commands accept. The longest one the engine
@@ -219,7 +220,7 @@ pub fn write_launch_cvar(
 ) -> Result<Client> {
     let name = validate_name(&name)?;
     let value = match value.as_deref() {
-        Some(value) => Some(validate_value(value)?),
+        Some(value) => Some(validate_value(name, value)?),
         None => None,
     };
 
@@ -258,16 +259,31 @@ fn validate_name(name: &str) -> Result<&str> {
     Ok(trimmed)
 }
 
-/// Refuses a value that would break the line it is written into.
+/// Refuses a value that would break the line it is written into, and a player
+/// name the engine's buffer could not hold whole.
 ///
 /// A double quote flips the parser's «inside quotes» flag for everything after
 /// it, and a newline opens a console segment of its own. A value holding one
 /// would turn the rest of the player's arguments into something else.
-fn validate_value(value: &str) -> Result<&str> {
+///
+/// The cvar `name` carries a second limit, [`MAX_NICKNAME_LEN`]: it is the
+/// same player name the nickname of a profile is, bound for the same
+/// `MAX_NETNAME` buffer, and the two end up on one command line next to each
+/// other. The profile form refuses a name over the limit, so a window that
+/// wrote the very same name here would save what the server then cuts,
+/// possibly through the middle of a letter. The name is recognised the way
+/// the engine recognises it, by [`names_cvar`] — case ignored, the console
+/// `+` optional.
+fn validate_value<'a>(name: &str, value: &'a str) -> Result<&'a str> {
     let trimmed = value.trim();
     if trimmed.len() > MAX_CVAR_VALUE_LEN {
         return Err(AppError::InvalidInput(format!(
             "the value is longer than {MAX_CVAR_VALUE_LEN} characters"
+        )));
+    }
+    if names_cvar(name, "name") && trimmed.len() > MAX_NICKNAME_LEN {
+        return Err(AppError::InvalidInput(format!(
+            "the nickname is longer than {MAX_NICKNAME_LEN} bytes of UTF-8"
         )));
     }
     if trimmed.contains('"') || trimmed.contains('\n') || trimmed.contains('\r') {
@@ -437,10 +453,38 @@ mod tests {
 
     #[test]
     fn a_value_that_would_rewrite_the_line_is_refused() {
-        assert!(validate_value("Kyle Katarn").is_ok());
-        assert!(validate_value("4").is_ok());
-        assert!(validate_value("say \"hi\"").is_err());
-        assert!(validate_value("one\ntwo").is_err());
-        assert!(validate_value(&"a".repeat(MAX_CVAR_VALUE_LEN + 1)).is_err());
+        assert!(validate_value("name", "Kyle Katarn").is_ok());
+        assert!(validate_value("r_mode", "4").is_ok());
+        assert!(validate_value("name", "say \"hi\"").is_err());
+        assert!(validate_value("name", "one\ntwo").is_err());
+        assert!(validate_value("r_mode", &"a".repeat(MAX_CVAR_VALUE_LEN + 1)).is_err());
+    }
+
+    #[test]
+    fn a_player_name_over_the_engine_buffer_is_refused() {
+        // The cvar `name` is the nickname of a profile by another road, and
+        // `profiles.rs` refuses the same length there: 36 bytes of UTF-8 fill
+        // `MAX_NETNAME`, the thirty-seventh is the one the server drops.
+        assert!(validate_value("name", &"x".repeat(MAX_NICKNAME_LEN)).is_ok());
+        assert!(validate_value("name", &"x".repeat(MAX_NICKNAME_LEN + 1)).is_err());
+
+        // Bytes and not letters: eighteen Cyrillic letters are the whole
+        // limit and the nineteenth is over it.
+        assert!(validate_value("name", &"Т".repeat(MAX_NICKNAME_LEN / 2)).is_ok());
+        assert!(validate_value("name", &"Т".repeat(MAX_NICKNAME_LEN / 2 + 1)).is_err());
+
+        // The engine matches the cvar without regard to case and with the
+        // console `+` optional, so the limit follows every spelling of it.
+        assert!(validate_value("Name", &"x".repeat(MAX_NICKNAME_LEN + 1)).is_err());
+        assert!(validate_value("+name", &"x".repeat(MAX_NICKNAME_LEN + 1)).is_err());
+
+        // Every other cvar keeps the value limit it had: `name` is the only
+        // one that ends up in the name buffer.
+        assert!(validate_value("r_mode", &"x".repeat(MAX_NICKNAME_LEN + 1)).is_ok());
+
+        // The value is measured trimmed, the way the core measures a nickname
+        // before saving it.
+        let padded = format!("  {}  ", "x".repeat(MAX_NICKNAME_LEN));
+        assert!(validate_value("name", &padded).is_ok());
     }
 }

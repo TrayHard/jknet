@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button, Input, Select, type SelectOption } from "../ui";
-import { NicknameEditor } from "./NicknameEditor";
+import { MAX_NICKNAME_BYTES, NicknameEditor, nicknameBytes } from "./NicknameEditor";
 import { Slider } from "./Slider";
 
 /**
@@ -107,6 +107,12 @@ function useCommittedDraft(
   value: string | null,
   revertOnEmpty: boolean,
   onCommit: (value: string | null) => void,
+  /**
+   * Holds a write back while the draft is one the core would refuse. The
+   * draft stays on the field with whatever the control says about it, so the
+   * player edits their own text instead of watching it spring back.
+   */
+  canCommit: (value: string) => boolean = () => true,
 ) {
   const [draft, setDraft] = useState(value ?? "");
   // Focus through a ref rather than through state: the effect below must run
@@ -130,6 +136,7 @@ function useCommittedDraft(
       return;
     }
     if (trimmed === (value ?? "") || trimmed === sent.current) return;
+    if (!canCommit(trimmed)) return;
     sent.current = trimmed;
     onCommit(trimmed === "" ? null : trimmed);
   };
@@ -206,12 +213,19 @@ interface CvarNameFieldProps {
  * What stays the way every other control of the window behaves: the write
  * happens on blur and on Enter, and clearing the field removes the cvar
  * instead of writing an empty name.
+ *
+ * A name over {@link MAX_NICKNAME_BYTES} is not written at all. The core
+ * refuses it — `validate_value` in `src-tauri/src/launch_tokens.rs` holds the
+ * same limit the nickname of a profile goes by — so the field holds the write
+ * back and leaves the player with the counter and the warning the editor
+ * already draws, rather than a toast about a name they can see is too long.
  */
 export function CvarNameField({ id, value, placeholder, onCommit }: CvarNameFieldProps) {
   const { draft, setDraft, onFocus, onBlur, onKeyDown } = useCommittedDraft(
     value,
     false,
     onCommit,
+    (next) => nicknameBytes(next) <= MAX_NICKNAME_BYTES,
   );
 
   return (

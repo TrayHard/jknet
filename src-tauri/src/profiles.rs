@@ -64,7 +64,12 @@ const MAX_NAME_LEN: usize = 48;
 ///
 /// Counting characters here instead would let the window promise a name the
 /// server then cuts in half, possibly through the middle of a letter.
-const MAX_NICKNAME_LEN: usize = 36;
+///
+/// The number lives here alone. Both writers of a player name go by it: the
+/// nickname of a profile through [`validate`] and the `name` cvar of a client
+/// window through [`crate::launch_tokens::write_launch_cvar`]. Two copies
+/// would be two limits the moment one of them moved.
+pub(crate) const MAX_NICKNAME_LEN: usize = 36;
 
 /// Longest value of the cvars that name a file: the model and the two hilts,
 /// **in bytes of UTF-8**.
