@@ -73,6 +73,12 @@ export function ServerRow({
       aria-selected={selected}
       onClick={onSelect}
       onKeyDown={(event) => {
+        // --- slice: servers home tweaks ---
+        // Only when the row itself has the focus. The star and the eye sit
+        // inside it and their key presses bubble here whatever they do with
+        // the click, so Enter on the eye would hide a server and select it in
+        // the same breath.
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
