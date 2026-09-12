@@ -965,12 +965,18 @@ export type PlayersSource = "info" | "status" | "unknown";
  * `src-tauri/src/servers/mod.rs`: which list of the browser one operation
  * fills.
  *
- * The same four names as the tabs, because that is what they are: every event
- * of a scan carries its scope, and the screen keeps a loader, a counter and a
+ * The first four are the tabs, because that is what they are: every event of a
+ * scan carries its scope, and the screen keeps a loader, a counter and a
  * "refreshed N s ago" line per scope. Two scopes may scan at once; the core
  * refuses a second scan of the same one.
+ *
+ * --- slice: servers home tweaks ---
+ * `one` belongs to no tab. It is the details panel asking about the server it
+ * is showing, from its own **Refresh** button or from the **Watch** switch that
+ * repeats the question once a minute. A scope of its own is what keeps the
+ * loader off the table while one row is being asked about.
  */
-export type ServerScope = "all" | "favorites" | "history" | "lan";
+export type ServerScope = "all" | "favorites" | "history" | "lan" | "one";
 
 /** `src-tauri/src/servers/mod.rs`: one row of the browser. */
 export interface ServerInfo {
