@@ -10,15 +10,15 @@
     "running": "En ejecución: {{client}}",
     "noClient": "Aún no hay clientes de {{game}}",
     "runningText": "Iniciado hace <0>{{age}}</0>, proceso {{pid}}. El lanzador se aparta mientras usted juega.",
-    "readyText": "Inicie el cliente predeterminado y elija un servidor en el menú del juego.",
     "continueText": "The server you played on last. Connect starts {{client}} and joins it. Play opens the client on its own menu.",
-    "noClientText": "Un cliente es una compilación del motor con sus propios archivos y ajustes. Cree uno y {{game}} quedará a un clic.",
     "createClient": "Crear un cliente de {{game}}",
     "play": "Jugar",
     "playHint": "Marque un cliente como predeterminado",
     "connect": "Conectar",
     "stop": "Detener",
-    "manageClients": "Gestionar clientes",
+    "otherClients": "Other clients…",
+    "launch": "Launch",
+    "newClient": "New client…",
     "aMoment": "un momento"
   },
   "gameFiles": {
