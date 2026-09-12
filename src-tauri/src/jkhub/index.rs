@@ -427,16 +427,106 @@ const LATIN_EXTENDED_A: [&str; 128] = [
     "u", "u", "u", "u", "w", "w", "y", "y", "y", "z", "z", "z", "z", "z", "z", "s",
 ];
 
-/// Splits a query into the tokens every result has to match.
+/// One `by:` in a query: which author the file has to be by.
 ///
-/// Whitespace separates them and nothing else does: `mp/ffa3` is one token,
-/// because that is how the player typed the name of a map.
-pub fn tokenize(query: &str) -> Vec<String> {
-    query
-        .split_whitespace()
-        .map(fold)
-        .filter(|token| !token.is_empty())
-        .collect()
+/// Both forms are folded, so they ignore case and Latin diacritics the way
+/// every other comparison of a search does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AuthorFilter {
+    /// `by:circa` — the name holds this somewhere.
+    Contains(String),
+    /// `by:"circa"` — the name is exactly this, spaces inside the quotes
+    /// included.
+    Exact(String),
+}
+
+impl AuthorFilter {
+    /// Whether a folded author name answers this filter.
+    fn matches(&self, author: &str) -> bool {
+        match self {
+            AuthorFilter::Contains(needle) => author.contains(needle.as_str()),
+            AuthorFilter::Exact(name) => author == name,
+        }
+    }
+}
+
+/// A query taken apart: the words, and the authors it asked for.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Query {
+    /// Folded words, every one of which has to be somewhere in the file.
+    pub tokens: Vec<String>,
+    /// Every `by:` of the query. All of them have to match, which is what a
+    /// player typing a second one means — the same rule the words follow.
+    pub authors: Vec<AuthorFilter>,
+}
+
+/// Reads a query into words and `by:` filters.
+///
+/// Two forms, and the quotes are the whole difference between them:
+///
+/// | Typed | Means |
+/// | --- | --- |
+/// | `by:circa` | the author's name holds `circa` |
+/// | `by:"Circa"` | the author's name is `Circa` and nothing more |
+/// | `by:"Szico VII"` | the same, with the space kept |
+/// | `by:circa duel` | both: this author, and `duel` in the file |
+///
+/// Nothing here can fail. `by:` with nothing after it, `by:""` and a quote
+/// the player has not closed yet are all a query in the middle of being
+/// typed, and a search that stopped answering at that moment would look
+/// broken. An empty operator is dropped; an unclosed quote takes the rest of
+/// the line, which is what the player is about to finish typing anyway.
+///
+/// ```ignore
+/// parse_query("by:circa duel").authors  // [Contains("circa")]
+/// parse_query("by:circa duel").tokens   // ["duel"]
+/// parse_query("by:\"Szico VII\"")       // [Exact("szico vii")], no tokens
+/// parse_query("by:").authors            // empty: nothing was asked
+/// ```
+pub fn parse_query(query: &str) -> Query {
+    const OPERATOR: &str = "by:";
+    let mut out = Query::default();
+    let mut rest = query;
+    while !rest.is_empty() {
+        let start = rest.trim_start();
+        if start.is_empty() {
+            break;
+        }
+        // `get` and not a slice: a query can open with a Cyrillic letter, and
+        // three bytes into one of those is not a character boundary.
+        let operator = start
+            .get(..OPERATOR.len())
+            .is_some_and(|head| head.eq_ignore_ascii_case(OPERATOR));
+        if !operator {
+            let end = start.find(char::is_whitespace).unwrap_or(start.len());
+            let word = fold(&start[..end]);
+            if !word.is_empty() {
+                out.tokens.push(word);
+            }
+            rest = &start[end..];
+            continue;
+        }
+
+        let value = &start[OPERATOR.len()..];
+        if let Some(quoted) = value.strip_prefix('"') {
+            // An unclosed quote runs to the end of the line: the player is
+            // still typing the name.
+            let end = quoted.find('"').unwrap_or(quoted.len());
+            let name = fold(&quoted[..end]);
+            if !name.is_empty() {
+                out.authors.push(AuthorFilter::Exact(name));
+            }
+            rest = &quoted[(end + 1).min(quoted.len())..];
+        } else {
+            let end = value.find(char::is_whitespace).unwrap_or(value.len());
+            let name = fold(&value[..end]);
+            if !name.is_empty() {
+                out.authors.push(AuthorFilter::Contains(name));
+            }
+            rest = &value[end..];
+        }
+    }
+    out
 }
 
 /// Where a token was found. Smaller sorts first.
@@ -454,15 +544,19 @@ struct Haystack {
     /// Author and tags: the fields that rank between a title and a
     /// description.
     meta: String,
+    /// The author alone, for the `by:` operator.
+    ///
+    /// `meta` cannot answer it: `by:"circa"` asks whether the author is
+    /// exactly that, and the tags sitting in the same string would make every
+    /// exact match fail. Empty when the card named no author.
+    author: String,
     description: String,
 }
 
 impl Haystack {
     fn of(file: &IndexedFile) -> Self {
-        let mut meta = String::new();
-        if let Some(author) = &file.author_name {
-            meta.push_str(&fold(author));
-        }
+        let author = file.author_name.as_deref().map(fold).unwrap_or_default();
+        let mut meta = author.clone();
         for tag in &file.tags {
             meta.push(' ');
             meta.push_str(&fold(tag));
@@ -470,8 +564,17 @@ impl Haystack {
         Haystack {
             title: fold(&file.title),
             meta,
+            author,
             description: fold(&file.description),
         }
+    }
+
+    /// Whether the file answers every `by:` of the query.
+    ///
+    /// A file with no author answers none of them: `by:` asks for a name, and
+    /// «unknown» is not one.
+    fn by(&self, authors: &[AuthorFilter]) -> bool {
+        authors.iter().all(|filter| filter.matches(&self.author))
     }
 
     /// How well this file answers the query, or `None` when it does not.
@@ -560,11 +663,18 @@ impl LoadedIndex {
     /// which is the entire point of narrowing by a category rather than
     /// guessing one first.
     pub fn search(&self, request: &SearchRequest) -> SearchAnswer {
-        let tokens = tokenize(&request.query);
+        // --- slice: jkhub catalog ---
+        // The `by:` operators come out of the query first, so what is left is
+        // words. An author filter is a condition and not a token: it never
+        // ranks a file, it only decides whether the file is answered at all.
+        let Query { tokens, authors } = parse_query(&request.query);
         let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
         let mut hits: Vec<(u8, usize)> = Vec::new();
 
         for (position, file) in self.index.files.iter().enumerate() {
+            if !authors.is_empty() && !self.haystacks[position].by(&authors) {
+                continue;
+            }
             let rank = if tokens.is_empty() {
                 Some(FIELD_TITLE)
             } else {
@@ -1525,9 +1635,14 @@ mod tests {
 
     #[test]
     fn a_query_is_split_on_whitespace_and_folded() {
-        assert_eq!(tokenize("  Terminative   3 "), vec!["terminative", "3"]);
-        assert_eq!(tokenize("mp/ffa3"), vec!["mp/ffa3"]);
-        assert!(tokenize("   ").is_empty());
+        let tokens = |query: &str| parse_query(query).tokens;
+        assert_eq!(tokens("  Terminative   3 "), vec!["terminative", "3"]);
+        assert_eq!(
+            tokens("mp/ffa3"),
+            vec!["mp/ffa3"],
+            "whitespace separates a token and nothing else does"
+        );
+        assert!(tokens("   ").is_empty());
     }
 
     #[test]
@@ -1557,6 +1672,117 @@ mod tests {
         assert_eq!(found.total, 3);
         let ids: Vec<u32> = found.cards.iter().map(|card| card.id).collect();
         assert_eq!(ids, vec![1, 2, 3], "title, then tag, then description");
+    }
+
+    /// --- slice: jkhub catalog ---
+    /// Files by three authors whose names overlap, which is what the two
+    /// forms of the operator are there to tell apart.
+    fn by_authors() -> LoadedIndex {
+        let named = |id: u32, title: &str, author: &str| {
+            let mut entry = file(id, title, 71);
+            entry.author_name = Some(author.into());
+            entry
+        };
+        let mut nameless = file(4, "Anonymous duel map", 71);
+        nameless.author_name = None;
+        index(vec![
+            named(1, "Duel of the Fates", "Circa"),
+            named(2, "Cloud City", "circassian"),
+            named(3, "Terminative", "Szico VII"),
+            nameless,
+        ])
+    }
+
+    fn found(loaded: &LoadedIndex, query: &str) -> Vec<u32> {
+        let mut ids: Vec<u32> = loaded
+            .search(&request(query))
+            .cards
+            .iter()
+            .map(|card| card.id)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    #[test]
+    fn the_by_operator_takes_a_substring_and_quotes_take_the_whole_name() {
+        let loaded = by_authors();
+        assert_eq!(found(&loaded, "by:circa"), vec![1, 2], "a substring, and case does not count");
+        assert_eq!(found(&loaded, "by:CIRCA"), vec![1, 2], "typed in capitals");
+        assert_eq!(found(&loaded, "by:\"circa\""), vec![1], "quotes ask for the whole name");
+        assert_eq!(found(&loaded, "by:\"Circa\""), vec![1], "and ignore case too");
+    }
+
+    #[test]
+    fn a_quoted_author_keeps_the_spaces_inside_the_quotes() {
+        let loaded = by_authors();
+        assert_eq!(found(&loaded, "by:\"Szico VII\""), vec![3]);
+        assert_eq!(
+            found(&loaded, "by:\"szico vii\" terminative"),
+            vec![3],
+            "and still reads the word after the closing quote"
+        );
+        assert!(
+            found(&loaded, "by:\"Szico\"").is_empty(),
+            "half of a quoted name is not the name"
+        );
+    }
+
+    #[test]
+    fn the_by_operator_narrows_the_words_beside_it() {
+        let loaded = by_authors();
+        assert_eq!(found(&loaded, "by:circa duel"), vec![1], "the author and the title");
+        assert!(
+            found(&loaded, "by:circa terminative").is_empty(),
+            "the word is by another author"
+        );
+        // Two operators are both conditions, the way two words are.
+        assert!(found(&loaded, "by:circa by:szico").is_empty());
+        assert_eq!(found(&loaded, "by:circa by:cass"), vec![2]);
+    }
+
+    #[test]
+    fn a_half_typed_operator_answers_rather_than_breaking() {
+        let loaded = by_authors();
+        assert_eq!(found(&loaded, "by:"), vec![1, 2, 3, 4], "nothing was asked yet");
+        assert_eq!(found(&loaded, "by:\"\""), vec![1, 2, 3, 4], "and empty quotes ask nothing");
+        assert_eq!(
+            found(&loaded, "by:\"Szico VII"),
+            vec![3],
+            "an unclosed quote takes the rest of the line"
+        );
+        assert!(
+            found(&loaded, "by:circa").iter().all(|id| *id != 4),
+            "a file with no author is by nobody"
+        );
+    }
+
+    #[test]
+    fn a_query_is_read_into_words_and_authors() {
+        assert_eq!(
+            parse_query("by:circa duel"),
+            Query {
+                tokens: vec!["duel".into()],
+                authors: vec![AuthorFilter::Contains("circa".into())],
+            }
+        );
+        assert_eq!(
+            parse_query("  mp/ffa3 BY:\"Szico VII\" arena "),
+            Query {
+                tokens: vec!["mp/ffa3".into(), "arena".into()],
+                authors: vec![AuthorFilter::Exact("szico vii".into())],
+            },
+            "the operator is case-insensitive and can sit anywhere"
+        );
+        assert_eq!(parse_query("by:"), Query::default());
+        assert_eq!(
+            parse_query("nothing:here"),
+            Query {
+                tokens: vec!["nothing:here".into()],
+                authors: Vec::new(),
+            },
+            "another colon is part of a word"
+        );
     }
 
     #[test]

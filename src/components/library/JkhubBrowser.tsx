@@ -8,6 +8,7 @@ import { Button, EmptyState, Select, type SelectOption } from "../ui";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
 // --- slice: jkhub catalog ---
+import { byAuthor } from "./jkhubQuery";
 import { useSectionName } from "./jkhubSections";
 // --- slice: jkhub index startup ---
 import { JkhubIndexing } from "./JkhubIndexing";
@@ -104,6 +105,15 @@ interface JkhubBrowserProps {
    * stays here, because it is this tab that pays for a keystroke.
    */
   search: string;
+  // --- slice: jkhub catalog ---
+  /**
+   * Writes into that box.
+   *
+   * The tab needs it for one action: a click on an author's name searches for
+   * everything by them, and the query it builds has to land where the player
+   * can see and edit it.
+   */
+  onSearch: (query: string) => void;
 }
 
 /**
@@ -128,6 +138,7 @@ export function JkhubBrowser({
   clientName,
   installed,
   search: typed,
+  onSearch,
 }: JkhubBrowserProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
@@ -314,6 +325,12 @@ export function JkhubBrowser({
     void jkhubIpc.open(id).catch((e: unknown) => setFailure(errorText(e)));
   };
 
+  // --- slice: jkhub catalog ---
+  // A click on an author writes the operator into the box of the screen and
+  // lets the ordinary search answer it: the tab keeps no author of its own,
+  // so the query stays visible, editable and shareable.
+  const searchAuthor = (author: string) => onSearch(byAuthor(typed, author));
+
   const reveal = (path: string) => {
     if (!isTauri()) return;
     void revealItemInDir(path).catch((e: unknown) => setFailure(errorText(e)));
@@ -460,7 +477,14 @@ export function JkhubBrowser({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-12 pb-12">
-            <span className="flex-1" />
+            {/* --- slice: jkhub catalog ---
+                The one line about the search box, which lives in the header
+                of the screen and belongs to all three tabs. It sits here
+                because the operator does: on the other two tabs the box is a
+                plain filter. */}
+            <span className="flex-1 min-w-0 text-body-sm text-fg-muted truncate">
+              {t("search.hint")}
+            </span>
             <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
             <Select
               ariaLabel={t("sort.label")}
@@ -556,6 +580,7 @@ export function JkhubBrowser({
                     }}
                     onInstall={() => runInstall(card.id, false)}
                     onOpenSite={() => openSite(card.id)}
+                    onAuthor={searchAuthor}
                   />
                 ))}
               </ul>
