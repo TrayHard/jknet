@@ -214,6 +214,7 @@
         "nicknamePreview": "As other players read it",
         "nicknameSaved": "Saved nicknames",
         "nicknameSave": "Save nickname",
+        "saber": "Lightsaber",
         "skin": "Skin (model)",
         "skinSearch": "Search a model",
         "skinLoading": "Reading the archives of this client…",
@@ -222,6 +223,8 @@
         "skinNone": "Not set",
         "skinNoIcon": "No icon",
         "skinAssembled": "Assembled",
+        "skinCustom": "Custom characters",
+        "skinPreview": "{{model}}, head, torso and legs",
         "skinPartHead": "Head",
         "skinPartTorso": "Torso",
         "skinPartLegs": "Legs",
@@ -258,6 +261,12 @@
       "saberTypes": {
         "single": "One blade",
         "staff": "Staff"
+      },
+      "saberModes": {
+        "label": "Saber type",
+        "single": "Single",
+        "staff": "Staff",
+        "duals": "Duals"
       }
     }
   },

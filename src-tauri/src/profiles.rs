@@ -64,7 +64,12 @@ const MAX_NAME_LEN: usize = 48;
 ///
 /// Counting characters here instead would let the window promise a name the
 /// server then cuts in half, possibly through the middle of a letter.
-const MAX_NICKNAME_LEN: usize = 36;
+///
+/// The number lives here alone. Both writers of a player name go by it: the
+/// nickname of a profile through [`validate`] and the `name` cvar of a client
+/// window through [`crate::launch_tokens::write_launch_cvar`]. Two copies
+/// would be two limits the moment one of them moved.
+pub(crate) const MAX_NICKNAME_LEN: usize = 36;
 
 /// Longest value of the cvars that name a file: the model and the two hilts,
 /// **in bytes of UTF-8**.
@@ -1149,6 +1154,98 @@ mod tests {
             tokens,
             ["+set", "name", "Kyle", "+set", "model", "kyle/red"]
         );
+    }
+
+    // --- slice: skins and hilts ---
+
+    /// The saber half of a profile, as the window's three shapes build it.
+    ///
+    /// The rule itself is `saberValuesFor` in `src/lib/sabers.ts`, because the
+    /// control has to answer on every click and a round trip per click would
+    /// be a round trip per click. What is pinned here is the other end: the
+    /// four values each shape produces, and the tokens they become. A change
+    /// to either side that the other did not follow fails one of these.
+    fn saber(saber1: &str, saber2: Option<&str>, color1: u8, color2: Option<u8>) -> PlayerProfile {
+        let mut set = profile("Duel");
+        set.saber1 = Some(saber1.to_string());
+        set.saber2 = saber2.map(str::to_string);
+        set.color1 = Some(color1);
+        set.color2 = color2;
+        set
+    }
+
+    #[test]
+    fn one_hilt_says_the_other_hand_is_empty() {
+        // **Single** and **Staff**. The empty hand is written down rather than
+        // left out: a profile that named only `saber1` would leave `saber2` to
+        // whatever `jampconfig.cfg` holds, and a player who picked one saber
+        // would walk in with two. `none` is the engine's own word for it —
+        // `G_SetSaber(ent, 1, …, "none")` at `codemp/game/g_client.c:2240`.
+        assert_eq!(
+            launch_tokens(&saber("single_1", Some("none"), 4, None), Game::JediAcademy),
+            [
+                "+set", "saber1", "single_1",
+                "+set", "saber2", "none",
+                "+set", "color1", "4",
+            ]
+        );
+
+        // A staff is one hilt with two blades, and the engine picks the colour
+        // by hilt and not by blade (`codemp/cgame/cg_players.c:6130-6140`), so
+        // both blades take `color1` and there is no second colour to write.
+        let staff = saber("dual_1", Some("none"), 5, None);
+        let tokens = launch_tokens(&staff, Game::JediAcademy);
+        assert!(!tokens.iter().any(|token| token == "color2"), "{tokens:?}");
+        assert_eq!(
+            tokens,
+            [
+                "+set", "saber1", "dual_1",
+                "+set", "saber2", "none",
+                "+set", "color1", "5",
+            ]
+        );
+    }
+
+    #[test]
+    fn two_hilts_carry_a_colour_each() {
+        // **Duals**: two hilts of one blade each, so `color2` paints the
+        // second one. This is the only shape in which it paints anything.
+        assert_eq!(
+            launch_tokens(
+                &saber("single_1", Some("single_5"), 0, Some(3)),
+                Game::JediAcademy
+            ),
+            [
+                "+set", "saber1", "single_1",
+                "+set", "saber2", "single_5",
+                "+set", "color1", "0",
+                "+set", "color2", "3",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_shape_with_no_hilt_named_writes_no_saber_at_all() {
+        // Picking a shape and no hilt is a profile that does not manage the
+        // saber, which is what an empty field means everywhere else in the
+        // form. A blade colour on its own still goes out: the cvar is real and
+        // the engine will use it for whatever saber the player already has.
+        let mut colour_only = profile("Duel");
+        colour_only.color1 = Some(2);
+
+        assert_eq!(
+            launch_tokens(&colour_only, Game::JediAcademy),
+            ["+set", "color1", "2"]
+        );
+
+        // And every one of the four values the shapes build passes the gate.
+        for set in [
+            saber("single_1", Some("none"), 0, None),
+            saber("dual_1", Some("none"), 5, None),
+            saber("single_1", Some("single_5"), 0, Some(3)),
+        ] {
+            assert!(validate(set.clone()).is_ok(), "{set:?} is a profile");
+        }
     }
 
     #[test]

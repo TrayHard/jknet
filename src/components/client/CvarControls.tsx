@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button, Input, Select, type SelectOption } from "../ui";
+import { MAX_NICKNAME_BYTES, NicknameEditor, nicknameBytes } from "./NicknameEditor";
 import { Slider } from "./Slider";
 
 /**
@@ -94,17 +95,25 @@ interface CvarFieldProps {
   onCommit: (value: string | null) => void;
 }
 
-/** A text or number field bound to one cvar. */
-export function CvarField({
-  id,
-  value,
-  placeholder,
-  numeric = false,
-  maxLength,
-  disabled = false,
-  revertOnEmpty = false,
-  onCommit,
-}: CvarFieldProps) {
+/**
+ * The draft of a field that writes when the player is done with it.
+ *
+ * The three rules of the file live here: the draft is what the field shows,
+ * the write happens on blur and on Enter, and an empty field removes the cvar
+ * unless the caller asked for the old value back. Both text fields of the
+ * window share it, the plain one and the coloured name.
+ */
+function useCommittedDraft(
+  value: string | null,
+  revertOnEmpty: boolean,
+  onCommit: (value: string | null) => void,
+  /**
+   * Holds a write back while the draft is one the core would refuse. The
+   * draft stays on the field with whatever the control says about it, so the
+   * player edits their own text instead of watching it spring back.
+   */
+  canCommit: (value: string) => boolean = () => true,
+) {
   const [draft, setDraft] = useState(value ?? "");
   // Focus through a ref rather than through state: the effect below must run
   // when the value changes and never because the field lost focus, which is
@@ -127,9 +136,43 @@ export function CvarField({
       return;
     }
     if (trimmed === (value ?? "") || trimmed === sent.current) return;
+    if (!canCommit(trimmed)) return;
     sent.current = trimmed;
     onCommit(trimmed === "" ? null : trimmed);
   };
+
+  return {
+    draft,
+    setDraft,
+    onFocus: () => {
+      focused.current = true;
+    },
+    onBlur: () => {
+      focused.current = false;
+      commit();
+    },
+    onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") commit();
+    },
+  };
+}
+
+/** A text or number field bound to one cvar. */
+export function CvarField({
+  id,
+  value,
+  placeholder,
+  numeric = false,
+  maxLength,
+  disabled = false,
+  revertOnEmpty = false,
+  onCommit,
+}: CvarFieldProps) {
+  const { draft, setDraft, onFocus, onBlur, onKeyDown } = useCommittedDraft(
+    value,
+    revertOnEmpty,
+    onCommit,
+  );
 
   return (
     <Input
@@ -141,17 +184,59 @@ export function CvarField({
       maxLength={maxLength}
       disabled={disabled}
       placeholder={placeholder}
-      onFocus={() => {
-        focused.current = true;
-      }}
+      onFocus={onFocus}
       onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        focused.current = false;
-        commit();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") commit();
-      }}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
+    />
+  );
+}
+
+interface CvarNameFieldProps {
+  id: string;
+  /** The value on the line, or `null` when the line does not carry `name`. */
+  value: string | null;
+  placeholder: string;
+  onCommit: (value: string | null) => void;
+}
+
+/**
+ * The `name` cvar, in the control that shows the name the way the game will.
+ *
+ * The same {@link NicknameEditor} the nickname of a player profile is written
+ * in: the letters carry their colour codes, the preview reads the name
+ * without its markup, and the counter measures it in the bytes the engine
+ * measures. The two names end up on the same command line one after the
+ * other, and a player who sees one of them coloured and the other plain would
+ * have every reason to think they are different kinds of name.
+ *
+ * What stays the way every other control of the window behaves: the write
+ * happens on blur and on Enter, and clearing the field removes the cvar
+ * instead of writing an empty name.
+ *
+ * A name over {@link MAX_NICKNAME_BYTES} is not written at all. The core
+ * refuses it — `validate_value` in `src-tauri/src/launch_tokens.rs` holds the
+ * same limit the nickname of a profile goes by — so the field holds the write
+ * back and leaves the player with the counter and the warning the editor
+ * already draws, rather than a toast about a name they can see is too long.
+ */
+export function CvarNameField({ id, value, placeholder, onCommit }: CvarNameFieldProps) {
+  const { draft, setDraft, onFocus, onBlur, onKeyDown } = useCommittedDraft(
+    value,
+    false,
+    onCommit,
+    (next) => nicknameBytes(next) <= MAX_NICKNAME_BYTES,
+  );
+
+  return (
+    <NicknameEditor
+      id={id}
+      value={draft}
+      placeholder={placeholder}
+      onChange={setDraft}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
     />
   );
 }

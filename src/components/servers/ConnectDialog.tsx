@@ -7,7 +7,6 @@ import { useLaunchWarningText } from "../../i18n/launchWarnings";
 import { cn, commandLine, splitArgs } from "../../lib/format";
 import { clientsOfGame, findConnectClient } from "../../lib/game";
 import {
-  NO_SECOND_HILT,
   type Client,
   type InlineProfile,
   type ServerInfo,
@@ -28,7 +27,7 @@ import {
   NicknameField,
   nicknameBytes,
 } from "../client/NicknameField";
-import { HiltSelect, HiltsNotice } from "../client/ProfileForm";
+import { HiltFields } from "../client/HiltFields";
 import { SkinPicker } from "../client/SkinPicker";
 import { Button, Combobox, Dialog, RadioCard, Select } from "../ui";
 
@@ -358,45 +357,32 @@ export function ConnectDialog({
               )}
             </Field>
 
-            {/* Jedi Outcast ships no `ext_data/sabers/`, so there is no hilt to
-                name and the core writes neither cvar. Hidden rather than left
-                empty: an empty list looks like a launcher that failed to read
+            {/* --- slice: skins and hilts ---
+                The very control of the client window, shape switch included:
+                the saber a player learns to set in one place is the saber
+                they set again before joining a server. Jedi Outcast ships no
+                `ext_data/sabers/`, and the control then shows the two blade
+                colours alone — that game has those cvars and no hilt to name.
+                The hilt lists are hidden rather than left empty, because an
+                empty list looks like a launcher that failed to read
                 something. */}
-            {hasHilts ? (
-              <>
-                <div className="grid grid-cols-2 gap-8">
-                  <Field label={t("connect.saber1")}>
-                    <HiltSelect
-                      value={manual.saber1}
-                      hilts={hilts.data ?? []}
-                      label={t("connect.saber1")}
-                      size="sm"
-                      onChange={(value) => edit({ saber1: value })}
-                    />
-                  </Field>
-                  <Field label={t("connect.saber2")}>
-                    <HiltSelect
-                      value={manual.saber2}
-                      hilts={hilts.data ?? []}
-                      label={t("connect.saber2")}
-                      size="sm"
-                      extra={[
-                        {
-                          value: NO_SECOND_HILT,
-                          label: t("connect.saber2None"),
-                        },
-                      ]}
-                      onChange={(value) => edit({ saber2: value })}
-                    />
-                  </Field>
-                </div>
-                {/* --- slice: profiles polish ---
-                    The same three states the client window draws, for the
-                    same reason: two lists holding only **Not set** say
-                    nothing about whether the archives were read. */}
-                <HiltsNotice hilts={hilts} />
-              </>
-            ) : null}
+            <Field label={t("connect.saber")}>
+              {/* No client is no archives to read, exactly as for the skin
+                  grid above: the query is idle and «no hilt in the archives
+                  of this client» would name a client that is not there. */}
+              {client === undefined ? null : (
+                <HiltFields
+                  values={manual}
+                  hilts={hilts}
+                  hasHilts={hasHilts}
+                  // The client above empties the hilt fields when it changes;
+                  // the shape switch is emptied with them.
+                  resetKey={client.id}
+                  size="sm"
+                  onChange={(values) => edit(values)}
+                />
+              )}
+            </Field>
           </>
         )}
 
