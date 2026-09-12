@@ -26,8 +26,12 @@ export type { PlayersFilter, StoredServerFilters };
  * **Hidden** is the fifth and asks nothing of the network. It is a view of the
  * same cached list the other tabs read, narrowed to the rows the player took
  * off the browser, so the core has never heard of it and does not need to.
+ *
+ * --- slice: servers home tweaks ---
+ * The `one` scope is subtracted rather than ignored: it is the details panel
+ * asking about the server it shows, and no tab is ever set to it.
  */
-export type ServerTab = ServerScope | "hidden";
+export type ServerTab = Exclude<ServerScope, "one"> | "hidden";
 
 // --- slice: server actions ---
 /**

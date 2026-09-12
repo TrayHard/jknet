@@ -247,6 +247,27 @@ export function ServersPage() {
   const selected = visible.find((row) => row.address === selectedAddress);
   const status = useServerStatus(selected?.address ?? null);
 
+  // --- slice: servers home tweaks ---
+  /**
+   * Asks the selected server everything again: its row and its player list.
+   *
+   * Under the `one` scope rather than the open tab's, so the loader stays off
+   * the table and the row the panel is showing is the only one that moves.
+   * `refetch` on the status query for the same reason the retry button uses
+   * it: the 15 s the answer stays fresh for is not a reason to ignore a press.
+   */
+  const refreshOne = () => {
+    if (selected === undefined) return;
+    refresh.refreshAddresses("one", [selected.address]);
+    void status.refetch();
+  };
+  const watch = useServerWatch(selected?.address ?? null, refreshOne);
+  const detailsAt = useDetailsRefreshedAt(
+    selected?.address ?? null,
+    refresh.scopes.one.refreshedAt,
+  );
+  const detailsSecondsAgo = useSecondsSince(detailsAt);
+
   // Over the whole tab, not the filtered list: the subtitle answers «is it
   // worth going in right now», and that question is about the servers of this
   // game rather than about what the search box happens to hold.
@@ -541,6 +562,17 @@ export function ServersPage() {
             // 15 s the query stays fresh for, which is the whole point of a
             // button the player pressed on purpose.
             onRetryPlayers={() => void status.refetch()}
+            // --- slice: servers home tweaks ---
+            // The panel's own scan, and the switch that repeats it once a
+            // minute. Both are about this one address; the tab keeps its own
+            // indicator and its own list, untouched by either.
+            onRefresh={refreshOne}
+            refreshing={refresh.scopes.one.running || status.isFetching}
+            watching={watch.watching}
+            onWatchChange={watch.setWatching}
+            refreshedAge={
+              detailsSecondsAgo === null ? null : format.age(detailsSecondsAgo)
+            }
             // --- slice: game switch ---
             // Live even without a client: pressing it is how the player finds
             // out they need one, and the toast that says so offers to make it.
@@ -1011,6 +1043,76 @@ function emptyText(
         ? t("empty.filteredBots", { count: hiddenBotOnly })
         : t("empty.filteredText");
   }
+}
+
+// --- slice: servers home tweaks ---
+/** How often **Watch** asks the selected server again. */
+const WATCH_INTERVAL_MS = 60_000;
+
+// --- slice: servers home tweaks ---
+/**
+ * The **Watch** switch of the details panel: one server, asked once a minute.
+ *
+ * Watching belongs to the row it was switched on for, so a different selection
+ * turns it off rather than quietly pointing the timer at somebody else's
+ * server. Leaving the screen unmounts this hook and closing the window takes
+ * the whole page with it, so both stop the timer without a rule of their own —
+ * which is the reason the timer lives in an effect and not in a module.
+ *
+ * `probe` is read through a ref: it closes over the selected row and is a new
+ * function on every render, and an effect that depended on it would restart
+ * the minute from zero every time anything on the screen changed.
+ */
+function useServerWatch(
+  address: string | null,
+  probe: () => void,
+): { watching: boolean; setWatching: (watching: boolean) => void } {
+  const [watching, setWatching] = useState(false);
+  const latest = useRef(probe);
+  latest.current = probe;
+
+  useEffect(() => {
+    setWatching(false);
+  }, [address]);
+
+  useEffect(() => {
+    if (!watching || address === null) return;
+    const timer = window.setInterval(() => latest.current(), WATCH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [watching, address]);
+
+  return { watching, setWatching };
+}
+
+// --- slice: servers home tweaks ---
+/**
+ * When the panel's own scan last landed, for the server on screen and no other.
+ *
+ * The `one` scope keeps one timestamp, the way every scope does, and it
+ * outlives the selection that produced it. A player who picks another row must
+ * not be told that server was asked about a moment ago, so a change of address
+ * clears the answer and the next scan fills it back in.
+ */
+function useDetailsRefreshedAt(
+  address: string | null,
+  scopeAt: number | null,
+): number | null {
+  const at = useRef<number | null>(null);
+  const lastScopeAt = useRef(scopeAt);
+  const forAddress = useRef(address);
+
+  if (lastScopeAt.current !== scopeAt) {
+    lastScopeAt.current = scopeAt;
+    at.current = scopeAt;
+  }
+  // Last, so a selection that changes in the same render wins: the scan that
+  // just landed belongs to the row the player has left.
+  if (forAddress.current !== address) {
+    forAddress.current = address;
+    at.current = null;
+  }
+
+  return at.current;
 }
 
 /** Seconds since `timestamp`, recomputed once a second. */
