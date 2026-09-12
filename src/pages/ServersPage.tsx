@@ -15,6 +15,8 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+// --- slice: servers home tweaks ---
+import { useSearchParams } from "react-router";
 
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
@@ -133,6 +135,20 @@ export function ServersPage() {
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
 
+  // --- slice: servers home tweaks ---
+  // The address a row of Home sent the player here with, kept apart from the
+  // selection. The panel opens on it even when this screen's own filters hide
+  // the row: Home shows a starred server whatever the bot switch says, and a
+  // link that lands on an empty panel reads as a link that did nothing.
+  const [params] = useSearchParams();
+  const requested = params.get("select");
+  const [openedFromHome, setOpenedFromHome] = useState<string | null>(null);
+  /** Selects a row the player pressed, which is nobody's link. */
+  const selectRow = (address: string) => {
+    setSelectedAddress(address);
+    setOpenedFromHome(null);
+  };
+
   // --- slice: servers browser ---
   // The dropdowns and the switches live in `settings.json`, so the screen
   // opens the way the player left it. The search box does not: a browser that
@@ -218,6 +234,7 @@ export function ServersPage() {
     previousGame.current = settledGame;
     if (before === undefined || before === settledGame) return;
     setSelectedAddress(null);
+    setOpenedFromHome(null);
     const forEitherGame = {
       ...storedNow.current,
       gametype: "any",
@@ -228,6 +245,33 @@ export function ServersPage() {
       updateSettings.mutate({ serverFilters: forEitherGame });
     }
   }, [settledGame, updateSettings]);
+
+  // --- slice: servers home tweaks ---
+  // A row of Home pressed: open that server here. The tab goes to **All**
+  // because that is the tab the address is certain to belong to — Favorites
+  // and History would answer a press on the busiest server with «not in your
+  // list», and the player pressed a server, not a tab.
+  useEffect(() => {
+    if (requested === null) return;
+    setSelectedAddress(requested);
+    setOpenedFromHome(requested);
+    setTab("all");
+  }, [requested]);
+
+  // --- slice: servers home tweaks ---
+  // The address this launcher has never had a row for: ask about it. The row
+  // is normally in the cache already, because Home draws from the same one —
+  // this covers a link that outlived the list behind it. One probe per
+  // address, so a cache that answers with nothing does not become a loop.
+  const probeAddresses = refresh.refreshAddresses;
+  const probed = useRef<string | null>(null);
+  useEffect(() => {
+    if (requested === null || !cached.isSuccess) return;
+    if (probed.current === requested) return;
+    if (cached.data.some((row) => row.address === requested)) return;
+    probed.current = requested;
+    probeAddresses("one", [requested]);
+  }, [requested, cached.isSuccess, cached.data, probeAddresses]);
 
   // --- slice: servers browser ---
   // The rows of the open tab before the filters: what the subtitle counts and
@@ -244,7 +288,17 @@ export function ServersPage() {
       : sortServers(filtered, sortColumn, sortDirection);
   }, [inTab, tab, filters, sortColumn, sortDirection]);
 
-  const selected = visible.find((row) => row.address === selectedAddress);
+  // --- slice: servers home tweaks ---
+  // The row the filters of this screen keep back, when it is the one a link
+  // named. Only that one: a row the player filtered away by hand stays away.
+  const linked = useMemo(() => {
+    if (selectedAddress === null || selectedAddress !== openedFromHome) {
+      return undefined;
+    }
+    return view.rows.find((row) => row.address === selectedAddress);
+  }, [selectedAddress, openedFromHome, view.rows]);
+  const selected =
+    visible.find((row) => row.address === selectedAddress) ?? linked;
   const status = useServerStatus(selected?.address ?? null);
 
   // --- slice: servers home tweaks ---
@@ -514,7 +568,7 @@ export function ServersPage() {
                     key={server.address}
                     server={server}
                     selected={server.address === selectedAddress}
-                    onSelect={() => setSelectedAddress(server.address)}
+                    onSelect={() => selectRow(server.address)}
                     onToggleFavorite={() =>
                       setFavorite.mutate({
                         address: server.address,
