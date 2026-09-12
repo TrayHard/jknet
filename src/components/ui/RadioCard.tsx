@@ -38,7 +38,9 @@ export function RadioCard({
   return (
     <label
       className={cn(
-        "flex flex-col gap-4 rounded-md border p-12 transition-colors duration-150",
+        // --- slice: selection context menu --- the whole card is the control.
+        "flex flex-col gap-4 rounded-md border p-12 select-none",
+        "transition-colors duration-150",
         "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2",
         "has-[:focus-visible]:outline-line-focus",
         disabled
