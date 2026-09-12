@@ -688,6 +688,20 @@ mod tests {
         );
     }
 
+    /// --- slice: library polish ---
+    /// The rule that turns a pasted address into a card runs that address
+    /// through [`youtube_id`], so it reaches four hosts and no further. An
+    /// address of any other site is a link the author put in the text, and
+    /// nothing here may turn it into a picture with a play button on it.
+    #[test]
+    fn a_bare_link_to_anywhere_but_youtube_stays_a_link() {
+        assert_eq!(
+            sanitize_fragment("<a href='https://example.com/x'>https://example.com/x</a>"),
+            "<a href=\"https://example.com/x\">https://example.com/x</a>",
+            "an unmarked address is a card only when it is a video"
+        );
+    }
+
     #[test]
     fn the_addresses_youtube_writes_all_give_the_same_id() {
         for src in [
