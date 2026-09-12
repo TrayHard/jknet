@@ -733,8 +733,26 @@ fn scan_hilts_of(
 
     let label = source.path.display().to_string();
     for name in names {
-        let Some(bytes) = read_entry(&mut archive, &name, &source.path, MAX_TEXT_BYTES)? else {
-            continue;
+        let bytes = match read_entry(&mut archive, &name, &source.path, MAX_TEXT_BYTES) {
+            Ok(Some(bytes)) => bytes,
+            // Over the size a text file can be: already logged, and the
+            // remaining entries of the archive are still worth reading.
+            Ok(None) => continue,
+            // One damaged entry costs its own hilts and nothing else, exactly
+            // as one damaged icon costs its own skin in `scan_models_of`.
+            //
+            // This used to be a `?`, and the difference is the whole of «the
+            // skins are there and the hilts are not»: the question mark left
+            // the loop, `scan_hilts` logged one warning about the archive and
+            // went on to the next source, and every hilt this archive had not
+            // yet been read for was gone. On a retail install `assets1.pk3`
+            // holds all fifteen of them, so a single unreadable entry emptied
+            // the list while the skin grid, which forgives the same failure,
+            // filled normally.
+            Err(e) => {
+                log::warn!("cannot read {name} of {}: {e}", source.path.display());
+                continue;
+            }
         };
         // Raven wrote these tables in the code page of their machine, so a
         // stray byte is replaced rather than failing the file around it.
@@ -1049,6 +1067,23 @@ mod tests {
         writer.finish().expect("finish pk3");
     }
 
+    /// The same archive, with the bytes of one entry damaged.
+    ///
+    /// `write_pk3` stores its entries rather than deflating them, so the
+    /// content of each sits in the file verbatim: finding it and flipping a
+    /// byte leaves an archive `zip` opens and lists happily and whose entry
+    /// fails its checksum when something reads it. That is what a pk3 left
+    /// behind by a dropped download looks like from the reader's side.
+    fn damage_entry(path: &Path, content: &[u8]) {
+        let mut bytes = fs::read(path).expect("the archive");
+        let at = bytes
+            .windows(content.len())
+            .position(|window| window == content)
+            .expect("the stored bytes of the entry");
+        bytes[at] ^= 0xFF;
+        fs::write(path, bytes).expect("the damaged archive");
+    }
+
     fn source_of(path: &Path) -> Source {
         let meta = fs::metadata(path).expect("the archive");
         Source {
@@ -1330,6 +1365,43 @@ dual_1
         );
         assert_eq!(table.get("menus_single_hilt1").map(String::as_str), Some("Arbiter"));
         assert_eq!(table.get("menus_staff_hilt1").map(String::as_str), Some("Guardian"));
+    }
+
+    // --- slice: profiles polish ---
+
+    #[test]
+    fn a_damaged_entry_costs_its_own_hilts_and_not_the_whole_archive() {
+        // The bug behind «the skins are there and the hilts are not»: the
+        // hilt scan left the archive on the first entry it could not read,
+        // and everything after that entry — on a retail install, the file
+        // that holds every hilt — was silently gone. The skin scan forgives
+        // the same failure, which is why one list filled and the other did
+        // not.
+        let temp = TempDir::new().expect("temp dir");
+        let pk3 = temp.path().join("assets1.pk3");
+        let broken = b"broken\n{\n\tname\t\"Broken\"\n\tsaberType\tSABER_SINGLE\n}\n".to_vec();
+        write_pk3(
+            &pk3,
+            &[
+                // First, so that a scan which gives up on it gives up before
+                // reaching either of the two good files.
+                ("ext_data/sabers/broken.sab", broken.clone()),
+                ("ext_data/sabers/single_1.sab", SINGLE_1.as_bytes().to_vec()),
+                (
+                    "ext_data/sabers/staff_1.sab",
+                    b"staff_1\n{\n\tname\t\"Guardian\"\n\tsaberType\tSABER_STAFF\n}\n".to_vec(),
+                ),
+            ],
+        );
+        damage_entry(&pk3, &broken);
+
+        let hilts = scan_hilts(&[source_of(&pk3)]);
+        let ids: Vec<&str> = hilts.iter().map(|hilt| hilt.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["single_1", "staff_1"],
+            "the two readable hilts survive the one that is not"
+        );
     }
 
     #[test]
