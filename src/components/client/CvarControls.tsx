@@ -1,7 +1,8 @@
 import { X } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import { Button, Input, Select, type SelectOption } from "../ui";
+import { NicknameEditor } from "./NicknameEditor";
 import { Slider } from "./Slider";
 
 /**
@@ -94,17 +95,19 @@ interface CvarFieldProps {
   onCommit: (value: string | null) => void;
 }
 
-/** A text or number field bound to one cvar. */
-export function CvarField({
-  id,
-  value,
-  placeholder,
-  numeric = false,
-  maxLength,
-  disabled = false,
-  revertOnEmpty = false,
-  onCommit,
-}: CvarFieldProps) {
+/**
+ * The draft of a field that writes when the player is done with it.
+ *
+ * The three rules of the file live here: the draft is what the field shows,
+ * the write happens on blur and on Enter, and an empty field removes the cvar
+ * unless the caller asked for the old value back. Both text fields of the
+ * window share it, the plain one and the coloured name.
+ */
+function useCommittedDraft(
+  value: string | null,
+  revertOnEmpty: boolean,
+  onCommit: (value: string | null) => void,
+) {
   const [draft, setDraft] = useState(value ?? "");
   // Focus through a ref rather than through state: the effect below must run
   // when the value changes and never because the field lost focus, which is
@@ -131,6 +134,39 @@ export function CvarField({
     onCommit(trimmed === "" ? null : trimmed);
   };
 
+  return {
+    draft,
+    setDraft,
+    onFocus: () => {
+      focused.current = true;
+    },
+    onBlur: () => {
+      focused.current = false;
+      commit();
+    },
+    onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") commit();
+    },
+  };
+}
+
+/** A text or number field bound to one cvar. */
+export function CvarField({
+  id,
+  value,
+  placeholder,
+  numeric = false,
+  maxLength,
+  disabled = false,
+  revertOnEmpty = false,
+  onCommit,
+}: CvarFieldProps) {
+  const { draft, setDraft, onFocus, onBlur, onKeyDown } = useCommittedDraft(
+    value,
+    revertOnEmpty,
+    onCommit,
+  );
+
   return (
     <Input
       id={id}
@@ -141,17 +177,52 @@ export function CvarField({
       maxLength={maxLength}
       disabled={disabled}
       placeholder={placeholder}
-      onFocus={() => {
-        focused.current = true;
-      }}
+      onFocus={onFocus}
       onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        focused.current = false;
-        commit();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") commit();
-      }}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
+    />
+  );
+}
+
+interface CvarNameFieldProps {
+  id: string;
+  /** The value on the line, or `null` when the line does not carry `name`. */
+  value: string | null;
+  placeholder: string;
+  onCommit: (value: string | null) => void;
+}
+
+/**
+ * The `name` cvar, in the control that shows the name the way the game will.
+ *
+ * The same {@link NicknameEditor} the nickname of a player profile is written
+ * in: the letters carry their colour codes, the preview reads the name
+ * without its markup, and the counter measures it in the bytes the engine
+ * measures. The two names end up on the same command line one after the
+ * other, and a player who sees one of them coloured and the other plain would
+ * have every reason to think they are different kinds of name.
+ *
+ * What stays the way every other control of the window behaves: the write
+ * happens on blur and on Enter, and clearing the field removes the cvar
+ * instead of writing an empty name.
+ */
+export function CvarNameField({ id, value, placeholder, onCommit }: CvarNameFieldProps) {
+  const { draft, setDraft, onFocus, onBlur, onKeyDown } = useCommittedDraft(
+    value,
+    false,
+    onCommit,
+  );
+
+  return (
+    <NicknameEditor
+      id={id}
+      value={draft}
+      placeholder={placeholder}
+      onChange={setDraft}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
     />
   );
 }
