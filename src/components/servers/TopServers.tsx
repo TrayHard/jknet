@@ -27,8 +27,12 @@ const TOP_COUNT = 4;
  */
 export function TopServers({
   actions,
+  onOpen,
 }: {
   actions?: (server: ServerInfo) => ReactNode;
+  // --- slice: servers home tweaks ---
+  /** Where a press on the row itself goes; passed straight through. */
+  onOpen?: (server: ServerInfo) => void;
 }) {
   const { t } = useTranslation("home");
   const cached = useCachedServers();
@@ -74,6 +78,7 @@ export function TopServers({
       servers={rows}
       seeAll
       actions={actions}
+      onOpen={onOpen}
     />
   );
 }

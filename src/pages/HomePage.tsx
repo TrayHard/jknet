@@ -255,6 +255,21 @@ export function HomePage() {
     </>
   );
 
+  // --- slice: servers home tweaks ---
+  /**
+   * Opens one server on the Servers screen, with its details panel showing.
+   *
+   * Home tells the player where they can go; who is on that server, on what
+   * map and how the last scan found it is the panel's answer, and walking to
+   * the browser to find the row by hand was the step between the two. The
+   * address travels in the query string rather than in the navigation state,
+   * because `HashRouter` keeps `#/servers?select=…` across a window reload
+   * while state does not survive one.
+   */
+  const openOnServers = (server: ServerInfo) => {
+    void navigate(`/servers?select=${encodeURIComponent(server.address)}`);
+  };
+
   // --- slice: server actions ---
   /**
    * How long ago the player was last on one server of the History block.
@@ -463,14 +478,16 @@ export function HomePage() {
           title={t("topServers.favorites")}
           servers={favorites}
           actions={rowActions}
+          onOpen={openOnServers}
         />
         <ServerListBlock
           title={t("topServers.history")}
           servers={history.rows}
           actions={rowActions}
           caption={lastConnected}
+          onOpen={openOnServers}
         />
-        <TopServers actions={rowActions} />
+        <TopServers actions={rowActions} onOpen={openOnServers} />
       </div>
 
       {/* --- slice: game switch --- the dialog already opens on the active
