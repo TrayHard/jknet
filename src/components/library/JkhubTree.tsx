@@ -18,6 +18,20 @@ interface JkhubTreeProps {
    * carries what its children hold.
    */
   counts: Record<string, number> | null;
+  // --- slice: library polish ---
+  /**
+   * Files per node of the whole catalogue, for the badge of a node the site
+   * printed no count for.
+   *
+   * The site prints a file count under `Audio` and under every gametype of
+   * `Maps`, and prints none at all under `Skins`, `Sabers`, `NPCs`, `Single
+   * Player` or `Vehicles` — so half the rail had no badge. The index knows
+   * exactly how many files each node holds, and `jkhub_search` answers with
+   * that tally for an empty query, already rolled up the tree. The number
+   * then matches what selecting the node puts in the grid, which the site's
+   * own count never quite did.
+   */
+  totals: Record<string, number> | null;
 }
 
 /**
@@ -44,13 +58,19 @@ export function shows(
 /**
  * The category tree of one game.
  *
- * --- slice: jkhub catalog ---
- * The core answers with the launcher's eight sections, one flat node each, so
- * nothing here expands today. The two levels below stay written: the tree is
- * still a tree on the wire, and the day a section grows children — the
- * gametypes under Maps are the obvious candidate — the component already draws
- * them. A container that holds no files of its own expands instead of
- * selecting, which is what a section id with no listing would need.
+ * --- slice: library polish ---
+ * Two levels: the launcher's eight sections, and under each of them the
+ * categories jkhub.org sorts that shelf into — the seven gametypes of
+ * **Maps**, the **Skins** and **Player Models** the launcher shows as one
+ * shelf. A section of a single site category has nothing under it and stays
+ * one row. Selecting a section lists everything inside it, selecting a
+ * category narrows to that category, and both are the same press: the core
+ * resolves either id out of the table of sections.
+ *
+ * A section is named by the launcher, in the player's language; a category
+ * under it keeps the site's own name. Sections are drawn open, as the site's
+ * own tree was before the sections existed: the rail is seventeen rows at its
+ * longest, and a collapsed branch is where the file nobody can find lives.
  *
  * With a query typed, the tree shrinks to the categories that answer it and
  * every badge switches from the file count of the category to the number of
@@ -67,7 +87,13 @@ export function shows(
  * action for it sits on the Settings screen, next to the other caches, rather
  * than above a list the player reads every visit.
  */
-export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeProps) {
+export function JkhubTree({
+  categories,
+  selected,
+  onSelect,
+  counts,
+  totals,
+}: JkhubTreeProps) {
   const { t } = useTranslation("jkhub");
   const sectionName = useSectionName();
   const [open, setOpen] = useState<Set<number>>(() => new Set());
@@ -103,9 +129,12 @@ export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeP
     // A pruned tree is a short one, and every branch left in it holds an
     // answer, so it opens itself.
     const expanded = counts != null || open.has(category.id) || depth === 0;
+    // --- slice: library polish ---
+    // Matches while a query is on, otherwise what the index holds, and the
+    // site's own count only until the first answer of the index arrives.
     const badge = counts
       ? counts[String(category.id)]
-      : (category.fileCount ?? undefined);
+      : (totals?.[String(category.id)] ?? category.fileCount ?? undefined);
     return (
       <li key={category.id}>
         <div className="flex items-center">
