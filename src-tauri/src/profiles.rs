@@ -66,25 +66,35 @@ const MAX_NAME_LEN: usize = 48;
 /// server then cuts in half, possibly through the middle of a letter.
 const MAX_NICKNAME_LEN: usize = 36;
 
-/// Longest value of the cvars that name a file: the model and the two hilts.
-/// `MAX_QPATH` in `codemp/qcommon/qfiles.h:39` of OpenJK `1a6a6434`, a byte
-/// buffer like the one above.
-const MAX_VALUE_LEN: usize = 64;
+/// Longest value of the cvars that name a file: the model and the two hilts,
+/// **in bytes of UTF-8**.
+///
+/// `MAX_QPATH` of the engine (`codemp/qcommon/q_shared.h:198` of OpenJK
+/// `1a6a6434`) is 64, the byte buffer such a value lives in, and a copy into
+/// it keeps the last byte for the terminator. So 63 is what arrives whole and
+/// the sixty-fourth byte is the first one the engine drops.
+///
+/// The `model` value is measured here as a whole: the model folder, the `/`
+/// and the variant, or the three parts joined by `|`. That whole string is
+/// what the cvar holds, so that whole string is what has to fit.
+const MAX_VALUE_LEN: usize = 63;
 
 /// --- slice: assembled skins ---
-/// Longest skin name the engine keeps, **in bytes of UTF-8**: one part of an
-/// assembled model, or the variant of an ordinary skin.
+/// Longest name of one part of an assembled model, **in bytes of UTF-8**.
 ///
 /// `SKIN_LENGTH` of the engine (`codemp/ui/ui_local.h:258` of OpenJK
-/// `1a6a6434`), the size of the `skinName_t` buffer the character menu fills
-/// with `Q_strncpyz(…, skinname, SKIN_LENGTH)` for each of the three rows
-/// (`codemp/ui/ui_main.c:9762`, `:9772` and `:9782`). A longer name is not
-/// refused there, it is cut: `Q_strncpyz` copies what fits and terminates, so
-/// the menu would go on to build a value naming a file no archive holds.
+/// `1a6a6434`) is 16, the size of the `skinName_t` buffer the character menu
+/// fills with `Q_strncpyz(…, skinname, SKIN_LENGTH)` for each of the three
+/// rows (`codemp/ui/ui_main.c:9762`, `:9772` and `:9782`). `Q_strncpyz` keeps
+/// the last byte for the terminator, so 15 bytes of the name survive. A name
+/// past that is not refused there, it is cut, and the menu goes on to build a
+/// value naming a file no archive holds.
 ///
-/// The rest of the value stays on `MAX_VALUE_LEN`, which is the buffer the
-/// cvar itself lives in: this bounds one name inside that value, not the value.
-const MAX_SKIN_NAME_LEN: usize = 16;
+/// Only a part goes by this. The variant of an ordinary skin has no bound of
+/// its own: the engine reads it into a `MAX_QPATH` buffer together with the
+/// model name (`codemp/ui/ui_main.c:4983`), which is [`MAX_VALUE_LEN`]
+/// measuring the value as a whole.
+const MAX_SKIN_PART_LEN: usize = 15;
 
 /// Most profiles one client may hold. High enough that nobody meets it and low
 /// enough that a broken writer cannot fill a disk.
@@ -800,11 +810,12 @@ impl Shape {
 ///
 /// Each part passes [`is_file_part`] on its own, which is what keeps a `..` or
 /// a slash out of a name the launcher turns into a file in its icon cache, and
-/// each is bounded on its own by [`MAX_SKIN_NAME_LEN`] rather than only
-/// together by the length of the whole value.
+/// each is bounded on its own by [`MAX_SKIN_PART_LEN`] rather than only
+/// together by the length of the whole value. The variant of an ordinary skin
+/// has no such bound of its own, only [`MAX_VALUE_LEN`] over the whole value.
 fn fits_skin(skin: &str) -> bool {
     if !skin.contains('|') {
-        return fits_skin_name(skin);
+        return is_file_part(skin);
     }
     let mut parts = skin.split('|');
     let (Some(head), Some(torso), Some(legs), None) =
@@ -812,9 +823,9 @@ fn fits_skin(skin: &str) -> bool {
     else {
         return false;
     };
-    fits_skin_name(head)
-        && fits_skin_name(torso)
-        && fits_skin_name(legs)
+    fits_skin_part(head)
+        && fits_skin_part(torso)
+        && fits_skin_part(legs)
         // `strstr` in the engine is case sensitive, so `Head_A1|…` is a value
         // the game would not take apart.
         && skin.contains("head")
@@ -823,13 +834,14 @@ fn fits_skin(skin: &str) -> bool {
 }
 
 /// --- slice: assembled skins ---
-/// Whether one skin name fits the buffer the engine keeps it in.
+/// Whether one part of an assembled model fits the buffer the engine keeps it
+/// in.
 ///
-/// [`is_file_part`] plus [`MAX_SKIN_NAME_LEN`], which is the pair every name
-/// after the `/` goes by: the variant of an ordinary skin, and each of the
-/// three parts of an assembled one.
-fn fits_skin_name(value: &str) -> bool {
-    value.len() <= MAX_SKIN_NAME_LEN && is_file_part(value)
+/// [`is_file_part`] plus [`MAX_SKIN_PART_LEN`]. The variant of an ordinary
+/// skin goes by [`is_file_part`] alone: the engine gives it no buffer of its
+/// own, so what bounds it is the length of the whole value.
+fn fits_skin_part(value: &str) -> bool {
+    value.len() <= MAX_SKIN_PART_LEN && is_file_part(value)
 }
 
 /// Whether the value is one part of a name the game holds a file under.
@@ -1289,31 +1301,61 @@ mod tests {
     }
 
     #[test]
-    fn a_skin_name_longer_than_the_engine_buffer_is_refused() {
-        // One name, not the whole value: every case here is far short of
-        // `MAX_VALUE_LEN`, so what refuses it is `MAX_SKIN_NAME_LEN`.
-        let fits = "head_aaaaaaaaaaa";
-        let over = "head_aaaaaaaaaaaa";
-        assert_eq!(fits.len(), MAX_SKIN_NAME_LEN);
-        assert_eq!(over.len(), MAX_SKIN_NAME_LEN + 1);
+    fn a_part_longer_than_the_engine_buffer_is_refused() {
+        // One part, not the whole value: every case here is far short of
+        // `MAX_VALUE_LEN`, so what refuses it is `MAX_SKIN_PART_LEN`.
+        let fits = "head_aaaaaaaaaa";
+        let over = "head_aaaaaaaaaaa";
+        assert_eq!(fits.len(), MAX_SKIN_PART_LEN);
+        assert_eq!(over.len(), MAX_SKIN_PART_LEN + 1);
 
         let mut edge = profile("Duel");
         edge.model = Some(format!("jedi_hm/{fits}|torso_a1|lower_a1"));
-        assert!(validate(edge).is_ok(), "a name of the buffer size is a model");
+        assert!(validate(edge).is_ok(), "a part of the buffer size is a model");
 
-        // Each of the three rows is measured, and so is the variant of an
-        // ordinary skin.
+        // Each of the three rows is measured on its own.
         for value in [
             format!("jedi_hm/{over}|torso_a1|lower_a1"),
-            format!("jedi_hm/head_a1|torso_{}|lower_a1", "b".repeat(11)),
-            format!("jedi_hm/head_a1|torso_a1|lower_{}", "c".repeat(11)),
-            format!("jedi_hf/{}", "d".repeat(MAX_SKIN_NAME_LEN + 1)),
+            format!("jedi_hm/head_a1|torso_{}|lower_a1", "b".repeat(10)),
+            format!("jedi_hm/head_a1|torso_a1|lower_{}", "c".repeat(10)),
         ] {
             assert!(value.len() <= MAX_VALUE_LEN, "{value:?} is short enough");
             let mut wrong = profile("Duel");
             wrong.model = Some(value.clone());
             assert!(validate(wrong).is_err(), "{value:?} is not a model");
         }
+    }
+
+    #[test]
+    fn a_variant_past_the_part_buffer_is_still_a_model() {
+        // The engine gives the variant of an ordinary skin no buffer of its
+        // own, so `MAX_SKIN_PART_LEN` is not its business: a variant twice
+        // that long is a value the game reads.
+        let variant = "a".repeat(MAX_SKIN_PART_LEN * 2);
+        let value = format!("human_merc/{variant}");
+        assert!(value.len() <= MAX_VALUE_LEN, "{value:?} is short enough");
+
+        let mut long = profile("Duel");
+        long.model = Some(value.clone());
+        assert!(validate(long).is_ok(), "{value:?} is a model");
+    }
+
+    #[test]
+    fn a_model_value_longer_than_the_cvar_buffer_is_refused() {
+        // `MAX_QPATH` less the byte the terminator takes. The variant carries
+        // the length here, because nothing else bounds it.
+        let fits = format!("kyle/{}", "a".repeat(MAX_VALUE_LEN - "kyle/".len()));
+        let over = format!("kyle/{}", "a".repeat(MAX_VALUE_LEN - "kyle/".len() + 1));
+        assert_eq!(fits.len(), MAX_VALUE_LEN);
+        assert_eq!(over.len(), MAX_VALUE_LEN + 1);
+
+        let mut edge = profile("Duel");
+        edge.model = Some(fits.clone());
+        assert!(validate(edge).is_ok(), "{fits:?} is a model");
+
+        let mut wrong = profile("Duel");
+        wrong.model = Some(over.clone());
+        assert!(validate(wrong).is_err(), "{over:?} is not a model");
     }
 
     #[test]
