@@ -101,6 +101,12 @@
     "botHeading_one": "{{count}} BOT",
     "botHeading_other": "{{count}} BOTS",
     "botBadge": "BOT",
+    "refreshHint": "Ask this server again and update its row in the list",
+    "watch": "Watch",
+    "watchHint": "Keep asking this server once a minute",
+    "watching": "Watching · updated {{age}} ago",
+    "watchingSoon": "Watching · asking again every minute",
+    "updated": "Updated {{age}} ago",
     "playersClosed": "This server does not publish its player list.",
     "playersRemembered": "PLAYER LIST FROM {{age}} AGO",
     "playersRememberedUnknown": "LAST KNOWN PLAYER LIST"

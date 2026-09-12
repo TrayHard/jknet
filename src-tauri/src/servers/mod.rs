@@ -191,6 +191,15 @@ pub enum RefreshScope {
     History,
     /// The broadcast sweep of the local network.
     Lan,
+    // --- slice: servers home tweaks ---
+    /// One address, asked from the details panel of the Servers screen.
+    ///
+    /// A scope of its own rather than the open tab's: the panel asks about a
+    /// single server, and borrowing the tab's scope would drop the loader over
+    /// the whole table and freeze every row of it to answer one question. The
+    /// **Watch** switch of the panel repeats the same scan once a minute, so
+    /// this scope is also the one the core refuses a second copy of.
+    One,
 }
 
 // --- slice: servers browser ---
@@ -3474,6 +3483,37 @@ mod tests {
         assert!(
             state.claim(Game::JediAcademy, RefreshScope::Favorites).is_ok(),
             "the guard releases the tab however the refresh ended"
+        );
+    }
+
+    // --- slice: servers home tweaks ---
+    #[test]
+    fn the_details_panel_scans_beside_the_tab_it_sits_on() {
+        let state = RefreshState::default();
+        // The player has All refreshing and asks the panel about one server:
+        // two scopes, so both go on the wire and the table is not frozen for
+        // the sake of one row.
+        let _all = state
+            .claim(Game::JediAcademy, RefreshScope::All)
+            .expect("the tab");
+        let one = state
+            .claim(Game::JediAcademy, RefreshScope::One)
+            .expect("the details panel beside it");
+        // Watch ticking onto a scan that has not come back is the second press
+        // this claim exists to refuse.
+        state
+            .claim(Game::JediAcademy, RefreshScope::One)
+            .expect_err("one panel scan at a time");
+        drop(one);
+        assert!(state.claim(Game::JediAcademy, RefreshScope::One).is_ok());
+    }
+
+    // --- slice: servers home tweaks ---
+    #[test]
+    fn the_panel_scope_travels_as_the_name_the_screen_keys_its_state_by() {
+        assert_eq!(
+            serde_json::to_string(&RefreshScope::One).expect("a scope serializes"),
+            "\"one\""
         );
     }
 
