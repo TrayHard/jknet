@@ -20,6 +20,7 @@ use crate::paths::DataPaths;
 use super::cache;
 use super::client::{JkhubClient, Page};
 use super::parse;
+use super::sections;
 use super::snapshot;
 use super::types::{
     JkhubCategories, JkhubCategory, JkhubFile, JkhubFileView, JkhubListing, JkhubSort,
@@ -123,13 +124,14 @@ pub fn tree_at_hand(
     game: Game,
 ) -> Vec<JkhubCategory> {
     let name = cache::categories_name(game.id());
-    if let Some(entry) = cache::read::<Vec<JkhubCategory>>(data, &name) {
-        return entry.payload;
-    }
-    snapshots
-        .and_then(|dir| snapshot::read(dir, game))
-        .map(|snapshot| snapshot.categories)
-        .unwrap_or_default()
+    let tree = match cache::read::<Vec<JkhubCategory>>(data, &name) {
+        Some(entry) => entry.payload,
+        None => snapshots
+            .and_then(|dir| snapshot::read(dir, game))
+            .map(|snapshot| snapshot.categories)
+            .unwrap_or_default(),
+    };
+    sections::prune(game, tree)
 }
 
 /// Address of one page of one category listing.
@@ -189,7 +191,22 @@ impl<'a> HtmlSource<'a> {
     /// The flag is answered rather than acted on: starting a background task
     /// needs an `AppHandle`, and this module has no business holding one. The
     /// command in `mod.rs` owns that half.
+    ///
+    /// --- slice: jkhub catalog ---
+    /// The answer is pruned to [`sections::SECTIONS`] whichever of the four
+    /// ways it arrived. A disk cache written before the sections existed, or
+    /// a bundled snapshot of an older build, holds the whole site tree and
+    /// lives for a week; pruning here rather than at the walk is what keeps
+    /// either from widening the tab back out.
     pub async fn categories_with_plan(&self, game: Game) -> Result<(JkhubCategories, bool)> {
+        let (mut answer, wants_refresh) = self.tree_from_anywhere(game).await?;
+        answer.categories = sections::prune(game, answer.categories);
+        Ok((answer, wants_refresh))
+    }
+
+    /// The tree of one game from the cache, the snapshot or the site, exactly
+    /// as that source had it.
+    async fn tree_from_anywhere(&self, game: Game) -> Result<(JkhubCategories, bool)> {
         let name = cache::categories_name(game.id());
         let cached = cache::read::<Vec<JkhubCategory>>(self.data, &name);
         // Read only when it could be used: the common path has a cache entry,
@@ -382,6 +399,14 @@ impl<'a> HtmlSource<'a> {
 /// A free function rather than a method: the walk needs no cache and no
 /// snapshot folder, and the background refresh in `mod.rs` runs it with
 /// nothing but the shared client.
+///
+/// --- slice: jkhub catalog ---
+/// Only the categories of [`sections::SECTIONS`] are walked. The game roots
+/// are not nodes of the launcher's tree, and a child outside the table — Code
+/// Mods, Cosmetic Mods, Media, Prefabs, Utilities — costs no request at all,
+/// which is what takes the walk from about twenty pages per game down to
+/// nine. A section id therefore has to be a direct child of a game root, or a
+/// child of one that is; the test in [`sections`] holds the table to it.
 pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCategory>> {
     let index = client
         .fetch_html(&format!("{}/files/categories/", parse::SITE))
@@ -404,20 +429,13 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
         if !root_game.matches(game) {
             continue;
         }
-        tree.push(JkhubCategory {
-            id: root.id,
-            slug: root.slug.clone(),
-            name: root.name.clone(),
-            parent_id: None,
-            game: root_game,
-            file_count: root.file_count,
-            // The two game roots redirect to hand-written pages of the site's
-            // CMS and never list files themselves (report, section 2).
-            has_files: false,
-            url: parse::category_url(root.id, &root.slug),
-        });
-
         for child in root.children {
+            // Outside the eight sections, so neither walked nor kept. The
+            // game root itself is not kept either: the tree the screen draws
+            // is the flat one `sections::tree` builds out of this one.
+            if !sections::covers(game, child.id) {
+                continue;
+            }
             let page = client
                 .fetch_html(&parse::category_url(child.id, &child.slug))
                 .await?;
@@ -435,9 +453,10 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
                     .or_else(|| exact_count(&page.body, has_files)),
                 has_files,
                 url: parse::category_url(child.id, &child.slug),
+                section: None,
             });
             for grandchild in grandchildren {
-                if grandchild.id == child.id {
+                if grandchild.id == child.id || !sections::covers(game, grandchild.id) {
                     continue;
                 }
                 tree.push(JkhubCategory {
@@ -455,6 +474,7 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
                     // renders.
                     has_files: true,
                     url: parse::category_url(grandchild.id, &grandchild.slug),
+                    section: None,
                 });
             }
         }
@@ -465,7 +485,7 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
     // keeps whatever count the walk found, and the rest come from the
     // grandchild entries above. Nothing is invented here.
     dedup(&mut tree);
-    Ok(tree)
+    Ok(sections::prune(game, tree))
 }
 
 /// The file count of a category whose whole listing fits on one page.
@@ -771,6 +791,7 @@ mod tests {
                 file_count: Some(367),
                 has_files: true,
                 url: parse::category_url(13, "free-for-all"),
+                section: None,
             }],
         };
         std::fs::write(
@@ -800,15 +821,19 @@ mod tests {
         let data = DataPaths::new(dir.path().to_path_buf());
         data.ensure().expect("the layout is created");
 
+        // A category of the eight sections, and a root of the pruned tree:
+        // anything else would come back changed and say nothing about the
+        // cache, which is what this test is about.
         let tree = vec![JkhubCategory {
-            id: 25,
-            slug: "server-side".into(),
-            name: "Server-Side".into(),
-            parent_id: Some(72),
+            id: 38,
+            slug: "audio".into(),
+            name: "Audio".into(),
+            parent_id: None,
             game: JkhubGame::Ja,
-            file_count: Some(28),
+            file_count: Some(52),
             has_files: true,
-            url: parse::category_url(25, "server-side"),
+            url: parse::category_url(38, "audio"),
+            section: None,
         }];
         let written = store_tree(&data, Game::JediAcademy, &tree);
         assert!(!written.is_empty());
@@ -851,6 +876,7 @@ mod tests {
             file_count: None,
             has_files: true,
             url: parse::category_url(id, "x"),
+            section: None,
         };
         let mut tree = vec![entry(74), entry(3), entry(74)];
         dedup(&mut tree);

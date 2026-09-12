@@ -15,6 +15,16 @@
     "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Actualizar",
+  "sections": {
+    "maps": "Maps",
+    "skins": "Skins & Player Models",
+    "sabers": "Sabers",
+    "guns": "Guns",
+    "npcs": "NPCs",
+    "vehicles": "Vehicles",
+    "singlePlayer": "Single Player",
+    "audio": "Audio"
+  },
   "tree": {
     "heading": "Categorías",
     "expand": "Desplegar {{category}}",

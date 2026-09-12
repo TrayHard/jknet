@@ -7,6 +7,8 @@ import { useToasts } from "../ToastsProvider";
 import { Button, EmptyState, Select, type SelectOption } from "../ui";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
+// --- slice: jkhub catalog ---
+import { useSectionName } from "./jkhubSections";
 // --- slice: jkhub index startup ---
 import { JkhubIndexing } from "./JkhubIndexing";
 import { JkhubTree } from "./JkhubTree";
@@ -65,19 +67,19 @@ export type Scope =
  * The category a search is narrowed to, or null for the whole game.
  *
  * A query is answered out of the whole catalogue unless the player narrowed it
- * themselves. The tab has to open somewhere and opens on the first category
- * with files of its own — `Audio`, 44 of the 3 324 Jedi Academy files — and a
- * search that stayed inside that would answer «nothing matches» to almost
- * every word typed into the search box of the screen. Finding a file in a
- * category nobody opened is what the local index is for.
+ * themselves. The tab has to open somewhere and opens on the first section —
+ * `Maps`, about 730 of the 2 600 Jedi Academy files — and a search that stayed
+ * inside that would answer «nothing matches» to a great many words typed into
+ * the search box of the screen. Finding a file in a section nobody opened is
+ * what the local index is for.
  *
  * Picking a category narrows the search to it, which is what the counts in the
  * tree are for; **Show all categories** widens it again.
  *
  * ```ts
- * searchScope({ kind: "landed", category: audio }, "")     // audio.id
- * searchScope({ kind: "landed", category: audio }, "kyle") // null
- * searchScope({ kind: "picked", category: audio }, "kyle") // audio.id
+ * searchScope({ kind: "landed", category: maps }, "")     // maps.id
+ * searchScope({ kind: "landed", category: maps }, "kyle") // null
+ * searchScope({ kind: "picked", category: maps }, "kyle") // maps.id
  * searchScope({ kind: "all" }, "kyle")                     // null
  * ```
  */
@@ -131,6 +133,8 @@ export function JkhubBrowser({
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const gameNames = useGameNames();
+  // --- slice: jkhub catalog --- the eight sections are named by the launcher.
+  const sectionName = useSectionName();
   const [scope, setScope] = useState<Scope | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
   const [shown, setShown] = useState(PAGE);
@@ -185,17 +189,21 @@ export function JkhubBrowser({
     setOpenFile(null);
   }, [game]);
 
-  // The first category with files of its own is the landing page of the tab:
-  // the two roots hold nothing themselves, and neither does Maps. It is filled
-  // in while nothing is chosen — after a change of game, and after a walk of
-  // the tree that no longer holds the category which was picked in it. A scope
-  // the player chose, `all` included, is left where it is.
+  // The first section is the landing page of the tab. It is filled in while
+  // nothing is chosen — after a change of game, and after a walk of the tree
+  // that no longer holds the category which was picked in it. A scope the
+  // player chose, `all` included, is left where it is.
+  //
+  // --- slice: jkhub catalog ---
+  // The tree is eight flat sections now, every one of them selectable, so the
+  // landing is `Maps` and not the first leaf that happened to have files of
+  // its own. That used to be `Audio`, 44 files of the 3 324 the site has.
   const tree = useMemo(() => categories.data?.categories ?? [], [categories.data]);
   useEffect(() => {
     if (tree.length === 0) return;
     if (scope?.kind === "all") return;
     if (scope != null && tree.some((entry) => entry.id === scope.category.id)) return;
-    const first = tree.find((entry) => entry.hasFiles && entry.parentId != null);
+    const first = tree.find((entry) => entry.hasFiles);
     setScope(first ? { kind: "landed", category: first } : { kind: "all" });
   }, [tree, scope]);
 
@@ -222,6 +230,14 @@ export function JkhubBrowser({
     for (const entry of tree) map.set(entry.id, entry);
     return map;
   }, [tree]);
+
+  // --- slice: jkhub catalog ---
+  // What a card prints under its title: the section of the launcher, in the
+  // player's language. Nothing when the tree has not arrived yet.
+  const sectionOf = (id: number) => {
+    const found = names.get(id);
+    return found ? sectionName(found) : undefined;
+  };
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();
@@ -511,7 +527,7 @@ export function JkhubBrowser({
               }
               text={
                 elsewhere
-                  ? t("empty.elsewhereText", { category: category.name })
+                  ? t("empty.elsewhereText", { category: sectionName(category) })
                   : t("empty.filteredText")
               }
               action={
@@ -529,9 +545,7 @@ export function JkhubBrowser({
                   <JkhubCard
                     key={card.id}
                     card={card}
-                    categoryName={
-                      names.get(card.categoryId ?? category?.id ?? 0)?.name
-                    }
+                    categoryName={sectionOf(card.categoryId ?? category?.id ?? 0)}
                     installed={installedIds.has(card.id)}
                     openOnly={openOnly.has(card.id)}
                     progress={progress.get(card.id) ?? null}

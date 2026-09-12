@@ -16,6 +16,16 @@
     "results_other": "{{count}} файла в игре {{game}}"
   },
   "refresh": "Обновить",
+  "sections": {
+    "maps": "Карты",
+    "skins": "Скины и модели",
+    "sabers": "Мечи",
+    "guns": "Оружие",
+    "npcs": "NPC",
+    "vehicles": "Транспорт",
+    "singlePlayer": "Одиночная игра",
+    "audio": "Звук"
+  },
   "tree": {
     "heading": "Категории",
     "expand": "Развернуть {{category}}",
