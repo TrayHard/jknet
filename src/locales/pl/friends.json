@@ -64,7 +64,8 @@
   },
   "row": {
     "join": "Dołącz",
-    "joining": "Uruchamianie…"
+    "joining": "Uruchamianie…",
+    "actions": "Friend actions"
   },
   "panel": {
     "status": "Status",

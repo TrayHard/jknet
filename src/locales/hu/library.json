@@ -46,7 +46,8 @@
     "conflict": "Ütközés",
     "enable": "{{file}} bekapcsolása",
     "remove": "{{file}} eltávolítása",
-    "removeHint": "Eltávolítás ebből a kliensből"
+    "removeHint": "Eltávolítás ebből a kliensből",
+    "actions": "File actions"
   },
   "empty": {
     "noClientsTitle": "Még nincs kliens a {{game}} játékhoz",

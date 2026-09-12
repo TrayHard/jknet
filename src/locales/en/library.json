@@ -46,7 +46,8 @@
     "conflict": "Conflict",
     "enable": "Enable {{file}}",
     "remove": "Remove {{file}}",
-    "removeHint": "Remove from this client"
+    "removeHint": "Remove from this client",
+    "actions": "File actions"
   },
   "empty": {
     "noClientsTitle": "No {{game}} clients yet",
