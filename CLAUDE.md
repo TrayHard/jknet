@@ -35,10 +35,10 @@ JKNet — десктопный лаунчер мультиплеера Star Wars
 
 | Скрипт | Что переписывает | Чего стоит |
 | --- | --- | --- |
-| `refresh-jkhub-categories.ps1` | `categories-ja.json` и `categories-jo.json`: дерево категорий | около 40 запросов, 20 с |
-| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 193 запроса, около 25 с |
+| `refresh-jkhub-categories.ps1` | `categories-ja.json` и `categories-jo.json`: дерево категорий восьми разделов | 21 запрос, 13 с |
+| `refresh-jkhub-index.ps1` | `index-ja.json` и `index-jo.json`: каталог файлов, по которому вкладка ищет | 135 запросов, около 22 с |
 
-Второй скрипт читает вшитое дерево, поэтому идёт после первого. В цикле их не запускают: jkhub.org — чужой сервер.
+Второй скрипт читает вшитое дерево, поэтому идёт после первого. В цикле их не запускают: jkhub.org — чужой сервер. Оба обходят только восемь разделов каталога; таблица разделов лежит в `src-tauri/src/jkhub/sections.rs`.
 
 ## Структура
 
@@ -58,7 +58,8 @@ src/
                          NewClientDialog, GameFilesNotice, MissingClientToast,
                          GameEventsProvider, AppUpdateProvider, AboutCard,
                          MapPreview, MapPicturesCard, ToastsProvider,
-                         FriendsProvider, AccountProvider
+                         FriendsProvider, AccountProvider, EngineLogo,
+                         OtherClientsMenu
   components/ui/         UI-кит: Button, Badge, Input, Select, Combobox, Menu,
                          Toggle, NavItem, EmptyState, RadioCard, StepBadges,
                          Toast, Avatar, Dialog
@@ -67,7 +68,7 @@ src/
                          профили игрока: список, форма, сетка скинов, никнейм
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
-                         JkhubIndexing, JkhubTree
+                         JkhubDownloadToasts, JkhubIndexing, JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs,
                          меню действий у выделенного сервера, окно
                          «Подключиться…»
@@ -87,6 +88,8 @@ src/
                          webview
   lib/format.ts          cn, shortenPath и чистые функции форматирования,
                          которым передают локаль
+  lib/jkhubDownloads.ts  ход установки файла JKHub вне React: его пишет
+                         useJkhubInstall, читает карточка в колонке тостов
   lib/devOnline.ts       подмена команд друзей вызовами к заглушке JKNet
                          Online вне Tauri
 src-tauri/
@@ -111,6 +114,7 @@ src-tauri/
   src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
                          снимок дерева категорий в сборке, разборщики страниц,
+                         очистка описания файла по списку разрешённых тегов,
                          индекс каталога и поиск по нему, сборка индекса при
                          старте, скачивание и установка в клиента
   resources/jkhub/       categories-*.json — дерево категорий, index-*.json —

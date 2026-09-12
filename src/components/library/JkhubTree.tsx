@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/format";
 import type { JkhubCategory } from "../../lib/ipc";
 import { Badge } from "../ui";
+import { useSectionName } from "./jkhubSections";
 
 interface JkhubTreeProps {
   categories: JkhubCategory[];
@@ -43,9 +44,13 @@ export function shows(
 /**
  * The category tree of one game.
  *
- * Two levels are expandable: JKHub nests Maps and Code Mods one deeper, and a
- * container such as Maps holds no files of its own — clicking it would give an
- * empty listing, so it expands instead of selecting.
+ * --- slice: jkhub catalog ---
+ * The core answers with the launcher's eight sections, one flat node each, so
+ * nothing here expands today. The two levels below stay written: the tree is
+ * still a tree on the wire, and the day a section grows children — the
+ * gametypes under Maps are the obvious candidate — the component already draws
+ * them. A container that holds no files of its own expands instead of
+ * selecting, which is what a section id with no listing would need.
  *
  * With a query typed, the tree shrinks to the categories that answer it and
  * every badge switches from the file count of the category to the number of
@@ -64,6 +69,7 @@ export function shows(
  */
 export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeProps) {
   const { t } = useTranslation("jkhub");
+  const sectionName = useSectionName();
   const [open, setOpen] = useState<Set<number>>(() => new Set());
 
   const visible = useMemo(
@@ -91,6 +97,7 @@ export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeP
     });
 
   const render = (category: JkhubCategory, depth: number) => {
+    const label = sectionName(category);
     const below = children.get(category.id) ?? [];
     const expandable = below.length > 0;
     // A pruned tree is a short one, and every branch left in it holds an
@@ -107,8 +114,8 @@ export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeP
               type="button"
               aria-label={
                 expanded
-                  ? t("tree.collapse", { category: category.name })
-                  : t("tree.expand", { category: category.name })
+                  ? t("tree.collapse", { category: label })
+                  : t("tree.expand", { category: label })
               }
               onClick={() => toggle(category.id)}
               className="inline-flex size-20 items-center justify-center rounded-sm text-fg-muted hover:text-fg cursor-pointer shrink-0"
@@ -133,8 +140,8 @@ export function JkhubTree({ categories, selected, onSelect, counts }: JkhubTreeP
                 : "text-fg-secondary hover:bg-hover-overlay hover:text-fg",
             )}
           >
-            <span className="flex-1 text-left truncate" title={category.name}>
-              {category.name}
+            <span className="flex-1 text-left truncate" title={label}>
+              {label}
             </span>
             {badge != null ? (
               <Badge

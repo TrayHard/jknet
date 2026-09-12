@@ -144,6 +144,15 @@ pub struct PlayerProfile {
     /// Tint of the character model.
     #[serde(default)]
     pub char_color: Option<CharColor>,
+    /// --- slice: profiles polish ---
+    /// The whole token line, written by hand, instead of the one the fields
+    /// above build.
+    ///
+    /// `None` — the ordinary case — means the line is assembled from the
+    /// fields. A string means the player edited that line and it is what goes
+    /// on the command line; see [`launch_tokens`].
+    #[serde(default)]
+    pub tokens_override: Option<String>,
 }
 
 // --- slice: connect dialog ---
@@ -203,6 +212,10 @@ impl InlineProfile {
             color1: self.color1,
             color2: self.color2,
             char_color: self.char_color,
+            // A profile of one run has no line to override: the dialog that
+            // fills it in has fields and no token line of its own, and a
+            // stored profile is where a hand-written line belongs.
+            tokens_override: None,
         })
     }
 }
@@ -306,7 +319,19 @@ impl ProfileBook {
 ///
 /// A game with no hilt data writes neither `saber1` nor `saber2`, whatever the
 /// profile holds. See [`crate::game::GameSpec::has_saber_hilts`].
+///
+/// --- slice: profiles polish ---
+/// A profile carrying [`PlayerProfile::tokens_override`] answers with that
+/// line split into tokens and nothing else. The player edited the line the
+/// fields had built, so the fields are no longer what the profile says — and
+/// the hilt rule above does not apply either: a line typed by hand goes out as
+/// typed, because the alternative is a launcher that silently drops part of
+/// what a player wrote.
 pub fn launch_tokens(profile: &PlayerProfile, game: Game) -> Vec<String> {
+    if let Some(line) = profile.tokens_override.as_deref() {
+        return crate::launch::split_args(line);
+    }
+
     let mut args: Vec<String> = Vec::new();
     let mut set = |name: &str, value: String| {
         args.push("+set".to_string());
@@ -377,6 +402,16 @@ pub fn save_profile(
     let profile = validate(profile)?;
 
     let paths = state.paths()?;
+    // --- slice: profiles polish ---
+    // And checked against the command line this client would start with, which
+    // needs the record and the settings and so cannot live inside `validate`.
+    check_line_budget(
+        &paths,
+        &state.settings()?,
+        &clients::read_record(&paths, &client_id)?,
+        &profile,
+    )?;
+
     let book = edit_book(&state, &paths, &client_id, move |book| {
         if profile.id.is_empty() {
             if book.profiles.len() >= MAX_PROFILES {
@@ -586,7 +621,116 @@ fn validate(profile: PlayerProfile) -> Result<PlayerProfile> {
         color1: profile.color1,
         color2: profile.color2,
         char_color: profile.char_color,
+        tokens_override: clean_tokens(profile.tokens_override.as_deref())?,
     })
+}
+
+/// --- slice: profiles polish ---
+/// Longest hand-written token line, in bytes of UTF-8.
+///
+/// Nine cvars with a long nickname and two long hilt names come to about two
+/// hundred bytes, so this leaves room for a line more than twice that and
+/// still stops a paste of a whole configuration file from reaching a command
+/// line.
+///
+/// Not the engine's own number and deliberately well under it. The engine
+/// counts `MAX_STRING_CHARS = 1024` against the *whole* command line, this
+/// line included but also the three roots, `fs_game`, the **Extra launch
+/// arguments** setting and the client's own argument field. A field limit of
+/// 1024 would therefore have promised a line the engine cannot carry. What
+/// answers for the budget is [`check_line_budget`]; this limit only keeps one
+/// field from being pasted full of a configuration file.
+const MAX_TOKENS_LEN: usize = 512;
+
+/// Checks the hand-written token line and drops an empty one back to `None`.
+///
+/// The gate is [`crate::launch::split_args`] itself: the line is split exactly
+/// as the launcher will split it before handing it to the process, and what
+/// the split says is what the answer is judged on. Three refusals:
+///
+/// - **A line break.** It opens a console segment of its own, the same reason
+///   [`clean`] refuses one in a nickname.
+/// - **An odd number of double quotes.** `split_args` treats the opening quote
+///   as «everything after this is one token», so an unterminated quote quietly
+///   swallows the rest of the line — including the `+set` that follows it.
+/// - **A line that splits into nothing.** Quotes and spaces alone are not a
+///   command line, and a profile holding one would launch bare while the form
+///   showed a line that is not empty. `""` splits into one *empty* token
+///   rather than into none, so the test is that no token has any content —
+///   `+set name ""`, which deliberately blanks a cvar, still passes.
+///
+/// Nothing else is checked. The line is the escape hatch for a cvar the form
+/// has no field for, and a launcher that vetted every token would be a
+/// launcher with a second, secret list of what a profile may set. The engine's
+/// own rule still holds on the other side: `Com_StartupVariable` keeps the
+/// **last** `+set` of a cvar, so a line that names one twice ends on the
+/// second.
+fn clean_tokens(line: Option<&str>) -> Result<Option<String>> {
+    let Some(line) = line.map(str::trim).filter(|line| !line.is_empty()) else {
+        return Ok(None);
+    };
+    if line.len() > MAX_TOKENS_LEN {
+        return Err(AppError::InvalidInput(format!(
+            "the token line is longer than {MAX_TOKENS_LEN} bytes of UTF-8"
+        )));
+    }
+    if line.contains('\n') || line.contains('\r') {
+        return Err(AppError::InvalidInput(
+            "the token line cannot hold a line break".into(),
+        ));
+    }
+    if line.matches('"').count() % 2 != 0 {
+        return Err(AppError::InvalidInput(
+            "the token line has a double quote that is never closed".into(),
+        ));
+    }
+    if crate::launch::split_args(line)
+        .iter()
+        .all(|token| token.is_empty())
+    {
+        return Err(AppError::InvalidInput(
+            "the token line holds no argument".into(),
+        ));
+    }
+    Ok(Some(line.to_string()))
+}
+
+/// --- slice: profiles polish ---
+/// Refuses a profile whose tokens would push this client's command line past
+/// what the engine reads.
+///
+/// The check [`MAX_TOKENS_LEN`] cannot make. That one bounds a field; this one
+/// bounds the line the field ends up in, next to the roots of the client, the
+/// **Extra launch arguments** setting and the client's own argument field —
+/// one buffer, `MAX_STRING_CHARS`, and several writers into it. Past the
+/// budget the engine does not complain and does not truncate at a token
+/// boundary: `Q_strcat` simply stops appending, so the tail of the line is
+/// gone and the log says nothing. See [`crate::launch::line_budget`] for what
+/// is counted.
+///
+/// A refusal rather than a warning, because the player is standing in front of
+/// the form that wrote the line, which is the one moment it can be shortened.
+/// The launch keeps its own WARN for the line that grew past the budget from
+/// the other side — a longer game data folder, an argument field edited later.
+///
+/// The measurement is a floor, so a refusal here is always a line the engine
+/// would really have cut.
+fn check_line_budget(
+    paths: &DataPaths,
+    settings: &crate::settings::Settings,
+    client: &clients::Client,
+    profile: &PlayerProfile,
+) -> Result<()> {
+    let tokens = launch_tokens(profile, client.game);
+    let budget = crate::launch::line_budget(paths, settings, client, &tokens);
+    if budget.is_past() {
+        return Err(AppError::InvalidInput(format!(
+            "the command line of {} would be {} bytes and the engine reads {}: \
+             shorten the token line or the launch arguments of the client",
+            client.name, budget.bytes, budget.limit
+        )));
+    }
+    Ok(())
 }
 
 /// The form a value has to keep on top of the rules of the command line.
@@ -719,6 +863,7 @@ mod tests {
             color1: None,
             color2: None,
             char_color: None,
+            tokens_override: None,
         }
     }
 
@@ -749,6 +894,7 @@ mod tests {
             color1: Some(0),
             color2: Some(5),
             char_color: Some(CharColor { red: 255, green: 128, blue: 0 }),
+            tokens_override: None,
         };
 
         assert_eq!(
@@ -765,6 +911,139 @@ mod tests {
                 "+set", "char_color_blue", "0",
             ]
         );
+    }
+
+    // --- slice: profiles polish ---
+
+    #[test]
+    fn a_hand_written_line_replaces_the_one_the_fields_build() {
+        let mut edited = profile("Duel");
+        edited.nickname = Some("Kyle".to_string());
+        edited.model = Some("kyle/red".to_string());
+
+        // Built from the fields while the override is empty.
+        assert_eq!(
+            launch_tokens(&edited, Game::JediAcademy),
+            ["+set", "name", "Kyle", "+set", "model", "kyle/red"]
+        );
+
+        // And replaced whole once the player edits the line: the model the
+        // form still shows writes no token any more.
+        edited.tokens_override = Some("+set name \"Ben Kenobi\" +set cg_fov 97".to_string());
+        assert_eq!(
+            launch_tokens(&edited, Game::JediAcademy),
+            ["+set", "name", "Ben Kenobi", "+set", "cg_fov", "97"]
+        );
+    }
+
+    #[test]
+    fn clearing_the_line_brings_the_fields_back() {
+        // **Reset to fields** sends an empty string rather than a null, and
+        // the gate turns it back into «this profile has no line of its own».
+        let mut edited = profile("Duel");
+        edited.nickname = Some("Kyle".to_string());
+        edited.tokens_override = Some("   ".to_string());
+
+        let stored = validate(edited).expect("a blank line is not a refusal");
+        assert_eq!(stored.tokens_override, None);
+        assert_eq!(
+            launch_tokens(&stored, Game::JediAcademy),
+            ["+set", "name", "Kyle"]
+        );
+    }
+
+    #[test]
+    fn a_hand_written_line_keeps_the_hilts_of_a_game_that_has_none() {
+        // The rule that drops `saber1` for Jedi Outcast is about a line the
+        // launcher builds. This one the player wrote, and a launcher that
+        // quietly deleted half of it would be worse than one that passes an
+        // ignored cvar to the engine.
+        let mut edited = profile("Duel");
+        edited.tokens_override = Some("+set saber1 single_1".to_string());
+
+        assert_eq!(
+            launch_tokens(&edited, Game::JediOutcast),
+            ["+set", "saber1", "single_1"]
+        );
+    }
+
+    #[test]
+    fn a_broken_token_line_is_refused() {
+        let refused = |line: &str| {
+            let mut edited = profile("Duel");
+            edited.tokens_override = Some(line.to_string());
+            validate(edited).expect_err(&format!("{line:?} should be refused"))
+        };
+
+        // An unterminated quote swallows every `+set` after it.
+        refused("+set name \"Ben");
+        // A line break opens a console segment of its own.
+        refused("+set name Ben\n+quit");
+        // Quotes around nothing are not a command line.
+        refused("\"\"");
+        refused(&format!("+set name {}", "a".repeat(MAX_TOKENS_LEN)));
+
+        // And the ordinary line passes, quotes and repeated cvar included:
+        // the engine keeps the last `+set` of a name, which is the player's
+        // own business.
+        let mut fine = profile("Duel");
+        fine.tokens_override = Some("  +set name \"Ben Kenobi\" +set name Ben  ".to_string());
+        let stored = validate(fine).expect("a well formed line passes");
+        assert_eq!(
+            stored.tokens_override.as_deref(),
+            Some("+set name \"Ben Kenobi\" +set name Ben"),
+            "the line is trimmed and otherwise kept as written"
+        );
+    }
+
+    /// A client whose only interesting part is what it spends of the command
+    /// line: the id decides the three roots, the argument field is the writer
+    /// the test moves.
+    fn client_record(launch_args: &str) -> clients::Client {
+        clients::Client {
+            id: "duel".to_string(),
+            name: "Duel".to_string(),
+            engine_id: "openjk".to_string(),
+            game: Game::JediAcademy,
+            engine_version: None,
+            engine_installed_at: None,
+            engine_published_at: None,
+            fs_game: None,
+            launch_args: launch_args.to_string(),
+            created_at: "2026-09-12T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn the_token_line_is_measured_against_the_whole_command_line() {
+        // The field limit answers for one field. The engine's `MAX_STRING_CHARS`
+        // answers for the line that field lands in, and the same 400 bytes fit
+        // one client and overflow another.
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        let settings = crate::settings::Settings::default();
+
+        let mut edited = profile("Duel");
+        edited.tokens_override = Some(format!("+set name {}", "a".repeat(400)));
+        let edited = validate(edited).expect("400 bytes fit the field");
+
+        check_line_budget(&paths, &settings, &client_record(""), &edited)
+            .expect("the roots of a client leave room for this line");
+
+        // The same line, and a client that has already spent most of the
+        // buffer on its own arguments: one budget, several writers.
+        let loaded = client_record(&format!("+set cg_hud {}", "b".repeat(600)));
+        let refused = check_line_budget(&paths, &settings, &loaded, &edited)
+            .expect_err("a line the engine would cut is refused");
+        assert!(
+            matches!(refused, AppError::InvalidInput(_)),
+            "a refusal the form can show: {refused:?}"
+        );
+
+        // And the profile that writes no tokens at all cannot be the one that
+        // overflows: what is left is the client's own doing.
+        check_line_budget(&paths, &settings, &loaded, &profile("Empty"))
+            .expect("an empty profile adds nothing to the line");
     }
 
     #[test]
@@ -987,6 +1266,7 @@ mod tests {
                 color1: Some(2),
                 color2: Some(4),
                 char_color: Some(CharColor { red: 1, green: 2, blue: 3 }),
+                tokens_override: Some("+set name Ben".to_string()),
             }],
             default_profile_id: Some("duel".to_string()),
         };
@@ -999,6 +1279,7 @@ mod tests {
         let text = fs::read_to_string(book_file(&paths, "duel")).expect("the file");
         assert!(text.contains("\"defaultProfileId\""), "{text}");
         assert!(text.contains("\"charColor\""), "{text}");
+        assert!(text.contains("\"tokensOverride\""), "{text}");
     }
 
     #[test]

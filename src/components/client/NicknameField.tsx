@@ -4,8 +4,9 @@ import { useTranslation } from "react-i18next";
 import { useErrorText } from "../../i18n/errors";
 import { cn } from "../../lib/format";
 import { useSettings, useUpdateSettings } from "../../lib/queries";
-import { Button, Input, Select } from "../ui";
+import { Button, Select } from "../ui";
 import { ColoredNickname } from "./ColoredNickname";
+import { ColoredNicknameInput } from "./ColoredNicknameInput";
 
 /**
  * Longest nickname the field accepts, in **bytes of UTF-8**.
@@ -67,7 +68,12 @@ export function NicknameField({
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-center gap-8">
-        <Input
+        {/* The letters are coloured in the field itself and not only in the
+            preview below: a player writing `^1Kyle^7 the ^2Grey` is composing
+            a coloured name, and reading the result two rows away is reading
+            it somewhere else. The preview stays for the name without its
+            markup, which is the other half of the question. */}
+        <ColoredNicknameInput
           id={id}
           className="flex-1 min-w-0"
           value={value}
@@ -76,9 +82,9 @@ export function NicknameField({
           // paste without ever cutting a nickname the server would accept.
           // The byte counter below is what holds the real limit.
           maxLength={MAX_NICKNAME_BYTES}
-          spellCheck={false}
+          invalid={tooLong}
           placeholder={t("clientWindow.profiles.form.nicknamePlaceholder")}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={onChange}
         />
         <Button
           size="sm"
