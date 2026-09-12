@@ -71,6 +71,21 @@ const MAX_NICKNAME_LEN: usize = 36;
 /// buffer like the one above.
 const MAX_VALUE_LEN: usize = 64;
 
+/// --- slice: assembled skins ---
+/// Longest skin name the engine keeps, **in bytes of UTF-8**: one part of an
+/// assembled model, or the variant of an ordinary skin.
+///
+/// `SKIN_LENGTH` of the engine (`codemp/ui/ui_local.h:258` of OpenJK
+/// `1a6a6434`), the size of the `skinName_t` buffer the character menu fills
+/// with `Q_strncpyz(…, skinname, SKIN_LENGTH)` for each of the three rows
+/// (`codemp/ui/ui_main.c:9762`, `:9772` and `:9782`). A longer name is not
+/// refused there, it is cut: `Q_strncpyz` copies what fits and terminates, so
+/// the menu would go on to build a value naming a file no archive holds.
+///
+/// The rest of the value stays on `MAX_VALUE_LEN`, which is the buffer the
+/// cvar itself lives in: this bounds one name inside that value, not the value.
+const MAX_SKIN_NAME_LEN: usize = 16;
+
 /// Most profiles one client may hold. High enough that nobody meets it and low
 /// enough that a broken writer cannot fill a disk.
 const MAX_PROFILES: usize = 64;
@@ -784,10 +799,12 @@ impl Shape {
 /// legs. A fourth part would end up inside the name of the third.
 ///
 /// Each part passes [`is_file_part`] on its own, which is what keeps a `..` or
-/// a slash out of a name the launcher turns into a file in its icon cache.
+/// a slash out of a name the launcher turns into a file in its icon cache, and
+/// each is bounded on its own by [`MAX_SKIN_NAME_LEN`] rather than only
+/// together by the length of the whole value.
 fn fits_skin(skin: &str) -> bool {
     if !skin.contains('|') {
-        return is_file_part(skin);
+        return fits_skin_name(skin);
     }
     let mut parts = skin.split('|');
     let (Some(head), Some(torso), Some(legs), None) =
@@ -795,14 +812,24 @@ fn fits_skin(skin: &str) -> bool {
     else {
         return false;
     };
-    is_file_part(head)
-        && is_file_part(torso)
-        && is_file_part(legs)
+    fits_skin_name(head)
+        && fits_skin_name(torso)
+        && fits_skin_name(legs)
         // `strstr` in the engine is case sensitive, so `Head_A1|…` is a value
         // the game would not take apart.
         && skin.contains("head")
         && skin.contains("torso")
         && skin.contains("lower")
+}
+
+/// --- slice: assembled skins ---
+/// Whether one skin name fits the buffer the engine keeps it in.
+///
+/// [`is_file_part`] plus [`MAX_SKIN_NAME_LEN`], which is the pair every name
+/// after the `/` goes by: the variant of an ordinary skin, and each of the
+/// three parts of an assembled one.
+fn fits_skin_name(value: &str) -> bool {
+    value.len() <= MAX_SKIN_NAME_LEN && is_file_part(value)
 }
 
 /// Whether the value is one part of a name the game holds a file under.
@@ -1257,6 +1284,34 @@ mod tests {
         for value in bad {
             let mut wrong = profile("Duel");
             wrong.model = Some(value.to_string());
+            assert!(validate(wrong).is_err(), "{value:?} is not a model");
+        }
+    }
+
+    #[test]
+    fn a_skin_name_longer_than_the_engine_buffer_is_refused() {
+        // One name, not the whole value: every case here is far short of
+        // `MAX_VALUE_LEN`, so what refuses it is `MAX_SKIN_NAME_LEN`.
+        let fits = "head_aaaaaaaaaaa";
+        let over = "head_aaaaaaaaaaaa";
+        assert_eq!(fits.len(), MAX_SKIN_NAME_LEN);
+        assert_eq!(over.len(), MAX_SKIN_NAME_LEN + 1);
+
+        let mut edge = profile("Duel");
+        edge.model = Some(format!("jedi_hm/{fits}|torso_a1|lower_a1"));
+        assert!(validate(edge).is_ok(), "a name of the buffer size is a model");
+
+        // Each of the three rows is measured, and so is the variant of an
+        // ordinary skin.
+        for value in [
+            format!("jedi_hm/{over}|torso_a1|lower_a1"),
+            format!("jedi_hm/head_a1|torso_{}|lower_a1", "b".repeat(11)),
+            format!("jedi_hm/head_a1|torso_a1|lower_{}", "c".repeat(11)),
+            format!("jedi_hf/{}", "d".repeat(MAX_SKIN_NAME_LEN + 1)),
+        ] {
+            assert!(value.len() <= MAX_VALUE_LEN, "{value:?} is short enough");
+            let mut wrong = profile("Duel");
+            wrong.model = Some(value.clone());
             assert!(validate(wrong).is_err(), "{value:?} is not a model");
         }
     }
