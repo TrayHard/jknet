@@ -897,12 +897,77 @@ export interface PlayerModel {
   value: string;
   /** Folder under `models/players/`. */
   model: string;
-  /** Suffix of `model_<variant>.skin`. */
+  /**
+   * What the engine calls the skin name: the suffix of
+   * `model_<variant>.skin`, or the three parts joined by `|`.
+   */
   variant: string;
   /** Absolute path of the cached icon, or `null` when it could not be read. */
   icon: string | null;
+  /**
+   * --- slice: assembled skins ---
+   * The three rows this model is assembled from, or `null` for an ordinary
+   * skin. The presence of this field is the «assembled» flag.
+   */
+  parts: ModelParts | null;
   /** The archive the skin was found in. */
   source: string;
+}
+
+// --- slice: assembled skins ---
+
+/** `src-tauri/src/appearance.rs`: one head, torso or pair of legs. */
+export interface ModelPart {
+  /** The name inside the cvar and the `.skin` it names: `head_a1`. */
+  id: string;
+  /** Absolute path of the cached icon, or `null` when it could not be read. */
+  icon: string | null;
+}
+
+/** The three rows an assembled model offers, each already sorted by name. */
+export interface ModelParts {
+  heads: ModelPart[];
+  torsos: ModelPart[];
+  legs: ModelPart[];
+}
+
+/** The three parts of an assembled model, taken out of a `model` value. */
+export interface AssembledSkin {
+  model: string;
+  head: string;
+  torso: string;
+  legs: string;
+}
+
+/**
+ * Takes an assembled `model` value apart, or answers `null` for any other.
+ *
+ * The engine's own reader, `UI_GetCharacterCvars`
+ * (`codemp/ui/ui_main.c:5010` and below of OpenJK `1a6a6434`): cut at the
+ * **last** `/`, then take the rest apart at two `|`. An ordinary `kyle/red`
+ * carries no `|` and is not an assembled skin.
+ */
+export function parseAssembledSkin(value: string | null): AssembledSkin | null {
+  if (value === null) return null;
+  const slash = value.lastIndexOf("/");
+  if (slash < 0) return null;
+  const model = value.slice(0, slash);
+  const parts = value.slice(slash + 1).split("|");
+  if (parts.length !== 3) return null;
+  const [head, torso, legs] = parts;
+  if (model === "" || head === "" || torso === "" || legs === "") return null;
+  return { model, head, torso, legs };
+}
+
+/**
+ * Puts an assembled `model` value back together.
+ *
+ * `UI_UpdateCharacterCvars` (`codemp/ui/ui_main.c:4981`) writes
+ * `<model>/<head>|<torso>|<legs>`, and the order is read back by position, so
+ * it is not the row prefixes that carry the meaning.
+ */
+export function assembledSkinValue(skin: AssembledSkin): string {
+  return `${skin.model}/${skin.head}|${skin.torso}|${skin.legs}`;
 }
 
 /** `src-tauri/src/appearance.rs`: one saber hilt a profile may name. */

@@ -35,6 +35,38 @@
 //! The game folder is separate from the client's, so the game is part of the
 //! path: `kyle/default` is a different picture in the two games.
 //!
+//! ## Assembled models
+//!
+//! Six folders of `assets1.pk3` hold a jedi the player builds out of three
+//! parts instead of picking whole. They are marked by a `PlayerChoice.txt`
+//! beside the model, which is what `UI_BuildPlayerModel_List`
+//! (`codemp/ui/ui_main.c:9689` of OpenJK `1a6a6434`) looks for, and their parts
+//! are `.skin` files named by the row they fill: `head_a1.skin`,
+//! `torso_a1.skin`, `lower_a1.skin`. A part is offered on the same terms as a
+//! whole skin — only with an `icon_<part>` entry beside it — and a folder
+//! missing a whole row is not offered at all, which is the engine's own
+//! `iSkinParts != 7` (`ui_main.c:9787`).
+//!
+//! The cvar takes the three parts joined by `|` after the model:
+//! `jedi_hm/head_a1|torso_a1|lower_a1`. `UI_UpdateCharacterCvars`
+//! (`ui_main.c:4981`) writes exactly that, and `CG_RegisterClientModelname`
+//! (`codemp/cgame/cg_players.c:491-497`) reads it back: a value carrying a `|`
+//! together with `head`, `torso` and `lower` loads
+//! `models/players/<model>/|<parts>` rather than one `model_<variant>.skin`.
+//!
+//! Part icons go into the same cache under the same rule, because the row
+//! prefix is part of the name the game holds the picture under —
+//! `icon_head_a1.jpg`, not `icon_a1.jpg`:
+//!
+//! ```text
+//! cache\skins\ja\jedi_hm__head_a1.jpg
+//! ```
+//!
+//! The colours a `PlayerChoice.txt` also carries are not read. They set
+//! `char_color_red`, `char_color_green` and `char_color_blue`
+//! (`ui_main.c:5003-5005`), which a player profile already owns as three
+//! sliders of its own.
+//!
 //! ## Hilts
 //!
 //! A hilt is a named block in `ext_data/sabers/*.sab`, and the block name *is*
@@ -51,7 +83,7 @@
 //! does not draw a picture either: it runs the real engine underneath the list.
 //! A 128×128 icon is what the game has, so it is what the launcher shows.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::{self, File};
 use std::io::{BufReader, Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -87,6 +119,22 @@ const STRINGS_PREFIX: &str = "strings/english/";
 /// Extensions the game reads for a skin icon, in the order it tries them.
 const ICON_EXTENSIONS: [&str; 4] = ["jpg", "jpeg", "png", "tga"];
 
+/// The file that marks a model folder as one the player assembles.
+///
+/// Lowercase, because every entry path is lowercased before it is compared.
+/// The archive spells it `playerchoice.txt` and the engine asks for
+/// `PlayerChoice.txt`; a Quake III file system is case insensitive and finds
+/// it either way.
+const PLAYERCHOICE_FILE: &str = "playerchoice.txt";
+
+/// The three rows of an assembled model, by the prefix the `.skin` files of
+/// each row carry, in the order the window draws them.
+///
+/// The engine's own three tests, `Q_stricmpn(skinname,"head_",5)` and the two
+/// beside it (`codemp/ui/ui_main.c:9753-9785`). The whole file name is the
+/// part name, prefix included: `head_a1`, and the icon is `icon_head_a1`.
+const PART_PREFIXES: [&str; 3] = ["head_", "torso_", "lower_"];
+
 /// Longest side a cached icon may have. The retail icons are 128×128; a custom
 /// skin that ships a 2048 px icon would fill the cache for a 64 px tile.
 const MAX_SIDE: u32 = 256;
@@ -111,6 +159,25 @@ const MAX_DECODE_BYTES: u64 = 64 * 1024 * 1024;
 /// Longest model or variant name the cache accepts.
 const MAX_SEGMENT_LEN: usize = 64;
 
+/// --- slice: assembled skins ---
+/// Longest skin name the engine keeps: one part of an assembled model, or the
+/// variant of an ordinary skin.
+///
+/// `SKIN_LENGTH` of the engine (`codemp/ui/ui_local.h:258` of OpenJK
+/// `1a6a6434`), the size of the `skinName_t` buffer the character menu fills
+/// with `Q_strncpyz(…, skinname, SKIN_LENGTH)` for each of the three rows
+/// (`codemp/ui/ui_main.c:9762`, `:9772` and `:9782`). A longer name is cut
+/// there rather than refused, and the value the menu then builds names a file
+/// no archive holds, so a name that does not fit is not offered here at all.
+///
+/// The model folder is not bounded by this: the engine copies it with
+/// `Q_strncpyz(species->Name, dirptr, MAX_QPATH)` (`ui_main.c:9723`), so it
+/// stays on [`MAX_SEGMENT_LEN`] with every other path segment.
+///
+/// Nothing in the retail archives meets it: the longest variant is
+/// `key_carrier` of `human_merc` at 11 bytes and the longest part is 8.
+const MAX_SKIN_NAME_LEN: usize = 16;
+
 /// Refuses a `.sab` or `.str` entry too large to be a text table.
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -122,18 +189,51 @@ const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerModel {
-    /// What goes into the cvar `model`: `kyle` or `kyle/red`.
+    /// What goes into the cvar `model`: `kyle`, `kyle/red`, or the three parts
+    /// of an assembled model, `jedi_hm/head_a1|torso_a1|lower_a1`.
     pub value: String,
     /// Folder under `models/players/`, lowercase.
     pub model: String,
-    /// Suffix of `model_<variant>.skin`, lowercase.
+    /// What the engine calls the skin name: the suffix of
+    /// `model_<variant>.skin` for an ordinary skin, and the three parts joined
+    /// by `|` for an assembled one. Lowercase.
     pub variant: String,
     /// Absolute path of the cached icon, or `null` when the picture could not
     /// be read. The window turns it into a URL with `convertFileSrc` and draws
     /// a text tile for a `null`.
+    ///
+    /// For an assembled model this is the icon of the head in [`Self::value`],
+    /// which is the picture the game itself falls back to for a three-part
+    /// skin (`codemp/cgame/cg_players.c:700-720`).
     pub icon: Option<String>,
+    /// The three rows this model is assembled from, or `null` for an ordinary
+    /// skin. The presence of this field *is* the «assembled» flag.
+    pub parts: Option<ModelParts>,
     /// The archive the skin was found in, for the log and the card.
     pub source: String,
+}
+
+/// One part of an assembled model: a head, a torso or a pair of legs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelPart {
+    /// The name the part carries inside the cvar and the `.skin` file it
+    /// names, row prefix included: `head_a1`.
+    pub id: String,
+    /// Absolute path of the cached icon, or `null` when the picture could not
+    /// be read. A part with no icon *entry* is not listed at all; this is the
+    /// narrower case of an entry that failed to decode.
+    pub icon: Option<String>,
+}
+
+/// The three rows an assembled model offers, each already filtered down to the
+/// parts that carry an icon and sorted by name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelParts {
+    pub heads: Vec<ModelPart>,
+    pub torsos: Vec<ModelPart>,
+    pub legs: Vec<ModelPart>,
 }
 
 /// One saber hilt a profile may name.
@@ -349,6 +449,10 @@ fn skin_entry(entry: &str) -> Option<(String, String)> {
     if model.is_empty() || variant.is_empty() || file.contains('/') {
         return None;
     }
+    // A name the engine's own menu would cut short. See `MAX_SKIN_NAME_LEN`.
+    if variant.len() > MAX_SKIN_NAME_LEN {
+        return None;
+    }
     Some((model.to_string(), variant.to_string()))
 }
 
@@ -368,6 +472,45 @@ fn icon_entry(entry: &str) -> Option<(String, String, String)> {
     Some((model.to_string(), variant.to_string(), extension.to_string()))
 }
 
+/// Reads `models/players/<model>/<row>_<variant>.skin` out of an entry path.
+///
+/// Returns the model folder and the whole part name, row prefix included, both
+/// lowercase. An ordinary `model_<variant>.skin` yields nothing: none of the
+/// three row prefixes is `model_`, so the two readers never claim the same
+/// entry.
+fn part_entry(entry: &str) -> Option<(String, String)> {
+    let lower = entry.replace('\\', "/").to_ascii_lowercase();
+    let rest = lower.strip_prefix(MODEL_PREFIX)?;
+    let (model, file) = rest.split_once('/')?;
+    if model.is_empty() || file.contains('/') {
+        return None;
+    }
+    let part = file.strip_suffix(".skin")?;
+    let prefix = PART_PREFIXES
+        .iter()
+        .find(|prefix| part.starts_with(**prefix))?;
+    // `head_.skin` names a row and no variant inside it. The engine would
+    // take it — it compares the prefix and nothing else — and the value it
+    // built would name a part nobody can tell from another.
+    if part.len() == prefix.len() {
+        return None;
+    }
+    // The row prefix counts: it is part of the name the engine copies into a
+    // `skinName_t`. See `MAX_SKIN_NAME_LEN`.
+    if part.len() > MAX_SKIN_NAME_LEN {
+        return None;
+    }
+    Some((model.to_string(), part.to_string()))
+}
+
+/// The model folder of a `models/players/<model>/playerchoice.txt` entry.
+fn playerchoice_entry(entry: &str) -> Option<String> {
+    let lower = entry.replace('\\', "/").to_ascii_lowercase();
+    let rest = lower.strip_prefix(MODEL_PREFIX)?;
+    let (model, file) = rest.split_once('/')?;
+    (!model.is_empty() && file == PLAYERCHOICE_FILE).then(|| model.to_string())
+}
+
 /// The value the cvar `model` takes for one model and variant.
 ///
 /// `default` is the variant the engine assumes for a name without a `/`, so
@@ -379,6 +522,17 @@ fn model_value(model: &str, variant: &str) -> String {
     } else {
         format!("{model}/{variant}")
     }
+}
+
+/// The skin name of an assembled model: the three parts joined by `|`.
+///
+/// The order is the engine's, `head|torso|lower`, and it is not free: the
+/// three names go into `ui_char_skin_head`, `ui_char_skin_torso` and
+/// `ui_char_skin_legs` in that order in `UI_GetCharacterCvars`
+/// (`codemp/ui/ui_main.c:5010` and below), which reads the value back by
+/// position and not by the row prefix each name happens to carry.
+fn assembled_variant(head: &str, torso: &str, legs: &str) -> String {
+    format!("{head}|{torso}|{legs}")
 }
 
 /// Whether a model or a variant name may become part of a file name.
@@ -536,13 +690,19 @@ fn icon_is_current(file: &Path, source: &Source) -> bool {
 // Scanning
 // ---------------------------------------------------------------------------
 
-/// What one archive holds of the two things this module looks for.
+/// What one archive holds of the things this module looks for.
 #[derive(Default)]
 struct Found {
     /// `<model>/<variant>` to the entry name of its `.skin`.
     skins: BTreeMap<String, String>,
     /// `<model>/<variant>` to the entry name of its icon and its extension.
+    /// Keyed the same way for a whole skin and for a part, because
+    /// `icon_head_a1.jpg` reads as the variant `head_a1` of its model.
     icons: BTreeMap<String, (String, String)>,
+    /// `<model>/<part>` of every `head_`, `torso_` or `lower_` `.skin`.
+    parts: BTreeSet<String>,
+    /// Model folders that carry a `playerchoice.txt`.
+    choices: BTreeSet<String>,
 }
 
 /// Reads the central directory of one archive and sorts the names it wants.
@@ -556,6 +716,14 @@ fn look_into(path: &Path) -> Result<(ZipArchive<BufReader<File>>, Found)> {
             found
                 .skins
                 .insert(format!("{model}/{variant}"), name.to_string());
+            continue;
+        }
+        if let Some((model, part)) = part_entry(name) {
+            found.parts.insert(format!("{model}/{part}"));
+            continue;
+        }
+        if let Some(model) = playerchoice_entry(name) {
+            found.choices.insert(model);
             continue;
         }
         if let Some((model, variant, extension)) = icon_entry(name) {
@@ -644,11 +812,105 @@ fn scan_models_of(
                 model: model.to_string(),
                 variant: variant.to_string(),
                 icon: icon.map(|path| path.display().to_string()),
+                parts: None,
                 source: label.clone(),
             },
         );
     }
+
+    scan_assembled_of(&mut archive, &found, source, dir, &label, skins);
     Ok(())
+}
+
+/// Adds the assembled models of one archive to the same list as its skins.
+///
+/// A model folder qualifies when it carries a `playerchoice.txt` and has at
+/// least one head, one torso and one pair of legs with an icon beside each.
+/// The engine's own gate is the same one written differently: `iSkinParts`
+/// gets a bit per row and a folder that did not collect all three is dropped
+/// (`codemp/ui/ui_main.c:9787`).
+///
+/// One archive at a time, exactly as whole skins are read: a part and its icon
+/// have to come out of the same pk3, and an archive later on the search path
+/// replaces the whole model rather than merging a row into it. That is the
+/// module's existing rule — `found.skins` and `found.icons` have always been
+/// per archive — and it costs a skin pack that ships one extra head with no
+/// `playerchoice.txt` beside it, which is not how such packs are built
+/// (**unverified**: no such pack was tried).
+fn scan_assembled_of(
+    archive: &mut ZipArchive<BufReader<File>>,
+    found: &Found,
+    source: &Source,
+    dir: &Path,
+    label: &str,
+    skins: &mut BTreeMap<String, PlayerModel>,
+) {
+    for model in &found.choices {
+        if !safe_segment(model) {
+            continue;
+        }
+        let prefix = format!("{model}/");
+        // `BTreeSet` keeps the parts of one model together and in name order,
+        // so the first of each row is the one the tile opens on.
+        let mut rows: [Vec<ModelPart>; PART_PREFIXES.len()] = Default::default();
+        let of_this_model = found
+            .parts
+            .range(prefix.clone()..)
+            .take_while(|key| key.starts_with(&prefix));
+        for key in of_this_model {
+            let part = &key[prefix.len()..];
+            let Some(row) = PART_PREFIXES
+                .iter()
+                .position(|candidate| part.starts_with(candidate))
+            else {
+                continue;
+            };
+            // The rule of the game's own menu, the same one whole skins go by.
+            let Some((entry, extension)) = found.icons.get(key) else {
+                continue;
+            };
+            if !safe_segment(part) {
+                continue;
+            }
+            let icon = match cached_icon(archive, source, dir, model, part, entry, extension) {
+                Ok(icon) => icon,
+                Err(e) => {
+                    log::warn!("cannot extract the icon of {key} from {label}: {e}");
+                    None
+                }
+            };
+            rows[row].push(ModelPart {
+                id: part.to_string(),
+                icon: icon.map(|path| path.display().to_string()),
+            });
+        }
+
+        let [heads, torsos, legs] = rows;
+        let (Some(head), Some(torso), Some(leg)) = (heads.first(), torsos.first(), legs.first())
+        else {
+            // A row with nothing in it is a model the game does not offer
+            // either, and offering two rows of three would build a value the
+            // engine reads as an ordinary skin that does not exist.
+            continue;
+        };
+        let variant = assembled_variant(&head.id, &torso.id, &leg.id);
+        let entry = PlayerModel {
+            value: format!("{model}/{variant}"),
+            model: model.clone(),
+            variant,
+            icon: head.icon.clone(),
+            parts: Some(ModelParts {
+                heads: heads.clone(),
+                torsos: torsos.clone(),
+                legs: legs.clone(),
+            }),
+            source: label.to_string(),
+        };
+        // A key no ordinary variant can take, so a model has one assembled
+        // tile however its rows are filled and a later archive replaces that
+        // tile instead of adding a second one. `safe_segment` refuses `|`.
+        skins.insert(format!("{model}/|"), entry);
+    }
 }
 
 /// The cached icon of one skin, extracted if the cache has nothing current.
@@ -970,7 +1232,11 @@ pub async fn list_player_models(
 
     remember(&MODEL_CACHE, &client_id, &signature, &found);
     allow_icons(&app, &found);
-    log::info!("client {client_id}: {} skin(s)", found.len());
+    let assembled = found.iter().filter(|model| model.parts.is_some()).count();
+    log::info!(
+        "client {client_id}: {} skin(s), {assembled} of them assembled",
+        found.len()
+    );
     Ok(found)
 }
 
@@ -1023,11 +1289,26 @@ fn allow_icons(app: &AppHandle, models: &[PlayerModel]) {
     use tauri::Manager;
 
     let scope = app.asset_protocol_scope();
-    for icon in models.iter().filter_map(|model| model.icon.as_deref()) {
+    for icon in models.iter().flat_map(icons_of) {
         if let Err(e) = scope.allow_file(icon) {
             log::warn!("cannot serve {icon}: {e}");
         }
     }
+}
+
+/// Every cached picture of one entry: the tile, and the three rows of parts
+/// behind it when the model is one the player assembles. The part icons need
+/// the same per-file permission as the tile, because the panel draws them.
+fn icons_of(model: &PlayerModel) -> impl Iterator<Item = &str> {
+    let parts = model.parts.iter().flat_map(|parts| {
+        parts
+            .heads
+            .iter()
+            .chain(&parts.torsos)
+            .chain(&parts.legs)
+            .filter_map(|part| part.icon.as_deref())
+    });
+    model.icon.as_deref().into_iter().chain(parts)
 }
 
 #[cfg(test)]
@@ -1129,6 +1410,272 @@ mod tests {
         assert_eq!(icon_entry("models/players/kyle/icon_.jpg"), None);
         assert_eq!(icon_entry("models/players/kyle/kyle.jpg"), None);
         assert_eq!(icon_entry("models/players/kyle/icon_red.txt"), None);
+    }
+
+    // --- slice: assembled skins ---
+
+    #[test]
+    fn an_entry_path_names_one_part_of_an_assembled_model() {
+        assert_eq!(
+            part_entry("models/players/jedi_hm/head_a1.skin"),
+            Some(("jedi_hm".into(), "head_a1".into()))
+        );
+        assert_eq!(
+            part_entry("MODELS\\PLAYERS\\Jedi_TF\\Lower_D1.skin"),
+            Some(("jedi_tf".into(), "lower_d1".into()))
+        );
+        assert_eq!(
+            part_entry("models/players/jedi_hm/torso_g1.skin"),
+            Some(("jedi_hm".into(), "torso_g1".into()))
+        );
+        // A whole skin belongs to the other reader, and nothing else is a part.
+        assert_eq!(part_entry("models/players/jedi_hm/model_siege.skin"), None);
+        assert_eq!(part_entry("models/players/jedi_hm/head_.skin"), None);
+        assert_eq!(part_entry("models/players/jedi_hm/hips_01.png"), None);
+        assert_eq!(part_entry("models/players/jedi_hm/sub/head_a1.skin"), None);
+
+        assert_eq!(
+            playerchoice_entry("models/players/jedi_hm/playerchoice.txt"),
+            Some("jedi_hm".into())
+        );
+        assert_eq!(
+            playerchoice_entry("MODELS/PLAYERS/jedi_hf/PlayerChoice.txt"),
+            Some("jedi_hf".into())
+        );
+        assert_eq!(playerchoice_entry("models/players/playerchoice.txt"), None);
+        assert_eq!(playerchoice_entry("models/players/kyle/sounds.cfg"), None);
+    }
+
+    #[test]
+    fn a_skin_name_longer_than_the_engine_buffer_is_not_offered() {
+        let part_fits = "head_aaaaaaaaaaa";
+        let part_over = "head_aaaaaaaaaaaa";
+        assert_eq!(part_fits.len(), MAX_SKIN_NAME_LEN);
+        assert_eq!(part_over.len(), MAX_SKIN_NAME_LEN + 1);
+        assert_eq!(
+            part_entry(&format!("models/players/jedi_hm/{part_fits}.skin")),
+            Some(("jedi_hm".into(), part_fits.into()))
+        );
+        assert_eq!(
+            part_entry(&format!("models/players/jedi_hm/{part_over}.skin")),
+            None
+        );
+
+        // The variant of an ordinary skin is measured the same way, and the
+        // `model_` prefix of the file name is not part of it.
+        let fits = "b".repeat(MAX_SKIN_NAME_LEN);
+        let over = "c".repeat(MAX_SKIN_NAME_LEN + 1);
+        assert_eq!(
+            skin_entry(&format!("models/players/kyle/model_{fits}.skin")),
+            Some(("kyle".into(), fits.clone()))
+        );
+        assert_eq!(
+            skin_entry(&format!("models/players/kyle/model_{over}.skin")),
+            None
+        );
+
+        // The model folder keeps the longer bound of every other path segment.
+        let folder = "e".repeat(MAX_SKIN_NAME_LEN + 1);
+        assert_eq!(
+            skin_entry(&format!("models/players/{folder}/model_red.skin")),
+            Some((folder, "red".into()))
+        );
+    }
+
+    #[test]
+    fn the_three_parts_are_joined_the_way_the_engine_reads_them_back() {
+        // `UI_UpdateCharacterCvars` writes `%s/%s|%s|%s` and
+        // `UI_GetCharacterCvars` reads the three back by position.
+        assert_eq!(
+            assembled_variant("head_a1", "torso_a1", "lower_a1"),
+            "head_a1|torso_a1|lower_a1"
+        );
+    }
+
+    /// A model folder shaped like the retail ones, in as few entries as the
+    /// rules allow.
+    fn assembled_pk3(path: &Path, extra: &[(&str, Vec<u8>)]) {
+        let icon = || picture(128, 128, ImageFormat::Jpeg);
+        let mut entries: Vec<(&str, Vec<u8>)> = vec![
+            ("models/players/jedi_hm/playerchoice.txt", b"x".to_vec()),
+            ("models/players/jedi_hm/head_a1.skin", b"hips,x".to_vec()),
+            ("models/players/jedi_hm/icon_head_a1.jpg", icon()),
+            ("models/players/jedi_hm/head_b1.skin", b"hips,x".to_vec()),
+            ("models/players/jedi_hm/icon_head_b1.jpg", icon()),
+            ("models/players/jedi_hm/torso_a1.skin", b"hips,x".to_vec()),
+            ("models/players/jedi_hm/icon_torso_a1.jpg", icon()),
+            ("models/players/jedi_hm/lower_a1.skin", b"hips,x".to_vec()),
+            ("models/players/jedi_hm/icon_lower_a1.jpg", icon()),
+        ];
+        entries.extend(extra.iter().map(|(name, bytes)| (*name, bytes.clone())));
+        write_pk3(path, &entries);
+    }
+
+    #[test]
+    fn a_folder_with_a_playerchoice_becomes_one_assembled_tile() {
+        let temp = TempDir::new().expect("temp dir");
+        let pk3 = temp.path().join("assets1.pk3");
+        assembled_pk3(
+            &pk3,
+            &[
+                // The whole skin of the same folder stays a tile of its own.
+                ("models/players/jedi_hm/model_siege.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_siege.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
+                // A part with no icon is not a part the player picks, the same
+                // rule that governs a whole skin.
+                ("models/players/jedi_hm/torso_g1.skin", b"hips,x".to_vec()),
+            ],
+        );
+
+        let dir = temp.path().join("cache");
+        let models = scan_models(&[source_of(&pk3)], &dir).expect("the scan");
+        let values: Vec<&str> = models.iter().map(|model| model.value.as_str()).collect();
+        assert_eq!(values, ["jedi_hm/siege", "jedi_hm/head_a1|torso_a1|lower_a1"]);
+
+        let assembled = models.last().expect("the assembled tile");
+        assert_eq!(assembled.model, "jedi_hm");
+        assert_eq!(assembled.variant, "head_a1|torso_a1|lower_a1");
+        let parts = assembled.parts.as_ref().expect("the three rows");
+        let ids = |row: &[ModelPart]| {
+            row.iter()
+                .map(|part| part.id.clone())
+                .collect::<Vec<String>>()
+        };
+        assert_eq!(ids(&parts.heads), ["head_a1", "head_b1"]);
+        assert_eq!(ids(&parts.torsos), ["torso_a1"], "torso_g1 has no icon");
+        assert_eq!(ids(&parts.legs), ["lower_a1"]);
+        // The tile wears the head of its own value, which is the picture the
+        // game falls back to for a three-part skin.
+        assert_eq!(
+            assembled.icon.as_deref(),
+            parts.heads[0].icon.as_deref(),
+            "the tile shows the head it names"
+        );
+        assert!(dir.join("jedi_hm__head_a1.jpg").is_file());
+        assert!(dir.join("jedi_hm__lower_a1.jpg").is_file());
+        // The whole skin beside it is not an assembled one.
+        assert!(models[0].parts.is_none());
+    }
+
+    #[test]
+    fn a_model_missing_a_whole_row_is_not_offered_assembled() {
+        // The engine's own `iSkinParts != 7`: two rows out of three build a
+        // value that names a skin the game cannot load.
+        let temp = TempDir::new().expect("temp dir");
+        let pk3 = temp.path().join("assets1.pk3");
+        write_pk3(
+            &pk3,
+            &[
+                ("models/players/jedi_hm/playerchoice.txt", b"x".to_vec()),
+                ("models/players/jedi_hm/head_a1.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_head_a1.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
+                ("models/players/jedi_hm/torso_a1.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_torso_a1.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
+                // The legs are there and their icon is not, so the row is empty.
+                ("models/players/jedi_hm/lower_a1.skin", b"hips,x".to_vec()),
+            ],
+        );
+
+        let dir = temp.path().join("cache");
+        let models = scan_models(&[source_of(&pk3)], &dir).expect("the scan");
+        assert!(models.is_empty(), "{models:?}");
+    }
+
+    #[test]
+    fn a_folder_of_parts_without_a_playerchoice_is_not_assembled() {
+        // The mark the engine goes by. Without it a folder of loose
+        // `head_*.skin` files is a model the menu never offers in parts.
+        let temp = TempDir::new().expect("temp dir");
+        let pk3 = temp.path().join("assets1.pk3");
+        assembled_pk3(&pk3, &[]);
+        let with_choice = scan_models(&[source_of(&pk3)], &temp.path().join("a")).expect("scan");
+        assert_eq!(with_choice.len(), 1);
+
+        let bare = temp.path().join("bare.pk3");
+        write_pk3(
+            &bare,
+            &[
+                ("models/players/jedi_hm/head_a1.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_head_a1.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
+                ("models/players/jedi_hm/torso_a1.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_torso_a1.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
+                ("models/players/jedi_hm/lower_a1.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_lower_a1.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
+            ],
+        );
+        let without = scan_models(&[source_of(&bare)], &temp.path().join("b")).expect("scan");
+        assert!(without.is_empty(), "{without:?}");
+    }
+
+    #[test]
+    fn a_later_archive_replaces_the_assembled_tile_rather_than_adding_one() {
+        let temp = TempDir::new().expect("temp dir");
+        let stock = temp.path().join("base").join("assets1.pk3");
+        assembled_pk3(&stock, &[]);
+        let mine = temp.path().join("home").join("zzz_jedi.pk3");
+        write_pk3(
+            &mine,
+            &[
+                ("models/players/jedi_hm/playerchoice.txt", b"x".to_vec()),
+                ("models/players/jedi_hm/head_z9.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_head_z9.png",
+                    picture(64, 64, ImageFormat::Png),
+                ),
+                ("models/players/jedi_hm/torso_z9.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_torso_z9.png",
+                    picture(64, 64, ImageFormat::Png),
+                ),
+                ("models/players/jedi_hm/lower_z9.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/icon_lower_z9.png",
+                    picture(64, 64, ImageFormat::Png),
+                ),
+            ],
+        );
+
+        let dir = temp.path().join("cache");
+        let models = scan_models(&[source_of(&stock), source_of(&mine)], &dir).expect("scan");
+        assert_eq!(models.len(), 1, "one tile per model, not two");
+        assert_eq!(models[0].value, "jedi_hm/head_z9|torso_z9|lower_z9");
+        assert!(models[0].source.ends_with("zzz_jedi.pk3"), "{}", models[0].source);
+    }
+
+    #[test]
+    fn every_part_icon_is_handed_to_the_window() {
+        // `allow_icons` permits each path it hands over one by one, so a path
+        // the panel draws and the list does not name would be refused by the
+        // asset protocol.
+        let temp = TempDir::new().expect("temp dir");
+        let pk3 = temp.path().join("assets1.pk3");
+        assembled_pk3(&pk3, &[]);
+
+        let models = scan_models(&[source_of(&pk3)], &temp.path().join("cache")).expect("scan");
+        let handed: Vec<&str> = models.iter().flat_map(icons_of).collect();
+        let parts = models[0].parts.as_ref().expect("the three rows");
+        for part in parts.heads.iter().chain(&parts.torsos).chain(&parts.legs) {
+            let icon = part.icon.as_deref().expect("a cached icon");
+            assert!(handed.contains(&icon), "{icon} is drawn and never allowed");
+        }
     }
 
     #[test]
@@ -1502,6 +2049,32 @@ dual_1
         }
         // The rule of the game's own menu, on the archive it was written for.
         assert!(!models.iter().any(|model| model.model == "x-wing"));
+
+        // --- slice: assembled skins ---
+        // The six folders of `assets1.pk3` that carry a `playerchoice.txt`.
+        let assembled: Vec<&PlayerModel> =
+            models.iter().filter(|model| model.parts.is_some()).collect();
+        let mut total = 0;
+        for model in &assembled {
+            let parts = model.parts.as_ref().expect("the three rows");
+            total += parts.heads.len() + parts.torsos.len() + parts.legs.len();
+            println!(
+                "{}: {} head(s), {} torso(s), {} leg(s) -> {}",
+                model.model,
+                parts.heads.len(),
+                parts.torsos.len(),
+                parts.legs.len(),
+                model.value
+            );
+            assert!(model.icon.is_some(), "{} has no tile icon", model.model);
+        }
+        println!("{} assembled model(s), {total} part(s)", assembled.len());
+        let names: Vec<&str> = assembled.iter().map(|model| model.model.as_str()).collect();
+        assert_eq!(
+            names,
+            ["jedi_hf", "jedi_hm", "jedi_kdm", "jedi_rm", "jedi_tf", "jedi_zf"]
+        );
+        assert_eq!(total, 84, "{names:?}");
 
         let started = Instant::now();
         let hilts = scan_hilts(&sources);
