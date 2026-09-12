@@ -514,6 +514,8 @@ pub async fn jkhub_install(
                 file_id: id,
                 client_id,
                 folder,
+                // Nothing was written, and nothing created the folder either.
+                folder_path: None,
                 outcome: JkhubInstallOutcome::External { url },
             })
         }
@@ -579,6 +581,7 @@ pub async fn jkhub_install(
         file_id: id,
         client_id,
         folder,
+        folder_path: Some(target.to_string_lossy().into_owned()),
         outcome: with_archive_path(outcome, &archive, &view.file.url),
     })
 }

@@ -96,6 +96,14 @@
     "downloading": "Pobieranie… {{received}}",
     "downloadingOf": "Pobieranie… {{received}} z {{total}}"
   },
+  "download": {
+    "fallbackTitle": "JKHub file",
+    "starting": "Asking JKHub for the archive…",
+    "unpacking": "Unpacking the archive…",
+    "installedInto": "Installed into {{client}}, folder {{folder}}",
+    "openFolder": "Open folder",
+    "answered": "Nothing installed. The file window says why and what to do."
+  },
   "install": {
     "pickClient": "Najpierw wybierz klienta powyżej: plik instaluje się do klienta.",
     "toastTitle": "Zainstalowano do: {{client}}",

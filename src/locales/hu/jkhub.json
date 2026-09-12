@@ -86,6 +86,14 @@
     "downloading": "Letöltés… {{received}}",
     "downloadingOf": "Letöltés… {{received}} / {{total}}"
   },
+  "download": {
+    "fallbackTitle": "JKHub file",
+    "starting": "Asking JKHub for the archive…",
+    "unpacking": "Unpacking the archive…",
+    "installedInto": "Installed into {{client}}, folder {{folder}}",
+    "openFolder": "Open folder",
+    "answered": "Nothing installed. The file window says why and what to do."
+  },
   "install": {
     "pickClient": "Előbb válasszon fent egy klienst: a fájl mindig egy kliensbe kerül.",
     "toastTitle": "Telepítve ide: {{client}}",
