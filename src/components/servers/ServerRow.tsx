@@ -1,4 +1,4 @@
-import { Lock, Star } from "lucide-react";
+import { Eye, EyeOff, Lock, Star } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
@@ -20,9 +20,14 @@ import { ServerName } from "./ServerName";
  * 11 px monospace a busy server writes `128/128`, and a server that publishes
  * no split writes a `?` after it. The name column is the one that gives them
  * up, because it is the only flexible one and it truncates gracefully.
+ *
+ * --- slice: servers home tweaks ---
+ * A ninth column closes the row: the eye that takes a server off the browser.
+ * It is 16 px, the width of the star that opens the row, so the two one-press
+ * marks of a row frame it rather than each finding a size of their own.
  */
 export const ROW_COLUMNS =
-  "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px";
+  "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px 16px";
 
 // --- slice: servers home tweaks ---
 /**
@@ -55,6 +60,9 @@ interface ServerRowProps {
   selected: boolean;
   onSelect: () => void;
   onToggleFavorite: () => void;
+  // --- slice: servers home tweaks ---
+  /** Takes this server off the browser, or brings it back on the Hidden tab. */
+  onToggleHidden: () => void;
 }
 
 /** One line of the server table. */
@@ -63,6 +71,7 @@ export function ServerRow({
   selected,
   onSelect,
   onToggleFavorite,
+  onToggleHidden,
 }: ServerRowProps) {
   const { t } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");
@@ -166,6 +175,34 @@ export function ServerRow({
       <span className="text-mono-xs text-fg-muted truncate" title={server.modName}>
         {server.modName}
       </span>
+
+      {/* --- slice: servers home tweaks ---
+          Hiding a server used to take selecting the row and opening the menu
+          beside **Connect**, which is three presses to say «not this one».
+          The row carries it now, at the end where the star at the other end
+          answers the opposite question. Which way it goes is the row's own
+          `hidden` flag, so the button reads **Unhide** on the Hidden tab and
+          nowhere else — the same rule the menu item follows. */}
+      <button
+        type="button"
+        title={server.hidden ? t("menu.unhide") : t("menu.hide")}
+        aria-label={server.hidden ? t("menu.unhide") : t("menu.hide")}
+        aria-pressed={server.hidden}
+        onClick={(event) => {
+          // The row underneath selects on a press, and taking a server off
+          // the list is not a way of saying «show me this one».
+          event.stopPropagation();
+          onToggleHidden();
+        }}
+        className={cn(
+          "flex items-center justify-center size-16 cursor-pointer",
+          server.hidden
+            ? "text-fg-accent hover:text-fg"
+            : "text-fg-disabled hover:text-fg-muted",
+        )}
+      >
+        {server.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+      </button>
     </div>
   );
 }
