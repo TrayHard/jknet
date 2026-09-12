@@ -79,6 +79,7 @@ import {
   useServerRefresh,
   useServerStatus,
   useSetServerFavorite,
+  useSetServerHidden,
   useSettings,
   useUpdateSettings,
 } from "../lib/queries";
@@ -108,6 +109,8 @@ export function ServersPage() {
   const cached = useCachedServers();
   const refresh = useServerRefresh();
   const setFavorite = useSetServerFavorite();
+  // --- slice: servers home tweaks --- the eye at the end of every row.
+  const setHidden = useSetServerHidden();
   const addHistory = useAddServerHistory();
   const launchClient = useLaunchClient();
   // --- slice: server actions ---
@@ -578,6 +581,14 @@ export function ServersPage() {
                         favorite: !server.favorite,
                       })
                     }
+                    // --- slice: servers home tweaks ---
+                    // The same command the menu item behind **Connect** runs.
+                    onToggleHidden={() =>
+                      setHidden.mutate({
+                        address: server.address,
+                        hidden: !server.hidden,
+                      })
+                    }
                   />
                 ))
               )}
@@ -909,6 +920,10 @@ function SortHeader({
           the values of this column are left-aligned. */}
       {cell("ping", t("columns.ping"), "justify-start")}
       {cell("mod", t("columns.mod"))}
+      {/* --- slice: servers home tweaks --- the eye column. A heading over a
+          button that says what it does on hover would only take the width the
+          rows need for the mod folder beside it. */}
+      <span />
     </div>
   );
 }

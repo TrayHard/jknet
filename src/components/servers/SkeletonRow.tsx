@@ -1,7 +1,18 @@
 import { ROW_COLUMNS } from "./ServerRow";
 
 /** Width of the grey bar in each column, so the skeleton reads as a table. */
-const BAR_WIDTHS = ["16px", "60%", "24px", "80px", "40px", "56px", "36px", "40px"];
+// --- slice: servers home tweaks --- nine bars since the eye closed the row.
+const BAR_WIDTHS = [
+  "16px",
+  "60%",
+  "24px",
+  "80px",
+  "40px",
+  "56px",
+  "36px",
+  "40px",
+  "16px",
+];
 
 /** One loading placeholder line, the SkeletonRow of the design. */
 export function SkeletonRow() {
