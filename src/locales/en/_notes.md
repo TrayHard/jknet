@@ -68,6 +68,8 @@ Everything else wraps.
 | `common:actions.seeAll` | A general «show the whole list», reused by any screen that shortens one. Do not name what is being listed — the screen that needs a specific label has its own key, as `home:topServers.seeAll` does. |
 | `home:hero.continueText` | Names two buttons of the same block: use the exact wording you gave `home:hero.connect` and `home:hero.play`, or the sentence describes buttons the player cannot find. `{{client}}` is a name the player typed. |
 | `home:hero.lastServer` | The caption over a map picture, under 20 characters. It says what the picture is, so it is a label, not a sentence. |
+| `home:hero.otherClients`, `newClient` | A button of the hero and the last line of the menu it opens. Both end in the ellipsis the launcher puts on a control that opens something instead of acting — keep it, and keep it as one character, «…». The button stands beside **Play** in a row that never wraps to a second line: two words at most. |
+| `home:hero.launch` | The mark at the right end of a client's line in that menu: pressing the line starts that client. One word, and the same one you gave `clients:engine.launch` — it is the same action on the same client. |
 | `home:topServers.favorites`, `history` | Headings of two blocks of server rows on **Home**. They name the same two things as the tabs `servers:tabs.favorites` and `servers:tabs.history` — use the same words. |
 | `servers:subtitle.*` | Parts of one line, joined with « · ». Each is a whole clause; none of them may end in a full stop. |
 | `servers:columns.players` | Abbreviation of «players» — the column is 76 px. |
