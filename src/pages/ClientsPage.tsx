@@ -438,12 +438,23 @@ function ClientCard({
   const menu = useContextMenu<Client>({
     ariaLabel: t("card.actions"),
     items: (): MenuItem[] => [
-      {
-        id: "launch",
-        label: t("engine.launch"),
-        icon: <Play size={14} />,
-        disabled: !installed || installing || isRunning || otherIsRunning,
-      },
+      // The card swaps its large button by `isRunning`, and the first line
+      // swaps with it: **Stop** while the game runs, **Launch** otherwise.
+      // Without the swap the line stood dead over a client the player came to
+      // stop. The line is not marked `danger`: stopping takes nothing away,
+      // and red in this menu belongs to **Delete** alone.
+      isRunning
+        ? {
+            id: "stop",
+            label: t("engine.stop"),
+            icon: <Square size={14} />,
+          }
+        : {
+            id: "launch",
+            label: t("engine.launch"),
+            icon: <Play size={14} />,
+            disabled: !installed || installing || otherIsRunning,
+          },
       { id: "edit", label: t("card.settings"), icon: <SettingsIcon size={14} /> },
       {
         id: "folder",
@@ -467,6 +478,7 @@ function ClientCard({
     ],
     onSelect: (id) => {
       if (id === "launch") onLaunch();
+      else if (id === "stop") onStop();
       else if (id === "edit") onEdit();
       else if (id === "folder") openFolder();
       else if (id === "default") onMakeDefault();

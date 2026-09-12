@@ -144,8 +144,14 @@ export function ServerDetails({
           <Badge tone="accent">
             {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
           </Badge>
-          {/* The mod folder is data: whatever the operator put in `fs_game`. */}
-          <Badge>{server.modName}</Badge>
+          {/* The mod folder is data: whatever the operator put in `fs_game`,
+              the same kind of string as a map name, so it is copied out of
+              here. A badge forbids selection, and the nested span takes the
+              rule back: a declaration on the child beats the inherited one,
+              the way a field inside a `select-none` label stays editable. */}
+          <Badge>
+            <span className="select-text">{server.modName}</span>
+          </Badge>
           {server.needpass ? (
             <Badge tone="danger" icon={<Lock size={12} />}>
               {t("details.password")}
