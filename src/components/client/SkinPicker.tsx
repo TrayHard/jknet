@@ -287,7 +287,6 @@ function PartRow({
   icon: string;
   onSelect: (id: string) => void;
 }) {
-  const { t } = useTranslation("clients");
   // A part the client no longer carries still stands in the value, so it keeps
   // a tile of its own: a row with nothing lit over a value that is set would
   // read as a choice the player never made.
@@ -302,45 +301,64 @@ function PartRow({
         className="flex gap-8 overflow-x-auto pb-4"
       >
         {parts.map((part) => (
-          <Tile
+          <PartTile
             key={part.id}
+            part={part}
             selected={part.id === value}
-            caption={partCaption(part.id)}
-            title={part.id}
             icon={icon}
             onSelect={() => onSelect(part.id)}
-            picture={
-              skinIconUrl(part.icon) === null ? (
-                <span className="text-label-xs text-fg-muted text-center px-4">
-                  {t("clientWindow.profiles.form.skinNoIcon")}
-                </span>
-              ) : (
-                <img
-                  src={skinIconUrl(part.icon) ?? undefined}
-                  alt=""
-                  loading="lazy"
-                  className={cn(icon, "object-cover rounded-sm")}
-                />
-              )
-            }
           />
         ))}
         {missing ? (
-          <Tile
+          <PartTile
+            part={{ id: value, icon: null }}
             selected
-            caption={partCaption(value)}
-            title={value}
             icon={icon}
             onSelect={() => onSelect(value)}
-            picture={
-              <span className="text-label-xs text-fg-muted text-center px-4">
-                {t("clientWindow.profiles.form.skinNoIcon")}
-              </span>
-            }
           />
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** One part of one row. */
+function PartTile({
+  part,
+  selected,
+  icon,
+  onSelect,
+}: {
+  part: ModelPart;
+  selected: boolean;
+  icon: string;
+  onSelect: () => void;
+}) {
+  const { t } = useTranslation("clients");
+  const url = skinIconUrl(part.icon);
+
+  return (
+    <Tile
+      selected={selected}
+      caption={partCaption(part.id)}
+      title={part.id}
+      icon={icon}
+      onSelect={onSelect}
+      picture={
+        url === null ? (
+          <span className="text-label-xs text-fg-muted text-center px-4">
+            {t("clientWindow.profiles.form.skinNoIcon")}
+          </span>
+        ) : (
+          <img
+            src={url}
+            alt=""
+            loading="lazy"
+            className={cn(icon, "object-cover rounded-sm")}
+          />
+        )
+      }
+    />
   );
 }
 
