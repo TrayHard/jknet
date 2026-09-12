@@ -1,6 +1,7 @@
 {
   "title": "Бібліотека",
   "searchPlaceholder": "Пошук за файлами",
+  "clearSearch": "Clear search",
   "browseJkhub": "Каталог JKHub",
   "addFiles": "Додати файли",
   "pickTitle": "Додати файли pk3",

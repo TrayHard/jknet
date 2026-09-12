@@ -1,6 +1,7 @@
 {
   "title": "Library",
   "searchPlaceholder": "Search files",
+  "clearSearch": "Clear search",
   "browseJkhub": "Browse JKHub",
   "addFiles": "Add files",
   "pickTitle": "Add pk3 files",

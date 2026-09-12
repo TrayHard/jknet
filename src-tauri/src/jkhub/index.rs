@@ -199,12 +199,12 @@ impl IndexedFile {
     /// The one thing it lacks is the thumbnail the listing prints, so an entry
     /// that already had one keeps it.
     ///
-    /// --- slice: jkhub catalog ---
-    /// The category of the page is a category of the site and is filed under
-    /// the launcher's section for it. `category_id` stays `0` when the file
-    /// sits outside the eight sections, and the caller drops the entry: the
-    /// front page names every new file of the site, cosmetic mods and frag
-    /// movies included.
+    /// --- slice: library polish ---
+    /// The category of the page is kept as the site printed it, so long as
+    /// the table covers it. `category_id` stays `0` when the file sits
+    /// outside the eight sections, and the caller drops the entry: the front
+    /// page names every new file of the site, cosmetic mods and frag movies
+    /// included.
     pub fn from_file(
         game: Game,
         file: &super::types::JkhubFile,
@@ -218,7 +218,7 @@ impl IndexedFile {
             author_url: file.author.as_ref().and_then(|author| author.url.clone()),
             category_id: file
                 .category_id
-                .and_then(|id| sections::id_of(game, id))
+                .filter(|id| sections::covers(game, *id))
                 .or_else(|| previous.map(|entry| entry.category_id))
                 .unwrap_or(0),
             game: file.game,
@@ -661,13 +661,22 @@ impl LoadedIndex {
     /// The counts are over the whole match, not over the page, and they ignore
     /// `category_id`: the tree has to show where else the query has answers,
     /// which is the entire point of narrowing by a category rather than
-    /// guessing one first.
+    /// guessing one first. They are keyed by the site's own category, and
+    /// `index::roll_up` adds them up the tree the screen draws.
+    ///
+    /// --- slice: library polish ---
+    /// `category_id` is either a category of the site — `28`, one gametype of
+    /// **Maps** — or a whole section of the launcher, and a section takes in
+    /// every category the table files under it. Both are one comparison
+    /// because the table answers without a tree; see
+    /// [`sections::node_id_of`].
     pub fn search(&self, request: &SearchRequest) -> SearchAnswer {
         // --- slice: jkhub catalog ---
         // The `by:` operators come out of the query first, so what is left is
         // words. An author filter is a condition and not a token: it never
         // ranks a file, it only decides whether the file is answered at all.
         let Query { tokens, authors } = parse_query(&request.query);
+        let game = self.index.game;
         let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
         let mut hits: Vec<(u8, usize)> = Vec::new();
 
@@ -683,7 +692,9 @@ impl LoadedIndex {
             let Some(rank) = rank else { continue };
             *counts.entry(file.category_id).or_default() += 1;
             if let Some(wanted) = request.category_id {
-                if file.category_id != wanted {
+                let inside = file.category_id == wanted
+                    || sections::node_id_of(game, file.category_id) == Some(wanted);
+                if !inside {
                     continue;
                 }
             }
@@ -791,14 +802,28 @@ fn newest_first(left: Option<&str>, right: Option<&str>) -> std::cmp::Ordering {
 /// somewhere under it, not that `Maps` itself holds none — it holds none by
 /// design, it is a container. So every node carries its own matches plus
 /// everything below it, and a node left at zero is one the pruned tree hides.
-pub fn roll_up(counts: &BTreeMap<u32, u32>, tree: &[JkhubCategory]) -> BTreeMap<u32, u32> {
+pub fn roll_up(
+    game: Game,
+    counts: &BTreeMap<u32, u32>,
+    tree: &[JkhubCategory],
+) -> BTreeMap<u32, u32> {
     let parents: HashMap<u32, Option<u32>> = tree
         .iter()
         .map(|entry| (entry.id, entry.parent_id))
         .collect();
     let mut rolled: BTreeMap<u32, u32> = BTreeMap::new();
     for (id, count) in counts {
-        let mut node = Some(*id);
+        // --- slice: library polish ---
+        // The counts are keyed by the site's own categories, and the rail
+        // does not draw all of them: `Audio` is one node standing in for
+        // category 38, and `Maps` stands in for the container 71 it nests
+        // the gametypes under. A count of a category with no row of its own
+        // starts at the section that speaks for it.
+        let mut node = if parents.contains_key(id) {
+            Some(*id)
+        } else {
+            sections::node_id_of(game, *id)
+        };
         let mut guard = 0;
         while let Some(current) = node {
             *rolled.entry(current).or_default() += count;
@@ -826,12 +851,18 @@ pub fn file_name(game: Game) -> String {
 /// Reads an index out of a text, saying why it is unusable.
 ///
 /// --- slice: jkhub catalog ---
-/// Whatever the document holds is filed onto the eight sections here, which
-/// is the one place every reader of an index goes through. An index crawled
-/// before the sections existed carries a file of **Free For All** under `13`
-/// and a file of **Cosmetic Mods** under `10`: the first is moved to **Maps**,
-/// the second is dropped. The index of the disk cache outlives an update of
-/// the launcher, so this is not a migration that runs once.
+/// Whatever the document holds is held to the eight sections here, which is
+/// the one place every reader of an index goes through. A file of **Cosmetic
+/// Mods** under `10` is dropped. The index of the disk cache outlives an
+/// update of the launcher, so this is not a migration that runs once.
+///
+/// --- slice: library polish ---
+/// An index written by an older build carries the id of the section instead
+/// of the id of the site's category — `71` for every map, whichever gametype
+/// it came from. Nothing is done about it: `71` is a category the site has,
+/// the file lands on the **Maps** section the same way, and the first top-up
+/// that touches the file writes the gametype back. Forcing a rebuild for it
+/// would cost every machine a hundred and fourteen requests to tidy a rail.
 pub fn parse_index(text: &str, game: Game) -> Result<CatalogIndex> {
     let mut index: CatalogIndex = serde_json::from_str(text)
         .map_err(|e| AppError::json("cannot parse a JKHub catalogue index", e))?;
@@ -1246,11 +1277,12 @@ pub async fn crawl(
 /// The map is keyed by `(leaf, page)`, so walking it in key order is walking
 /// the catalogue the way the old one-at-a-time loop did.
 ///
-/// --- slice: jkhub catalog ---
-/// An entry carries the launcher's section, not the site's category: a map of
-/// **Duel** and a map of **Siege** are both **Maps** here, which is what makes
-/// the tree eight nodes rather than twenty. The site's own category is still
-/// in the file page, and the dialog reads it there.
+/// --- slice: library polish ---
+/// An entry carries the category of the site whose listing it was read from:
+/// a map of **Duel** reads `28`, not the `71` of the **Maps** section it
+/// hangs under. Which section that is comes from the table whenever it is
+/// asked for — [`sections::node_id_of`] — and keeping the site's own answer
+/// is what lets the rail narrow to one gametype.
 fn merge_pages(
     game: Game,
     leaves: &[&JkhubCategory],
@@ -1262,14 +1294,14 @@ fn merge_pages(
         let Some(leaf) = leaves.get(leaf) else {
             continue;
         };
-        let Some(section) = sections::id_of(game, leaf.id) else {
+        if !sections::covers(game, leaf.id) {
             continue;
-        };
+        }
         for card in cards {
             // A file listed twice — the site puts one under two categories
             // now and then — keeps the first category the crawl met it in.
             if seen.insert(card.id) {
-                files.push(IndexedFile::from_card(card, section, leaf.game));
+                files.push(IndexedFile::from_card(card, leaf.id, leaf.game));
             }
         }
     }
@@ -1825,6 +1857,47 @@ mod tests {
         assert_eq!(narrowed.category_counts.get(&15), Some(&1));
     }
 
+    /// --- slice: library polish ---
+    /// The two things a rail with categories under a section can be asked
+    /// for: one drawer, or the whole shelf. Nothing here knows a tree — the
+    /// table says which shelf a category is on.
+    #[test]
+    fn narrowing_takes_a_category_of_the_site_or_a_whole_section() {
+        let loaded = index(vec![
+            file(1, "Mixed map", 15),
+            file(2, "Free for all map", 13),
+            file(3, "A skin", 4),
+            file(4, "A player model", 5),
+        ]);
+
+        let duel_only = loaded.search(&SearchRequest {
+            category_id: Some(15),
+            ..request("")
+        });
+        assert_eq!(duel_only.total, 1, "one gametype, one map");
+        assert_eq!(duel_only.cards[0].id, 1);
+
+        let maps = loaded.search(&SearchRequest {
+            category_id: Some(sections::NODE_ID_BASE + 71),
+            ..request("")
+        });
+        assert_eq!(maps.total, 2, "the section takes in every gametype under it");
+
+        let skins = loaded.search(&SearchRequest {
+            category_id: Some(sections::NODE_ID_BASE + 4),
+            ..request("")
+        });
+        assert_eq!(
+            skins.total, 2,
+            "and the two site categories the launcher merged into one shelf"
+        );
+        assert_eq!(
+            skins.category_counts.get(&13),
+            Some(&1),
+            "the counts still say where else the answer is"
+        );
+    }
+
     #[test]
     fn counts_climb_the_tree_so_a_container_shows_what_is_under_it() {
         let tree = vec![
@@ -1838,6 +1911,7 @@ mod tests {
                 has_files: false,
                 url: String::new(),
                 section: None,
+                site_id: None,
             },
             JkhubCategory {
                 id: 71,
@@ -1849,6 +1923,7 @@ mod tests {
                 has_files: false,
                 url: String::new(),
                 section: None,
+                site_id: None,
             },
             JkhubCategory {
                 id: 13,
@@ -1860,6 +1935,7 @@ mod tests {
                 has_files: true,
                 url: String::new(),
                 section: None,
+                site_id: None,
             },
             JkhubCategory {
                 id: 15,
@@ -1871,14 +1947,67 @@ mod tests {
                 has_files: true,
                 url: String::new(),
                 section: None,
+                site_id: None,
             },
         ];
         let counts = BTreeMap::from([(13, 2), (15, 3)]);
-        let rolled = roll_up(&counts, &tree);
+        let rolled = roll_up(Game::JediAcademy, &counts, &tree);
         assert_eq!(rolled.get(&13), Some(&2));
         assert_eq!(rolled.get(&15), Some(&3));
         assert_eq!(rolled.get(&71), Some(&5), "Maps holds both of its children");
         assert_eq!(rolled.get(&41), Some(&5));
+    }
+
+    /// --- slice: library polish ---
+    /// The rail of the launcher, not the tree of the site: `Audio` is one
+    /// node standing in for site category 38, and `Maps` stands in for the
+    /// container 71 whose gametypes it draws. A count keyed by a category
+    /// with no row of its own has to reach the section all the same.
+    #[test]
+    fn a_count_of_a_category_the_rail_does_not_draw_reaches_its_section() {
+        let tree = sections::tree(
+            Game::JediAcademy,
+            &sections::prune(
+                Game::JediAcademy,
+                vec![
+                    category(38, None, "Audio"),
+                    category(71, None, "Maps"),
+                    category(13, Some(71), "Free For All"),
+                ],
+            ),
+        );
+        let counts = BTreeMap::from([(38, 4), (71, 1), (13, 2)]);
+        let rolled = roll_up(Game::JediAcademy, &counts, &tree);
+
+        let maps = sections::NODE_ID_BASE + 71;
+        assert_eq!(rolled.get(&13), Some(&2), "the gametype keeps its own");
+        assert_eq!(
+            rolled.get(&maps),
+            Some(&3),
+            "and Maps holds it plus the one the site filed on the shelf itself"
+        );
+        assert_eq!(
+            rolled.get(&(sections::NODE_ID_BASE + 38)),
+            Some(&4),
+            "a section of one category answers for it"
+        );
+        assert_eq!(rolled.get(&38), None, "and nothing lands on a node nobody draws");
+    }
+
+    /// A node of the site's tree, for a test that builds one.
+    fn category(id: u32, parent: Option<u32>, name: &str) -> JkhubCategory {
+        JkhubCategory {
+            id,
+            slug: name.to_lowercase().replace(' ', "-"),
+            name: name.into(),
+            parent_id: parent,
+            game: JkhubGame::Ja,
+            file_count: None,
+            has_files: parent.is_some() || id != 71,
+            url: String::new(),
+            section: None,
+            site_id: None,
+        }
     }
 
     #[test]
@@ -2046,6 +2175,7 @@ mod tests {
             has_files: true,
             url: String::new(),
             section: None,
+            site_id: None,
         }
     }
 
@@ -2089,15 +2219,21 @@ mod tests {
             vec![1, 2, 3],
             "leaf order first, page order second"
         );
-        // Both leaves are gametypes under Maps, so both file under the Maps
-        // section: the launcher's tree has no node for a gametype.
+        // --- slice: library polish ---
+        // The listing a card was read from, gametype and all: the rail draws
+        // the gametypes under Maps, and narrowing to one of them is what the
+        // site's own id is kept for.
         assert_eq!(
-            files[0].category_id, 71,
+            files[0].category_id, 13,
             "a file two categories list keeps the first one the crawl met"
         );
+        assert_eq!(files[2].category_id, 15, "and the other leaf keeps its own");
         assert!(
-            files.iter().all(|entry| entry.category_id == 71),
-            "every gametype under Maps is filed as Maps"
+            files
+                .iter()
+                .all(|entry| sections::node_id_of(Game::JediAcademy, entry.category_id)
+                    == Some(sections::NODE_ID_BASE + 71)),
+            "every gametype still answers under the Maps section"
         );
     }
 
@@ -2189,10 +2325,15 @@ mod tests {
 
     /// --- slice: jkhub catalog ---
     /// The index of the disk cache outlives an update of the launcher, and one
-    /// written before the sections existed holds the whole site: a gametype
-    /// under Maps is filed as Maps on the way in, and Cosmetic Mods is dropped.
+    /// written before the sections existed holds the whole site: Cosmetic Mods
+    /// and map sources are dropped on the way in.
+    ///
+    /// --- slice: library polish ---
+    /// What is kept is kept as the site filed it. A gametype stays a gametype
+    /// and answers under Maps because the table says so, not because the field
+    /// was rewritten.
     #[test]
-    fn an_older_index_is_filed_onto_the_sections_when_it_is_read() {
+    fn an_older_index_is_held_to_the_sections_when_it_is_read() {
         let mut catalogue = CatalogIndex::new(Game::JediAcademy);
         catalogue.files = vec![
             file(1, "Free For All map", 13),
@@ -2208,8 +2349,13 @@ mod tests {
             vec![1, 2],
             "cosmetic mods and map sources are not catalogue any more"
         );
-        assert_eq!(back.files[0].category_id, 71, "a gametype is Maps");
-        assert_eq!(back.files[1].category_id, 4, "a model is Skins");
+        assert_eq!(back.files[0].category_id, 13, "the gametype is left alone");
+        assert_eq!(back.files[1].category_id, 5, "and so is Player Models");
+        assert_eq!(
+            sections::node_id_of(Game::JediAcademy, back.files[0].category_id),
+            Some(sections::NODE_ID_BASE + 71),
+            "the gametype answers under Maps all the same"
+        );
     }
 
     #[test]
