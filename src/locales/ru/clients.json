@@ -215,6 +215,7 @@
         "nicknamePreview": "Как его видят другие игроки",
         "nicknameSaved": "Сохранённые никнеймы",
         "nicknameSave": "Сохранить никнейм",
+        "saber": "Световой меч",
         "skin": "Скин (model)",
         "skinSearch": "Найти модель",
         "skinLoading": "Читаем архивы этого клиента…",
@@ -261,6 +262,12 @@
       "saberTypes": {
         "single": "Одно лезвие",
         "staff": "Двойное лезвие"
+      },
+      "saberModes": {
+        "label": "Тип меча",
+        "single": "Один",
+        "staff": "Стафф",
+        "duals": "Два меча"
       }
     }
   },
