@@ -249,6 +249,7 @@ mod tests {
             file_count: Some(3299),
             has_files: false,
             url: "https://jkhub.org/files/category/41-jedi-academy/".into(),
+            section: None,
         }]
     }
 

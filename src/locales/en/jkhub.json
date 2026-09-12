@@ -14,6 +14,16 @@
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest."
   },
   "refresh": "Refresh",
+  "sections": {
+    "maps": "Maps",
+    "skins": "Skins & Player Models",
+    "sabers": "Sabers",
+    "guns": "Guns",
+    "npcs": "NPCs",
+    "vehicles": "Vehicles",
+    "singlePlayer": "Single Player",
+    "audio": "Audio"
+  },
   "tree": {
     "heading": "Categories",
     "expand": "Expand {{category}}",

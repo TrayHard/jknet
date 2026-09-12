@@ -1548,6 +1548,16 @@ export interface JkhubCategory {
   /** False for a container such as Maps, which holds only children. */
   hasFiles: boolean;
   url: string;
+  /**
+   * Key of the launcher section this node is, for a node of the tree the tab
+   * draws; absent for a raw site category.
+   *
+   * The screen names a section from `sections.<key>` of `jkhub.json`, not from
+   * `name`: the eight sections are the launcher's own, and their site
+   * spelling is not. The table of site ids behind a key lives in
+   * `src-tauri/src/jkhub/sections.rs`.
+   */
+  section?: string;
 }
 
 export interface JkhubCategories {

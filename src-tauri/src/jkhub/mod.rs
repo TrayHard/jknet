@@ -15,6 +15,7 @@
 //! | `client.rs` | one HTTP client, one cookie jar, and the limiter in front |
 //! | `cache.rs` | `cache\jkhub\`: the tree, the listings, the file pages |
 //! | `snapshot.rs` | the category tree bundled with the build |
+//! | `sections.rs` | the eight sections the tab shows, and the site ids behind them |
 //! | `index.rs` | the local catalogue index, and the search that runs on it |
 //! | `parse.rs` | pure parsers, tested against saved pages |
 //! | `source.rs` | the trait, the HTML reader, the REST placeholder |
@@ -37,6 +38,9 @@ pub mod parse;
 // Builds the catalogue index a few seconds after the launcher starts, instead
 // of under the player who typed the first word of a search.
 pub mod prewarm;
+/// --- slice: jkhub catalog ---
+/// The eight sections of the catalogue and the site categories behind them.
+pub mod sections;
 pub mod snapshot;
 pub mod source;
 pub mod types;
@@ -361,7 +365,13 @@ pub async fn jkhub_categories(
     let source = HtmlSource::new(jkhub.client()?, &data)
         .forced(force)
         .with_snapshots(snapshot::bundled_dir(&app));
-    let (categories, wants_refresh) = source.categories_with_plan(game).await?;
+    let (mut categories, wants_refresh) = source.categories_with_plan(game).await?;
+    // --- slice: jkhub catalog ---
+    // The screen gets the launcher's eight sections, not the site's tree: one
+    // flat node each, `Skins` and `Player Models` merged into one of them, and
+    // the name read from the locale rather than from the site. The pruned site
+    // tree behind them stays inside the module, where the crawl needs it.
+    categories.categories = sections::tree(game, &categories.categories);
     if force {
         // The player just paid for a walk in the foreground; the one behind
         // the next answer has nothing left to find.
@@ -736,7 +746,9 @@ pub async fn jkhub_search(
         page: request.page.unwrap_or(1),
         per_page: request.per_page.unwrap_or(index::RESULTS_PER_PAGE),
     });
-    let tree = source::tree_at_hand(&data, snapshots.as_ref(), game);
+    // The same eight nodes `jkhub_categories` answers with, so a count lands
+    // on a node the tree actually draws.
+    let tree = sections::tree(game, &source::tree_at_hand(&data, snapshots.as_ref(), game));
     Ok(JkhubSearchResult {
         game,
         total: answer.total,

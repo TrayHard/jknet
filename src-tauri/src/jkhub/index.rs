@@ -43,6 +43,7 @@ use crate::timestamp;
 use super::cache;
 use super::client::{JkhubClient, Lane};
 use super::parse;
+use super::sections;
 use super::source::{self, HtmlSource};
 use super::types::{JkhubAuthor, JkhubCard, JkhubCategory, JkhubGame, JkhubSort};
 
@@ -197,7 +198,18 @@ impl IndexedFile {
     /// makes an incremental refresh able to move a file between categories.
     /// The one thing it lacks is the thumbnail the listing prints, so an entry
     /// that already had one keeps it.
-    pub fn from_file(file: &super::types::JkhubFile, previous: Option<&IndexedFile>) -> Self {
+    ///
+    /// --- slice: jkhub catalog ---
+    /// The category of the page is a category of the site and is filed under
+    /// the launcher's section for it. `category_id` stays `0` when the file
+    /// sits outside the eight sections, and the caller drops the entry: the
+    /// front page names every new file of the site, cosmetic mods and frag
+    /// movies included.
+    pub fn from_file(
+        game: Game,
+        file: &super::types::JkhubFile,
+        previous: Option<&IndexedFile>,
+    ) -> Self {
         IndexedFile {
             id: file.id,
             slug: file.slug.clone(),
@@ -206,6 +218,7 @@ impl IndexedFile {
             author_url: file.author.as_ref().and_then(|author| author.url.clone()),
             category_id: file
                 .category_id
+                .and_then(|id| sections::id_of(game, id))
                 .or_else(|| previous.map(|entry| entry.category_id))
                 .unwrap_or(0),
             game: file.game,
@@ -701,9 +714,24 @@ pub fn file_name(game: Game) -> String {
 }
 
 /// Reads an index out of a text, saying why it is unusable.
+///
+/// --- slice: jkhub catalog ---
+/// Whatever the document holds is filed onto the eight sections here, which
+/// is the one place every reader of an index goes through. An index crawled
+/// before the sections existed carries a file of **Free For All** under `13`
+/// and a file of **Cosmetic Mods** under `10`: the first is moved to **Maps**,
+/// the second is dropped. The index of the disk cache outlives an update of
+/// the launcher, so this is not a migration that runs once.
 pub fn parse_index(text: &str, game: Game) -> Result<CatalogIndex> {
-    let index: CatalogIndex = serde_json::from_str(text)
+    let mut index: CatalogIndex = serde_json::from_str(text)
         .map_err(|e| AppError::json("cannot parse a JKHub catalogue index", e))?;
+    let dropped = sections::retain(game, &mut index.files);
+    if dropped > 0 {
+        log::info!(
+            "jkhub: the {} index dropped {dropped} file(s) outside the eight sections",
+            game.id()
+        );
+    }
     if index.version != INDEX_VERSION {
         return Err(AppError::InvalidInput(format!(
             "the JKHub index of {} is version {}, this build reads {INDEX_VERSION}",
@@ -996,7 +1024,15 @@ pub async fn crawl(
     stop: Option<StopFlag<'_>>,
     on_progress: &mut (dyn FnMut(CrawlStep) + Send),
 ) -> Result<Crawled> {
-    let leaves: Vec<&JkhubCategory> = tree.iter().filter(|entry| entry.has_files).collect();
+    // --- slice: jkhub catalog ---
+    // The tree is pruned to the eight sections before it gets here, and the
+    // filter repeats the rule anyway: a caller could hand over a tree read
+    // out of a disk cache written before the sections existed, and a crawl of
+    // Cosmetic Mods would put back exactly what the sections are for.
+    let leaves: Vec<&JkhubCategory> = tree
+        .iter()
+        .filter(|entry| entry.has_files && sections::covers(game, entry.id))
+        .collect();
     // Never more pages in flight than the lane would let through anyway:
     // queueing more only moves the wait from this loop into the limiter.
     let at_once = client.limiter(Lane::Crawl).pace().parallel;
@@ -1075,7 +1111,7 @@ pub async fn crawl(
         }
     }
 
-    let files = merge_pages(&leaves, pages);
+    let files = merge_pages(game, &leaves, pages);
     log::info!(
         "jkhub: crawled {} files of {} in {} request(s), {:.1} s{}",
         files.len(),
@@ -1099,7 +1135,14 @@ pub async fn crawl(
 /// the first one the crawl met it in — would otherwise depend on the network.
 /// The map is keyed by `(leaf, page)`, so walking it in key order is walking
 /// the catalogue the way the old one-at-a-time loop did.
+///
+/// --- slice: jkhub catalog ---
+/// An entry carries the launcher's section, not the site's category: a map of
+/// **Duel** and a map of **Siege** are both **Maps** here, which is what makes
+/// the tree eight nodes rather than twenty. The site's own category is still
+/// in the file page, and the dialog reads it there.
 fn merge_pages(
+    game: Game,
     leaves: &[&JkhubCategory],
     pages: BTreeMap<(usize, u32), Vec<JkhubCard>>,
 ) -> Vec<IndexedFile> {
@@ -1109,11 +1152,14 @@ fn merge_pages(
         let Some(leaf) = leaves.get(leaf) else {
             continue;
         };
+        let Some(section) = sections::id_of(game, leaf.id) else {
+            continue;
+        };
         for card in cards {
             // A file listed twice — the site puts one under two categories
             // now and then — keeps the first category the crawl met it in.
             if seen.insert(card.id) {
-                files.push(IndexedFile::from_card(card, leaf.id, leaf.game));
+                files.push(IndexedFile::from_card(card, section, leaf.game));
             }
         }
     }
@@ -1353,10 +1399,19 @@ async fn top_up(
         *requests += 1;
         match view {
             Some(view) => {
-                let entry = IndexedFile::from_file(&view.file, index.get(id));
-                let one = index.upsert(entry);
-                report.added += one.added;
-                report.updated += one.updated;
+                let entry = IndexedFile::from_file(index.game, &view.file, index.get(id));
+                // The front page names every new file of the site, and most
+                // of the site is not one of the eight sections.
+                if entry.category_id == 0 {
+                    log::debug!(
+                        "jkhub: {id} sits outside the eight sections of {}",
+                        index.game.id()
+                    );
+                } else {
+                    let one = index.upsert(entry);
+                    report.added += one.added;
+                    report.updated += one.updated;
+                }
             }
             None => report.removed += index.remove(id).removed,
         }
@@ -1556,6 +1611,7 @@ mod tests {
                 file_count: None,
                 has_files: false,
                 url: String::new(),
+                section: None,
             },
             JkhubCategory {
                 id: 71,
@@ -1566,6 +1622,7 @@ mod tests {
                 file_count: None,
                 has_files: false,
                 url: String::new(),
+                section: None,
             },
             JkhubCategory {
                 id: 13,
@@ -1576,6 +1633,7 @@ mod tests {
                 file_count: None,
                 has_files: true,
                 url: String::new(),
+                section: None,
             },
             JkhubCategory {
                 id: 15,
@@ -1586,6 +1644,7 @@ mod tests {
                 file_count: None,
                 has_files: true,
                 url: String::new(),
+                section: None,
             },
         ];
         let counts = BTreeMap::from([(13, 2), (15, 3)]);
@@ -1760,6 +1819,7 @@ mod tests {
             file_count: Some(30),
             has_files: true,
             url: String::new(),
+            section: None,
         }
     }
 
@@ -1797,17 +1857,22 @@ mod tests {
         pages.insert((0, 2), vec![card(2, "Arena")]);
         pages.insert((0, 1), vec![card(1, "Terminative")]);
 
-        let files = merge_pages(&leaves, pages);
+        let files = merge_pages(Game::JediAcademy, &leaves, pages);
         assert_eq!(
             files.iter().map(|entry| entry.id).collect::<Vec<_>>(),
             vec![1, 2, 3],
             "leaf order first, page order second"
         );
+        // Both leaves are gametypes under Maps, so both file under the Maps
+        // section: the launcher's tree has no node for a gametype.
         assert_eq!(
-            files[0].category_id, 13,
+            files[0].category_id, 71,
             "a file two categories list keeps the first one the crawl met"
         );
-        assert_eq!(files[2].category_id, 15);
+        assert!(
+            files.iter().all(|entry| entry.category_id == 71),
+            "every gametype under Maps is filed as Maps"
+        );
     }
 
     /// What the search box of the tab is switched on by.
@@ -1880,7 +1945,7 @@ mod tests {
         data.ensure().expect("the layout is created");
 
         let mut catalogue = CatalogIndex::new(Game::JediAcademy);
-        catalogue.replace(vec![file(1, "One", 13)]);
+        catalogue.replace(vec![file(1, "One", 71)]);
         store(&data, &catalogue).expect("it writes");
 
         let cache_dir = cache::dir(&data).expect("the cache folder");
@@ -1894,6 +1959,31 @@ mod tests {
         let loaded = load(&data, None, Game::JediAcademy).expect("it loads");
         assert_eq!(loaded.source, IndexSource::Cache);
         assert_eq!(loaded.index.files.len(), 1);
+    }
+
+    /// --- slice: jkhub catalog ---
+    /// The index of the disk cache outlives an update of the launcher, and one
+    /// written before the sections existed holds the whole site: a gametype
+    /// under Maps is filed as Maps on the way in, and Cosmetic Mods is dropped.
+    #[test]
+    fn an_older_index_is_filed_onto_the_sections_when_it_is_read() {
+        let mut catalogue = CatalogIndex::new(Game::JediAcademy);
+        catalogue.files = vec![
+            file(1, "Free For All map", 13),
+            file(2, "Player model", 5),
+            file(3, "A cosmetic mod", 10),
+            file(4, "Map sources", 35),
+        ];
+        let text = serde_json::to_string(&catalogue).expect("it serializes");
+
+        let back = parse_index(&text, Game::JediAcademy).expect("it reads");
+        assert_eq!(
+            back.files.iter().map(|entry| entry.id).collect::<Vec<_>>(),
+            vec![1, 2],
+            "cosmetic mods and map sources are not catalogue any more"
+        );
+        assert_eq!(back.files[0].category_id, 71, "a gametype is Maps");
+        assert_eq!(back.files[1].category_id, 4, "a model is Skins");
     }
 
     #[test]
@@ -2039,7 +2129,7 @@ mod tests {
             changelog: Vec::new(),
         };
 
-        let entry = IndexedFile::from_file(&page, Some(&kept));
+        let entry = IndexedFile::from_file(Game::JediOutcast, &page, Some(&kept));
         assert_eq!(entry.submitted_at.as_deref(), Some("2020-01-01T00:00:00Z"));
         assert_eq!(entry.updated_at.as_deref(), Some("2021-02-02T00:00:00Z"));
         assert_eq!(entry.downloads, Some(77));
@@ -2050,7 +2140,7 @@ mod tests {
         );
 
         // With nothing remembered, a page with no screenshots has no picture.
-        let fresh = IndexedFile::from_file(&page, None);
+        let fresh = IndexedFile::from_file(Game::JediOutcast, &page, None);
         assert_eq!(fresh.thumbnail_url, None);
         assert_eq!(fresh.category_id, 67);
     }
