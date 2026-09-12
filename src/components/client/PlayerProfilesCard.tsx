@@ -10,7 +10,8 @@ import {
   useProfiles,
   useSetDefaultProfile,
 } from "../../lib/queries";
-import { Badge, Button, Dialog } from "../ui";
+// --- slice: selection context menu ---
+import { Badge, Button, Dialog, useContextMenu, type MenuItem } from "../ui";
 import { ColoredNickname } from "./ColoredNickname";
 import { blankProfile, ProfileForm } from "./ProfileForm";
 
@@ -28,6 +29,7 @@ import { blankProfile, ProfileForm } from "./ProfileForm";
  */
 export function PlayerProfilesCard({ client }: { client: Client }) {
   const { t } = useTranslation("clients");
+  const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const book = useProfiles(client.id);
   const remove = useDeleteProfile(client.id);
@@ -41,6 +43,34 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
   const profiles = book.data?.profiles ?? [];
   const defaultId = book.data?.defaultProfileId ?? null;
   const failure = book.error ?? remove.error ?? setDefault.error;
+
+  // --- slice: selection context menu ---
+  // The three buttons of the row, on a right click anywhere in it. **Delete**
+  // opens the same confirmation the bin does: a profile is a nickname, a skin
+  // and two hilts somebody put together, and no menu takes that away outright.
+  const menu = useContextMenu<PlayerProfile>({
+    ariaLabel: t("clientWindow.profiles.actions"),
+    items: (profile): MenuItem[] => [
+      {
+        id: "default",
+        label: t("clientWindow.profiles.makeDefault"),
+        icon: <Star size={14} />,
+        disabled: profile.id === defaultId || setDefault.isPending,
+      },
+      { id: "edit", label: tCommon("actions.edit"), icon: <Pencil size={14} /> },
+      {
+        id: "remove",
+        label: tCommon("actions.delete"),
+        icon: <Trash2 size={14} />,
+        danger: true,
+      },
+    ],
+    onSelect: (id, profile) => {
+      if (id === "default") setDefault.mutate(profile.id);
+      else if (id === "edit") setEditing(profile);
+      else setRemoving(profile);
+    },
+  });
 
   if (editing !== null) {
     return (
@@ -77,6 +107,8 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
                 "flex items-center gap-12 px-12 py-8 rounded-md",
                 "border border-line bg-input",
               )}
+              // --- slice: selection context menu ---
+              onContextMenu={(event) => menu.open(event, profile)}
             >
               <span className="flex-1 min-w-0 flex flex-col gap-2">
                 <span className="flex items-center gap-8 min-w-0">
@@ -121,6 +153,9 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
               />
             </li>
           ))}
+          {/* --- slice: selection context menu --- one list for the whole
+              list of profiles. */}
+          {menu.menu}
         </ul>
       )}
 

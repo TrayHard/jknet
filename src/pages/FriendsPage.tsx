@@ -1,4 +1,14 @@
-import { AlertTriangle, Search, UserPlus, Users, Wifi, WifiOff } from "lucide-react";
+import {
+  AlertTriangle,
+  Gamepad2,
+  Search,
+  Send,
+  UserMinus,
+  UserPlus,
+  Users,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -8,6 +18,8 @@ import { FriendRow } from "../components/friends/FriendRow";
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
 import {
+  // --- slice: selection context menu ---
+  canJoin,
   GROUPS,
   groupFriends,
   matchesSearch,
@@ -15,7 +27,16 @@ import {
 } from "../components/friends/presence";
 import { RequestList } from "../components/friends/RequestList";
 import { Page, PageHeader } from "../components/PageHeader";
-import { Badge, Button, EmptyState, Input } from "../components/ui";
+// --- slice: selection context menu ---
+import {
+  Badge,
+  Button,
+  Dialog,
+  EmptyState,
+  Input,
+  useContextMenu,
+  type MenuItem,
+} from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
 import type { Friend, Presence } from "../lib/ipc";
@@ -109,6 +130,57 @@ export function FriendsPage() {
   // A second game cannot start while one runs, so the join buttons say so
   // instead of letting the core refuse the click.
   const canLaunch = running.data == null;
+
+  // --- slice: selection context menu ---
+  /** The friend the confirmation is about, or `null` while it is closed. */
+  const [removing, setRemoving] = useState<Friend | null>(null);
+  // --- slice: selection context menu ---
+  // A right click on a row, with the three things the screen already does to
+  // a friend: the **Join** of the row, and the **Invite to my game** and
+  // **Remove friend** of the panel. Removing asks first, exactly as the panel
+  // does — the two rows of the list and the panel are one screen.
+  const onMyServer = myServer(view?.presence ?? NO_PRESENCE);
+  const rowMenu = useContextMenu<Friend>({
+    ariaLabel: t("row.actions"),
+    items: (friend): MenuItem[] => [
+      {
+        id: "join",
+        label: t("row.join"),
+        icon: <Gamepad2 size={14} />,
+        disabled: !canLaunch || !canJoin(friend) || join.isPending,
+      },
+      {
+        id: "invite",
+        label: t("panel.invite"),
+        icon: <Send size={14} />,
+        disabled: onMyServer === null || invite.isPending,
+      },
+      {
+        id: "remove",
+        label: t("panel.remove"),
+        icon: <UserMinus size={14} />,
+        danger: true,
+        disabled: remove.isPending,
+      },
+    ],
+    onSelect: (id, friend) => {
+      if (id === "join") {
+        joinFriend(friend);
+        return;
+      }
+      if (id === "invite") {
+        if (onMyServer === null) return;
+        setNote(null);
+        invite.mutate({
+          toUserId: friend.user.id,
+          serverAddress: onMyServer.address,
+          serverName: onMyServer.name,
+        });
+        return;
+      }
+      setRemoving(friend);
+    },
+  });
 
   const addFriend = () => {
     const query = search.trim();
@@ -260,6 +332,8 @@ export function FriendsPage() {
                       onSelect={() => setSelectedId(friend.user.id)}
                       onJoin={canLaunch ? () => joinFriend(friend) : undefined}
                       joining={join.isPending && join.variables === friend.user.id}
+                      // --- slice: selection context menu ---
+                      onContextMenu={(event) => rowMenu.open(event, friend)}
                     />
                   ))}
                 </section>
@@ -325,6 +399,41 @@ export function FriendsPage() {
           />
         )}
       </div>
+
+      {/* --- slice: selection context menu --- the list of the right click,
+          and the question it asks before taking a friend off the list. */}
+      {rowMenu.menu}
+      {removing === null ? null : (
+        <Dialog
+          variant="danger"
+          title={t("panel.remove")}
+          body={t("panel.removeConfirm", { name: removing.user.displayName })}
+          onClose={() => setRemoving(null)}
+          actions={
+            <>
+              <Button size="sm" variant="ghost" onClick={() => setRemoving(null)}>
+                {tCommon("actions.cancel")}
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={remove.isPending}
+                onClick={() => {
+                  const id = removing.user.id;
+                  setRemoving(null);
+                  remove.mutate(id, {
+                    onSuccess: () => {
+                      if (selectedId === id) setSelectedId(null);
+                    },
+                  });
+                }}
+              >
+                {tCommon("actions.remove")}
+              </Button>
+            </>
+          }
+        />
+      )}
     </div>
   );
 }

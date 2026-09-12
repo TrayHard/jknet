@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Lock, Star } from "lucide-react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
@@ -59,6 +60,15 @@ interface ServerRowProps {
   // --- slice: servers home tweaks ---
   /** Takes this server off the browser, or brings it back on the Hidden tab. */
   onToggleHidden: () => void;
+  // --- slice: selection context menu ---
+  /**
+   * A right click anywhere in the row.
+   *
+   * The screen owns the menu, because one layer serves the whole table: two
+   * hundred rows carrying one each would be two hundred floating layers that
+   * are never up at the same time.
+   */
+  onContextMenu?: (event: ReactMouseEvent) => void;
 }
 
 /** One line of the server table. */
@@ -68,6 +78,7 @@ export function ServerRow({
   onSelect,
   onToggleFavorite,
   onToggleHidden,
+  onContextMenu,
 }: ServerRowProps) {
   const { t } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");
@@ -88,6 +99,11 @@ export function ServerRow({
         if (hasTextSelection()) return;
         onSelect();
       }}
+      // --- slice: selection context menu ---
+      // The same three actions the dots carry on the other screen, from
+      // anywhere in the row. It selects nothing: the question is what can be
+      // done with this server, not which one the panel should show.
+      onContextMenu={onContextMenu}
       onKeyDown={(event) => {
         // --- slice: servers home tweaks ---
         // Only when the row itself has the focus. The star and the eye sit
