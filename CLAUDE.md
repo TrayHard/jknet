@@ -67,7 +67,7 @@ src/
                          профили игрока: список, форма, сетка скинов, никнейм
   components/library/    экран Library: карточка, диалоги, категории,
                          вкладка JKHub: JkhubBrowser, JkhubCard, JkhubDetails,
-                         JkhubIndexing, JkhubTree
+                         JkhubDownloadToasts, JkhubIndexing, JkhubTree
   components/servers/    экран Servers: таблица, панель сведений, фильтры, Tabs,
                          меню действий у выделенного сервера, окно
                          «Подключиться…»
@@ -85,6 +85,8 @@ src/
   lib/runtime.ts         isTauri: проверка, что страница живёт в окне Tauri
   lib/format.ts          cn, shortenPath и чистые функции форматирования,
                          которым передают локаль
+  lib/jkhubDownloads.ts  ход установки файла JKHub вне React: его пишет
+                         useJkhubInstall, читает карточка в колонке тостов
   lib/devOnline.ts       подмена команд друзей вызовами к заглушке JKNet
                          Online вне Tauri
 src-tauri/
@@ -109,6 +111,7 @@ src-tauri/
   src/online/            клиент JKNet Online: типы контракта, запросы, ошибки
   src/jkhub/             каталог jkhub.org: клиент с ограничителем, кеш,
                          снимок дерева категорий в сборке, разборщики страниц,
+                         очистка описания файла по списку разрешённых тегов,
                          индекс каталога и поиск по нему, сборка индекса при
                          старте, скачивание и установка в клиента
   resources/jkhub/       categories-*.json — дерево категорий, index-*.json —

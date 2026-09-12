@@ -1,3 +1,4 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ArrowDownCircle,
   Check,
@@ -15,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import type { JkhubFile, JkhubInstallResult } from "../../lib/ipc";
+import { isTauri } from "../../lib/runtime";
 import { Badge, Button, Dialog } from "../ui";
 
 interface JkhubDetailsProps {
@@ -42,14 +44,20 @@ interface JkhubDetailsProps {
  * 232 px sidebar, and a category tree plus a card grid plus a details panel
  * would leave every one of them too narrow to read.
  *
- * The description is rendered as plain paragraphs, never as markup. It comes
- * from the JSON-LD copy, which the site already stripped of HTML, and the
- * launcher carries no sanitizer: putting a remote string through
- * `dangerouslySetInnerHTML` would hand jkhub.org a script in this window.
+ * --- slice: jkhub details ---
+ * The description is rendered as the author wrote it: paragraphs, lists,
+ * links, pictures and the still of an embedded video. The markup does not come
+ * off the page, it comes out of `jkhub::richtext` in the core, which rebuilds
+ * it from an allowlist of tags and refuses every attribute and every address
+ * it does not name itself. That is what makes the one
+ * `dangerouslySetInnerHTML` of the launcher defensible, and why the string is
+ * never touched on this side. A page whose block the theme moved answers with
+ * an empty string, and the plain copy below takes over.
  *
  * Every picture here carries `referrerPolicy="no-referrer"`: the site refuses
  * a hotlinked image with `403`, and its own screenshots are the only thing
- * this window loads from another host. See `JkhubCard` and `index.html`.
+ * this window loads from another host. The pictures inside a description carry
+ * it too, written by the core onto the tag. See `JkhubCard` and `index.html`.
  */
 export function JkhubDetails({
   file,
@@ -140,7 +148,18 @@ export function JkhubDetails({
                         type="button"
                         onClick={() => setZoomed(shot.url)}
                         aria-label={t("details.openScreenshot")}
-                        className="block h-120 w-200 overflow-hidden rounded-md border border-line cursor-pointer"
+                        // --- slice: jkhub details ---
+                        // The frame is fixed and the picture is not. JKHub
+                        // holds in-game screenshots at whatever resolution
+                        // their author played at — 4:3 and 16:9 both, and the
+                        // site publishes no size anywhere — while this frame
+                        // is 200 by 120, which is 5:3. `object-cover` filled
+                        // it by cutting a strip off every one of them, which
+                        // is why a picture that reads fine on the site read
+                        // wrong here. `contain` shows the whole shot on the
+                        // frame's own background, the way the enlarged view
+                        // below already did.
+                        className="block h-120 w-200 overflow-hidden rounded-md border border-line bg-elevated cursor-pointer"
                       >
                         {broken.has(preview) ? (
                           <span className="flex size-full items-center justify-center bg-elevated text-fg-muted">
@@ -154,7 +173,7 @@ export function JkhubDetails({
                             decoding="async"
                             referrerPolicy="no-referrer"
                             onError={() => fail(preview)}
-                            className="size-full object-cover"
+                            className="size-full object-contain"
                           />
                         )}
                       </button>
@@ -212,13 +231,23 @@ export function JkhubDetails({
               </div>
             ) : null}
 
-            <div className="flex flex-col gap-8">
-              {paragraphs(file.description).map((line, index) => (
-                <p key={index} className="text-body-sm text-fg-secondary">
-                  {line}
-                </p>
-              ))}
-            </div>
+            {file.descriptionHtml ? (
+              <div
+                className="jkhub-richtext"
+                onClick={openLink}
+                // Cleaned in the core, by `jkhub::richtext`. Nothing on this
+                // side may put another string here.
+                dangerouslySetInnerHTML={{ __html: file.descriptionHtml }}
+              />
+            ) : (
+              <div className="flex flex-col gap-8">
+                {paragraphs(file.description).map((line, index) => (
+                  <p key={index} className="text-body-sm text-fg-secondary">
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {file.changelog.length > 0 ? (
               <div className="flex flex-col gap-4">
@@ -390,6 +419,30 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dd className="text-body-sm text-fg">{value}</dd>
     </div>
   );
+}
+
+/**
+ * --- slice: jkhub details ---
+ * Sends a link of the description to the system browser.
+ *
+ * The window is the launcher, not a browser: following a link inside it would
+ * replace the application with a web page and leave no way back. One handler
+ * on the container rather than a listener per link, because the markup is
+ * inserted as a string and React has no element to hang a prop on.
+ *
+ * The address is checked a second time here. The core already refused
+ * everything that is not `http(s)`, and this costs one regular expression to
+ * make the rule true at the point where the address is actually used.
+ */
+function openLink(event: React.MouseEvent<HTMLDivElement>) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const anchor = target.closest("a[href]");
+  if (!(anchor instanceof HTMLAnchorElement)) return;
+  event.preventDefault();
+  const href = anchor.getAttribute("href") ?? "";
+  if (!/^https?:\/\//i.test(href) || !isTauri()) return;
+  void openUrl(href).catch(() => undefined);
 }
 
 /**

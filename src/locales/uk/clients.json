@@ -192,6 +192,12 @@
         "body": "The nickname, the skin and the saber settings of this profile go with it. The client, its engine and its files stay as they are.",
         "confirm": "Delete profile"
       },
+      "unsaved": {
+        "title": "Discard changes?",
+        "body": "This profile has edits that were never saved. Leaving now loses them.",
+        "discard": "Discard changes",
+        "keep": "Keep editing"
+      },
       "form": {
         "newHeading": "New profile",
         "editHeading": "Profile {{profile}}",
@@ -216,6 +222,8 @@
         "saber2": "Second hilt (saber2)",
         "saber2None": "No second hilt",
         "saberEmpty": "No hilt in the archives of this client.",
+        "saberLoading": "Reading the hilts out of the archives…",
+        "saberRetry": "Try again",
         "color1": "Blade colour (color1)",
         "color2": "Second blade colour (color2)",
         "charColor": "Character tint (char_color)",
@@ -224,6 +232,10 @@
         "charColorBlue": "Blue",
         "tokens": "What this profile adds to the command line",
         "tokensEmpty": "Nothing: a field left empty leaves the cvar to the engine.",
+        "tokensHint": "Built from the fields above. Edit it to write the line yourself.",
+        "tokensOverrideHint": "This line is yours and the fields no longer build it. The engine keeps the last +set of a cvar, so a cvar named twice ends on the second. Up to 512 bytes: the client folders and the launcher's own arguments share the 1024-byte command line with it.",
+        "tokensOverrideNotice": "This profile launches by the line at the bottom. The fields below still describe it, but they no longer reach the game until you reset the line.",
+        "tokensReset": "Reset to fields",
         "save": "Save profile",
         "cancel": "Cancel"
       },

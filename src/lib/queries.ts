@@ -87,6 +87,8 @@ import {
   type Settings,
   type SettingsPatch,
 } from "./ipc";
+// --- slice: jkhub details ---
+import { jkhubDownloads } from "./jkhubDownloads";
 import { isTauri } from "./runtime";
 
 export const queryKeys = {
@@ -1049,6 +1051,9 @@ const IDLE_SCOPES: Record<ServerScope, ScopeRefresh> = {
   favorites: IDLE_SCOPE,
   history: IDLE_SCOPE,
   lan: IDLE_SCOPE,
+  // --- slice: servers home tweaks --- the details panel, which has a
+  // **Refresh** button and a **Watch** switch of its own and no tab at all.
+  one: IDLE_SCOPE,
 };
 
 /** Adds or replaces rows by address, keeping the rest of the list intact. */
@@ -1999,7 +2004,21 @@ export function useJkhubInstall(clientId: string | null) {
   return useMutation({
     mutationFn: ({ id, replace }: { id: number; replace?: boolean }) =>
       jkhubIpc.install(id, clientId as string, replace ?? false),
+    // --- slice: jkhub details ---
+    // Every install goes through this hook, so this is the one place that
+    // sees all three moments a progress card needs. Reporting from the screen
+    // instead would mean a screen that forgets leaves a card spinning for the
+    // rest of the session.
+    //
+    // The failure travels as it came: this file translates nothing, and the
+    // card that shows it already has `useErrorText`.
+    onMutate: ({ id }) => {
+      const cached = queryClient.getQueryData<JkhubFile>(jkhubKeys.file(id));
+      jkhubDownloads.start(id, cached?.title ?? null, clientId);
+    },
+    onError: (error, { id }) => jkhubDownloads.fail(id, error),
     onSuccess: (result) => {
+      jkhubDownloads.finish(result.fileId, result);
       if (result.kind !== "installed") return;
       queryClient.invalidateQueries({
         queryKey: libraryKeys.items(result.clientId),

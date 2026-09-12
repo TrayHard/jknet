@@ -1,8 +1,8 @@
 import { X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { cn } from "../../lib/format";
 import { Button, Input, Select, type SelectOption } from "../ui";
+import { Slider } from "./Slider";
 
 /**
  * The controls of the client window, each bound to one cvar.
@@ -229,9 +229,9 @@ export function CvarSlider({ id, value, ariaLabel, onCommit }: CvarSliderProps) 
 
   return (
     <div className="flex items-center gap-12">
-      <input
+      <Slider
         id={id}
-        type="range"
+        className="flex-1 min-w-0"
         min={0}
         max={1}
         step={VOLUME_STEP}
@@ -247,17 +247,8 @@ export function CvarSlider({ id, value, ariaLabel, onCommit }: CvarSliderProps) 
         onPointerUp={commit}
         onKeyUp={commit}
         onBlur={commit}
-        className={cn(
-          "flex-1 min-w-0 h-6 appearance-none rounded-full cursor-pointer",
-          "bg-elevated accent-[var(--color-bg-accent)]",
-          "[&::-webkit-slider-thumb]:appearance-none",
-          "[&::-webkit-slider-thumb]:size-14",
-          "[&::-webkit-slider-thumb]:rounded-full",
-          "[&::-webkit-slider-thumb]:bg-accent",
-          "[&::-webkit-slider-thumb]:cursor-pointer",
-        )}
       />
-      <span className="w-32 shrink-0 text-mono-xs text-fg-muted text-right">
+      <span className="w-32 shrink-0 text-mono-xs text-fg-secondary text-right tabular-nums">
         {value === null ? "—" : value}
       </span>
     </div>

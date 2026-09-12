@@ -852,6 +852,17 @@ export interface PlayerProfile {
   color1: number | null;
   color2: number | null;
   charColor: CharColor | null;
+  // --- slice: profiles polish ---
+  /**
+   * The whole `+set` line, written by hand, instead of the one the fields
+   * build.
+   *
+   * `null` is the ordinary case: the line is assembled from the fields above.
+   * A string is a line the player edited, and it is what the launch carries —
+   * the fields are then a record of where the line came from, not of what it
+   * says. **Reset to fields** sends `null` and the assembling starts again.
+   */
+  tokensOverride: string | null;
 }
 
 // --- slice: connect dialog ---
@@ -862,8 +873,16 @@ export interface PlayerProfile {
  * *stored* profile is found and listed by. The **Connect…** dialog fills these
  * fields in, presses **Connect** and is done: nothing reaches `profiles.json`.
  * The core checks them at the same gate a saved profile passes.
+ *
+ * --- slice: profiles polish ---
+ * `tokensOverride` is left out as well: the dialog has fields and no token
+ * line of its own, and its **Extra arguments** row is already the place to
+ * type a token the fields have no control for.
  */
-export type InlineProfile = Omit<PlayerProfile, "id" | "name">;
+export type InlineProfile = Omit<
+  PlayerProfile,
+  "id" | "name" | "tokensOverride"
+>;
 
 /** `src-tauri/src/profiles.rs`: `clients\<slug>\profiles.json`. */
 export interface ProfileBook {
@@ -965,12 +984,18 @@ export type PlayersSource = "info" | "status" | "unknown";
  * `src-tauri/src/servers/mod.rs`: which list of the browser one operation
  * fills.
  *
- * The same four names as the tabs, because that is what they are: every event
- * of a scan carries its scope, and the screen keeps a loader, a counter and a
+ * The first four are the tabs, because that is what they are: every event of a
+ * scan carries its scope, and the screen keeps a loader, a counter and a
  * "refreshed N s ago" line per scope. Two scopes may scan at once; the core
  * refuses a second scan of the same one.
+ *
+ * --- slice: servers home tweaks ---
+ * `one` belongs to no tab. It is the details panel asking about the server it
+ * is showing, from its own **Refresh** button or from the **Watch** switch that
+ * repeats the question once a minute. A scope of its own is what keeps the
+ * loader off the table while one row is being asked about.
  */
-export type ServerScope = "all" | "favorites" | "history" | "lan";
+export type ServerScope = "all" | "favorites" | "history" | "lan" | "one";
 
 /** `src-tauri/src/servers/mod.rs`: one row of the browser. */
 export interface ServerInfo {
@@ -1635,8 +1660,18 @@ export interface JkhubFile {
   categoryId: number | null;
   categoryName: string | null;
   author: JkhubAuthor | null;
-  /** Plain text from JSON-LD. Never render it as HTML: there is no sanitizer. */
+  /** Plain text from JSON-LD, with its HTML entities resolved. */
   description: string;
+  /**
+   * --- slice: jkhub details ---
+   * The same description with the author's markup, rebuilt by the core out of
+   * an allowlist of tags (`src-tauri/src/jkhub/richtext.rs`). This is the one
+   * string of the launcher that may go through `dangerouslySetInnerHTML`, and
+   * only because no element, attribute or address reaches it that the core did
+   * not write itself. Empty when the theme moved the block, and then the plain
+   * copy above is what the window prints.
+   */
+  descriptionHtml: string;
   submittedAt: string | null;
   updatedAt: string | null;
   version: string | null;
@@ -1686,6 +1721,12 @@ export type JkhubInstallResult = JkhubInstallOutcome & {
   clientId: string;
   /** Folder inside `home\` the files went to. */
   folder: string;
+  /**
+   * --- slice: jkhub details ---
+   * The same folder as a path on disk, for **Open folder**. Null only for the
+   * outcome that wrote nothing: a record pointing at another site.
+   */
+  folderPath: string | null;
 };
 
 /** What `provenance.json` remembers about one installed file. */
@@ -1705,6 +1746,13 @@ export interface JkhubDownloadProgress {
   received: number;
   /** Zero when the server sent no length. */
   total: number;
+  /**
+   * --- slice: jkhub details ---
+   * Name of the archive coming down. The progress card names it: the file
+   * host sends no `Content-Disposition`, so nothing on this side knows it
+   * until the install answers.
+   */
+  fileName: string;
 }
 
 /** Payload of `jkhub:installed`. */

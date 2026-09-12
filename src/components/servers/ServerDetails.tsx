@@ -1,4 +1,4 @@
-import { Check, Copy, Lock, Play, RefreshCw, Users } from "lucide-react";
+import { Check, Copy, Eye, Lock, Play, RefreshCw, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,7 +8,7 @@ import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo, ServerPlayer } from "../../lib/ipc";
 import { MapPreview } from "../MapPreview";
-import { Badge, Button } from "../ui";
+import { Badge, Button, Toggle } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
 import { ServerMenu } from "./ServerMenu";
@@ -41,6 +41,30 @@ interface ServerDetailsProps {
    * refusal rather than a new question.
    */
   onRetryPlayers: () => void;
+  // --- slice: servers home tweaks ---
+  /**
+   * Asks this one server everything again: its row and its player list.
+   *
+   * Nothing in the browser refreshes by itself, so a panel left open shows
+   * what the last scan of the whole list happened to see. This is how a player
+   * watching one server finds out it filled up without re-scanning two hundred
+   * addresses to hear it.
+   */
+  onRefresh: () => void;
+  /** True while that scan is in flight, for the spinner and the dead button. */
+  refreshing: boolean;
+  // --- slice: servers home tweaks ---
+  /** **Watch**: repeat that scan once a minute for as long as it is on. */
+  watching: boolean;
+  onWatchChange: (watching: boolean) => void;
+  /**
+   * How long ago the panel's own scan last landed, already formatted.
+   *
+   * `null` until one lands: the row on the table carries the age of the last
+   * whole-list scan, and printing that here would say this server was asked
+   * about when it was not.
+   */
+  refreshedAge: string | null;
   onConnect: () => void;
   /**
    * False when nothing could come of the press — a game already running, say.
@@ -70,6 +94,11 @@ export function ServerDetails({
   playersLoading,
   playersFailed,
   onRetryPlayers,
+  onRefresh,
+  refreshing,
+  watching,
+  onWatchChange,
+  refreshedAge,
   onConnect,
   canConnect,
   connecting,
@@ -148,6 +177,52 @@ export function ServerDetails({
         <Ping ms={server.pingMs} />
       </div>
 
+      {/* --- slice: servers home tweaks ---
+          One server, asked on purpose. The browser refreshes nothing by
+          itself, and a player deciding whether to join watches numbers that
+          change every few seconds — so the panel carries the press that asks
+          this address again, and a switch that keeps asking. */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-8">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="-ml-8"
+            icon={
+              <RefreshCw
+                size={14}
+                className={refreshing ? "animate-spin" : undefined}
+              />
+            }
+            title={t("details.refreshHint")}
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            {t("refresh")}
+          </Button>
+          <span className="ml-auto inline-flex items-center gap-6">
+            {/* The eye says the switch is on without the player reading the
+                caption under it: a panel that keeps asking looks the same as
+                one that does not, right up to the moment a number moves. */}
+            {watching ? <Eye size={14} className="text-fg-accent" /> : null}
+            <span
+              className={cn(
+                "text-label-xs",
+                watching ? "text-fg-accent" : "text-fg-muted",
+              )}
+            >
+              {t("details.watch")}
+            </span>
+            <Toggle
+              label={t("details.watchHint")}
+              checked={watching}
+              onChange={onWatchChange}
+            />
+          </span>
+        </div>
+        <WatchLine watching={watching} age={refreshedAge} />
+      </div>
+
       <PlayerList
         players={players}
         loading={playersLoading}
@@ -179,6 +254,44 @@ export function ServerDetails({
         {canConnect ? null : hint}
       </div>
     </aside>
+  );
+}
+
+// --- slice: servers home tweaks ---
+/**
+ * What the panel says under the **Refresh** button and the **Watch** switch.
+ *
+ * Three states and one line: watching with a time behind it, watching with
+ * nothing behind it yet, and a panel that was asked once by hand. A panel that
+ * has done neither says nothing at all — the row it opened on carries the age
+ * of the whole-list scan, and repeating that here would answer a question
+ * about this server with a fact about two hundred others.
+ */
+function WatchLine({
+  watching,
+  age,
+}: {
+  watching: boolean;
+  age: string | null;
+}) {
+  const { t } = useTranslation("servers");
+
+  if (!watching && age === null) return null;
+  const text = watching
+    ? age === null
+      ? t("details.watchingSoon")
+      : t("details.watching", { age })
+    : t("details.updated", { age });
+
+  return (
+    <p
+      className={cn(
+        "text-label-xs",
+        watching ? "text-fg-accent" : "text-fg-disabled",
+      )}
+    >
+      {text}
+    </p>
   );
 }
 

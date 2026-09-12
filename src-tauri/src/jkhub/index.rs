@@ -2342,6 +2342,7 @@ mod tests {
             category_name: Some("Skins".into()),
             author: None,
             description: "A skin".into(),
+            description_html: String::new(),
             submitted_at: Some("2020-01-01T00:00:00Z".into()),
             updated_at: Some("2021-02-02T00:00:00Z".into()),
             version: Some("1.0".into()),
