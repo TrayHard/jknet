@@ -1,4 +1,4 @@
-import { Lock, Star } from "lucide-react";
+import { Eye, EyeOff, Lock, Star } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
@@ -12,7 +12,7 @@ import { ServerName } from "./ServerName";
 
 /**
  * Column widths of the design: star 16, name fills the rest, the trust and
- * lock marks 40, map 116, mode 60, players 76, ping 56, mod 60. One constant
+ * lock marks 24, map 116, mode 60, players 76, ping 56, mod 60. One constant
  * so the header, the rows and the skeleton cannot drift apart.
  *
  * The design gives the players column 52 px, which holds `12/32` and nothing
@@ -20,9 +20,21 @@ import { ServerName } from "./ServerName";
  * 11 px monospace a busy server writes `128/128`, and a server that publishes
  * no split writes a `?` after it. The name column is the one that gives them
  * up, because it is the only flexible one and it truncates gracefully.
+ *
+ * --- slice: servers home tweaks ---
+ * A ninth column closes the row: the eye that takes a server off the browser.
+ * It is 16 px, the width of the star that opens the row, so the two one-press
+ * marks of a row frame it rather than each finding a size of their own. The
+ * column keeps its width whether the eye shows or not, because a mark that
+ * appears on hover must not move the eight columns beside it.
+ *
+ * That column and the gap before it cost the name 28 px at the 1280 px the
+ * window opens with (`src-tauri/tauri.conf.json`), so the mark column gives
+ * 16 of them back: it carries one optional 14 px lock and had 40 px to do it
+ * in. Widen it again when the trust mark lands beside the lock.
  */
 export const ROW_COLUMNS =
-  "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px";
+  "16px minmax(0, 1fr) 24px 116px 60px 76px 56px 60px 16px";
 
 /** Which badge tone a game type gets, so the modes stay apart at a glance. */
 const MODE_TONE: Record<number, BadgeTone> = {
@@ -42,6 +54,9 @@ interface ServerRowProps {
   selected: boolean;
   onSelect: () => void;
   onToggleFavorite: () => void;
+  // --- slice: servers home tweaks ---
+  /** Takes this server off the browser, or brings it back on the Hidden tab. */
+  onToggleHidden: () => void;
 }
 
 /** One line of the server table. */
@@ -50,6 +65,7 @@ export function ServerRow({
   selected,
   onSelect,
   onToggleFavorite,
+  onToggleHidden,
 }: ServerRowProps) {
   const { t } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");
@@ -64,6 +80,12 @@ export function ServerRow({
       aria-selected={selected}
       onClick={onSelect}
       onKeyDown={(event) => {
+        // --- slice: servers home tweaks ---
+        // Only when the row itself has the focus. The star and the eye sit
+        // inside it and their key presses bubble here whatever they do with
+        // the click, so Enter on the eye would hide a server and select it in
+        // the same breath.
+        if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
@@ -71,7 +93,9 @@ export function ServerRow({
       }}
       style={{ gridTemplateColumns: ROW_COLUMNS }}
       className={cn(
-        "grid items-center gap-12 h-40 px-12 rounded-md cursor-pointer",
+        // --- slice: servers home tweaks --- `group`, so the eye at the end
+        // can read the hover of the whole row rather than of itself.
+        "group grid items-center gap-12 h-40 px-12 rounded-md cursor-pointer",
         "transition-colors duration-100",
         selected
           ? "bg-selected-overlay text-fg"
@@ -121,7 +145,10 @@ export function ServerRow({
         {server.map || tCommon("values.empty")}
       </span>
 
-      <Badge tone={MODE_TONE[server.gametype] ?? "neutral"}>
+      {/* --- slice: servers home tweaks --- `centered`, because this badge
+          stands in a column with others under it. The rule itself lives in
+          the kit, so the row of Home cannot line its modes up differently. */}
+      <Badge tone={MODE_TONE[server.gametype] ?? "neutral"} centered>
         {gametypes.short(server.game, server.gametype)}
       </Badge>
 
@@ -150,6 +177,44 @@ export function ServerRow({
       <span className="text-mono-xs text-fg-muted truncate" title={server.modName}>
         {server.modName}
       </span>
+
+      {/* --- slice: servers home tweaks ---
+          Hiding a server used to take selecting the row and opening the menu
+          beside **Connect**, which is three presses to say «not this one».
+          The row carries it now, at the end where the star at the other end
+          answers the opposite question. Which way it goes is the row's own
+          `hidden` flag, so the button reads **Unhide** on the Hidden tab and
+          nowhere else — the same rule the menu item follows.
+
+          It shows on the row the pointer is over and on its own focus, and
+          not on the other forty rows: hiding a server is a rare answer, and
+          forty eyes down the right edge of a table read as a column of data.
+          Hidden by `opacity`, never by `hidden` or a condition, so the track
+          under it stays and the row does not reflow on hover. Focus counts
+          because the keyboard reaches this button by Tab, which is not a
+          hover, and a control nobody can see is a control nobody presses. */}
+      <button
+        type="button"
+        title={server.hidden ? t("menu.unhide") : t("menu.hide")}
+        aria-label={server.hidden ? t("menu.unhide") : t("menu.hide")}
+        aria-pressed={server.hidden}
+        onClick={(event) => {
+          // The row underneath selects on a press, and taking a server off
+          // the list is not a way of saying «show me this one».
+          event.stopPropagation();
+          onToggleHidden();
+        }}
+        className={cn(
+          "flex items-center justify-center size-16 cursor-pointer",
+          "opacity-0 transition-opacity duration-100",
+          "group-hover:opacity-100 focus-visible:opacity-100",
+          server.hidden
+            ? "text-fg-accent hover:text-fg"
+            : "text-fg-disabled hover:text-fg-muted",
+        )}
+      >
+        {server.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+      </button>
     </div>
   );
 }

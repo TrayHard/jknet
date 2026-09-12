@@ -7,8 +7,13 @@ interface PageHeaderProps {
    *
    * Left out on a screen whose controls say it already: an empty line under a
    * heading is a gap, not a subtitle.
+   *
+   * --- slice: servers home tweaks ---
+   * A node rather than a string, because the Servers screen answers with
+   * counts behind icons and every icon carries the sentence it stands for on
+   * hover. Every other screen still passes one translated line.
    */
-  subtitle?: string;
+  subtitle?: ReactNode;
   /** Buttons aligned to the right of the title. */
   actions?: ReactNode;
 }

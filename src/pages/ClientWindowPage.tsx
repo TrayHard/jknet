@@ -1,3 +1,4 @@
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -18,6 +19,11 @@ import {
   useCvarEditor,
   type WindowCvar,
 } from "../components/client/useCvarEditor";
+// --- slice: profiles polish ---
+import {
+  UnsavedGuardProvider,
+  useUnsavedGuard,
+} from "../components/client/UnsavedGuard";
 import { TitleBar } from "../components/TitleBar";
 import { Badge, Button, type SelectOption } from "../components/ui";
 // --- slice: i18n ---
@@ -96,34 +102,101 @@ export function ClientWindowPage() {
   }, [error, id]);
 
   return (
-    <div className="flex flex-col h-full bg-app text-fg">
-      <TitleBar
-        title={name ?? t("clientWindow.loading")}
-        subtitle={id}
-        maximizable={false}
-      />
-      <main className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex flex-col gap-16 p-16">
-          {/* A refusal that arrived after the record did leaves the cards on
-              screen and states itself above them. A refusal instead of the
-              record takes the window over, because there is nothing else. */}
-          {error && client ? <Notice text={errorText(error)} /> : null}
-          {client ? (
-            <ClientCards client={client} />
-          ) : error ? (
-            <Failure text={errorText(error)} label={t("clientWindow.close")} />
-          ) : isLoading ? (
-            <Loading text={t("clientWindow.loadingClient")} />
-          ) : (
-            <Failure
-              text={t("clientWindow.notFound")}
-              label={t("clientWindow.close")}
-            />
-          )}
-        </div>
-      </main>
-    </div>
+    // --- slice: profiles polish ---
+    // Around the whole window, because the thing it guards — a profile form
+    // with edits nobody saved — is asked about by the close button of the
+    // title bar as well as by the form itself.
+    <UnsavedGuardProvider>
+      <div className="flex flex-col h-full bg-app text-fg">
+        <CloseGuard />
+        <TitleBar
+          title={name ?? t("clientWindow.loading")}
+          subtitle={id}
+          maximizable={false}
+        />
+        <main className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex flex-col gap-16 p-16">
+            {/* A refusal that arrived after the record did leaves the cards on
+                screen and states itself above them. A refusal instead of the
+                record takes the window over, because there is nothing else. */}
+            {error && client ? <Notice text={errorText(error)} /> : null}
+            {client ? (
+              <ClientCards client={client} />
+            ) : error ? (
+              <Failure text={errorText(error)} label={t("clientWindow.close")} />
+            ) : isLoading ? (
+              <Loading text={t("clientWindow.loadingClient")} />
+            ) : (
+              <Failure
+                text={t("clientWindow.notFound")}
+                label={t("clientWindow.close")}
+              />
+            )}
+          </div>
+        </main>
+      </div>
+    </UnsavedGuardProvider>
   );
+}
+
+// --- slice: profiles polish ---
+/**
+ * Stands between the close button and the window, and draws nothing.
+ *
+ * A window has no «are you sure» of its own: `tauri://close-requested` is the
+ * one moment a page gets to answer, and answering means preventing the default
+ * and then closing the window itself when the player says so.
+ *
+ * The default is prevented **every time**, including when nothing is unsaved,
+ * and the close is this component's own `destroy()`. Two reasons. The
+ * shorter: one path is easier to be sure of than two. The longer: without
+ * `preventDefault` the API destroys the window as the handler returns, so a
+ * guard that only prevented «sometimes» would have to be certain, at that
+ * instant, that nothing is unsaved — and the answer to that arrives from a
+ * dialog, later.
+ *
+ * `destroy` and not `close`: `close` asks again, arrives back here, and the
+ * window never shuts. It is in `capabilities/client-window.json` for this one
+ * call.
+ *
+ * One close never reaches this guard: quitting the launcher. `close_all` in
+ * the core destroys the client windows outright, so an unsaved profile is lost
+ * with the application rather than holding it open behind a dialog in a window
+ * the player may have minimised. The two ordinary ways out of the form —
+ * **Cancel** and closing this window — are the ones that ask.
+ */
+function CloseGuard() {
+  const guard = useUnsavedGuard();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let stop: UnlistenFn | undefined;
+    let gone = false;
+
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        event.preventDefault();
+        guard.ask(() => {
+          logWindow("closing the client window");
+          void getCurrentWindow()
+            .destroy()
+            .catch((e: unknown) => logWindowFailure("destroy", e));
+        });
+      })
+      .then((off) => {
+        // The window can be gone before the listener is registered.
+        if (gone) off();
+        else stop = off;
+      })
+      .catch((e: unknown) => logWindowFailure("onCloseRequested", e));
+
+    return () => {
+      gone = true;
+      stop?.();
+    };
+  }, [guard]);
+
+  return null;
 }
 
 /** What the window holds while the record is on its way. */

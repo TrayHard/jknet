@@ -13,6 +13,23 @@ export type BadgeTone =
 interface BadgeProps {
   tone?: BadgeTone;
   icon?: ReactNode;
+  // --- slice: servers home tweaks ---
+  /**
+   * Centres the label in a pill at least 56 px wide.
+   *
+   * For a badge that stands in a column with others under it: the mode of a
+   * server row, on the table of the Servers screen and in the rows of Home.
+   * The labels run from `JM` to `SIEGE`, so pills sized to their own text sat
+   * under one another with the text starting in four different places, which
+   * reads as a column that failed to line up. 56 px is the widest short label
+   * plus the padding below, so the floor squeezes nothing and the 60 px
+   * column of the table still holds it.
+   *
+   * A badge that stands on its own — **DEFAULT** beside a client name, the
+   * lock of a passworded server — takes the width of its own text and leaves
+   * this off.
+   */
+  centered?: boolean;
   className?: string;
   children: ReactNode;
 }
@@ -26,13 +43,20 @@ const TONES: Record<BadgeTone, string> = {
   purple: "bg-purple-subtle text-fg-purple",
 };
 
-export function Badge({ tone = "neutral", icon, className, children }: BadgeProps) {
+export function Badge({
+  tone = "neutral",
+  icon,
+  centered = false,
+  className,
+  children,
+}: BadgeProps) {
   return (
     <span
       className={cn(
         "inline-flex items-center gap-4 h-20 px-8 rounded-full",
         "text-label-xs",
         TONES[tone],
+        centered && "min-w-56 justify-center text-center",
         className,
       )}
     >

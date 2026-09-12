@@ -8,6 +8,8 @@ import { AppUpdateProvider } from "./components/AppUpdateProvider";
 // --- slice: friends ---
 import { FriendsProvider } from "./components/FriendsProvider";
 import { GameEventsProvider } from "./components/GameEventsProvider";
+// --- slice: jkhub details ---
+import { JkhubDownloadToasts } from "./components/library/JkhubDownloadToasts";
 import { ToastsProvider } from "./components/ToastsProvider";
 // --- slice: i18n ---
 import { LanguageSync } from "./i18n/LanguageSync";
@@ -68,6 +70,11 @@ export default function App() {
           renders into it — the launch events included, which is why it sits
           above `GameEventsProvider` and not inside it. */}
       <ToastsProvider>
+        {/* --- slice: jkhub details --- */}
+        {/* A file coming down from JKHub reports into the same column, and
+            the download outlives the screen it was started on: the player
+            presses Install and walks off to the server browser. */}
+        <JkhubDownloadToasts />
         {/* Above the router: an engine install must survive a route change. */}
         <GameEventsProvider>
           {/* --- slice: installer --- */}
