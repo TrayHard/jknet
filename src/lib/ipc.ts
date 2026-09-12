@@ -1686,6 +1686,12 @@ export type JkhubInstallResult = JkhubInstallOutcome & {
   clientId: string;
   /** Folder inside `home\` the files went to. */
   folder: string;
+  /**
+   * --- slice: jkhub details ---
+   * The same folder as a path on disk, for **Open folder**. Null only for the
+   * outcome that wrote nothing: a record pointing at another site.
+   */
+  folderPath: string | null;
 };
 
 /** What `provenance.json` remembers about one installed file. */
@@ -1705,6 +1711,13 @@ export interface JkhubDownloadProgress {
   received: number;
   /** Zero when the server sent no length. */
   total: number;
+  /**
+   * --- slice: jkhub details ---
+   * Name of the archive coming down. The progress card names it: the file
+   * host sends no `Content-Disposition`, so nothing on this side knows it
+   * until the install answers.
+   */
+  fileName: string;
 }
 
 /** Payload of `jkhub:installed`. */

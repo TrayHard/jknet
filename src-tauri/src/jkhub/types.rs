@@ -300,6 +300,15 @@ pub struct JkhubInstallResult {
     pub client_id: String,
     /// Folder inside `home\` the files went to: `base` or the client's mod.
     pub folder: String,
+    /// --- slice: jkhub details ---
+    /// That same folder as a path on disk, so the toast of a finished install
+    /// can reveal the pk3 in the file manager without the screen stitching a
+    /// path together out of the client's directory and two names.
+    ///
+    /// `None` for the one outcome where nothing was written: a record that
+    /// points at another site is resolved before a folder is ever touched.
+    #[serde(default)]
+    pub folder_path: Option<String>,
     #[serde(flatten)]
     pub outcome: JkhubInstallOutcome,
 }
@@ -331,6 +340,14 @@ pub struct DownloadProgress {
     pub received: u64,
     /// Zero when the server sent no length.
     pub total: u64,
+    /// --- slice: jkhub details ---
+    /// Name of the archive coming down, as it will land on disk.
+    ///
+    /// The progress card names what it is fetching, and this is the one place
+    /// that knows: `files.jkhub.org` sends no `Content-Disposition`, so the
+    /// name is read out of the address and nothing on the screen has it until
+    /// the install answers.
+    pub file_name: String,
 }
 
 /// Payload of `jkhub:installed`.
@@ -400,6 +417,7 @@ mod tests {
             file_id: 1486,
             client_id: "everyday".into(),
             folder: "base".into(),
+            folder_path: Some("C:\\clients\\everyday\\home\\base".into()),
             outcome: JkhubInstallOutcome::Installed {
                 files: vec!["saber.pk3".into()],
             },
@@ -408,5 +426,6 @@ mod tests {
         assert_eq!(json["kind"], "installed");
         assert_eq!(json["files"][0], "saber.pk3");
         assert_eq!(json["fileId"], 1486);
+        assert_eq!(json["folderPath"], "C:\\clients\\everyday\\home\\base");
     }
 }
