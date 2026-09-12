@@ -1466,6 +1466,7 @@ mod tests {
                 color1: Some(3),
                 color2: None,
                 char_color: None,
+                tokens_override: None,
             },
             Game::JediAcademy,
         );

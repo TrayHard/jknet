@@ -223,6 +223,10 @@
         "charColorBlue": "Blue",
         "tokens": "What this profile adds to the command line",
         "tokensEmpty": "Nothing: a field left empty leaves the cvar to the engine.",
+        "tokensHint": "Built from the fields above. Edit it to write the line yourself.",
+        "tokensOverrideHint": "This line is yours and the fields no longer build it. The engine keeps the last +set of a cvar, so a cvar named twice ends on the second.",
+        "tokensOverrideNotice": "This profile launches by the line at the bottom. The fields below still describe it, but they no longer reach the game until you reset the line.",
+        "tokensReset": "Reset to fields",
         "save": "Save profile",
         "cancel": "Cancel"
       },

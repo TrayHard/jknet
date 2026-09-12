@@ -1,3 +1,4 @@
+import { RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -44,6 +45,7 @@ export function blankProfile(): PlayerProfile {
     color1: null,
     color2: null,
     charColor: null,
+    tokensOverride: null,
   };
 }
 
@@ -89,6 +91,10 @@ export function ProfileForm({
     setDraft((current) => ({ ...current, ...changes }));
 
   const tokens = profileTokens(draft, hasHilts);
+  // --- slice: profiles polish ---
+  // The very test the core makes of the field: a line of spaces is no line at
+  // all, and `clean_tokens` turns it back into «assemble from the fields».
+  const overridden = isOverridden(draft.tokensOverride);
   // The core refuses a nickname over `MAX_NETNAME`, so the button says so
   // before the round trip does. The field itself shows the count.
   const ready =
@@ -110,6 +116,17 @@ export function ProfileForm({
           ? t("clientWindow.profiles.form.newHeading")
           : t("clientWindow.profiles.form.editHeading", { profile: profile.name })}
       </h3>
+
+      {/* --- slice: profiles polish ---
+          Every field below still edits the profile, and none of them reaches
+          the game while the line at the bottom is a line the player wrote. A
+          form that stayed silent about that would let somebody change a skin
+          six times and wonder why the game keeps the old one. */}
+      {overridden ? (
+        <p className="rounded-md border border-line-warm bg-warm-subtle p-12 text-body-sm text-fg">
+          {t("clientWindow.profiles.form.tokensOverrideNotice")}
+        </p>
+      ) : null}
 
       <SettingRow
         label={t("clientWindow.profiles.form.name")}
@@ -210,16 +227,11 @@ export function ProfileForm({
         />
       </SettingRow>
 
-      <div className="flex flex-col gap-4">
-        <span className="text-label-xs text-fg-muted">
-          {t("clientWindow.profiles.form.tokens")}
-        </span>
-        <pre className="rounded-md border border-line bg-input p-12 text-mono-xs text-fg-secondary whitespace-pre-wrap break-all">
-          {tokens.length === 0
-            ? t("clientWindow.profiles.form.tokensEmpty")
-            : commandLine(tokens)}
-        </pre>
-      </div>
+      <TokenLine
+        built={tokens}
+        override={draft.tokensOverride}
+        onChange={(value) => edit({ tokensOverride: value })}
+      />
 
       {save.error ? (
         <p role="alert" className="text-body-sm text-fg-danger break-words">
@@ -236,6 +248,92 @@ export function ProfileForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+// --- slice: profiles polish ---
+
+/**
+ * Whether this profile launches by its hand-written line rather than by its
+ * fields.
+ *
+ * The same test `profiles::clean_tokens` makes in the core: a line of spaces
+ * is stored as «no line», so a form that called it an override would promise
+ * a launch that will not happen. Exported for the form and its guard.
+ */
+export function isOverridden(line: string | null): boolean {
+  return line !== null && line.trim() !== "";
+}
+
+/**
+ * The `+set` line of the profile, and the field that edits it.
+ *
+ * The line was a read-only preview of what the fields build. It is now the
+ * other way round as soon as the player types in it: the string is kept on the
+ * profile as `tokensOverride` and it is what the launch carries, because a
+ * player who edits a command line means the command line, not the controls
+ * that happened to have produced it. **Reset to fields** drops the string and
+ * the assembling starts again.
+ *
+ * A `textarea` and not an `<input>`: the line is long, and wrapping it is the
+ * difference between reading nine cvars and scrolling through them. Line
+ * breaks are refused by the core, so the field commits whatever is typed and
+ * the refusal, if any, is the core's to give.
+ */
+function TokenLine({
+  built,
+  override,
+  onChange,
+}: {
+  built: string[];
+  override: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  const { t } = useTranslation("clients");
+  const edited = override !== null;
+  const line = override ?? commandLine(built);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between gap-8">
+        <label
+          htmlFor="profile-form-tokens"
+          className="text-label-xs text-fg-muted"
+        >
+          {t("clientWindow.profiles.form.tokens")}
+        </label>
+        {edited ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            icon={<RotateCcw size={14} />}
+            onClick={() => onChange(null)}
+          >
+            {t("clientWindow.profiles.form.tokensReset")}
+          </Button>
+        ) : null}
+      </div>
+      <textarea
+        id="profile-form-tokens"
+        value={line}
+        rows={2}
+        spellCheck={false}
+        placeholder={t("clientWindow.profiles.form.tokensEmpty")}
+        onChange={(event) => onChange(event.target.value)}
+        className={cn(
+          "w-full px-12 py-8 rounded-md resize-y",
+          "bg-input border focus:border-line-focus outline-none",
+          edited ? "border-line-warm" : "border-line",
+          "text-mono-xs text-fg placeholder:text-fg-muted",
+        )}
+      />
+      <p className="text-body-sm text-fg-muted">
+        {edited
+          ? t("clientWindow.profiles.form.tokensOverrideHint")
+          : t("clientWindow.profiles.form.tokensHint")}
+      </p>
+    </div>
   );
 }
 
