@@ -160,23 +160,25 @@ const MAX_DECODE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_SEGMENT_LEN: usize = 64;
 
 /// --- slice: assembled skins ---
-/// Longest skin name the engine keeps: one part of an assembled model, or the
-/// variant of an ordinary skin.
+/// Longest name of one part of an assembled model the engine keeps.
 ///
 /// `SKIN_LENGTH` of the engine (`codemp/ui/ui_local.h:258` of OpenJK
-/// `1a6a6434`), the size of the `skinName_t` buffer the character menu fills
-/// with `Q_strncpyz(…, skinname, SKIN_LENGTH)` for each of the three rows
-/// (`codemp/ui/ui_main.c:9762`, `:9772` and `:9782`). A longer name is cut
-/// there rather than refused, and the value the menu then builds names a file
-/// no archive holds, so a name that does not fit is not offered here at all.
+/// `1a6a6434`) is 16, the size of the `skinName_t` buffer the character menu
+/// fills with `Q_strncpyz(…, skinname, SKIN_LENGTH)` for each of the three
+/// rows (`codemp/ui/ui_main.c:9762`, `:9772` and `:9782`). `Q_strncpyz` keeps
+/// the last byte for the terminator, so 15 bytes of the name survive. A longer
+/// name is cut there rather than refused, and the value the menu then builds
+/// names a file no archive holds, so a part that does not fit is not offered
+/// here at all.
 ///
-/// The model folder is not bounded by this: the engine copies it with
-/// `Q_strncpyz(species->Name, dirptr, MAX_QPATH)` (`ui_main.c:9723`), so it
-/// stays on [`MAX_SEGMENT_LEN`] with every other path segment.
+/// Neither the model folder nor the variant of an ordinary skin is bounded by
+/// this. The engine copies the folder with
+/// `Q_strncpyz(species->Name, dirptr, MAX_QPATH)` (`ui_main.c:9723`) and reads
+/// the variant into a `MAX_QPATH` buffer beside it (`ui_main.c:4983`), so both
+/// stay on [`MAX_SEGMENT_LEN`] with every other path segment.
 ///
-/// Nothing in the retail archives meets it: the longest variant is
-/// `key_carrier` of `human_merc` at 11 bytes and the longest part is 8.
-const MAX_SKIN_NAME_LEN: usize = 16;
+/// Nothing in the retail archives meets it: the longest part is 8 bytes.
+const MAX_SKIN_PART_LEN: usize = 15;
 
 /// Refuses a `.sab` or `.str` entry too large to be a text table.
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
@@ -449,10 +451,6 @@ fn skin_entry(entry: &str) -> Option<(String, String)> {
     if model.is_empty() || variant.is_empty() || file.contains('/') {
         return None;
     }
-    // A name the engine's own menu would cut short. See `MAX_SKIN_NAME_LEN`.
-    if variant.len() > MAX_SKIN_NAME_LEN {
-        return None;
-    }
     Some((model.to_string(), variant.to_string()))
 }
 
@@ -496,8 +494,9 @@ fn part_entry(entry: &str) -> Option<(String, String)> {
         return None;
     }
     // The row prefix counts: it is part of the name the engine copies into a
-    // `skinName_t`. See `MAX_SKIN_NAME_LEN`.
-    if part.len() > MAX_SKIN_NAME_LEN {
+    // `skinName_t`, and that copy cuts what does not fit. See
+    // `MAX_SKIN_PART_LEN`.
+    if part.len() > MAX_SKIN_PART_LEN {
         return None;
     }
     Some((model.to_string(), part.to_string()))
@@ -1447,11 +1446,11 @@ mod tests {
     }
 
     #[test]
-    fn a_skin_name_longer_than_the_engine_buffer_is_not_offered() {
-        let part_fits = "head_aaaaaaaaaaa";
-        let part_over = "head_aaaaaaaaaaaa";
-        assert_eq!(part_fits.len(), MAX_SKIN_NAME_LEN);
-        assert_eq!(part_over.len(), MAX_SKIN_NAME_LEN + 1);
+    fn a_part_longer_than_the_engine_buffer_is_not_offered() {
+        let part_fits = "head_aaaaaaaaaa";
+        let part_over = "head_aaaaaaaaaaa";
+        assert_eq!(part_fits.len(), MAX_SKIN_PART_LEN);
+        assert_eq!(part_over.len(), MAX_SKIN_PART_LEN + 1);
         assert_eq!(
             part_entry(&format!("models/players/jedi_hm/{part_fits}.skin")),
             Some(("jedi_hm".into(), part_fits.into()))
@@ -1461,21 +1460,15 @@ mod tests {
             None
         );
 
-        // The variant of an ordinary skin is measured the same way, and the
-        // `model_` prefix of the file name is not part of it.
-        let fits = "b".repeat(MAX_SKIN_NAME_LEN);
-        let over = "c".repeat(MAX_SKIN_NAME_LEN + 1);
+        // The variant of an ordinary skin is not measured that way: it has no
+        // buffer of its own and keeps the longer bound of every other path
+        // segment, as does the model folder.
+        let variant = "b".repeat(MAX_SKIN_PART_LEN * 2);
         assert_eq!(
-            skin_entry(&format!("models/players/kyle/model_{fits}.skin")),
-            Some(("kyle".into(), fits.clone()))
+            skin_entry(&format!("models/players/kyle/model_{variant}.skin")),
+            Some(("kyle".into(), variant.clone()))
         );
-        assert_eq!(
-            skin_entry(&format!("models/players/kyle/model_{over}.skin")),
-            None
-        );
-
-        // The model folder keeps the longer bound of every other path segment.
-        let folder = "e".repeat(MAX_SKIN_NAME_LEN + 1);
+        let folder = "e".repeat(MAX_SKIN_PART_LEN * 2);
         assert_eq!(
             skin_entry(&format!("models/players/{folder}/model_red.skin")),
             Some((folder, "red".into()))
