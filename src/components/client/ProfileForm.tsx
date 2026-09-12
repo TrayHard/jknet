@@ -178,6 +178,10 @@ export function ProfileForm({
         <SkinPicker
           clientId={client.id}
           value={draft.model}
+          // --- slice: assembled skins ---
+          // The **Character tint** row is a few fields below, so the panel of
+          // parts may point at it for the colour it does not set itself.
+          tintBelow
           onChange={(value) => edit({ model: value })}
         />
       </SettingRow>
