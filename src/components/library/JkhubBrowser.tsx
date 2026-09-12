@@ -564,7 +564,22 @@ export function JkhubBrowser({
             />
           ) : (
             <>
-              <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">
+              {/* --- slice: jkhub catalog ---
+                  Columns follow the width of this list, not of the window.
+                  The breakpoints that used to be here — `md` and `xl` — are
+                  measured against the window, while the grid sits inside a
+                  `flex-1` beside a 232 px rail: a window wide enough for five
+                  columns still got three, and one just under `xl` dropped to
+                  two while the list still had room for three. 216 px is the
+                  width a card has in the design at three columns on a
+                  1280 px window, and `auto-fill` keeps that the minimum
+                  rather than the fixed size: a card never stretches past its
+                  share of the row, and a row with two cards in it leaves the
+                  rest of the columns empty instead of widening them.
+                  `min(216px,100%)` is the floor of the floor — a container
+                  narrower than one card gives one column that fits, not one
+                  column that overflows. */}
+              <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(216px,100%),1fr))] gap-12">
                 {cards.map((card) => (
                   <JkhubCard
                     key={card.id}
