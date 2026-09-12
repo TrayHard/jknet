@@ -53,7 +53,9 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-4 h-20 px-8 rounded-full",
+        // --- slice: selection context menu ---
+        // A badge is a mark on a row, not a word to copy out of it.
+        "inline-flex items-center gap-4 h-20 px-8 rounded-full select-none",
         "text-label-xs",
         TONES[tone],
         centered && "min-w-56 justify-center text-center",

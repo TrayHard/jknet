@@ -61,7 +61,8 @@
   },
   "row": {
     "join": "Unirse",
-    "joining": "Iniciando…"
+    "joining": "Iniciando…",
+    "actions": "Friend actions"
   },
   "panel": {
     "status": "Estado",

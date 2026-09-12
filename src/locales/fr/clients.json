@@ -19,8 +19,11 @@
     "engineDetails": "About {{engine}}",
     "openFolder": "Ouvrir le dossier",
     "delete": "Supprimer",
+    "settings": "Settings",
     "settingsOf": "Paramètres de {{client}}",
     "settingsHint": "Nom et dossier du mod",
+    "makeDefault": "Make default",
+    "actions": "Client actions",
     "installedOn": "installé le {{date}}",
     "manualInstall": "Cette version doit être installée à la main."
   },
@@ -185,6 +188,7 @@
       "edit": "Edit {{profile}}",
       "remove": "Delete {{profile}}",
       "makeDefault": "Set as default",
+      "actions": "Profile actions",
       "noNickname": "No nickname",
       "removeDialog": {
         "title": "Delete {{profile}}?",

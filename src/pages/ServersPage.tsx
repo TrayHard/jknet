@@ -23,6 +23,8 @@ import { useSearchParams } from "react-router";
 import { useMissingClientToast } from "../components/MissingClientToast";
 import { PageHeader } from "../components/PageHeader";
 import { ServerDetails } from "../components/servers/ServerDetails";
+// --- slice: selection context menu ---
+import { useServerContextMenu } from "../components/servers/ServerMenu";
 import { ROW_COLUMNS, ServerRow } from "../components/servers/ServerRow";
 import { SkeletonRows } from "../components/servers/SkeletonRow";
 import { Tabs, type TabDefinition } from "../components/servers/Tabs";
@@ -132,6 +134,9 @@ export function ServersPage() {
   // with, and the default client of the game only when there is no such record.
   const connectClient = useConnectClient();
   const missingClientToast = useMissingClientToast();
+  // --- slice: selection context menu ---
+  // One layer for the whole table: a right click names the row it landed on.
+  const rowMenu = useServerContextMenu();
 
   const [tab, setTab] = useState<ServerTab>("all");
   const [sortColumn, setSortColumn] = useState<SortColumn>("players");
@@ -615,10 +620,15 @@ export function ServersPage() {
                         hidden: !server.hidden,
                       })
                     }
+                    // --- slice: selection context menu ---
+                    onContextMenu={(event) => rowMenu.open(event, server)}
                   />
                 ))
               )}
             </div>
+            {/* --- slice: selection context menu --- the list of the right
+                click, rendered once for the whole table. */}
+            {rowMenu.menu}
           </div>
 
           {view.frozen ? (

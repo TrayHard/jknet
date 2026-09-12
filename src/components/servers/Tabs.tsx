@@ -45,7 +45,8 @@ export function Tabs<Id extends string>({
             title={tab.title}
             onClick={() => onChange(tab.id)}
             className={cn(
-              "inline-flex items-center gap-6 h-36 px-12 -mb-1 border-b-2",
+              // --- slice: selection context menu ---
+              "inline-flex items-center gap-6 h-36 px-12 -mb-1 border-b-2 select-none",
               "text-body-sm-medium transition-colors duration-150 cursor-pointer",
               active
                 ? "border-line-accent text-fg"

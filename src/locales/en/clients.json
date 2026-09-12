@@ -18,8 +18,11 @@
     "engineDetails": "About {{engine}}",
     "openFolder": "Open folder",
     "delete": "Delete",
+    "settings": "Settings",
     "settingsOf": "Settings of {{client}}",
     "settingsHint": "Opens the client in a window of its own",
+    "makeDefault": "Make default",
+    "actions": "Client actions",
     "installedOn": "installed {{date}}",
     "manualInstall": "This build has to be installed by hand."
   },
@@ -184,6 +187,7 @@
       "edit": "Edit {{profile}}",
       "remove": "Delete {{profile}}",
       "makeDefault": "Set as default",
+      "actions": "Profile actions",
       "noNickname": "No nickname",
       "removeDialog": {
         "title": "Delete {{profile}}?",
