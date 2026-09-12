@@ -160,7 +160,7 @@ pub async fn fetch(
 
     let mut received = already;
     let mut last = std::time::Instant::now();
-    emit(app, file_id, received, total);
+    emit(app, file_id, received, total, file_name);
 
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
@@ -171,7 +171,7 @@ pub async fn fetch(
         received += chunk.len() as u64;
         if last.elapsed().as_millis() >= PROGRESS_INTERVAL_MS {
             last = std::time::Instant::now();
-            emit(app, file_id, received, total);
+            emit(app, file_id, received, total, file_name);
         }
     }
     sink.flush()
@@ -197,18 +197,19 @@ pub async fn fetch(
     }
     std::fs::rename(&partial, &target)
         .map_err(|e| AppError::io_path("cannot rename", &partial, e))?;
-    emit(app, file_id, received, total.max(received));
+    emit(app, file_id, received, total.max(received), file_name);
     log::info!("jkhub: downloaded {received} bytes into {}", target.display());
     Ok(target)
 }
 
 /// Sends one progress event. A failed emit is logged, never propagated: a
 /// download must not fail because a window went away.
-fn emit(app: &AppHandle, file_id: u32, received: u64, total: u64) {
+fn emit(app: &AppHandle, file_id: u32, received: u64, total: u64, file_name: &str) {
     let payload = DownloadProgress {
         file_id,
         received,
         total,
+        file_name: file_name.to_string(),
     };
     if let Err(e) = app.emit(PROGRESS_EVENT, payload) {
         log::warn!("cannot emit {PROGRESS_EVENT}: {e}");
