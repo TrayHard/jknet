@@ -1,4 +1,5 @@
-import { RotateCcw } from "lucide-react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { Loader2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -186,11 +187,7 @@ export function ProfileForm({
             />
           </SettingRow>
 
-          {hilts.data?.length === 0 ? (
-            <p className="text-body-sm text-fg-muted">
-              {t("clientWindow.profiles.form.saberEmpty")}
-            </p>
-          ) : null}
+          <HiltsNotice hilts={hilts} />
         </>
       ) : null}
 
@@ -335,6 +332,64 @@ function TokenLine({
       </p>
     </div>
   );
+}
+
+/**
+ * What the hilt list is doing, when it is not simply a list.
+ *
+ * --- slice: profiles polish ---
+ * The skin grid owns its query and draws three states of it — reading,
+ * failed, and genuinely empty. The hilt lists were handed `hilts.data ?? []`
+ * and drew one: two `Select`s holding **Not set** and nothing else. A refused
+ * `list_saber_hilts` and an archive with no hilt in it looked exactly alike,
+ * and because the query is `retry: false` with `staleTime: Infinity`, the
+ * first refusal was the last word until the window was reopened. That is the
+ * whole of the report «the skins are there and the hilts are not», the other
+ * half being the archive scan that used to give up on its first bad entry.
+ *
+ * So the same three states, and a way out of the third: **Try again** refetches
+ * rather than asking the player to close the window.
+ */
+export function HiltsNotice({ hilts }: { hilts: UseQueryResult<SaberHilt[]> }) {
+  const { t } = useTranslation("clients");
+  const errorText = useErrorText();
+
+  if (hilts.error) {
+    return (
+      <div
+        role="alert"
+        className="flex items-center gap-8 flex-wrap text-body-sm text-fg-danger"
+      >
+        <span className="break-words">{errorText(hilts.error)}</span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          icon={<RotateCcw size={14} />}
+          disabled={hilts.isFetching}
+          onClick={() => void hilts.refetch()}
+        >
+          {t("clientWindow.profiles.form.saberRetry")}
+        </Button>
+      </div>
+    );
+  }
+  if (hilts.isLoading) {
+    return (
+      <p className="flex items-center gap-8 text-body-sm text-fg-muted">
+        <Loader2 size={14} className="text-fg-accent animate-spin shrink-0" />
+        {t("clientWindow.profiles.form.saberLoading")}
+      </p>
+    );
+  }
+  if ((hilts.data ?? []).length === 0) {
+    return (
+      <p className="text-body-sm text-fg-muted">
+        {t("clientWindow.profiles.form.saberEmpty")}
+      </p>
+    );
+  }
+  return null;
 }
 
 /**

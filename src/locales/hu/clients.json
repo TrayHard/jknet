@@ -214,6 +214,8 @@
         "saber2": "Second hilt (saber2)",
         "saber2None": "No second hilt",
         "saberEmpty": "No hilt in the archives of this client.",
+        "saberLoading": "Reading the hilts out of the archives…",
+        "saberRetry": "Try again",
         "color1": "Blade colour (color1)",
         "color2": "Second blade colour (color2)",
         "charColor": "Character tint (char_color)",
