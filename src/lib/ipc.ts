@@ -1011,6 +1011,29 @@ export const SABER_COLORS: readonly string[] = [
   "purple",
 ];
 
+// --- slice: skins and hilts ---
+/**
+ * What each of the six looks like, so the control can wear the colour it
+ * names.
+ *
+ * `CG_RGBForSaberColor` (`codemp/cgame/cg_players.c:5246-5271` of OpenJK
+ * `1a6a6434`) in hexadecimal: the engine writes the channels as floats, and
+ * `0.2` is `0x33`, `0.5` is `0x80`, `0.1` is `0x1a`, `0.4` is `0x66` and `0.9`
+ * is `0xe6`. Indexed by the value of `color1`, like {@link SABER_COLORS}.
+ *
+ * Not a design token and deliberately so: this is the blade of the game, and a
+ * swatch that matched the launcher's palette instead would show the player a
+ * colour they will not get.
+ */
+export const SABER_BLADE_RGB: readonly string[] = [
+  "#ff3333",
+  "#ff801a",
+  "#ffff33",
+  "#33ff33",
+  "#3366ff",
+  "#e633ff",
+];
+
 export const profilesIpc = {
   listProfiles: (clientId: string) =>
     call<ProfileBook>("list_profiles", { clientId }),
