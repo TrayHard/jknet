@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Search,
   Server as ServerIcon,
+  Users,
 } from "lucide-react";
 import {
   useEffect,
@@ -420,15 +421,17 @@ export function ServersPage() {
     <div className="flex flex-col h-full p-24">
       <PageHeader
         title={t("title")}
-        subtitle={describeCounts(t, {
-          // --- slice: game switch --- the list is one game's, and the line
-          // says which: two lists that look alike need naming apart.
-          game: gameName(activeGame),
-          total: inTab.length,
-          players: playersOnline,
-          age: secondsAgo === null ? null : format.age(secondsAgo),
-          scanning: scope.running,
-        })}
+        subtitle={
+          <CountsLine
+            // --- slice: game switch --- the list is one game's, and the line
+            // says which: two lists that look alike need naming apart.
+            game={gameName(activeGame)}
+            total={inTab.length}
+            players={playersOnline}
+            age={secondsAgo === null ? null : format.age(secondsAgo)}
+            scanning={scope.running}
+          />
+        }
         actions={
           <>
             <Input
@@ -997,9 +1000,6 @@ function buildTabs(
 /** The `t` of the `servers` namespace, as the builders below take it. */
 type ServersT = ReturnType<typeof useTranslation<"servers">>["t"];
 
-/** Punctuation between the parts of the subtitle, not a word. */
-const DOT = " · ";
-
 /**
  * The line under the title: how many people are playing, and how fresh that is.
  *
@@ -1014,38 +1014,110 @@ const DOT = " · ";
  * answer is now a row of its own — muted, marked offline — so counting them in
  * a sentence says it twice.
  *
+ * --- slice: servers home tweaks ---
+ * The words went the same way: three icons carry them now, and each one holds
+ * the sentence it stands for on hover. A line of three numbers is read in a
+ * glance, while «57 players online · 130 Jedi Academy servers · refreshed
+ * 2 min ago» is read as a sentence — and the header of a screen whose numbers
+ * change every refresh is not something anybody reads twice.
+ *
  * --- slice: i18n ---
- * Each part is a whole message with its own placeholders and its own plural,
- * and the middot between them is punctuation. Nothing here glues half-sentences
- * together: «118 Jedi Academy servers» is one message, not «118» and «servers».
+ * The hidden sentences are whole messages with their own placeholders and
+ * their own plurals, the same keys as before. Nothing here glues halves
+ * together: «118 Jedi Academy servers» is one message, not «118» and
+ * «servers». An empty list still answers in words, because there is no number
+ * for an icon to carry.
  */
-function describeCounts(
-  t: ServersT,
-  state: {
-    /** Name of the active game, which is whose list this is. */
-    game: string;
-    total: number;
-    players: number;
-    /** How long ago the list was refreshed, already formatted, or `null`. */
-    age: string | null;
-    scanning: boolean;
-  },
-): string {
-  const { game, total, players, age, scanning } = state;
+function CountsLine({
+  game,
+  total,
+  players,
+  age,
+  scanning,
+}: {
+  /** Name of the active game, which is whose list this is. */
+  game: string;
+  total: number;
+  players: number;
+  /** How long ago the list was refreshed, already formatted, or `null`. */
+  age: string | null;
+  scanning: boolean;
+}) {
+  const { t } = useTranslation("servers");
+  const format = useFormat();
+  const scan = (
+    <CountsPart
+      icon={<RefreshCw size={14} className="animate-spin" />}
+      hint={t("subtitle.scanning")}
+    />
+  );
 
   if (total === 0) {
-    return scanning
-      ? [t("subtitle.empty", { game }), t("subtitle.scanning")].join(DOT)
-      : t("subtitle.empty", { game });
+    return (
+      <span className="inline-flex flex-wrap items-center gap-8">
+        {t("subtitle.empty", { game })}
+        {scanning ? scan : null}
+      </span>
+    );
   }
 
-  const parts: string[] = [
-    t("subtitle.players", { count: players }),
-    t("subtitle.servers", { count: total, game }),
-  ];
-  if (scanning) parts.push(t("subtitle.scanning"));
-  else if (age !== null) parts.push(t("subtitle.refreshed", { age }));
-  return parts.join(DOT);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-12">
+      <CountsPart
+        icon={<Users size={14} />}
+        value={format.number(players)}
+        hint={t("subtitle.players", { count: players })}
+      />
+      <CountsPart
+        icon={<ServerIcon size={14} />}
+        value={format.number(total)}
+        hint={t("subtitle.servers", { count: total, game })}
+      />
+      {scanning ? (
+        scan
+      ) : age === null ? null : (
+        <CountsPart
+          icon={<RefreshCw size={14} />}
+          value={age}
+          hint={t("subtitle.refreshed", { age })}
+        />
+      )}
+    </span>
+  );
+}
+
+// --- slice: servers home tweaks ---
+/**
+ * One icon and the number behind it, with the sentence it stands for on hover.
+ *
+ * The sentence is both the tooltip and the label: an icon and a bare number
+ * are nothing to a screen reader, and «130» read out alone is worse than the
+ * words this line dropped.
+ */
+function CountsPart({
+  icon,
+  value,
+  hint,
+}: {
+  icon: ReactNode;
+  /** Left out by the part that is a state rather than a count. */
+  value?: string;
+  hint: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-6"
+      title={hint}
+      aria-label={hint}
+    >
+      <span className="text-fg-muted" aria-hidden="true">
+        {icon}
+      </span>
+      {value === undefined ? null : (
+        <span className="tabular-nums">{value}</span>
+      )}
+    </span>
+  );
 }
 
 function emptyTitle(
