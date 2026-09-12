@@ -415,6 +415,7 @@ export function LibraryPage() {
           clientName={client?.name ?? t("fallback.theClient")}
           installed={all}
           search={search}
+          onSearch={setSearch}
         />
       ) : (
         <EmptyState

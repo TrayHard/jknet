@@ -10,6 +10,7 @@
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
+    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_many": "{{count}} results in {{game}}",
     "results_other": "{{count}} results in {{game}}"
@@ -71,6 +72,7 @@
   },
   "card": {
     "open": "Abrir {{title}}",
+    "byAuthor": "Search for everything by {{author}}",
     "installed": "Instalado",
     "install": "Instalar",
     "reinstall": "Reinstalar",
