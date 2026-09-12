@@ -29,7 +29,14 @@ import {
 } from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
-import { Badge, Button, EmptyState } from "../components/ui";
+// --- slice: selection context menu ---
+import {
+  Badge,
+  Button,
+  EmptyState,
+  useContextMenu,
+  type MenuItem,
+} from "../components/ui";
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
 import { useEngineNote } from "../i18n/useEngineNote";
@@ -48,6 +55,8 @@ import { engineRoute } from "../lib/engines";
 // --- slice: game switch ---
 import {
   clientsOfGame,
+  // --- slice: selection context menu ---
+  defaultClientPatch,
   isGame,
   otherGame,
   resolveDefaultClientId,
@@ -67,6 +76,8 @@ import {
   useRunningGame,
   useSettings,
   useStopGame,
+  // --- slice: selection context menu ---
+  useUpdateSettings,
 } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 
@@ -100,6 +111,10 @@ export function ClientsPage() {
   const installEngine = useInstallEngine();
   const launchClient = useLaunchClient();
   const stopGame = useStopGame();
+  // --- slice: selection context menu ---
+  // **Make default** is a line of the card's context menu and of nothing
+  // else: the card itself sends the player to the client window for it.
+  const updateSettings = useUpdateSettings();
   const runningGame = useRunningGame();
   // Two sources, because neither covers the whole install on its own: the
   // mutation knows about the call from the click until the core answers, the
@@ -236,6 +251,13 @@ export function ClientsPage() {
                   );
                 }}
                 onNewClient={() => setDialogOpen(true)}
+                // --- slice: selection context menu ---
+                onMakeDefault={() => {
+                  setError(null);
+                  updateSettings.mutate(defaultClientPatch(client), {
+                    onError: (e) => setError(errorText(e)),
+                  });
+                }}
                 onStop={() =>
                   stopGame.mutate(undefined, {
                     onError: (e) => setError(errorText(e)),
@@ -338,6 +360,9 @@ interface ClientCardProps {
   onStop: () => void;
   /** Opens the New client dialog, for the way out of a legacy engine. */
   onNewClient: () => void;
+  // --- slice: selection context menu ---
+  /** Makes this client the one **Play** and **Connect** start. */
+  onMakeDefault: () => void;
 }
 
 /**
@@ -371,6 +396,7 @@ function ClientCard({
   onLaunch,
   onStop,
   onNewClient,
+  onMakeDefault,
 }: ClientCardProps) {
   const { t } = useTranslation("clients");
   const errorText = useErrorText();
@@ -395,11 +421,69 @@ function ClientCard({
   const isRunning = running?.clientId === client.id;
   const otherIsRunning = running !== null && !isRunning;
 
+  // `revealItemInDir` and not `openPath`: the permission of the latter is
+  // scoped to `$APPLOCALDATA`, and `dataDirOverride` can put the client folder
+  // anywhere on the disk. The price is that the file manager opens `clients\`
+  // with the folder selected rather than inside it.
+  const openFolder = () => {
+    if (!isTauri() || clientDir.data === undefined) return;
+    void revealItemInDir(clientDir.data).catch(() => undefined);
+  };
+
+  // --- slice: selection context menu ---
+  // A right click on the card, with the five things the card itself offers —
+  // its one large button, its three small ones and the badge that says which
+  // client is the default. Every line runs the handler of the control it
+  // stands for, and a line the card would draw dead is dead here too.
+  const menu = useContextMenu<Client>({
+    ariaLabel: t("card.actions"),
+    items: (): MenuItem[] => [
+      {
+        id: "launch",
+        label: t("engine.launch"),
+        icon: <Play size={14} />,
+        disabled: !installed || installing || isRunning || otherIsRunning,
+      },
+      { id: "edit", label: t("card.settings"), icon: <SettingsIcon size={14} /> },
+      {
+        id: "folder",
+        label: t("card.openFolder"),
+        icon: <FolderOpen size={14} />,
+        disabled: clientDir.data === undefined,
+      },
+      {
+        id: "default",
+        label: t("card.makeDefault"),
+        icon: <Check size={14} />,
+        disabled: isDefault,
+      },
+      {
+        id: "delete",
+        label: t("card.delete"),
+        icon: <Trash2 size={14} />,
+        danger: true,
+        disabled: isRunning || installing,
+      },
+    ],
+    onSelect: (id) => {
+      if (id === "launch") onLaunch();
+      else if (id === "edit") onEdit();
+      else if (id === "folder") openFolder();
+      else if (id === "default") onMakeDefault();
+      else onDelete();
+    },
+  });
+
   return (
     // One row of three parts: the mark, everything the card says, and the one
     // button the player came to press. Nothing is stacked under the row, so
     // **Launch** sits against the middle of the card at any height.
-    <li className="flex items-center gap-12 rounded-lg border border-line bg-surface p-16">
+    <li
+      className="flex items-center gap-12 rounded-lg border border-line bg-surface p-16"
+      // --- slice: selection context menu ---
+      onContextMenu={(event) => menu.open(event, client)}
+    >
+      {menu.menu}
       <EngineLogo engineId={client.engineId} name={engineName} size={44} />
       <div className="flex-1 min-w-0 flex flex-col gap-4">
         <div className="flex items-center gap-8">
@@ -517,15 +601,7 @@ function ClientCard({
             // pushing the whole tail of the row out of the card.
             className="min-w-0"
             icon={<FolderOpen size={14} className="shrink-0" />}
-            // `revealItemInDir` and not `openPath`: the permission of the
-            // latter is scoped to `$APPLOCALDATA`, and `dataDirOverride` can
-            // put the client folder anywhere on the disk. The price is that
-            // the file manager opens `clients\` with the folder selected
-            // rather than inside it.
-            onClick={() => {
-              if (!isTauri() || clientDir.data === undefined) return;
-              void revealItemInDir(clientDir.data).catch(() => undefined);
-            }}
+            onClick={openFolder}
             disabled={clientDir.data === undefined}
             title={clientDir.data ?? undefined}
           >

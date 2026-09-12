@@ -11,7 +11,8 @@ import { MapPreview } from "../MapPreview";
 import { Badge, Button, Toggle } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
-import { ServerMenu } from "./ServerMenu";
+// --- slice: selection context menu ---
+import { ServerMenu, useServerContextMenu } from "./ServerMenu";
 import { ServerName } from "./ServerName";
 
 interface ServerDetailsProps {
@@ -109,6 +110,11 @@ export function ServerDetails({
   const gametypes = useGametypeLabels();
   const format = useFormat();
   const [copied, setCopied] = useState(false);
+  // --- slice: selection context menu ---
+  // The heading of the panel answers a right click with the same list the
+  // dots beside **Connect** carry, so the panel behaves like the row that
+  // opened it.
+  const headingMenu = useServerContextMenu();
 
   const copyAddress = () => {
     void navigator.clipboard
@@ -123,7 +129,12 @@ export function ServerDetails({
       {/* --- slice: maps --- */}
       <MapPreview map={server.map} game={server.game} compact className="h-96" />
 
-      <div className="flex flex-col gap-8">
+      {/* --- slice: selection context menu --- */}
+      <div
+        className="flex flex-col gap-8"
+        onContextMenu={(event) => headingMenu.open(event, server)}
+      >
+        {headingMenu.menu}
         <ServerName
           raw={server.hostnameRaw}
           clean={server.hostnameClean}

@@ -61,7 +61,8 @@
   },
   "row": {
     "join": "Rejoindre",
-    "joining": "Démarrage…"
+    "joining": "Démarrage…",
+    "actions": "Friend actions"
   },
   "panel": {
     "status": "Statut",

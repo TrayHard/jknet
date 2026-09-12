@@ -12,6 +12,8 @@ import { hasTextSelection } from "../../lib/selection";
 import { Badge } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
+// --- slice: selection context menu ---
+import { useServerContextMenu } from "./ServerMenu";
 import { ServerName } from "./ServerName";
 
 interface ServerListBlockProps {
@@ -95,6 +97,10 @@ export function ServerListBlock({
   const { t: tServers } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");
   const gametypes = useGametypeLabels();
+  // --- slice: selection context menu ---
+  // One layer for the block: the same three actions the dots at the end of
+  // the row carry, from anywhere in it.
+  const rowMenu = useServerContextMenu();
 
   if (servers.length === 0) return null;
 
@@ -141,6 +147,10 @@ export function ServerListBlock({
                       onOpen(server);
                     }
               }
+              // --- slice: selection context menu ---
+              // A right click anywhere in the row, buttons included: it opens
+              // the same list as the dots and leads nowhere.
+              onContextMenu={(event) => rowMenu.open(event, server)}
               onKeyDown={
                 onOpen === undefined
                   ? undefined
@@ -240,6 +250,8 @@ export function ServerListBlock({
           );
         })}
       </ul>
+      {/* --- slice: selection context menu --- one list for the block. */}
+      {rowMenu.menu}
     </section>
   );
 }

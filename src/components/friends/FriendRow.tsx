@@ -1,4 +1,5 @@
 import { Gamepad2 } from "lucide-react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
@@ -16,6 +17,14 @@ interface FriendRowProps {
   /** Shows the Join button on hover. Left out while a game already runs. */
   onJoin?: () => void;
   joining?: boolean;
+  // --- slice: selection context menu ---
+  /**
+   * A right click anywhere in the row.
+   *
+   * The screen owns the menu: it is the one that knows how to join, invite
+   * and remove, and one layer serves the whole list.
+   */
+  onContextMenu?: (event: ReactMouseEvent) => void;
 }
 
 /**
@@ -33,6 +42,7 @@ export function FriendRow({
   onSelect,
   onJoin,
   joining = false,
+  onContextMenu,
 }: FriendRowProps) {
   const { t } = useTranslation("friends");
   const statusLine = useStatusLine();
@@ -51,6 +61,8 @@ export function FriendRow({
         if (hasTextSelection()) return;
         onSelect();
       }}
+      // --- slice: selection context menu ---
+      onContextMenu={onContextMenu}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

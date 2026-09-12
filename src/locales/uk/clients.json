@@ -20,8 +20,11 @@
     "engineDetails": "About {{engine}}",
     "openFolder": "Open folder",
     "delete": "Видалити",
+    "settings": "Settings",
     "settingsOf": "Налаштування клієнта {{client}}",
     "settingsHint": "Ім’я та папка мода",
+    "makeDefault": "Make default",
+    "actions": "Client actions",
     "installedOn": "встановлено {{date}}",
     "manualInstall": "Цю збірку встановлюють вручну."
   },
@@ -186,6 +189,7 @@
       "edit": "Edit {{profile}}",
       "remove": "Delete {{profile}}",
       "makeDefault": "Set as default",
+      "actions": "Profile actions",
       "noNickname": "No nickname",
       "removeDialog": {
         "title": "Delete {{profile}}?",
