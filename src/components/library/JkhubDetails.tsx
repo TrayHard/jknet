@@ -148,7 +148,18 @@ export function JkhubDetails({
                         type="button"
                         onClick={() => setZoomed(shot.url)}
                         aria-label={t("details.openScreenshot")}
-                        className="block h-120 w-200 overflow-hidden rounded-md border border-line cursor-pointer"
+                        // --- slice: jkhub details ---
+                        // The frame is fixed and the picture is not. JKHub
+                        // holds in-game screenshots at whatever resolution
+                        // their author played at — 4:3 and 16:9 both, and the
+                        // site publishes no size anywhere — while this frame
+                        // is 200 by 120, which is 5:3. `object-cover` filled
+                        // it by cutting a strip off every one of them, which
+                        // is why a picture that reads fine on the site read
+                        // wrong here. `contain` shows the whole shot on the
+                        // frame's own background, the way the enlarged view
+                        // below already did.
+                        className="block h-120 w-200 overflow-hidden rounded-md border border-line bg-elevated cursor-pointer"
                       >
                         {broken.has(preview) ? (
                           <span className="flex size-full items-center justify-center bg-elevated text-fg-muted">
@@ -162,7 +173,7 @@ export function JkhubDetails({
                             decoding="async"
                             referrerPolicy="no-referrer"
                             onError={() => fail(preview)}
-                            className="size-full object-cover"
+                            className="size-full object-contain"
                           />
                         )}
                       </button>
