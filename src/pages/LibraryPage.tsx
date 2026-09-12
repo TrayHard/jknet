@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Upload,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -288,6 +289,16 @@ export function LibraryPage() {
   const indexStatus = useJkhubIndexStatus(activeGame, tab === "jkhub");
   const searchOff = tab === "jkhub" && indexStatus.data?.available === false;
 
+  // --- slice: library polish ---
+  // Clearing puts the caret back where the player was typing: the box is the
+  // one control of the screen they came back to, and a cleared field they
+  // then have to click into costs the same keystroke twice.
+  const searchBox = useRef<HTMLInputElement>(null);
+  const clearSearch = () => {
+    setSearch("");
+    searchBox.current?.focus();
+  };
+
   const queryError = clients.error ?? items.error ?? conflicts.error ?? null;
   const failure = error ?? (queryError ? errorText(queryError) : null);
   const busy = addFiles.isPending || setEnabled.isPending || removeItem.isPending;
@@ -303,14 +314,35 @@ export function LibraryPage() {
         title={t("title")}
         actions={
           <>
+            {/* --- slice: library polish ---
+                The box searches three tabs, and on **Browse JKHub** it takes
+                operators such as `by:author` on top of the words — 232 px hid
+                the second half of anything longer than two words. It starts
+                at 360 px and grows with the window to 480; at the 1100 px
+                minimum the header row wraps and the buttons take a line of
+                their own, which is what `PageHeader` has a basis for. */}
             <Input
+              ref={searchBox}
               icon={<Search size={16} />}
               placeholder={t("searchPlaceholder")}
               value={search}
-              className="w-232"
+              className="w-[clamp(360px,30vw,480px)]"
               disabled={searchOff}
               title={searchOff ? tJkhub("search.unavailable") : undefined}
               onChange={(event) => setSearch(event.target.value)}
+              trailing={
+                search !== "" ? (
+                  <button
+                    type="button"
+                    aria-label={t("clearSearch")}
+                    title={t("clearSearch")}
+                    onClick={clearSearch}
+                    className="inline-flex size-20 items-center justify-center rounded-sm text-fg-muted hover:text-fg cursor-pointer select-none"
+                  >
+                    <X size={14} />
+                  </button>
+                ) : undefined
+              }
             />
             <Button icon={<ExternalLink size={16} />} onClick={browseJkhub}>
               {t("browseJkhub")}
