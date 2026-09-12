@@ -21,6 +21,7 @@ use serde_json::Value;
 
 use crate::error::{AppError, Result};
 
+use super::richtext;
 use super::types::{
     JkhubAuthor, JkhubCard, JkhubChangelogEntry, JkhubFile, JkhubGame, JkhubRating,
     JkhubScreenshot,
@@ -467,7 +468,11 @@ pub fn parse_file_page(html: &str, id: u32, slug: &str) -> Result<JkhubFile> {
                 avatar_url: string(author, "image"),
             })
         }),
-        description: string(app, "description").unwrap_or_default(),
+        // The site encodes the structured copy of the description twice:
+        // file 2672 carries `&amp;` where the page carries `&`, and the
+        // window printed «Unlock &amp; upgrade» because of it.
+        description: richtext::decode_entities(&string(app, "description").unwrap_or_default()),
+        description_html: description_html(&document),
         submitted_at: string(app, "dateCreated"),
         updated_at: string(app, "dateModified"),
         version: string(app, "softwareVersion"),
@@ -486,6 +491,27 @@ pub fn parse_file_page(html: &str, id: u32, slug: &str) -> Result<JkhubFile> {
         tags: tags_of(document.root_element()),
         changelog: changelog(&document),
     })
+}
+
+/// --- slice: jkhub details ---
+/// The **About This File** block, cleaned of everything the window will not
+/// render.
+///
+/// The theme gives the description one class the rest of the page does not
+/// use: `ipsType_break`. A review and a changelog entry are `ipsType_richText`
+/// too — `ipsType_richText ipsType_normal ipsContained`, with a
+/// `data-role='commentContent'` on the reviews — and both sit below the
+/// description in every saved page, so the first match is the description in
+/// all eight of them.
+///
+/// This costs no request: the page is the one the screenshots and the
+/// counters were already read from.
+fn description_html(document: &Html) -> String {
+    document
+        .select(&sel("div.ipsType_richText.ipsType_break"))
+        .next()
+        .map(richtext::sanitize_element)
+        .unwrap_or_default()
 }
 
 /// Every `application/ld+json` block of the page that parses as JSON.
@@ -885,6 +911,48 @@ mod tests {
         assert_eq!(file.version.as_deref(), Some("1.0"));
         assert_eq!((file.views, file.downloads), (2985, 33));
         assert!(file.description.contains("Saito Hajime model"));
+    }
+
+    /// --- slice: jkhub details ---
+    #[test]
+    fn the_description_keeps_the_markup_the_author_typed() {
+        let file = parse_file_page(LUGORMOD, 2672, "lugormod").expect("the page parses");
+        let html = &file.description_html;
+        assert!(html.starts_with("<p>"), "{html}");
+        assert!(
+            html.contains("<a href=\"https://lugormod.com/\">https://lugormod.com/</a>"),
+            "the address of a link is what plain text loses first: {html}"
+        );
+        assert!(html.contains("<br />"), "the line breaks of a readme matter");
+        assert!(
+            html.contains("Unlock &amp; upgrade"),
+            "an ampersand is written once, and reads as one: {html}"
+        );
+        assert!(
+            !html.contains("This file is not developed"),
+            "the notice the site appends to every page is not the description"
+        );
+        assert!(!html.contains("rel=\"external"), "no attribute but href survives");
+        assert!(
+            !html.contains("crosshairText"),
+            "the changelog is `ipsType_richText` too and is not the description: {html}"
+        );
+
+        // The plain copy stays plain, because the catalogue index searches it.
+        assert!(!file.description.contains('<'));
+        assert!(
+            file.description.contains("Unlock & upgrade"),
+            "the entity of the structured block is resolved: {}",
+            file.description
+        );
+    }
+
+    /// --- slice: jkhub details ---
+    #[test]
+    fn a_page_whose_block_moved_leaves_the_plain_copy_to_answer() {
+        let file = parse_file_page(BARE, 4234, "saitohajime").expect("the page parses");
+        assert!(file.description_html.is_empty(), "the trimmed sample has no block");
+        assert!(!file.description.is_empty(), "and the window still has words to print");
     }
 
     #[test]
