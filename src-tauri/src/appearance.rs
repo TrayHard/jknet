@@ -183,6 +183,33 @@ const MAX_SKIN_PART_LEN: usize = 15;
 /// Refuses a `.sab` or `.str` entry too large to be a text table.
 const MAX_TEXT_BYTES: u64 = 4 * 1024 * 1024;
 
+/// --- slice: skins and hilts ---
+/// Folder of the composed previews inside the icon cache of one game.
+///
+/// A folder of its own rather than one more flat name, because a preview is
+/// named after four segments — the model and the three parts — and a name that
+/// long could collide with the `<model>__<variant>` of an ordinary icon.
+const PREVIEW_DIR: &str = "assembled";
+
+/// --- slice: skins and hilts ---
+/// Side of one row of a composed preview, in pixels.
+///
+/// The retail part icons are 128×128, so a row of this size neither enlarges
+/// nor throws anything away. A picture that is not square is fitted inside the
+/// row and centred rather than stretched.
+const PREVIEW_SIDE: u32 = 128;
+
+/// --- slice: skins and hilts ---
+/// The ground a composed preview is painted on: `--gray-200` of the design
+/// tokens, `#b9c1d1`.
+///
+/// Light and opaque, and both halves matter. A part icon may carry an alpha
+/// channel — every TGA the cache converts becomes a PNG — and a head drawn
+/// straight onto the page showed the dark surface through everything the
+/// artist had cut away. The composed picture has no alpha at all, so there is
+/// nothing left to show through.
+const PREVIEW_GROUND: [u8; 3] = [0xb9, 0xc1, 0xd1];
+
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
@@ -211,6 +238,17 @@ pub struct PlayerModel {
     /// The three rows this model is assembled from, or `null` for an ordinary
     /// skin. The presence of this field *is* the «assembled» flag.
     pub parts: Option<ModelParts>,
+    /// --- slice: skins and hilts ---
+    /// Absolute path of the composed picture of [`Self::value`]: the icons of
+    /// its head, torso and legs stacked on a light ground. `null` for an
+    /// ordinary skin, and for an assembled model whose three icons could none
+    /// of them be read.
+    ///
+    /// The tile of the grid draws this instead of the three part icons, which
+    /// as three tiles read as three cut-out body parts with the page showing
+    /// through them. A combination the player builds afterwards is composed by
+    /// [`assembled_skin_preview`]; this field is the one the list opens on.
+    pub preview: Option<String>,
     /// The archive the skin was found in, for the log and the card.
     pub source: String,
 }
@@ -686,6 +724,187 @@ fn icon_is_current(file: &Path, source: &Source) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// --- slice: skins and hilts ---
+// The composed preview of an assembled model
+// ---------------------------------------------------------------------------
+
+/// The three parts of an assembled `model` value, in the order the engine
+/// reads them back.
+///
+/// The reader is the engine's own, `UI_GetCharacterCvars`
+/// (`codemp/ui/ui_main.c:5010` and below of OpenJK `1a6a6434`): cut at the
+/// **last** `/`, then take what is left apart at two `|`. Anything else — an
+/// ordinary `kyle/red`, a value with four parts, a part left empty — is not an
+/// assembled skin and yields nothing.
+fn split_assembled(value: &str) -> Option<(&str, [&str; 3])> {
+    let (model, skin) = value.rsplit_once('/')?;
+    let mut parts = skin.split('|');
+    let (Some(head), Some(torso), Some(legs), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    if model.is_empty() || head.is_empty() || torso.is_empty() || legs.is_empty() {
+        return None;
+    }
+    Some((model, [head, torso, legs]))
+}
+
+/// The name the composed preview of one combination is cached under.
+///
+/// Four segments and not three: two models may well share a head named
+/// `head_a1`, and the whole combination is what the picture shows. Every
+/// segment goes through [`safe_segment`] for the reason the icon cache does —
+/// the names come out of an archive a stranger built.
+fn preview_file_name(model: &str, picks: [&str; 3]) -> Option<String> {
+    if !safe_segment(model) || !picks.iter().all(|pick| safe_segment(pick)) {
+        return None;
+    }
+    let [head, torso, legs] = picks;
+    Some(format!("{model}__{head}__{torso}__{legs}.png"))
+}
+
+/// Whether the composed file is newer than every icon that went into it.
+///
+/// The icons themselves are kept current against the archives they came out of
+/// by [`icon_is_current`], so this second comparison is the whole freshness
+/// rule: a pk3 the player installed makes the icon newer, and the newer icon
+/// makes the preview stale.
+fn preview_is_current(file: &Path, icons: [Option<&Path>; 3]) -> bool {
+    let Some(made) = modified_at(file) else {
+        return false;
+    };
+    if made == 0 {
+        return false;
+    }
+    icons
+        .iter()
+        .flatten()
+        .all(|icon| modified_at(icon).is_some_and(|when| made >= when))
+}
+
+/// Modification time of a non-empty file in Unix seconds.
+fn modified_at(file: &Path) -> Option<u64> {
+    let meta = fs::metadata(file).ok()?;
+    if meta.len() == 0 {
+        return None;
+    }
+    Some(
+        meta.modified()
+            .ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|since| since.as_secs())
+            .unwrap_or(0),
+    )
+}
+
+/// Stacks a head, a torso and a pair of legs into one picture on a light
+/// ground.
+///
+/// Three square rows, top to bottom, which is the order the engine reads the
+/// value in and the order a person is built in. The answer is a PNG **without
+/// an alpha channel**: [`PREVIEW_GROUND`] is opaque and the encode drops the
+/// channel, so nothing of the page behind shows through a part the artist cut
+/// away. That is the whole point of composing at all — three part icons drawn
+/// as three tiles read as three cut-out limbs floating over a dark surface.
+///
+/// A row whose icon is missing or will not decode is left as bare ground
+/// rather than failing the picture around it, exactly as one unreadable icon
+/// costs its own skin and not the archive. Only a combination with no
+/// readable icon at all answers `None`: a picture of nothing but ground says
+/// less than the text tile the window already draws for a skin with no icon.
+fn compose_preview(rows: [Option<Vec<u8>>; 3]) -> Result<Option<Vec<u8>>> {
+    use image::imageops::{self, FilterType};
+    use image::{DynamicImage, Rgba, RgbaImage};
+
+    let [ground_r, ground_g, ground_b] = PREVIEW_GROUND;
+    let mut sheet = RgbaImage::from_pixel(
+        PREVIEW_SIDE,
+        PREVIEW_SIDE * rows.len() as u32,
+        Rgba([ground_r, ground_g, ground_b, 0xff]),
+    );
+
+    let mut drawn = 0usize;
+    for (row, bytes) in rows.iter().enumerate() {
+        let Some(bytes) = bytes else { continue };
+        let Some(decoded) = decode_row(bytes) else {
+            continue;
+        };
+        // `resize` fits inside the box and keeps the aspect ratio; the retail
+        // icons are square and come back untouched.
+        let scaled = decoded
+            .resize(PREVIEW_SIDE, PREVIEW_SIDE, FilterType::Triangle)
+            .to_rgba8();
+        let x = (PREVIEW_SIDE.saturating_sub(scaled.width()) / 2) as i64;
+        let y = (row as u32 * PREVIEW_SIDE + PREVIEW_SIDE.saturating_sub(scaled.height()) / 2)
+            as i64;
+        // `overlay` blends by alpha, so a cut-away pixel keeps the ground.
+        imageops::overlay(&mut sheet, &scaled, x, y);
+        drawn += 1;
+    }
+    if drawn == 0 {
+        return Ok(None);
+    }
+
+    let mut out = Vec::new();
+    DynamicImage::ImageRgba8(sheet)
+        .to_rgb8()
+        .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?;
+    Ok(Some(out))
+}
+
+/// Decodes one cached icon under the limits of this module, or `None`.
+///
+/// The format is guessed rather than taken from the file name: the cache holds
+/// JPEG and PNG, and a byte that is neither is a file somebody else wrote into
+/// the folder.
+fn decode_row(bytes: &[u8]) -> Option<image::DynamicImage> {
+    let format = image::guess_format(bytes).ok()?;
+    match reader(bytes, format).decode() {
+        Ok(decoded) => Some(decoded),
+        Err(e) => {
+            log::warn!("a part icon of an assembled model will not decode: {e}");
+            None
+        }
+    }
+}
+
+/// The composed preview of one combination, built when the cache holds nothing
+/// current.
+///
+/// `dir` is the icon cache of the game; the picture goes into [`PREVIEW_DIR`]
+/// inside it.
+fn cached_preview(
+    dir: &Path,
+    model: &str,
+    picks: [&str; 3],
+    icons: [Option<&Path>; 3],
+) -> Result<Option<PathBuf>> {
+    let Some(name) = preview_file_name(model, picks) else {
+        log::warn!("{model} and its parts are not a usable file name");
+        return Ok(None);
+    };
+    let folder = dir.join(PREVIEW_DIR);
+    let file = folder.join(name);
+    if preview_is_current(&file, icons) {
+        return Ok(Some(file));
+    }
+
+    let rows = icons.map(|icon| icon.and_then(|path| fs::read(path).ok()));
+    let Some(bytes) = compose_preview(rows)? else {
+        return Ok(None);
+    };
+    paths::create_dir(&folder)?;
+    // A picture the webview is showing may be locked on Windows, exactly as an
+    // icon may. That costs this one preview and not the scan around it.
+    if let Err(e) = fs::write(&file, &bytes) {
+        log::warn!("cannot write {}: {e}", file.display());
+        return Ok(None);
+    }
+    Ok(Some(file))
+}
+
+// ---------------------------------------------------------------------------
 // Scanning
 // ---------------------------------------------------------------------------
 
@@ -812,6 +1031,7 @@ fn scan_models_of(
                 variant: variant.to_string(),
                 icon: icon.map(|path| path.display().to_string()),
                 parts: None,
+                preview: None,
                 source: label.clone(),
             },
         );
@@ -893,6 +1113,27 @@ fn scan_assembled_of(
             continue;
         };
         let variant = assembled_variant(&head.id, &torso.id, &leg.id);
+        // --- slice: skins and hilts ---
+        // Composed here, where the three icons of the combination the list
+        // opens on are already in hand. A combination the player builds
+        // afterwards goes through `assembled_skin_preview`, which shares
+        // every function below this line.
+        let preview = match cached_preview(
+            dir,
+            model,
+            [&head.id, &torso.id, &leg.id],
+            [
+                head.icon.as_deref().map(Path::new),
+                torso.icon.as_deref().map(Path::new),
+                leg.icon.as_deref().map(Path::new),
+            ],
+        ) {
+            Ok(preview) => preview,
+            Err(e) => {
+                log::warn!("cannot compose the preview of {model} from {label}: {e}");
+                None
+            }
+        };
         let entry = PlayerModel {
             value: format!("{model}/{variant}"),
             model: model.clone(),
@@ -903,6 +1144,7 @@ fn scan_assembled_of(
                 torsos: torsos.clone(),
                 legs: legs.clone(),
             }),
+            preview: preview.map(|path| path.display().to_string()),
             source: label.to_string(),
         };
         // A key no ordinary variant can take, so a model has one assembled
@@ -1218,9 +1460,30 @@ pub async fn list_player_models(
     client_id: String,
 ) -> Result<Vec<PlayerModel>> {
     let inputs = resolve(&state, &client_id)?;
-    if let Some(answer) = cached(&MODEL_CACHE, &client_id, &inputs.signature) {
-        allow_icons(&app, &answer);
-        return Ok(answer);
+    let (found, fresh) = models_of(&app, inputs, &client_id).await?;
+    if fresh {
+        let assembled = found.iter().filter(|model| model.parts.is_some()).count();
+        log::info!(
+            "client {client_id}: {} skin(s), {assembled} of them assembled",
+            found.len()
+        );
+    }
+    Ok(found)
+}
+
+/// The skin list of one client, off the cache or off the archives.
+///
+/// The second half of the answer says which of the two it was, so the command
+/// logs a scan once and [`assembled_skin_preview`], which asks the same
+/// question to find three icons, adds no second line per click.
+async fn models_of(
+    app: &AppHandle,
+    inputs: Inputs,
+    client_id: &str,
+) -> Result<(Vec<PlayerModel>, bool)> {
+    if let Some(answer) = cached(&MODEL_CACHE, client_id, &inputs.signature) {
+        allow_icons(app, &answer);
+        return Ok((answer, false));
     }
 
     let signature = inputs.signature.clone();
@@ -1229,14 +1492,84 @@ pub async fn list_player_models(
     })
     .await?;
 
-    remember(&MODEL_CACHE, &client_id, &signature, &found);
-    allow_icons(&app, &found);
-    let assembled = found.iter().filter(|model| model.parts.is_some()).count();
-    log::info!(
-        "client {client_id}: {} skin(s), {assembled} of them assembled",
-        found.len()
-    );
-    Ok(found)
+    remember(&MODEL_CACHE, client_id, &signature, &found);
+    allow_icons(app, &found);
+    Ok((found, true))
+}
+
+/// --- slice: skins and hilts ---
+/// The composed picture of one combination of head, torso and legs.
+///
+/// `value` is the whole cvar, `jedi_hm/head_a1|torso_a1|lower_a1`, and the
+/// three parts are looked up in the client's own list rather than trusted: the
+/// window is handed cached file paths, and a page that could name any three of
+/// them would be a page that could name any file on the disk.
+///
+/// Answers `null` for a value that is not an assembled skin of this client and
+/// for one whose icons could none of them be read. The path it does answer
+/// with is allowed on the asset protocol by the very call that built it, the
+/// same per-file permission the icons get.
+#[tauri::command]
+pub async fn assembled_skin_preview(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+    value: String,
+) -> Result<Option<String>> {
+    let Some((model, picks)) = split_assembled(&value) else {
+        return Ok(None);
+    };
+    // One `resolve` for both halves of the work: the sources are read off the
+    // disk to answer «which archives does this client load», and doing that
+    // twice per click on a part would be twice per click on a part.
+    let inputs = resolve(&state, &client_id)?;
+    let dir = inputs.cache_dir.clone();
+    let (found, _) = models_of(&app, inputs, &client_id).await?;
+    let Some(entry) = found
+        .iter()
+        .find(|entry| entry.model == model && entry.parts.is_some())
+    else {
+        return Ok(None);
+    };
+    // The list opens on this very combination, so the tile of a model nobody
+    // has touched costs no work at all.
+    if entry.value == value {
+        return Ok(entry.preview.clone());
+    }
+
+    let parts = entry.parts.as_ref().expect("filtered above");
+    let rows = [&parts.heads, &parts.torsos, &parts.legs];
+    let icons: Vec<Option<PathBuf>> = rows
+        .iter()
+        .zip(picks)
+        .map(|(row, pick)| {
+            row.iter()
+                .find(|part| part.id == pick)
+                .and_then(|part| part.icon.as_deref())
+                .map(PathBuf::from)
+        })
+        .collect();
+    let [head, torso, legs] = <[Option<PathBuf>; 3]>::try_from(icons).expect("three rows");
+
+    let model = model.to_string();
+    let picks = picks.map(str::to_string);
+    let composed = blocking("the character preview", move || {
+        let borrowed = [picks[0].as_str(), picks[1].as_str(), picks[2].as_str()];
+        cached_preview(
+            &dir,
+            &model,
+            borrowed,
+            [head.as_deref(), torso.as_deref(), legs.as_deref()],
+        )
+    })
+    .await?;
+
+    let Some(file) = composed else {
+        return Ok(None);
+    };
+    let path = file.display().to_string();
+    allow_file(&app, &path);
+    Ok(Some(path))
 }
 
 /// Every saber hilt this client can offer a profile, sorted by id.
@@ -1285,18 +1618,23 @@ where
 /// the map pictures on 11 September 2026. Allowing the file itself closes the
 /// gap: the same call canonicalises the same string.
 fn allow_icons(app: &AppHandle, models: &[PlayerModel]) {
-    use tauri::Manager;
-
-    let scope = app.asset_protocol_scope();
     for icon in models.iter().flat_map(icons_of) {
-        if let Err(e) = scope.allow_file(icon) {
-            log::warn!("cannot serve {icon}: {e}");
-        }
+        allow_file(app, icon);
     }
 }
 
-/// Every cached picture of one entry: the tile, and the three rows of parts
-/// behind it when the model is one the player assembles. The part icons need
+/// The same permission for one path, which is what a preview composed after
+/// the list needs.
+fn allow_file(app: &AppHandle, path: &str) {
+    use tauri::Manager;
+
+    if let Err(e) = app.asset_protocol_scope().allow_file(path) {
+        log::warn!("cannot serve {path}: {e}");
+    }
+}
+
+/// Every cached picture of one entry: the tile, the composed preview of an
+/// assembled model, and the three rows of parts behind it. The part icons need
 /// the same per-file permission as the tile, because the panel draws them.
 fn icons_of(model: &PlayerModel) -> impl Iterator<Item = &str> {
     let parts = model.parts.iter().flat_map(|parts| {
@@ -1307,7 +1645,12 @@ fn icons_of(model: &PlayerModel) -> impl Iterator<Item = &str> {
             .chain(&parts.legs)
             .filter_map(|part| part.icon.as_deref())
     });
-    model.icon.as_deref().into_iter().chain(parts)
+    model
+        .icon
+        .as_deref()
+        .into_iter()
+        .chain(model.preview.as_deref())
+        .chain(parts)
 }
 
 #[cfg(test)]
@@ -1549,8 +1892,143 @@ mod tests {
         );
         assert!(dir.join("jedi_hm__head_a1.jpg").is_file());
         assert!(dir.join("jedi_hm__lower_a1.jpg").is_file());
-        // The whole skin beside it is not an assembled one.
+        // The whole skin beside it is not an assembled one, and has no
+        // composed preview: there is nothing to compose.
         assert!(models[0].parts.is_none());
+        assert_eq!(models[0].preview, None);
+    }
+
+    // --- slice: skins and hilts ---
+
+    /// A 128×128 picture whose left half is opaque and whose right half is cut
+    /// away — the shape of a part icon that used to show the page through it.
+    fn cut_out_png() -> Vec<u8> {
+        use image::{Rgba, RgbaImage};
+
+        let mut image = RgbaImage::new(128, 128);
+        for (x, _, pixel) in image.enumerate_pixels_mut() {
+            *pixel = if x < 64 {
+                Rgba([200, 30, 40, 255])
+            } else {
+                Rgba([0, 0, 0, 0])
+            };
+        }
+        let mut bytes = Vec::new();
+        image
+            .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+            .expect("encode");
+        bytes
+    }
+
+    #[test]
+    fn an_assembled_value_is_taken_apart_the_way_the_engine_reads_it() {
+        assert_eq!(
+            split_assembled("jedi_hm/head_a1|torso_a1|lower_a1"),
+            Some(("jedi_hm", ["head_a1", "torso_a1", "lower_a1"]))
+        );
+        // Everything the engine reads as one variant instead.
+        assert_eq!(split_assembled("kyle/red"), None);
+        assert_eq!(split_assembled("kyle"), None);
+        assert_eq!(split_assembled("jedi_hm/a1|b1|c1|d1"), None);
+        assert_eq!(split_assembled("jedi_hm/|torso_a1|lower_a1"), None);
+        assert_eq!(split_assembled("/head_a1|torso_a1|lower_a1"), None);
+    }
+
+    #[test]
+    fn a_composed_preview_is_three_rows_over_an_opaque_ground() {
+        let rows = [Some(cut_out_png()), None, Some(cut_out_png())];
+        let bytes = compose_preview(rows)
+            .expect("the compose")
+            .expect("two readable rows are a picture");
+
+        let composed = image::load_from_memory(&bytes).expect("a picture");
+        assert_eq!(composed.width(), PREVIEW_SIDE);
+        assert_eq!(composed.height(), PREVIEW_SIDE * 3);
+        // No alpha channel at all, so there is nothing for the dark page to
+        // show through. That is the whole reason the picture is composed.
+        assert_eq!(composed.color(), image::ColorType::Rgb8);
+
+        let pixels = composed.to_rgb8();
+        let ground = image::Rgb(PREVIEW_GROUND);
+        assert_eq!(pixels.get_pixel(10, 10), &image::Rgb([200, 30, 40]));
+        assert_eq!(
+            pixels.get_pixel(110, 10),
+            &ground,
+            "what the icon cut away is ground, not a hole"
+        );
+        assert_eq!(
+            pixels.get_pixel(64, PREVIEW_SIDE + 64),
+            &ground,
+            "a row with no readable icon is bare ground and costs no picture"
+        );
+        assert_eq!(
+            pixels.get_pixel(10, PREVIEW_SIDE * 2 + 10),
+            &image::Rgb([200, 30, 40]),
+            "the legs are the third row"
+        );
+
+        // And a combination with nothing readable in it is no picture: the
+        // window already draws a text tile for a skin with no icon.
+        assert_eq!(compose_preview([None, None, None]).expect("no rows"), None);
+    }
+
+    #[test]
+    fn a_preview_is_named_after_the_whole_combination() {
+        assert_eq!(
+            preview_file_name("jedi_hm", ["head_a1", "torso_a1", "lower_a1"]).as_deref(),
+            Some("jedi_hm__head_a1__torso_a1__lower_a1.png")
+        );
+        // Two models may share a part name, so the model is part of the name.
+        assert_ne!(
+            preview_file_name("jedi_hm", ["head_a1", "torso_a1", "lower_a1"]),
+            preview_file_name("jedi_tf", ["head_a1", "torso_a1", "lower_a1"])
+        );
+        // The names come out of an archive a stranger built.
+        assert_eq!(
+            preview_file_name("jedi_hm", ["..", "torso_a1", "lower_a1"]),
+            None
+        );
+        assert_eq!(
+            preview_file_name("../secret", ["head_a1", "torso_a1", "lower_a1"]),
+            None
+        );
+    }
+
+    #[test]
+    fn the_scan_composes_the_preview_the_grid_opens_on() {
+        let temp = TempDir::new().expect("temp dir");
+        let pk3 = temp.path().join("assets1.pk3");
+        assembled_pk3(&pk3, &[]);
+
+        let dir = temp.path().join("cache");
+        let models = scan_models(&[source_of(&pk3)], &dir).expect("the scan");
+        let assembled = models.last().expect("the assembled tile");
+
+        let file = dir
+            .join(PREVIEW_DIR)
+            .join("jedi_hm__head_a1__torso_a1__lower_a1.png");
+        assert!(file.is_file(), "the preview of the default combination");
+        assert_eq!(assembled.preview.as_deref(), Some(file.display().to_string().as_str()));
+        // And the window is allowed to read it by the same per-file rule the
+        // icons go through.
+        assert!(
+            icons_of(assembled).any(|path| path == file.display().to_string()),
+            "the preview is handed to the window"
+        );
+
+        // A second scan reuses the file rather than composing it again.
+        let made = fs::metadata(&file).expect("the preview").modified().ok();
+        let again = scan_models(&[source_of(&pk3)], &dir).expect("the second scan");
+        assert_eq!(
+            again.last().expect("the tile").preview,
+            assembled.preview,
+            "the same path"
+        );
+        assert_eq!(
+            fs::metadata(&file).expect("the preview").modified().ok(),
+            made,
+            "and the same file"
+        );
     }
 
     #[test]

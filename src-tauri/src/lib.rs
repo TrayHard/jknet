@@ -338,6 +338,8 @@ pub fn run() {
             profiles::set_default_profile,
             appearance::list_player_models,
             appearance::list_saber_hilts,
+            // --- slice: skins and hilts ---
+            appearance::assembled_skin_preview,
             // --- slice: library ---
             library::list_library,
             library::inspect_pk3,
