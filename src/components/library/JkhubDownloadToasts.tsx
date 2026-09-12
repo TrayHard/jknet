@@ -1,6 +1,5 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { FolderOpen } from "lucide-react";
-import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
@@ -14,7 +13,7 @@ import {
 } from "../../lib/jkhubDownloads";
 import { useClients, useJkhubDownloadProgress } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
-import { ToastSlot, useToasts } from "../ToastsProvider";
+import { ToastSlot } from "../ToastsProvider";
 import { Button, Toast } from "../ui";
 
 /**
@@ -35,21 +34,18 @@ import { Button, Toast } from "../ui";
  * The cards are rendered into the column through [`ToastSlot`] rather than
  * pushed with `useToasts`, because their content changes several times a
  * second and a push per progress event would rebuild the whole column each
- * time. The one thing that is pushed is a dismissal: the Library screen still
- * shows a plain toast of its own under the id `jkhub:<file>`, and this takes
- * it away in the same commit, so one install is one card. That call goes when
- * the tab stops pushing it.
+ * time.
+ *
+ * --- slice: library polish ---
+ * One install is one card, start to finish. The Library screen used to push a
+ * plain toast of its own under `jkhub:<file>` when the core answered, and
+ * this component took it away again in the next commit; the tab no longer
+ * pushes it, so there is nothing left to dismiss.
  */
 export function JkhubDownloadToasts() {
   const entries = useJkhubInstalls();
   const progress = useJkhubDownloadProgress();
-  const toasts = useToasts();
   const clients = useClients();
-
-  const { dismiss } = toasts;
-  useEffect(() => {
-    for (const entry of entries) dismiss(`jkhub:${entry.fileId}`);
-  }, [entries, dismiss]);
 
   if (entries.length === 0) return null;
 
@@ -71,9 +67,6 @@ export function JkhubDownloadToasts() {
   );
 }
 
-/** How long a finished install stays on screen before it takes itself away. */
-const KEEP_AFTER_SUCCESS_MS = 10_000;
-
 interface InstallCardProps {
   entry: JkhubInstallEntry;
   progress: JkhubDownloadProgress | null;
@@ -87,19 +80,12 @@ function InstallCard({ entry, progress, clientName }: InstallCardProps) {
   const result = entry.result;
   const installed = result?.kind === "installed" ? result : null;
 
-  // Only a plain success goes away on its own. Every other answer is a
-  // question the player has not answered yet, and a card that took the
-  // question away with it would leave nothing to press.
-  useEffect(() => {
-    if (installed === null) return;
-    const timer = setTimeout(
-      () => jkhubDownloads.forget(entry.fileId),
-      KEEP_AFTER_SUCCESS_MS,
-    );
-    return () => clearTimeout(timer);
-    // `attempt` re-arms the timer when the same file is installed again.
-  }, [installed, entry.fileId, entry.attempt]);
-
+  // --- slice: library polish ---
+  // No card takes itself away, success included. A success carries the folder
+  // the archive landed in and the **Open folder** button that opens it, and a
+  // player who was watching the bytes come down is not always the one looking
+  // at the screen ten seconds later. The cross closes it, and nothing else
+  // does.
   const title = entry.title ?? progress?.fileName ?? t("download.fallbackTitle");
 
   return (

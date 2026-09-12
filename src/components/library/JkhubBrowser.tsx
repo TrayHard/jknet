@@ -274,6 +274,12 @@ export function JkhubBrowser({
   // opened halfway through a crawl has instead of the events it missed.
   const step = indexing.get(game) ?? status.data?.progress ?? null;
 
+  // --- slice: library polish ---
+  // Nothing here reports the install: the card in the toast column does, from
+  // the press to the answer, and it is the only place that does. The tab used
+  // to push a second toast under `jkhub:<id>` at the end, which the column
+  // then took away again in the next commit — one install, two popups and a
+  // flicker between them.
   const runInstall = (id: number, replace: boolean) => {
     if (!clientId) {
       setFailure(t("install.pickClient"));
@@ -286,14 +292,7 @@ export function JkhubBrowser({
       {
         onSuccess: (answer) => {
           setResult(answer);
-          if (answer.kind === "installed") {
-            toasts.show(`jkhub:${id}`, {
-              variant: "success",
-              title: t("install.toastTitle", { client: clientName }),
-              text: answer.files.join(", "),
-            });
-            return;
-          }
+          if (answer.kind === "installed") return;
           // --- slice: library cleanup ---
           // Two of the answers say the entry has nothing to install: a `.rar`
           // archive and a record that links to another site. A listing card
@@ -307,15 +306,10 @@ export function JkhubBrowser({
           // buttons for it are.
           setOpenFile(id);
         },
-        onError: (error) => {
-          const message = errorText(error);
-          setFailure(message);
-          toasts.show(`jkhub:${id}`, {
-            variant: "error",
-            title: t("install.failedTitle"),
-            text: message,
-          });
-        },
+        // A failure is reported by the same card, in red and until the player
+        // closes it. The banner at the top of the tab is left for what has no
+        // card of its own: a client that was never picked, a link that would
+        // not open, a refresh that failed.
       },
     );
   };

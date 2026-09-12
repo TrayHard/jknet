@@ -118,8 +118,6 @@
   },
   "install": {
     "pickClient": "Najpierw wybierz klienta powyżej: plik instaluje się do klienta.",
-    "toastTitle": "Zainstalowano do: {{client}}",
-    "failedTitle": "Instalacja nie powiodła się",
     "categoriesTitle": "Kategorie zaktualizowane",
     "categoriesText": "Odczytano z JKHub kategorii: {{count}}."
   },

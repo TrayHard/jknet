@@ -113,8 +113,6 @@
   },
   "install": {
     "pickClient": "Choisissez d’abord un client ci-dessus : un fichier s’installe dans un client.",
-    "toastTitle": "Installé dans {{client}}",
-    "failedTitle": "Échec de l’installation",
     "categoriesTitle": "Catégories mises à jour",
     "categoriesText": "{{count}} catégories lues sur JKHub."
   },

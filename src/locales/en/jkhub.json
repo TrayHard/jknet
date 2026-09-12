@@ -108,8 +108,6 @@
   },
   "install": {
     "pickClient": "Pick a client above first: a file is installed into a client.",
-    "toastTitle": "Installed into {{client}}",
-    "failedTitle": "Install failed",
     "categoriesTitle": "Categories updated",
     "categoriesText": "{{count}} categories read from JKHub."
   },
