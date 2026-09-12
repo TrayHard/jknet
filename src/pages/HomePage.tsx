@@ -3,11 +3,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
+// --- slice: home client block ---
+import { EngineLogo } from "../components/EngineLogo";
 import { GameFilesNotice } from "../components/GameFilesNotice";
 import { MapPreview } from "../components/MapPreview";
 // --- slice: server actions ---
 import { useMissingClientToast } from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
+// --- slice: home client block ---
+import { OtherClientsMenu } from "../components/OtherClientsMenu";
 import { Page, PageHeader } from "../components/PageHeader";
 import { realPlayers, visibleServers } from "../components/servers/filter";
 import { ServerListBlock } from "../components/servers/ServerListBlock";
@@ -20,16 +24,18 @@ import { useFormat } from "../i18n/useFormat";
 import { cn } from "../lib/format";
 // --- slice: game switch ---
 import {
+  clientsOfGame,
   useActiveGame,
   useConnectClient,
   useDefaultClient,
   useGameNames,
 } from "../lib/game";
-import type { Game, ServerInfo } from "../lib/ipc";
+import type { Client, Game, ServerInfo } from "../lib/ipc";
 import {
   useAddServerHistory,
   useCachedServers,
   useClients,
+  useEnginesOfGame,
   useLaunchClient,
   useRunningGame,
   useServerRefresh,
@@ -148,18 +154,42 @@ export function HomePage() {
   const canPlay =
     defaultClient !== undefined && running === null && !launchClient.isPending;
 
+  // --- slice: home client block ---
+  // The registry name of an engine, the way a client card of the Clients
+  // screen prints it: «EternalJK», not `eternaljk`. The id is the fallback, and
+  // it is the whole answer for a client built on a build the registry dropped.
+  const engines = useEnginesOfGame(activeGame);
+  const engineName = (engineId: string) =>
+    engines.find((engine) => engine.id === engineId)?.name ?? engineId;
+
   /**
-   * Which of the two hero buttons the player pressed, while it is starting.
+   * The client the hero's own buttons already start.
    *
-   * Connect and Play share one mutation, so `isPending` alone cannot tell them
-   * apart, and the launch in flight would put «Starting…» on whichever button
-   * the code asked first. The arguments say it instead: only Connect passes an
-   * address. Both buttons still go inactive together — the client starts once.
+   * **Play** starts the default client, and while a game is up the hero names
+   * the client that is running. Everything else of this game is what the menu
+   * offers, so a line of the menu is never the button standing beside it.
+   */
+  const heroClient = running !== null ? runningClient : defaultClient;
+  const otherClients = clientsOfGame(clients.data, activeGame).filter(
+    (client) => client.id !== heroClient?.id,
+  );
+
+  /**
+   * Which of the hero's ways in the player took, while it is starting.
+   *
+   * Connect, Play and every line of the **Other clients…** menu share one
+   * mutation, so `isPending` alone cannot tell them apart, and the launch in
+   * flight would put «Starting…» on whichever button the code asked first. The
+   * arguments say it instead: only Connect passes an address, and only Play
+   * passes the default client. Every button still goes inactive together — the
+   * client starts once.
    */
   const startingConnect =
     launchClient.isPending && launchClient.variables?.connect !== undefined;
   const startingPlay =
-    launchClient.isPending && launchClient.variables?.connect === undefined;
+    launchClient.isPending &&
+    launchClient.variables?.connect === undefined &&
+    launchClient.variables?.clientId === defaultClient?.id;
 
   /**
    * The server the hero offers to go back to, or nothing.
@@ -193,13 +223,29 @@ export function HomePage() {
   // in it at all. See `useFirstServerList`.
   useFirstServerList(activeGame, cachedServers, servers.getNewList);
 
-  const play = () => {
-    if (!defaultClient) return;
+  // --- slice: home client block ---
+  /**
+   * Starts one client, with no server behind it.
+   *
+   * One function for **Play** and for every line of the **Other clients…**
+   * menu: a client started from the menu has to arrive in the game exactly
+   * where **Play** arrives — on the client's own menu, without `+connect` —
+   * and two call sites of the same mutation would be two places for that to
+   * drift. Joining a server with another client is a different question, and
+   * the **Connect…** dialog is where it is asked.
+   */
+  const launch = (client: Client) => {
+    if (running !== null || launchClient.isPending) return;
     setError(null);
     launchClient.mutate(
-      { clientId: defaultClient.id },
+      { clientId: client.id },
       { onError: (e) => setError(errorText(e)) },
     );
+  };
+
+  const play = () => {
+    if (!defaultClient) return;
+    launch(defaultClient);
   };
 
   /**
@@ -365,23 +411,48 @@ export function HomePage() {
                     : (defaultClient?.name ??
                       t("hero.noClient", { game: gameName(activeGame) }))}
               </h2>
-              <p className="text-body-md text-fg-secondary max-w-[560px]">
-                {running ? (
-                  <RunningLine startedAt={running.startedAt} pid={running.pid} />
-                ) : continueServer && continueClient ? (
-                  t("hero.continueText", { client: continueClient.name })
-                ) : defaultClient ? (
-                  t("hero.readyText")
-                ) : (
-                  // --- slice: game switch --- the hero of a game with no
-                  // client is the invitation to make one, not a dead button.
-                  t("hero.noClientText", { game: gameName(activeGame) })
-                )}
-              </p>
+              {/* --- slice: home client block ---
+                  The engine of the client the heading names, under the name
+                  and with the engine's own mark. It is the one fact that
+                  separates two clients of the same player, and it belongs to
+                  the name rather than to the row of buttons, where it used to
+                  stand. Only the Quick play hero carries it: the Continue
+                  heading is a server name, and a badge under it would name the
+                  engine of a client the heading does not mention. */}
+              {!running && continueServer === undefined && defaultClient ? (
+                <Badge
+                  tone="accent"
+                  className="self-start"
+                  icon={
+                    <EngineLogo
+                      engineId={defaultClient.engineId}
+                      name={engineName(defaultClient.engineId)}
+                      size={14}
+                    />
+                  }
+                >
+                  {engineName(defaultClient.engineId)}
+                </Badge>
+              ) : null}
+              {/* The line under the heading answers «what is this», and the
+                  Quick play hero has no question left: the heading is the
+                  client, the badge is its engine and the button says Play.
+                  The two states that do keep a line say something the block
+                  cannot show — how long the game has been up, and what the two
+                  buttons of the Continue hero each do. */}
+              {running || (continueServer && continueClient) ? (
+                <p className="text-body-md text-fg-secondary max-w-[560px]">
+                  {running ? (
+                    <RunningLine startedAt={running.startedAt} pid={running.pid} />
+                  ) : (
+                    t("hero.continueText", { client: continueClient?.name })
+                  )}
+                </p>
+              ) : null}
             </div>
 
             {/* --- slice: i18n --- the row wraps: «Create a Jedi Outcast
-                client» beside «Manage clients» already fills the hero at the
+                client» beside «Other clients…» already fills the hero at the
                 1100 px minimum, and a language a third longer would be clipped
                 by the hero's own `overflow-hidden`. */}
             <div className="flex flex-wrap items-center gap-12">
@@ -437,16 +508,19 @@ export function HomePage() {
                   </Button>
                 </>
               )}
-              <Button
-                size="lg"
-                icon={<Plus size={20} />}
-                onClick={() => void navigate("/clients")}
-              >
-                {t("hero.manageClients")}
-              </Button>
-              {defaultClient ? (
-                <Badge tone="accent">{defaultClient.engineId}</Badge>
-              ) : null}
+              {/* --- slice: home client block ---
+                  The other clients of this game, each one press from the
+                  hero. The button used to lead to the Clients screen and
+                  nothing else; the screen is still a line of the menu away,
+                  and the walk there is no longer the price of starting the
+                  second client. */}
+              <OtherClientsMenu
+                clients={otherClients}
+                engineName={engineName}
+                onLaunch={launch}
+                onNewClient={() => void navigate("/clients")}
+                launchDisabled={running !== null || launchClient.isPending}
+              />
             </div>
           </div>
 
