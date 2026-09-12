@@ -91,6 +91,7 @@ export function ServerListBlock({
   // The tooltip over the player count says the same thing on both screens, so
   // it is the same message: a server row is a server row wherever it is drawn.
   const { t: tServers } = useTranslation("servers");
+  const { t: tCommon } = useTranslation("common");
   const gametypes = useGametypeLabels();
 
   if (servers.length === 0) return null;
@@ -134,11 +135,15 @@ export function ServerListBlock({
               className={cn(
                 "grid items-center gap-12 h-44 px-16",
                 // The last column is the actions. It is `auto`, so it measures
-                // the buttons themselves and the four columns left of it keep
-                // the widths the design gives them; the name is the only
-                // flexible one and truncates, which is what holds the row on
-                // one line down to the 1100 px minimum.
-                "grid-cols-[minmax(0,1fr)_auto_76px_56px_auto]",
+                // the buttons themselves and the columns left of it keep the
+                // widths the design gives them; the name is the only flexible
+                // one and truncates, which is what holds the row on one line
+                // down to the 1100 px minimum.
+                //
+                // --- slice: servers home tweaks --- the map takes 116 px, the
+                // width the same column has on the Servers table, so a player
+                // reading both sees one row and not two designs.
+                "grid-cols-[minmax(0,1fr)_116px_auto_76px_56px_auto]",
                 "border-b border-line-subtle last:border-b-0",
                 onOpen === undefined
                   ? undefined
@@ -156,6 +161,18 @@ export function ServerListBlock({
                     {line}
                   </span>
                 )}
+              </span>
+              {/* --- slice: servers home tweaks ---
+                  Which map is up, in the same place in all three blocks. Half
+                  the answer to «do I want to go there» is the map, and the row
+                  had the mode and the head count without it. A map name is
+                  what the operator put in `mapname`: data, never translated,
+                  and cut off rather than allowed to push the row apart. */}
+              <span
+                className="text-mono-xs text-fg-muted truncate"
+                title={server.map}
+              >
+                {server.map || tCommon("values.empty")}
               </span>
               <Badge tone="accent">
                 {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
