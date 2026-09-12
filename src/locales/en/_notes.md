@@ -68,6 +68,8 @@ Everything else wraps.
 | `common:actions.seeAll` | A general «show the whole list», reused by any screen that shortens one. Do not name what is being listed — the screen that needs a specific label has its own key, as `home:topServers.seeAll` does. |
 | `home:hero.continueText` | Names two buttons of the same block: use the exact wording you gave `home:hero.connect` and `home:hero.play`, or the sentence describes buttons the player cannot find. `{{client}}` is a name the player typed. |
 | `home:hero.lastServer` | The caption over a map picture, under 20 characters. It says what the picture is, so it is a label, not a sentence. |
+| `home:hero.otherClients`, `newClient` | A button of the hero and the last line of the menu it opens. Both end in the ellipsis the launcher puts on a control that opens something instead of acting — keep it, and keep it as one character, «…». The button stands beside **Play** in a row that never wraps to a second line: two words at most. |
+| `home:hero.launch` | The mark at the right end of a client's line in that menu: pressing the line starts that client. One word, and the same one you gave `clients:engine.launch` — it is the same action on the same client. |
 | `home:topServers.favorites`, `history` | Headings of two blocks of server rows on **Home**. They name the same two things as the tabs `servers:tabs.favorites` and `servers:tabs.history` — use the same words. |
 | `servers:subtitle.*` | Parts of one line, joined with « · ». Each is a whole clause; none of them may end in a full stop. |
 | `servers:columns.players` | Abbreviation of «players» — the column is 76 px. |
@@ -93,8 +95,10 @@ Everything else wraps.
 | `library:categories.*` vs `library:categoryOne.*` | The first is the plural in the category rail, the second the singular on a card badge. Some languages need different words. |
 | `library:conflicts.ruleOrder` | The rule the game itself follows, and the only place the player learns why one file beats another. `dl_` is a file-name prefix and `pk3` an extension; neither is translated. |
 | `library:conflicts.kind.*`, `library:conflicts.kindHint.*` | What a shared path holds. The first is a badge of one or two words, the second one sentence for a player who does not know the word — «shader» means nothing to most of them. |
-| `library:conflicts.outcome`, `library:conflicts.disableWinner` | `{{winner}}`, `{{next}}` and `{{file}}` are pk3 file names. The sentence tells the player what changes after the button, so keep both halves: disabling the winner hands the path over, disabling a hidden file changes nothing the game reads. |
+| `library:conflicts.ruleToggle` | The button that opens the rule of the engine inside the conflicts window. One short word: it stands next to a summary line and must not push it onto a second row. |
+| `library:conflicts.disableWinner`, `library:conflicts.disableHidden` | Both are hints on the **Disable** button; `{{file}}` and `{{next}}` are pk3 file names. Each tells the player what changes after the click, so keep that half of the sentence: disabling the winner hands the path over, disabling a hidden file changes nothing the game reads. |
 | `jkhub:details.ratingValue` | `{{value}}` is a rating out of five, already formatted; `{{count}}` is the number of reviews. |
+| `jkhub:download.*` | The card that follows one install of a JKHub file, in the corner where the toasts are. `{{client}}` is the name the player gave a client, `{{folder}}` is `base` or the name of a mod folder — neither is translated. `download.openFolder` is a narrow button: two words at most. |
 | `jkhub:search.unavailable` | The tooltip of the search box while it is switched off, which happens only while the launcher has no copy of the JKHub catalog. It says why the box refuses words, so keep it to one short sentence; the panel below the bar carries the progress and the buttons. |
 | `friends:status.lastSeen*` | `{{count}}` is minutes, hours or days. The three keys exist so each unit can take its own plural. |
 | `friends:requests.handle` | `jkhub:kyle_k`. Do not translate; it is an identifier. |

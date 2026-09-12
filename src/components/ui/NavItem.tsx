@@ -20,7 +20,8 @@ export function NavItem({ to, icon, label, count, end = false }: NavItemProps) {
       end={end}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-12 h-36 px-12 rounded-md",
+          // --- slice: selection context menu ---
+          "flex items-center gap-12 h-36 px-12 rounded-md select-none",
           "text-display-nav transition-colors duration-150",
           isActive
             ? "bg-selected-overlay text-fg"

@@ -58,7 +58,8 @@
   },
   "row": {
     "join": "Csatlakozás",
-    "joining": "Indítás…"
+    "joining": "Indítás…",
+    "actions": "Friend actions"
   },
   "panel": {
     "status": "Állapot",

@@ -1,8 +1,11 @@
 import { Gamepad2 } from "lucide-react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import type { Friend } from "../../lib/ipc";
+// --- slice: selection context menu ---
+import { hasTextSelection } from "../../lib/selection";
 import { Avatar, Button } from "../ui";
 import { canJoin } from "./presence";
 import { useStatusLine } from "./useStatusLine";
@@ -14,6 +17,14 @@ interface FriendRowProps {
   /** Shows the Join button on hover. Left out while a game already runs. */
   onJoin?: () => void;
   joining?: boolean;
+  // --- slice: selection context menu ---
+  /**
+   * A right click anywhere in the row.
+   *
+   * The screen owns the menu: it is the one that knows how to join, invite
+   * and remove, and one layer serves the whole list.
+   */
+  onContextMenu?: (event: ReactMouseEvent) => void;
 }
 
 /**
@@ -31,6 +42,7 @@ export function FriendRow({
   onSelect,
   onJoin,
   joining = false,
+  onContextMenu,
 }: FriendRowProps) {
   const { t } = useTranslation("friends");
   const statusLine = useStatusLine();
@@ -42,7 +54,15 @@ export function FriendRow({
       role="row"
       tabIndex={0}
       aria-selected={selected}
-      onClick={onSelect}
+      // --- slice: selection context menu ---
+      // The drag that copied a friend's name ends as a click on the row; it
+      // was not a press on the row, so it selects nobody.
+      onClick={() => {
+        if (hasTextSelection()) return;
+        onSelect();
+      }}
+      // --- slice: selection context menu ---
+      onContextMenu={onContextMenu}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();

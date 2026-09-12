@@ -29,6 +29,14 @@ interface JkhubCardProps {
   onInstall: () => void;
   /** Opens the file page of jkhub.org in the system browser. */
   onOpenSite: () => void;
+  // --- slice: jkhub catalog ---
+  /**
+   * Searches the catalogue for everything by this author.
+   *
+   * Given only when the card names one: without a name there is nothing to
+   * search for, and the line stays plain text.
+   */
+  onAuthor?: (author: string) => void;
 }
 
 /**
@@ -63,6 +71,7 @@ export function JkhubCard({
   onOpen,
   onInstall,
   onOpenSite,
+  onAuthor,
 }: JkhubCardProps) {
   const { t } = useTranslation("jkhub");
   const format = useFormat();
@@ -72,6 +81,8 @@ export function JkhubCard({
   const thumbnail =
     card.thumbnailUrl && card.thumbnailUrl !== broken ? card.thumbnailUrl : null;
   const downloading = progress != null;
+  // --- slice: jkhub catalog --- the site leaves the field empty now and then.
+  const author = card.author?.name ?? null;
 
   return (
     <li className="flex flex-col rounded-lg border border-line bg-surface overflow-hidden">
@@ -110,11 +121,33 @@ export function JkhubCard({
           >
             {card.title}
           </button>
-          {/* Author and category are the site's own words. */}
+          {/* --- slice: jkhub catalog ---
+              The author is a button and the section beside it is not: a click
+              on the name writes `by:"name"` into the search box of the screen,
+              which is the shortest way from one liked file to the rest of what
+              its author made. The line is two nodes now rather than one, so
+              the name truncates on its own and the section keeps its place —
+              a name long enough to fill the card would otherwise push the
+              section out of the card entirely. */}
           <span className="flex items-center gap-6 min-w-0">
             <span className="text-body-sm text-fg-muted truncate flex-1">
-              {[card.author?.name, categoryName].filter(Boolean).join(" · ") ||
-                t("card.fallbackAuthor")}
+              {author && onAuthor ? (
+                // `inline` and not the button's own `inline-block`: the line
+                // truncates as one string, name and section together.
+                <button
+                  type="button"
+                  title={t("card.byAuthor", { author })}
+                  onClick={() => onAuthor(author)}
+                  className="inline cursor-pointer hover:text-fg-accent hover:underline"
+                >
+                  {author}
+                </button>
+              ) : (
+                author
+              )}
+              {author && categoryName ? " · " : null}
+              {categoryName}
+              {!author && !categoryName ? t("card.fallbackAuthor") : null}
             </span>
             {installed ? (
               <Badge tone="success" icon={<Check size={12} />} className="shrink-0">

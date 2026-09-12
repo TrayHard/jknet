@@ -20,8 +20,11 @@
     "engineDetails": "About {{engine}}",
     "openFolder": "Open folder",
     "delete": "Usuń",
+    "settings": "Settings",
     "settingsOf": "Ustawienia klienta {{client}}",
     "settingsHint": "Nazwa i folder moda",
+    "makeDefault": "Make default",
+    "actions": "Client actions",
     "installedOn": "zainstalowano {{date}}",
     "manualInstall": "Tę kompilację trzeba zainstalować ręcznie."
   },
@@ -186,6 +189,7 @@
       "edit": "Edit {{profile}}",
       "remove": "Delete {{profile}}",
       "makeDefault": "Set as default",
+      "actions": "Profile actions",
       "noNickname": "No nickname",
       "removeDialog": {
         "title": "Delete {{profile}}?",

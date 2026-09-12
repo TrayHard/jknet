@@ -55,7 +55,11 @@ export function Button({
     <button
       type={type}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap",
+        // --- slice: selection context menu ---
+        // `select-none`, because a label is something to press and never
+        // something to copy: the page itself is selectable now, and a drag
+        // that starts on a button would otherwise paint it blue.
+        "inline-flex items-center justify-center whitespace-nowrap select-none",
         "transition-colors duration-150 cursor-pointer",
         "disabled:cursor-not-allowed",
         VARIANTS[variant],

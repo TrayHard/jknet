@@ -58,7 +58,8 @@
   },
   "row": {
     "join": "Beitreten",
-    "joining": "Startet…"
+    "joining": "Startet…",
+    "actions": "Friend actions"
   },
   "panel": {
     "status": "Status",
