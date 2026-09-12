@@ -99,6 +99,14 @@
   --color-bg-danger: var(--red-500);
   --color-bg-danger-subtle: var(--red-900);
   --color-bg-purple-subtle: var(--purple-900);
+  /* --- slice: skins and hilts ---
+     Plate under a picture that carries an alpha channel of its own. The one
+     light ground of a dark launcher, and it exists because the part icons of
+     an assembled character are cut out: over any dark surface the cut shows
+     the page and the head reads as a hole. The core paints the very same
+     value into the composed preview it caches, so the plate and the picture
+     on it are one colour. */
+  --color-bg-icon-plate: var(--gray-200);
   --color-bg-overlay: var(--alpha-black-60);
   /* Ground under a caption that lies on a picture. Deeper than the dialog
      overlay on purpose: a levelshot can be bright everywhere, and the caption

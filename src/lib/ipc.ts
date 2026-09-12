@@ -910,6 +910,17 @@ export interface PlayerModel {
    * skin. The presence of this field is the «assembled» flag.
    */
   parts: ModelParts | null;
+  // --- slice: skins and hilts ---
+  /**
+   * Absolute path of the composed picture of {@link value}: the icons of its
+   * head, torso and legs stacked on a light ground. `null` for an ordinary
+   * skin.
+   *
+   * The card of a custom character draws this instead of the head icon alone.
+   * A combination the player builds afterwards is composed by
+   * {@link profilesIpc.assembledSkinPreview}.
+   */
+  preview: string | null;
   /** The archive the skin was found in. */
   source: string;
 }
@@ -1000,6 +1011,29 @@ export const SABER_COLORS: readonly string[] = [
   "purple",
 ];
 
+// --- slice: skins and hilts ---
+/**
+ * What each of the six looks like, so the control can wear the colour it
+ * names.
+ *
+ * `CG_RGBForSaberColor` (`codemp/cgame/cg_players.c:5246-5271` of OpenJK
+ * `1a6a6434`) in hexadecimal: the engine writes the channels as floats, and
+ * `0.2` is `0x33`, `0.5` is `0x80`, `0.1` is `0x1a`, `0.4` is `0x66` and `0.9`
+ * is `0xe6`. Indexed by the value of `color1`, like {@link SABER_COLORS}.
+ *
+ * Not a design token and deliberately so: this is the blade of the game, and a
+ * swatch that matched the launcher's palette instead would show the player a
+ * colour they will not get.
+ */
+export const SABER_BLADE_RGB: readonly string[] = [
+  "#ff3333",
+  "#ff801a",
+  "#ffff33",
+  "#33ff33",
+  "#3366ff",
+  "#e633ff",
+];
+
 export const profilesIpc = {
   listProfiles: (clientId: string) =>
     call<ProfileBook>("list_profiles", { clientId }),
@@ -1016,6 +1050,16 @@ export const profilesIpc = {
   /** Every saber hilt this client can offer. Empty for a game with none. */
   listSaberHilts: (clientId: string) =>
     call<SaberHilt[]>("list_saber_hilts", { clientId }),
+  // --- slice: skins and hilts ---
+  /**
+   * The composed picture of one combination of head, torso and legs.
+   *
+   * `value` is the whole cvar, `jedi_hm/head_a1|torso_a1|lower_a1`. Answers
+   * `null` for a value that is not an assembled skin of this client, and for
+   * one whose part icons could none of them be read.
+   */
+  assembledSkinPreview: (clientId: string, value: string) =>
+    call<string | null>("assembled_skin_preview", { clientId, value }),
 };
 
 /**
