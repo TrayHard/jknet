@@ -120,13 +120,18 @@ export function ServerListBlock({
               // --- slice: servers home tweaks ---
               // The row leads to the details panel of the Servers screen. Its
               // buttons stop the press themselves, so **Connect** and the menu
-              // still do what they say rather than navigating away.
+              // still do what they say rather than navigating away: the click
+              // is stopped where the buttons sit, and the key press is taken
+              // only when the row itself has the focus. A key event bubbles
+              // whatever the click does, and Enter on **Connect** must not
+              // start a client and walk off the screen at the same time.
               tabIndex={onOpen === undefined ? undefined : 0}
               onClick={onOpen === undefined ? undefined : () => onOpen(server)}
               onKeyDown={
                 onOpen === undefined
                   ? undefined
                   : (event) => {
+                      if (event.target !== event.currentTarget) return;
                       if (event.key !== "Enter" && event.key !== " ") return;
                       event.preventDefault();
                       onOpen(server);
