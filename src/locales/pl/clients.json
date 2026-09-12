@@ -223,6 +223,8 @@
         "skinNone": "Not set",
         "skinNoIcon": "No icon",
         "skinAssembled": "Assembled",
+        "skinCustom": "Custom characters",
+        "skinPreview": "{{model}}, head, torso and legs",
         "skinPartHead": "Head",
         "skinPartTorso": "Torso",
         "skinPartLegs": "Legs",

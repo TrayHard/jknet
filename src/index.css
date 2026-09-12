@@ -43,6 +43,8 @@
   --color-danger: var(--color-bg-danger);
   --color-danger-subtle: var(--color-bg-danger-subtle);
   --color-purple-subtle: var(--color-bg-purple-subtle);
+  /* --- slice: skins and hilts --- `bg-icon-plate`. */
+  --color-icon-plate: var(--color-bg-icon-plate);
   --color-overlay: var(--color-bg-overlay);
   --color-scrim: var(--color-bg-scrim);
   --color-hover-overlay: var(--color-bg-hover-overlay);

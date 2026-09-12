@@ -223,6 +223,8 @@
         "skinNone": "Не задан",
         "skinNoIcon": "Без иконки",
         "skinAssembled": "Сборная",
+        "skinCustom": "Сборные персонажи",
+        "skinPreview": "{{model}}: голова, торс и ноги",
         "skinPartHead": "Голова",
         "skinPartTorso": "Торс",
         "skinPartLegs": "Ноги",
