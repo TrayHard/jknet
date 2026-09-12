@@ -1,4 +1,4 @@
-import { colorSpans } from "../servers/ServerName";
+import { colorSpans, colorSpanStyle } from "../servers/ServerName";
 
 /**
  * A nickname drawn the way the game draws it.
@@ -28,10 +28,7 @@ export function ColoredNickname({
   return (
     <span className={className}>
       {spans.map((span, index) => (
-        <span
-          key={`${index}-${span.text}`}
-          style={span.color === "inherit" ? undefined : { color: span.color }}
-        >
+        <span key={`${index}-${span.text}`} style={colorSpanStyle(span)}>
           {span.text}
         </span>
       ))}

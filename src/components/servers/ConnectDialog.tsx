@@ -28,7 +28,7 @@ import {
   NicknameField,
   nicknameBytes,
 } from "../client/NicknameField";
-import { HiltSelect } from "../client/ProfileForm";
+import { HiltSelect, HiltsNotice } from "../client/ProfileForm";
 import { SkinPicker } from "../client/SkinPicker";
 import { Button, Combobox, Dialog, RadioCard, Select } from "../ui";
 
@@ -363,32 +363,39 @@ export function ConnectDialog({
                 empty: an empty list looks like a launcher that failed to read
                 something. */}
             {hasHilts ? (
-              <div className="grid grid-cols-2 gap-8">
-                <Field label={t("connect.saber1")}>
-                  <HiltSelect
-                    value={manual.saber1}
-                    hilts={hilts.data ?? []}
-                    label={t("connect.saber1")}
-                    size="sm"
-                    onChange={(value) => edit({ saber1: value })}
-                  />
-                </Field>
-                <Field label={t("connect.saber2")}>
-                  <HiltSelect
-                    value={manual.saber2}
-                    hilts={hilts.data ?? []}
-                    label={t("connect.saber2")}
-                    size="sm"
-                    extra={[
-                      {
-                        value: NO_SECOND_HILT,
-                        label: t("connect.saber2None"),
-                      },
-                    ]}
-                    onChange={(value) => edit({ saber2: value })}
-                  />
-                </Field>
-              </div>
+              <>
+                <div className="grid grid-cols-2 gap-8">
+                  <Field label={t("connect.saber1")}>
+                    <HiltSelect
+                      value={manual.saber1}
+                      hilts={hilts.data ?? []}
+                      label={t("connect.saber1")}
+                      size="sm"
+                      onChange={(value) => edit({ saber1: value })}
+                    />
+                  </Field>
+                  <Field label={t("connect.saber2")}>
+                    <HiltSelect
+                      value={manual.saber2}
+                      hilts={hilts.data ?? []}
+                      label={t("connect.saber2")}
+                      size="sm"
+                      extra={[
+                        {
+                          value: NO_SECOND_HILT,
+                          label: t("connect.saber2None"),
+                        },
+                      ]}
+                      onChange={(value) => edit({ saber2: value })}
+                    />
+                  </Field>
+                </div>
+                {/* --- slice: profiles polish ---
+                    The same three states the client window draws, for the
+                    same reason: two lists holding only **Not set** say
+                    nothing about whether the archives were read. */}
+                <HiltsNotice hilts={hilts} />
+              </>
             ) : null}
           </>
         )}
