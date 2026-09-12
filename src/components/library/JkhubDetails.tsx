@@ -35,6 +35,12 @@ interface JkhubDetailsProps {
   onInstall: (replace: boolean) => void;
   onOpenSite: () => void;
   onRevealArchive: (path: string) => void;
+  /**
+   * --- slice: jkhub catalog ---
+   * Asks the screen for everything this author made. Same callback the name on
+   * a card takes: it writes `by:"name"` into the search box of the screen.
+   */
+  onAuthor?: (author: string) => void;
 }
 
 /**
@@ -72,6 +78,7 @@ export function JkhubDetails({
   onInstall,
   onOpenSite,
   onRevealArchive,
+  onAuthor,
 }: JkhubDetailsProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
@@ -90,6 +97,10 @@ export function JkhubDetails({
     file?.title ??
     (loading ? t("details.loadingTitle") : t("details.fallbackTitle"));
   const conflicts = result?.kind === "conflicts" ? result.files : null;
+  // --- slice: jkhub catalog ---
+  // A page with no author named answers with nothing to search for, so the
+  // line stays plain text in that case.
+  const author = file?.author?.name ?? null;
 
   return (
     <>
@@ -186,7 +197,19 @@ export function JkhubDetails({
             <dl className="grid grid-cols-2 gap-x-24 gap-y-8">
               <Fact
                 label={t("details.author")}
-                value={file.author?.name ?? t("details.authorUnknown")}
+                value={author ?? t("details.authorUnknown")}
+                title={author && onAuthor ? t("card.byAuthor", { author }) : undefined}
+                onClick={
+                  author && onAuthor
+                    ? () => {
+                        onAuthor(author);
+                        // The search happens on the screen behind this dialog,
+                        // and a window left open over its own answer would
+                        // hide every file the click just asked for.
+                        onClose();
+                      }
+                    : undefined
+                }
               />
               <Fact label={t("details.updated")} value={format.date(file.updatedAt)} />
               <Fact
@@ -412,11 +435,42 @@ function Notice({
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+/**
+ * One labelled line of the facts grid.
+ *
+ * `onClick` turns the value into a button, and only the author uses it: the
+ * click searches the catalogue for the rest of what that author made, the way
+ * the name on a card does. The other three facts are dates and a rating, which
+ * lead nowhere.
+ */
+function Fact({
+  label,
+  value,
+  title,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+  onClick?: () => void;
+}) {
   return (
     <div className="flex flex-col gap-2">
       <dt className="text-label-xs text-fg-muted">{label}</dt>
-      <dd className="text-body-sm text-fg">{value}</dd>
+      <dd className="text-body-sm text-fg">
+        {onClick ? (
+          <button
+            type="button"
+            title={title}
+            onClick={onClick}
+            className="cursor-pointer text-left hover:text-fg-accent hover:underline"
+          >
+            {value}
+          </button>
+        ) : (
+          value
+        )}
+      </dd>
     </div>
   );
 }
