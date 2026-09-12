@@ -1,31 +1,84 @@
+import type { CSSProperties } from "react";
+
 import { cn } from "../../lib/format";
 
 /**
  * The game's colour palette, `g_color_table` in
- * `shared/qcommon/q_color.c:18` of OpenJK.
+ * `shared/qcommon/q_color.cpp:36-47` of OpenJK `1a6a6434`.
  *
- * Two entries are lifted for the launcher's dark surface: `^0` is pure black
- * and `^4` is pure blue in the game, and both are unreadable on `#0B0E14`.
- * The game draws them over a bright HUD, this table draws them over a panel,
- * so the hue is kept and the luminance is raised.
+ * The table is the engine's own and is copied straight: a name the player
+ * writes in the launcher has to look the way it will look on the server, and a
+ * palette «adjusted for the panel» is a palette that lies about `^0`. The
+ * floats of the engine are `0`, `0.5` and `1` per channel, so every entry is
+ * `00`, `80` or `FF`.
+ *
+ * `^7` is white and is written as white rather than left to inherit: the game
+ * draws `^7` as a colour of its own, and a row whose text is dimmed would
+ * otherwise show `^7` dimmed as well. Text before any code inherits, which is
+ * a different thing — nothing has been coloured yet.
  */
 const PALETTE: Record<string, string> = {
-  "0": "#4A5058", // black in game, lifted to stay visible
-  "1": "#FF4A4A", // red, softened so it does not vibrate on dark
-  "2": "#3BE07A",
-  "3": "#FFE14A",
-  "4": "#5B7BFF", // blue in game, lifted to stay visible
-  "5": "#4AE3FF",
-  "6": "#FF6EE0",
-  "7": "inherit", // white: let the row's own colour through
-  "8": "#FF9A3C",
-  "9": "#9AA3AE",
+  "0": "#000000", // black
+  "1": "#FF0000", // red
+  "2": "#00FF00", // green
+  "3": "#FFFF00", // yellow
+  "4": "#0000FF", // blue
+  "5": "#00FFFF", // cyan
+  "6": "#FF00FF", // magenta
+  "7": "#FFFFFF", // white
+  "8": "#FF8000", // orange, `1 0.5 0` of the engine
+  "9": "#808080", // medium grey, `0.5 0.5 0.5` of the engine
 };
 
+/**
+ * The codes the panel cannot carry on its own, and the halo that saves them.
+ *
+ * Black on `#0B0E14` is invisible and pure blue is very nearly so — a contrast
+ * of about 1.6 to 1. The game draws both over a bright, moving scene; the
+ * launcher draws them over a dark panel. Rather than bend the palette, which
+ * would show the player a colour the server will not use, the two dark codes
+ * keep their hue and get a thin light halo behind the glyphs.
+ *
+ * A halo of four one-pixel shadows and not `-webkit-text-stroke`: the stroke is
+ * painted inside the glyph and eats a 12 px letter from both sides.
+ */
+const DARK_CODES = new Set(["0", "4"]);
+
+/** The halo of a dark span. Thin enough to read as an outline, not a glow. */
+const DARK_HALO = [
+  "0 0 1px rgba(255, 255, 255, 0.95)",
+  "1px 0 1px rgba(255, 255, 255, 0.65)",
+  "-1px 0 1px rgba(255, 255, 255, 0.65)",
+  "0 1px 1px rgba(255, 255, 255, 0.65)",
+  "0 -1px 1px rgba(255, 255, 255, 0.65)",
+].join(", ");
+
 /** One run of characters that shares a colour. */
-interface Span {
+export interface Span {
   text: string;
   color: string;
+  /** The colour is one of {@link DARK_CODES} and needs the halo. */
+  dark?: boolean;
+  /**
+   * The run is the `^N` itself, kept by {@link colorSpansWithCodes} so an
+   * overlay can sit exactly on top of the text a field holds.
+   */
+  code?: boolean;
+}
+
+/**
+ * How a span should be painted, halo included.
+ *
+ * One function for every place a coloured name is drawn — the server row, the
+ * profile preview, the overlay of the nickname field — so none of them can
+ * paint `^0` differently from the others.
+ */
+export function colorSpanStyle(span: Span): CSSProperties | undefined {
+  const color = span.color === "inherit" ? undefined : span.color;
+  if (span.dark !== true) {
+    return color === undefined ? undefined : { color };
+  }
+  return { color, textShadow: DARK_HALO };
 }
 
 /**
@@ -36,20 +89,43 @@ interface Span {
  * character. Exported so the parsing can be read on its own.
  */
 export function colorSpans(raw: string): Span[] {
+  return walk(raw, false);
+}
+
+/**
+ * The same runs, with the `^N` codes kept as runs of their own.
+ *
+ * For an overlay drawn on top of a text field: the field holds `^1Kyle` and
+ * the layer beneath it has to hold the same six characters, or the letters
+ * stop lining up with the caret. The code runs carry `code: true` so the
+ * caller can dim them.
+ */
+export function colorSpansWithCodes(raw: string): Span[] {
+  return walk(raw, true);
+}
+
+/** The one walk behind both functions. */
+function walk(raw: string, keepCodes: boolean): Span[] {
   const spans: Span[] = [];
-  let color = "inherit";
+  let code: string | null = null;
   let text = "";
 
   const push = () => {
-    if (text.length > 0) spans.push({ text, color });
+    if (text.length === 0) return;
+    spans.push(span(text, code));
     text = "";
   };
 
   for (let at = 0; at < raw.length; at += 1) {
-    const code = raw[at + 1];
-    if (raw[at] === "^" && code !== undefined && code >= "0" && code <= "9") {
+    const next = raw[at + 1];
+    if (raw[at] === "^" && next !== undefined && next >= "0" && next <= "9") {
       push();
-      color = PALETTE[code] ?? "inherit";
+      if (keepCodes) {
+        // Drawn in the colour it turns on, so a player reading the field can
+        // tell which code did what, and dimmed by the caller.
+        spans.push({ ...span(`^${next}`, next), code: true });
+      }
+      code = next;
       at += 1;
       continue;
     }
@@ -57,6 +133,14 @@ export function colorSpans(raw: string): Span[] {
   }
   push();
   return spans;
+}
+
+/** One run in the colour of `code`, or in the inherited colour. */
+function span(text: string, code: string | null): Span {
+  if (code === null) return { text, color: "inherit" };
+  const color = PALETTE[code];
+  if (color === undefined) return { text, color: "inherit" };
+  return DARK_CODES.has(code) ? { text, color, dark: true } : { text, color };
 }
 
 interface ServerNameProps {
@@ -74,12 +158,9 @@ export function ServerName({ raw, clean, className }: ServerNameProps) {
     <span className={cn("truncate", className)} title={clean}>
       {spans.length === 0
         ? clean
-        : spans.map((span, index) => (
-            <span
-              key={`${index}-${span.text}`}
-              style={span.color === "inherit" ? undefined : { color: span.color }}
-            >
-              {span.text}
+        : spans.map((item, index) => (
+            <span key={`${index}-${item.text}`} style={colorSpanStyle(item)}>
+              {item.text}
             </span>
           ))}
     </span>
