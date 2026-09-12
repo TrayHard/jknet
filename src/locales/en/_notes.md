@@ -93,8 +93,10 @@ Everything else wraps.
 | `library:categories.*` vs `library:categoryOne.*` | The first is the plural in the category rail, the second the singular on a card badge. Some languages need different words. |
 | `library:conflicts.ruleOrder` | The rule the game itself follows, and the only place the player learns why one file beats another. `dl_` is a file-name prefix and `pk3` an extension; neither is translated. |
 | `library:conflicts.kind.*`, `library:conflicts.kindHint.*` | What a shared path holds. The first is a badge of one or two words, the second one sentence for a player who does not know the word — «shader» means nothing to most of them. |
+| `library:conflicts.ruleToggle` | The button that opens the rule of the engine inside the conflicts window. One short word: it stands next to a summary line and must not push it onto a second row. |
 | `library:conflicts.outcome`, `library:conflicts.disableWinner` | `{{winner}}`, `{{next}}` and `{{file}}` are pk3 file names. The sentence tells the player what changes after the button, so keep both halves: disabling the winner hands the path over, disabling a hidden file changes nothing the game reads. |
 | `jkhub:details.ratingValue` | `{{value}}` is a rating out of five, already formatted; `{{count}}` is the number of reviews. |
+| `jkhub:download.*` | The card that follows one install of a JKHub file, in the corner where the toasts are. `{{client}}` is the name the player gave a client, `{{folder}}` is `base` or the name of a mod folder — neither is translated. `download.openFolder` is a narrow button: two words at most. |
 | `jkhub:search.unavailable` | The tooltip of the search box while it is switched off, which happens only while the launcher has no copy of the JKHub catalog. It says why the box refuses words, so keep it to one short sentence; the panel below the bar carries the progress and the buttons. |
 | `friends:status.lastSeen*` | `{{count}}` is minutes, hours or days. The three keys exist so each unit can take its own plural. |
 | `friends:requests.handle` | `jkhub:kyle_k`. Do not translate; it is an identifier. |
