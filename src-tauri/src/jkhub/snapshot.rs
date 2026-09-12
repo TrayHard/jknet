@@ -1,6 +1,6 @@
 //! The category tree that ships inside the launcher.
 //!
-//! Walking the tree of one game costs about twenty requests to jkhub.org, and
+//! Walking the tree of one game costs about ten requests to jkhub.org, and
 //! the first open of the tab used to pay all of them before a single card
 //! appeared. The tree changes a few times a year, so a copy of it is bundled
 //! with the build: the tab renders from that copy immediately and the real
@@ -320,12 +320,20 @@ mod tests {
                 .unwrap_or_else(|| panic!("{} ships a snapshot", file_name(game)));
             assert_eq!(snapshot.game, game);
             assert!(!snapshot.generated_at.is_empty());
-            assert!(
-                snapshot.categories.len() >= 15,
-                "{}: {} categories",
-                file_name(game),
-                snapshot.categories.len()
-            );
+            // --- slice: jkhub catalog ---
+            // The tree is pruned to the eight sections, so a count of nodes
+            // says only how many subcategories Maps had that day. What has to
+            // hold is that every section of this game is in the file: one
+            // missing is a shelf the tab cannot show at all.
+            for section in &crate::jkhub::sections::SECTIONS {
+                let Some(id) = section.id(game) else { continue };
+                assert!(
+                    snapshot.categories.iter().any(|entry| entry.id == id),
+                    "{}: the {} section is not in the tree",
+                    file_name(game),
+                    section.key
+                );
+            }
             assert!(
                 snapshot.categories.iter().any(|entry| entry.has_files),
                 "{}: the tab needs a category to land on",
