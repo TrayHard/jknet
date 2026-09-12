@@ -1049,6 +1049,9 @@ const IDLE_SCOPES: Record<ServerScope, ScopeRefresh> = {
   favorites: IDLE_SCOPE,
   history: IDLE_SCOPE,
   lan: IDLE_SCOPE,
+  // --- slice: servers home tweaks --- the details panel, which has a
+  // **Refresh** button and a **Watch** switch of its own and no tab at all.
+  one: IDLE_SCOPE,
 };
 
 /** Adds or replaces rows by address, keeping the rest of the list intact. */

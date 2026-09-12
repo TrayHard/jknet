@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Search,
   Server as ServerIcon,
+  Users,
 } from "lucide-react";
 import {
   useEffect,
@@ -15,6 +16,8 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+// --- slice: servers home tweaks ---
+import { useSearchParams } from "react-router";
 
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
@@ -76,6 +79,7 @@ import {
   useServerRefresh,
   useServerStatus,
   useSetServerFavorite,
+  useSetServerHidden,
   useSettings,
   useUpdateSettings,
 } from "../lib/queries";
@@ -105,6 +109,8 @@ export function ServersPage() {
   const cached = useCachedServers();
   const refresh = useServerRefresh();
   const setFavorite = useSetServerFavorite();
+  // --- slice: servers home tweaks --- the eye at the end of every row.
+  const setHidden = useSetServerHidden();
   const addHistory = useAddServerHistory();
   const launchClient = useLaunchClient();
   // --- slice: server actions ---
@@ -132,6 +138,32 @@ export function ServersPage() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+
+  // --- slice: servers home tweaks ---
+  // The address a row of Home sent the player here with, kept apart from the
+  // selection. The panel opens on it even when this screen's own filters hide
+  // the row: Home shows a starred server whatever the bot switch says, and a
+  // link that lands on an empty panel reads as a link that did nothing.
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("select");
+  const [openedFromHome, setOpenedFromHome] = useState<string | null>(null);
+  /** Selects a row the player pressed, which is nobody's link. */
+  const selectRow = (address: string) => {
+    setSelectedAddress(address);
+    setOpenedFromHome(null);
+  };
+  /**
+   * Opens a tab, and lets go of the link that brought the player here.
+   *
+   * The link keeps the panel open through the filters of this screen, and a
+   * tab is a filter the player set by hand after arriving: **Favorites** with
+   * a server that is in nobody's favourites draws a table with no selected
+   * row beside a panel that still shows one.
+   */
+  const changeTab = (next: ServerTab) => {
+    setTab(next);
+    setOpenedFromHome(null);
+  };
 
   // --- slice: servers browser ---
   // The dropdowns and the switches live in `settings.json`, so the screen
@@ -218,6 +250,7 @@ export function ServersPage() {
     previousGame.current = settledGame;
     if (before === undefined || before === settledGame) return;
     setSelectedAddress(null);
+    setOpenedFromHome(null);
     const forEitherGame = {
       ...storedNow.current,
       gametype: "any",
@@ -228,6 +261,47 @@ export function ServersPage() {
       updateSettings.mutate({ serverFilters: forEitherGame });
     }
   }, [settledGame, updateSettings]);
+
+  // --- slice: servers home tweaks ---
+  // A row of Home pressed: open that server here. The tab goes to **All**
+  // because that is the tab the address is certain to belong to — Favorites
+  // and History would answer a press on the busiest server with «not in your
+  // list», and the player pressed a server, not a tab.
+  //
+  // The parameter goes back out of the address once it has been read. It is
+  // an instruction for the arrival, not a property of the screen, and one
+  // left in `#/servers?select=...` would reopen the panel on that server
+  // every time the player came back to the browser from elsewhere. What the
+  // link asked for lives on in `openedFromHome` until the player selects
+  // another row or opens another tab.
+  useEffect(() => {
+    if (requested === null) return;
+    setSelectedAddress(requested);
+    setOpenedFromHome(requested);
+    setTab("all");
+    const rest = new URLSearchParams(params);
+    rest.delete("select");
+    setParams(rest, { replace: true });
+  }, [requested, params, setParams]);
+
+  // --- slice: servers home tweaks ---
+  // The address this launcher has never had a row for: ask about it. The row
+  // is normally in the cache already, because Home draws from the same one —
+  // this covers a link that outlived the list behind it. One probe per
+  // address, so a cache that answers with nothing does not become a loop.
+  //
+  // Off `openedFromHome` rather than off the parameter, because the parameter
+  // leaves the address as soon as it is read and the cache is often still
+  // loading at that moment.
+  const probeAddresses = refresh.refreshAddresses;
+  const probed = useRef<string | null>(null);
+  useEffect(() => {
+    if (openedFromHome === null || !cached.isSuccess) return;
+    if (probed.current === openedFromHome) return;
+    if (cached.data.some((row) => row.address === openedFromHome)) return;
+    probed.current = openedFromHome;
+    probeAddresses("one", [openedFromHome]);
+  }, [openedFromHome, cached.isSuccess, cached.data, probeAddresses]);
 
   // --- slice: servers browser ---
   // The rows of the open tab before the filters: what the subtitle counts and
@@ -244,8 +318,39 @@ export function ServersPage() {
       : sortServers(filtered, sortColumn, sortDirection);
   }, [inTab, tab, filters, sortColumn, sortDirection]);
 
-  const selected = visible.find((row) => row.address === selectedAddress);
+  // --- slice: servers home tweaks ---
+  // The row the filters of this screen keep back, when it is the one a link
+  // named. Only that one: a row the player filtered away by hand stays away.
+  const linked = useMemo(() => {
+    if (selectedAddress === null || selectedAddress !== openedFromHome) {
+      return undefined;
+    }
+    return view.rows.find((row) => row.address === selectedAddress);
+  }, [selectedAddress, openedFromHome, view.rows]);
+  const selected =
+    visible.find((row) => row.address === selectedAddress) ?? linked;
   const status = useServerStatus(selected?.address ?? null);
+
+  // --- slice: servers home tweaks ---
+  /**
+   * Asks the selected server everything again: its row and its player list.
+   *
+   * Under the `one` scope rather than the open tab's, so the loader stays off
+   * the table and the row the panel is showing is the only one that moves.
+   * `refetch` on the status query for the same reason the retry button uses
+   * it: the 15 s the answer stays fresh for is not a reason to ignore a press.
+   */
+  const refreshOne = () => {
+    if (selected === undefined) return;
+    refresh.refreshAddresses("one", [selected.address]);
+    void status.refetch();
+  };
+  const watch = useServerWatch(selected?.address ?? null, refreshOne);
+  const detailsAt = useDetailsRefreshedAt(
+    selected?.address ?? null,
+    refresh.scopes.one.refreshedAt,
+  );
+  const detailsSecondsAgo = useSecondsSince(detailsAt);
 
   // Over the whole tab, not the filtered list: the subtitle answers «is it
   // worth going in right now», and that question is about the servers of this
@@ -345,15 +450,17 @@ export function ServersPage() {
     <div className="flex flex-col h-full p-24">
       <PageHeader
         title={t("title")}
-        subtitle={describeCounts(t, {
-          // --- slice: game switch --- the list is one game's, and the line
-          // says which: two lists that look alike need naming apart.
-          game: gameName(activeGame),
-          total: inTab.length,
-          players: playersOnline,
-          age: secondsAgo === null ? null : format.age(secondsAgo),
-          scanning: scope.running,
-        })}
+        subtitle={
+          <CountsLine
+            // --- slice: game switch --- the list is one game's, and the line
+            // says which: two lists that look alike need naming apart.
+            game={gameName(activeGame)}
+            total={inTab.length}
+            players={playersOnline}
+            age={secondsAgo === null ? null : format.age(secondsAgo)}
+            scanning={scope.running}
+          />
+        }
         actions={
           <>
             <Input
@@ -405,7 +512,7 @@ export function ServersPage() {
       <Tabs
         className="mt-16"
         value={tab}
-        onChange={setTab}
+        onChange={changeTab}
         // --- slice: servers browser ---
         // The strip counts the rows the screen is drawing, so a frozen table
         // and the number beside its tab cannot disagree.
@@ -493,11 +600,19 @@ export function ServersPage() {
                     key={server.address}
                     server={server}
                     selected={server.address === selectedAddress}
-                    onSelect={() => setSelectedAddress(server.address)}
+                    onSelect={() => selectRow(server.address)}
                     onToggleFavorite={() =>
                       setFavorite.mutate({
                         address: server.address,
                         favorite: !server.favorite,
+                      })
+                    }
+                    // --- slice: servers home tweaks ---
+                    // The same command the menu item behind **Connect** runs.
+                    onToggleHidden={() =>
+                      setHidden.mutate({
+                        address: server.address,
+                        hidden: !server.hidden,
                       })
                     }
                   />
@@ -541,6 +656,17 @@ export function ServersPage() {
             // 15 s the query stays fresh for, which is the whole point of a
             // button the player pressed on purpose.
             onRetryPlayers={() => void status.refetch()}
+            // --- slice: servers home tweaks ---
+            // The panel's own scan, and the switch that repeats it once a
+            // minute. Both are about this one address; the tab keeps its own
+            // indicator and its own list, untouched by either.
+            onRefresh={refreshOne}
+            refreshing={refresh.scopes.one.running || status.isFetching}
+            watching={watch.watching}
+            onWatchChange={watch.setWatching}
+            refreshedAge={
+              detailsSecondsAgo === null ? null : format.age(detailsSecondsAgo)
+            }
             // --- slice: game switch ---
             // Live even without a client: pressing it is how the player finds
             // out they need one, and the toast that says so offers to make it.
@@ -820,6 +946,10 @@ function SortHeader({
           the values of this column are left-aligned. */}
       {cell("ping", t("columns.ping"), "justify-start")}
       {cell("mod", t("columns.mod"))}
+      {/* --- slice: servers home tweaks --- the eye column. A heading over a
+          button that says what it does on hover would only take the width the
+          rows need for the mod folder beside it. */}
+      <span />
     </div>
   );
 }
@@ -911,9 +1041,6 @@ function buildTabs(
 /** The `t` of the `servers` namespace, as the builders below take it. */
 type ServersT = ReturnType<typeof useTranslation<"servers">>["t"];
 
-/** Punctuation between the parts of the subtitle, not a word. */
-const DOT = " · ";
-
 /**
  * The line under the title: how many people are playing, and how fresh that is.
  *
@@ -928,38 +1055,110 @@ const DOT = " · ";
  * answer is now a row of its own — muted, marked offline — so counting them in
  * a sentence says it twice.
  *
+ * --- slice: servers home tweaks ---
+ * The words went the same way: three icons carry them now, and each one holds
+ * the sentence it stands for on hover. A line of three numbers is read in a
+ * glance, while «57 players online · 130 Jedi Academy servers · refreshed
+ * 2 min ago» is read as a sentence — and the header of a screen whose numbers
+ * change every refresh is not something anybody reads twice.
+ *
  * --- slice: i18n ---
- * Each part is a whole message with its own placeholders and its own plural,
- * and the middot between them is punctuation. Nothing here glues half-sentences
- * together: «118 Jedi Academy servers» is one message, not «118» and «servers».
+ * The hidden sentences are whole messages with their own placeholders and
+ * their own plurals, the same keys as before. Nothing here glues halves
+ * together: «118 Jedi Academy servers» is one message, not «118» and
+ * «servers». An empty list still answers in words, because there is no number
+ * for an icon to carry.
  */
-function describeCounts(
-  t: ServersT,
-  state: {
-    /** Name of the active game, which is whose list this is. */
-    game: string;
-    total: number;
-    players: number;
-    /** How long ago the list was refreshed, already formatted, or `null`. */
-    age: string | null;
-    scanning: boolean;
-  },
-): string {
-  const { game, total, players, age, scanning } = state;
+function CountsLine({
+  game,
+  total,
+  players,
+  age,
+  scanning,
+}: {
+  /** Name of the active game, which is whose list this is. */
+  game: string;
+  total: number;
+  players: number;
+  /** How long ago the list was refreshed, already formatted, or `null`. */
+  age: string | null;
+  scanning: boolean;
+}) {
+  const { t } = useTranslation("servers");
+  const format = useFormat();
+  const scan = (
+    <CountsPart
+      icon={<RefreshCw size={14} className="animate-spin" />}
+      hint={t("subtitle.scanning")}
+    />
+  );
 
   if (total === 0) {
-    return scanning
-      ? [t("subtitle.empty", { game }), t("subtitle.scanning")].join(DOT)
-      : t("subtitle.empty", { game });
+    return (
+      <span className="inline-flex flex-wrap items-center gap-8">
+        {t("subtitle.empty", { game })}
+        {scanning ? scan : null}
+      </span>
+    );
   }
 
-  const parts: string[] = [
-    t("subtitle.players", { count: players }),
-    t("subtitle.servers", { count: total, game }),
-  ];
-  if (scanning) parts.push(t("subtitle.scanning"));
-  else if (age !== null) parts.push(t("subtitle.refreshed", { age }));
-  return parts.join(DOT);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-12">
+      <CountsPart
+        icon={<Users size={14} />}
+        value={format.number(players)}
+        hint={t("subtitle.players", { count: players })}
+      />
+      <CountsPart
+        icon={<ServerIcon size={14} />}
+        value={format.number(total)}
+        hint={t("subtitle.servers", { count: total, game })}
+      />
+      {scanning ? (
+        scan
+      ) : age === null ? null : (
+        <CountsPart
+          icon={<RefreshCw size={14} />}
+          value={age}
+          hint={t("subtitle.refreshed", { age })}
+        />
+      )}
+    </span>
+  );
+}
+
+// --- slice: servers home tweaks ---
+/**
+ * One icon and the number behind it, with the sentence it stands for on hover.
+ *
+ * The sentence is both the tooltip and the label: an icon and a bare number
+ * are nothing to a screen reader, and «130» read out alone is worse than the
+ * words this line dropped.
+ */
+function CountsPart({
+  icon,
+  value,
+  hint,
+}: {
+  icon: ReactNode;
+  /** Left out by the part that is a state rather than a count. */
+  value?: string;
+  hint: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center gap-6"
+      title={hint}
+      aria-label={hint}
+    >
+      <span className="text-fg-muted" aria-hidden="true">
+        {icon}
+      </span>
+      {value === undefined ? null : (
+        <span className="tabular-nums">{value}</span>
+      )}
+    </span>
+  );
 }
 
 function emptyTitle(
@@ -1011,6 +1210,76 @@ function emptyText(
         ? t("empty.filteredBots", { count: hiddenBotOnly })
         : t("empty.filteredText");
   }
+}
+
+// --- slice: servers home tweaks ---
+/** How often **Watch** asks the selected server again. */
+const WATCH_INTERVAL_MS = 60_000;
+
+// --- slice: servers home tweaks ---
+/**
+ * The **Watch** switch of the details panel: one server, asked once a minute.
+ *
+ * Watching belongs to the row it was switched on for, so a different selection
+ * turns it off rather than quietly pointing the timer at somebody else's
+ * server. Leaving the screen unmounts this hook and closing the window takes
+ * the whole page with it, so both stop the timer without a rule of their own —
+ * which is the reason the timer lives in an effect and not in a module.
+ *
+ * `probe` is read through a ref: it closes over the selected row and is a new
+ * function on every render, and an effect that depended on it would restart
+ * the minute from zero every time anything on the screen changed.
+ */
+function useServerWatch(
+  address: string | null,
+  probe: () => void,
+): { watching: boolean; setWatching: (watching: boolean) => void } {
+  const [watching, setWatching] = useState(false);
+  const latest = useRef(probe);
+  latest.current = probe;
+
+  useEffect(() => {
+    setWatching(false);
+  }, [address]);
+
+  useEffect(() => {
+    if (!watching || address === null) return;
+    const timer = window.setInterval(() => latest.current(), WATCH_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [watching, address]);
+
+  return { watching, setWatching };
+}
+
+// --- slice: servers home tweaks ---
+/**
+ * When the panel's own scan last landed, for the server on screen and no other.
+ *
+ * The `one` scope keeps one timestamp, the way every scope does, and it
+ * outlives the selection that produced it. A player who picks another row must
+ * not be told that server was asked about a moment ago, so a change of address
+ * clears the answer and the next scan fills it back in.
+ */
+function useDetailsRefreshedAt(
+  address: string | null,
+  scopeAt: number | null,
+): number | null {
+  const at = useRef<number | null>(null);
+  const lastScopeAt = useRef(scopeAt);
+  const forAddress = useRef(address);
+
+  if (lastScopeAt.current !== scopeAt) {
+    lastScopeAt.current = scopeAt;
+    at.current = scopeAt;
+  }
+  // Last, so a selection that changes in the same render wins: the scan that
+  // just landed belongs to the row the player has left.
+  if (forAddress.current !== address) {
+    forAddress.current = address;
+    at.current = null;
+  }
+
+  return at.current;
 }
 
 /** Seconds since `timestamp`, recomputed once a second. */
