@@ -27,6 +27,7 @@ import {
 import { SettingRow } from "./CvarControls";
 import { MAX_NICKNAME_BYTES, NicknameField, nicknameBytes } from "./NicknameField";
 import { SkinPicker } from "./SkinPicker";
+import { Slider } from "./Slider";
 
 /** The tint the sliders start on when the player switches the tint on. */
 const DEFAULT_TINT: CharColor = { red: 255, green: 255, blue: 255 };
@@ -379,8 +380,8 @@ function TintSliders({
         {channels.map(([channel, label]) => (
           <label key={channel} className="flex items-center gap-8">
             <span className="w-44 shrink-0 text-label-xs text-fg-muted">{label}</span>
-            <input
-              type="range"
+            <Slider
+              className="flex-1 min-w-0"
               min={0}
               max={255}
               step={1}
@@ -389,17 +390,10 @@ function TintSliders({
               onChange={(event) =>
                 onChange({ ...tint, [channel]: Number(event.target.value) })
               }
-              className={cn(
-                "flex-1 min-w-0 h-6 appearance-none rounded-full cursor-pointer",
-                "bg-elevated accent-[var(--color-bg-accent)]",
-                "[&::-webkit-slider-thumb]:appearance-none",
-                "[&::-webkit-slider-thumb]:size-14",
-                "[&::-webkit-slider-thumb]:rounded-full",
-                "[&::-webkit-slider-thumb]:bg-accent",
-                "[&::-webkit-slider-thumb]:cursor-pointer",
-              )}
             />
-            <span className="w-32 shrink-0 text-mono-xs text-fg-muted text-right">
+            {/* The number beside the track, because a colour channel is a
+                value a player copies and types back, not only a position. */}
+            <span className="w-32 shrink-0 text-mono-xs text-fg-secondary text-right tabular-nums">
               {tint[channel]}
             </span>
           </label>
