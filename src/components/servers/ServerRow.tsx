@@ -24,6 +24,19 @@ import { ServerName } from "./ServerName";
 export const ROW_COLUMNS =
   "16px minmax(0, 1fr) 40px 116px 60px 76px 56px 60px";
 
+// --- slice: servers home tweaks ---
+/**
+ * The mode badge, on the table of the Servers screen and in the rows of Home.
+ *
+ * A floor under the width and the label in the middle of it. The short names
+ * run from `JM` to `SIEGE`, so pills of four different widths sat under one
+ * another with their text starting in four different places — a column that
+ * reads as one that failed to line up. 56 px is the widest short label plus
+ * the padding of the badge: nothing is squeezed by the floor, and the 60 px
+ * column of the table still holds it.
+ */
+export const MODE_BADGE = "min-w-56 justify-center text-center";
+
 /** Which badge tone a game type gets, so the modes stay apart at a glance. */
 const MODE_TONE: Record<number, BadgeTone> = {
   0: "neutral", // FFA
@@ -121,7 +134,10 @@ export function ServerRow({
         {server.map || tCommon("values.empty")}
       </span>
 
-      <Badge tone={MODE_TONE[server.gametype] ?? "neutral"}>
+      <Badge
+        tone={MODE_TONE[server.gametype] ?? "neutral"}
+        className={MODE_BADGE}
+      >
         {gametypes.short(server.game, server.gametype)}
       </Badge>
 
