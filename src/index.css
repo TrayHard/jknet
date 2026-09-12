@@ -174,3 +174,162 @@
     background-clip: content-box;
   }
 }
+
+/*
+ * --- slice: jkhub details ---
+ *
+ * The description of a file on JKHub, as its author wrote it.
+ *
+ * The markup arrives from the core rebuilt out of an allowlist
+ * (`src-tauri/src/jkhub/richtext.rs`), so this stylesheet only has to dress
+ * the dozen tags that list allows. It is a component layer rather than a set
+ * of Tailwind utilities because nothing on this side of the launcher writes
+ * the elements: they come out of a string, and a class attribute cannot be
+ * put on them.
+ *
+ * The one class that does arrive is `jkhub-video`, and the core writes it
+ * itself for the still that replaces an embedded player.
+ */
+@layer components {
+  .jkhub-richtext {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-text-secondary);
+    /* A readme pasted as one long line, and a URL nobody broke, both have to
+       stay inside the dialog rather than widening it. */
+    overflow-wrap: anywhere;
+  }
+
+  .jkhub-richtext > :first-child {
+    margin-top: 0;
+  }
+
+  .jkhub-richtext > :last-child {
+    margin-bottom: 0;
+  }
+
+  .jkhub-richtext p,
+  .jkhub-richtext ul,
+  .jkhub-richtext ol,
+  .jkhub-richtext blockquote,
+  .jkhub-richtext pre,
+  .jkhub-richtext table {
+    margin: 0 0 8px;
+  }
+
+  .jkhub-richtext h1,
+  .jkhub-richtext h2,
+  .jkhub-richtext h3,
+  .jkhub-richtext h4 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--color-text-primary);
+    margin: 12px 0 4px;
+  }
+
+  .jkhub-richtext strong,
+  .jkhub-richtext b {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .jkhub-richtext ul,
+  .jkhub-richtext ol {
+    padding-left: 20px;
+  }
+
+  .jkhub-richtext ul {
+    list-style: disc;
+  }
+
+  .jkhub-richtext ol {
+    list-style: decimal;
+  }
+
+  .jkhub-richtext li {
+    margin: 2px 0;
+  }
+
+  .jkhub-richtext a {
+    color: var(--color-text-accent);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .jkhub-richtext blockquote {
+    border-left: 2px solid var(--color-border-default);
+    padding-left: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .jkhub-richtext code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background-color: var(--color-bg-elevated);
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+
+  .jkhub-richtext pre {
+    background-color: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: 6px;
+    padding: 8px;
+    overflow-x: auto;
+  }
+
+  .jkhub-richtext pre code {
+    background: none;
+    padding: 0;
+  }
+
+  .jkhub-richtext table {
+    border-collapse: collapse;
+    display: block;
+    overflow-x: auto;
+  }
+
+  .jkhub-richtext th,
+  .jkhub-richtext td {
+    border: 1px solid var(--color-border-default);
+    padding: 4px 8px;
+    text-align: left;
+  }
+
+  /* A picture inside a description is the author's, at whatever size they
+     uploaded it: it is shown whole and never cropped, the way the enlarged
+     screenshot is. */
+  .jkhub-richtext img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 8px 0;
+  }
+
+  /* The still of a video the core turned into a link. The badge says it plays
+     somewhere else, which it does: the click opens the system browser. */
+  .jkhub-richtext a.jkhub-video {
+    position: relative;
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .jkhub-richtext a.jkhub-video::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 0;
+    height: 0;
+    border-style: solid;
+    border-width: 14px 0 14px 24px;
+    border-color: transparent transparent transparent var(--color-text-primary);
+    filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6));
+  }
+}
