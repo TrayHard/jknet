@@ -402,6 +402,16 @@ pub fn save_profile(
     let profile = validate(profile)?;
 
     let paths = state.paths()?;
+    // --- slice: profiles polish ---
+    // And checked against the command line this client would start with, which
+    // needs the record and the settings and so cannot live inside `validate`.
+    check_line_budget(
+        &paths,
+        &state.settings()?,
+        &clients::read_record(&paths, &client_id)?,
+        &profile,
+    )?;
+
     let book = edit_book(&state, &paths, &client_id, move |book| {
         if profile.id.is_empty() {
             if book.profiles.len() >= MAX_PROFILES {
@@ -619,9 +629,18 @@ fn validate(profile: PlayerProfile) -> Result<PlayerProfile> {
 /// Longest hand-written token line, in bytes of UTF-8.
 ///
 /// Nine cvars with a long nickname and two long hilt names come to about two
-/// hundred bytes, so this leaves room for a line several times that and still
-/// stops a paste of a whole configuration file from reaching a command line.
-const MAX_TOKENS_LEN: usize = 1024;
+/// hundred bytes, so this leaves room for a line more than twice that and
+/// still stops a paste of a whole configuration file from reaching a command
+/// line.
+///
+/// Not the engine's own number and deliberately well under it. The engine
+/// counts `MAX_STRING_CHARS = 1024` against the *whole* command line, this
+/// line included but also the three roots, `fs_game`, the **Extra launch
+/// arguments** setting and the client's own argument field. A field limit of
+/// 1024 would therefore have promised a line the engine cannot carry. What
+/// answers for the budget is [`check_line_budget`]; this limit only keeps one
+/// field from being pasted full of a configuration file.
+const MAX_TOKENS_LEN: usize = 512;
 
 /// Checks the hand-written token line and drops an empty one back to `None`.
 ///
@@ -674,6 +693,44 @@ fn clean_tokens(line: Option<&str>) -> Result<Option<String>> {
         ));
     }
     Ok(Some(line.to_string()))
+}
+
+/// --- slice: profiles polish ---
+/// Refuses a profile whose tokens would push this client's command line past
+/// what the engine reads.
+///
+/// The check [`MAX_TOKENS_LEN`] cannot make. That one bounds a field; this one
+/// bounds the line the field ends up in, next to the roots of the client, the
+/// **Extra launch arguments** setting and the client's own argument field —
+/// one buffer, `MAX_STRING_CHARS`, and several writers into it. Past the
+/// budget the engine does not complain and does not truncate at a token
+/// boundary: `Q_strcat` simply stops appending, so the tail of the line is
+/// gone and the log says nothing. See [`crate::launch::line_budget`] for what
+/// is counted.
+///
+/// A refusal rather than a warning, because the player is standing in front of
+/// the form that wrote the line, which is the one moment it can be shortened.
+/// The launch keeps its own WARN for the line that grew past the budget from
+/// the other side — a longer game data folder, an argument field edited later.
+///
+/// The measurement is a floor, so a refusal here is always a line the engine
+/// would really have cut.
+fn check_line_budget(
+    paths: &DataPaths,
+    settings: &crate::settings::Settings,
+    client: &clients::Client,
+    profile: &PlayerProfile,
+) -> Result<()> {
+    let tokens = launch_tokens(profile, client.game);
+    let budget = crate::launch::line_budget(paths, settings, client, &tokens);
+    if budget.is_past() {
+        return Err(AppError::InvalidInput(format!(
+            "the command line of {} would be {} bytes and the engine reads {}: \
+             shorten the token line or the launch arguments of the client",
+            client.name, budget.bytes, budget.limit
+        )));
+    }
+    Ok(())
 }
 
 /// The form a value has to keep on top of the rules of the command line.
@@ -937,6 +994,56 @@ mod tests {
             Some("+set name \"Ben Kenobi\" +set name Ben"),
             "the line is trimmed and otherwise kept as written"
         );
+    }
+
+    /// A client whose only interesting part is what it spends of the command
+    /// line: the id decides the three roots, the argument field is the writer
+    /// the test moves.
+    fn client_record(launch_args: &str) -> clients::Client {
+        clients::Client {
+            id: "duel".to_string(),
+            name: "Duel".to_string(),
+            engine_id: "openjk".to_string(),
+            game: Game::JediAcademy,
+            engine_version: None,
+            engine_installed_at: None,
+            engine_published_at: None,
+            fs_game: None,
+            launch_args: launch_args.to_string(),
+            created_at: "2026-09-12T00:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn the_token_line_is_measured_against_the_whole_command_line() {
+        // The field limit answers for one field. The engine's `MAX_STRING_CHARS`
+        // answers for the line that field lands in, and the same 400 bytes fit
+        // one client and overflow another.
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        let settings = crate::settings::Settings::default();
+
+        let mut edited = profile("Duel");
+        edited.tokens_override = Some(format!("+set name {}", "a".repeat(400)));
+        let edited = validate(edited).expect("400 bytes fit the field");
+
+        check_line_budget(&paths, &settings, &client_record(""), &edited)
+            .expect("the roots of a client leave room for this line");
+
+        // The same line, and a client that has already spent most of the
+        // buffer on its own arguments: one budget, several writers.
+        let loaded = client_record(&format!("+set cg_hud {}", "b".repeat(600)));
+        let refused = check_line_budget(&paths, &settings, &loaded, &edited)
+            .expect_err("a line the engine would cut is refused");
+        assert!(
+            matches!(refused, AppError::InvalidInput(_)),
+            "a refusal the form can show: {refused:?}"
+        );
+
+        // And the profile that writes no tokens at all cannot be the one that
+        // overflows: what is left is the client's own doing.
+        check_line_budget(&paths, &settings, &loaded, &profile("Empty"))
+            .expect("an empty profile adds nothing to the line");
     }
 
     #[test]
