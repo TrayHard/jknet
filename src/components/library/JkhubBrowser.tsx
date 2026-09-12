@@ -633,6 +633,7 @@ export function JkhubBrowser({
           onInstall={(replace) => runInstall(openFile, replace)}
           onOpenSite={() => openSite(openFile)}
           onRevealArchive={reveal}
+          onAuthor={searchAuthor}
         />
       ) : null}
     </>
