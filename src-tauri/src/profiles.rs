@@ -739,7 +739,8 @@ enum Shape {
     /// Whatever the player typed. The nickname: colour codes, any alphabet and
     /// any punctuation are theirs to choose.
     Free,
-    /// `<model>` or `<model>/<variant>`, the two forms the cvar `model` takes.
+    /// `<model>`, `<model>/<variant>` or `<model>/<head>|<torso>|<legs>`, the
+    /// three forms the cvar `model` takes.
     Model,
     /// The name of a block in a `.sab` file, which is one part with no slash.
     Block,
@@ -751,12 +752,57 @@ impl Shape {
         match self {
             Shape::Free => true,
             Shape::Model => match value.split_once('/') {
-                Some((model, variant)) => is_file_part(model) && is_file_part(variant),
+                Some((model, skin)) => is_file_part(model) && fits_skin(skin),
                 None => is_file_part(value),
             },
             Shape::Block => is_file_part(value),
         }
     }
+}
+
+/// --- slice: assembled skins ---
+/// Whether what follows the `/` is a skin name the game reads.
+///
+/// Two shapes, and the `|` decides which:
+///
+/// - **One variant**, `red`, which names `model_red.skin`.
+/// - **Three parts**, `head_a1|torso_a1|lower_a1`, which name a jedi the
+///   player assembled out of a head, a torso and a pair of legs.
+///
+/// The three-part form is checked the way the engine detects it, not the way
+/// it would be convenient to check. `CG_RegisterClientModelname`
+/// (`codemp/cgame/cg_players.c:491-497` of OpenJK `1a6a6434`) takes the value
+/// as three parts when it holds a `|` **and** the words `head`, `torso` and
+/// `lower`; anything else it reads as one variant and looks for
+/// `model_<the whole string>.skin`, which for a value with a `|` in it is a
+/// file no archive holds. So a value the engine would not recognise is
+/// refused here rather than saved and silently rendered as the default skin.
+///
+/// The count is exactly three, because `UI_GetCharacterCvars`
+/// (`codemp/ui/ui_main.c:5010` and below) reads the parts back by position: it
+/// cuts at the first `|`, then at the second, and takes everything left as the
+/// legs. A fourth part would end up inside the name of the third.
+///
+/// Each part passes [`is_file_part`] on its own, which is what keeps a `..` or
+/// a slash out of a name the launcher turns into a file in its icon cache.
+fn fits_skin(skin: &str) -> bool {
+    if !skin.contains('|') {
+        return is_file_part(skin);
+    }
+    let mut parts = skin.split('|');
+    let (Some(head), Some(torso), Some(legs), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    is_file_part(head)
+        && is_file_part(torso)
+        && is_file_part(legs)
+        // `strstr` in the engine is case sensitive, so `Head_A1|…` is a value
+        // the game would not take apart.
+        && skin.contains("head")
+        && skin.contains("torso")
+        && skin.contains("lower")
 }
 
 /// Whether the value is one part of a name the game holds a file under.
@@ -1168,6 +1214,69 @@ mod tests {
         let mut variant = profile("Duel");
         variant.model = Some("jedi_hf/red".to_string());
         assert!(validate(variant).is_ok());
+    }
+
+    // --- slice: assembled skins ---
+
+    #[test]
+    fn the_three_parts_of_an_assembled_jedi_are_a_model_value() {
+        // What `UI_UpdateCharacterCvars` writes and the skin picker builds.
+        for good in [
+            "jedi_hm/head_a1|torso_a1|lower_a1",
+            "jedi_tf/head_b4|torso_f1|lower_d1",
+            "jedi_zf/head_c1|torso_e1|lower_a1",
+        ] {
+            let mut right = profile("Duel");
+            right.model = Some(good.to_string());
+            assert!(validate(right).is_ok(), "{good:?} is a model");
+        }
+    }
+
+    #[test]
+    fn a_value_the_engine_would_not_take_apart_is_refused() {
+        let bad = [
+            // Not three parts: the engine cuts at the first two `|` and
+            // reads whatever is left as the legs.
+            "jedi_hm/head_a1|torso_a1",
+            "jedi_hm/head_a1|torso_a1|lower_a1|extra",
+            // An empty part names no file at all.
+            "jedi_hm/head_a1||lower_a1",
+            "jedi_hm/|torso_a1|lower_a1",
+            "jedi_hm/head_a1|torso_a1|",
+            // A part that would climb out of the icon cache.
+            "jedi_hm/..|torso_a1|lower_a1",
+            "jedi_hm/head_a1|../../secret|lower_a1",
+            // A second slash: the model is one folder.
+            "jedi_hm/sub/head_a1|torso_a1|lower_a1",
+            // Words the engine's own test looks for, and does not find.
+            "jedi_hm/a1|b1|c1",
+            "jedi_hm/head_a1|chest_a1|lower_a1",
+            // `strstr` is case sensitive, so this loads the default skin.
+            "jedi_hm/Head_A1|Torso_A1|Lower_A1",
+        ];
+        for value in bad {
+            let mut wrong = profile("Duel");
+            wrong.model = Some(value.to_string());
+            assert!(validate(wrong).is_err(), "{value:?} is not a model");
+        }
+    }
+
+    #[test]
+    fn an_assembled_value_travels_as_one_token_with_no_quotes() {
+        // `|` is an ordinary character to `split_args`: it neither ends a
+        // token nor opens a quoted group, so the value reaches the engine
+        // whole and the launcher adds nothing around it.
+        let mut jedi = profile("Duel");
+        jedi.model = Some("jedi_hm/head_a1|torso_a1|lower_a1".to_string());
+        let tokens = launch_tokens(&validate(jedi).expect("a valid profile"), Game::JediAcademy);
+        assert_eq!(
+            tokens,
+            ["+set", "model", "jedi_hm/head_a1|torso_a1|lower_a1"]
+        );
+        assert_eq!(
+            crate::launch::split_args("+set model jedi_hm/head_a1|torso_a1|lower_a1"),
+            tokens
+        );
     }
 
     #[test]
