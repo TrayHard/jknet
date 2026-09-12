@@ -11,6 +11,8 @@ import { Badge } from "../ui";
 import { botCount, realPlayers } from "./filter";
 import { Ping } from "./Ping";
 import { ServerName } from "./ServerName";
+// --- slice: servers home tweaks ---
+import { MODE_BADGE } from "./ServerRow";
 
 interface ServerListBlockProps {
   /** Heading above the rows. */
@@ -174,7 +176,10 @@ export function ServerListBlock({
               >
                 {server.map || tCommon("values.empty")}
               </span>
-              <Badge tone="accent">
+              {/* --- slice: servers home tweaks --- the same pill as the one
+                  on the table of the Servers screen, down to the floor under
+                  its width and the label centred in it. */}
+              <Badge tone="accent" className={MODE_BADGE}>
                 {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
               </Badge>
               {/* --- slice: server actions ---
