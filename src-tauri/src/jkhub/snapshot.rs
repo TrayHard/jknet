@@ -250,6 +250,7 @@ mod tests {
             has_files: false,
             url: "https://jkhub.org/files/category/41-jedi-academy/".into(),
             section: None,
+            site_id: None,
         }]
     }
 

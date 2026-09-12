@@ -454,6 +454,7 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
                 has_files,
                 url: parse::category_url(child.id, &child.slug),
                 section: None,
+                site_id: None,
             });
             for grandchild in grandchildren {
                 if grandchild.id == child.id || !sections::covers(game, grandchild.id) {
@@ -475,6 +476,7 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
                     has_files: true,
                     url: parse::category_url(grandchild.id, &grandchild.slug),
                     section: None,
+                    site_id: None,
                 });
             }
         }
@@ -792,6 +794,7 @@ mod tests {
                 has_files: true,
                 url: parse::category_url(13, "free-for-all"),
                 section: None,
+                site_id: None,
             }],
         };
         std::fs::write(
@@ -834,6 +837,7 @@ mod tests {
             has_files: true,
             url: parse::category_url(38, "audio"),
             section: None,
+            site_id: None,
         }];
         let written = store_tree(&data, Game::JediAcademy, &tree);
         assert!(!written.is_empty());
@@ -877,6 +881,7 @@ mod tests {
             has_files: true,
             url: parse::category_url(id, "x"),
             section: None,
+            site_id: None,
         };
         let mut tree = vec![entry(74), entry(3), entry(74)];
         dedup(&mut tree);

@@ -206,9 +206,14 @@ export function JkhubBrowser({
   // player chose, `all` included, is left where it is.
   //
   // --- slice: jkhub catalog ---
-  // The tree is eight flat sections now, every one of them selectable, so the
-  // landing is `Maps` and not the first leaf that happened to have files of
-  // its own. That used to be `Audio`, 44 files of the 3 324 the site has.
+  // Every node of the tree is selectable, sections included, so the landing is
+  // `Maps` and not the first leaf that happened to have files of its own. That
+  // used to be `Audio`, 44 files of the 3 324 the site has.
+  //
+  // --- slice: library polish ---
+  // The first node is still the first section: the core answers with a
+  // section and then whatever the site nests under it, in the order of the
+  // table.
   const tree = useMemo(() => categories.data?.categories ?? [], [categories.data]);
   useEffect(() => {
     if (tree.length === 0) return;
@@ -233,12 +238,44 @@ export function JkhubBrowser({
   const cards = search.data?.cards ?? [];
   const total = search.data?.total ?? 0;
   const counts = query ? (search.data?.categoryCounts ?? {}) : null;
+  // --- slice: library polish ---
+  // The same tally, read as the size of each shelf rather than as the answer
+  // to a query: with no words typed the search matches the whole catalogue,
+  // so its counts are how many files every node of the rail holds. It costs
+  // no request — the answer is on screen already — and it is the only count
+  // the site prints for half the sections, which is none.
+  const totals = query ? null : (search.data?.categoryCounts ?? null);
   const canLoadMore =
     shown < Math.min(total, MAX_SHOWN) && !search.isFetching;
 
-  const names = useMemo(() => {
+  // --- slice: library polish ---
+  // Which section any id of the tree belongs to. Two ways in, because a card
+  // carries a category of the site and the rail is the launcher's:
+  //
+  // * a node of the rail — a section, or a category drawn under one — answers
+  //   with the root of its branch;
+  // * the site category a section stands for answers with that section, which
+  //   is the only way home for a card of `Audio`, a shelf with nothing drawn
+  //   under it.
+  const sections = useMemo(() => {
+    const byId = new Map<number, JkhubCategory>();
+    for (const entry of tree) byId.set(entry.id, entry);
+    const rootOf = (entry: JkhubCategory) => {
+      let node = entry;
+      // The tree is two deep; the guard is against a parent chain a damaged
+      // answer could make circular.
+      for (let step = 0; step < 8 && node.parentId != null; step += 1) {
+        const parent = byId.get(node.parentId);
+        if (!parent) break;
+        node = parent;
+      }
+      return node;
+    };
     const map = new Map<number, JkhubCategory>();
-    for (const entry of tree) map.set(entry.id, entry);
+    for (const entry of tree) {
+      map.set(entry.id, rootOf(entry));
+      if (entry.siteId != null) map.set(entry.siteId, entry);
+    }
     return map;
   }, [tree]);
 
@@ -246,7 +283,7 @@ export function JkhubBrowser({
   // What a card prints under its title: the section of the launcher, in the
   // player's language. Nothing when the tree has not arrived yet.
   const sectionOf = (id: number) => {
-    const found = names.get(id);
+    const found = sections.get(id);
     return found ? sectionName(found) : undefined;
   };
 
@@ -274,6 +311,12 @@ export function JkhubBrowser({
   // opened halfway through a crawl has instead of the events it missed.
   const step = indexing.get(game) ?? status.data?.progress ?? null;
 
+  // --- slice: library polish ---
+  // Nothing here reports the install: the card in the toast column does, from
+  // the press to the answer, and it is the only place that does. The tab used
+  // to push a second toast under `jkhub:<id>` at the end, which the column
+  // then took away again in the next commit — one install, two popups and a
+  // flicker between them.
   const runInstall = (id: number, replace: boolean) => {
     if (!clientId) {
       setFailure(t("install.pickClient"));
@@ -286,14 +329,7 @@ export function JkhubBrowser({
       {
         onSuccess: (answer) => {
           setResult(answer);
-          if (answer.kind === "installed") {
-            toasts.show(`jkhub:${id}`, {
-              variant: "success",
-              title: t("install.toastTitle", { client: clientName }),
-              text: answer.files.join(", "),
-            });
-            return;
-          }
+          if (answer.kind === "installed") return;
           // --- slice: library cleanup ---
           // Two of the answers say the entry has nothing to install: a `.rar`
           // archive and a record that links to another site. A listing card
@@ -307,15 +343,10 @@ export function JkhubBrowser({
           // buttons for it are.
           setOpenFile(id);
         },
-        onError: (error) => {
-          const message = errorText(error);
-          setFailure(message);
-          toasts.show(`jkhub:${id}`, {
-            variant: "error",
-            title: t("install.failedTitle"),
-            text: message,
-          });
-        },
+        // A failure is reported by the same card, in red and until the player
+        // closes it. The banner at the top of the tab is left for what has no
+        // card of its own: a client that was never picked, a link that would
+        // not open, a refresh that failed.
       },
     );
   };
@@ -472,6 +503,7 @@ export function JkhubBrowser({
             selected={scoped}
             onSelect={(entry) => setScope({ kind: "picked", category: entry })}
             counts={counts}
+            totals={totals}
           />
         </aside>
 

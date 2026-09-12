@@ -12,39 +12,56 @@
 //! | ---- | ---------------------- |
 //! | [`super::source::crawl_tree`] | which category pages the walk visits at all |
 //! | [`prune`] | which nodes survive in a cached or bundled tree |
-//! | [`tree`] | the eight nodes the screen draws |
-//! | [`super::index::crawl`] | which listings are read, and under which section a file lands |
+//! | [`tree`] | the nodes the screen draws: a section and the site categories under it |
+//! | [`super::index::crawl`] | which listings are read at all |
 //! | [`retain`] | which entries of an older index on disk are still catalogue |
 //!
-//! Two consequences worth naming. A section is one node even when the site
+//! Two consequences worth naming. A section is one shelf even when the site
 //! spells it as two — **Skins** and **Player Models** are one **Skins & Player
-//! Models** with one count — and a section can be empty for one game: Jedi
-//! Outcast has no NPCs category at all, so that section is absent from its
-//! tree rather than shown at zero.
+//! Models**, with both of them under it — and a section can be empty for one
+//! game: Jedi Outcast has no NPCs category at all, so that section is absent
+//! from its tree rather than shown at zero.
 //!
 //! Names come from `src/locales/*/jkhub.json` through [`Section::key`], not
 //! from the site: the launcher names its own shelves, and the site's spelling
 //! («Lightsabers & Melee», «Source FIles» with the typo it has carried for
-//! years) is not the launcher's to inherit.
+//! years) is not the launcher's to inherit. A category *below* a section
+//! keeps the site's own name: the launcher named the shelf, not every drawer
+//! in it.
 
 use crate::game::Game;
 
 use super::types::{JkhubCategory, JkhubGame};
 
+/// Where the ids of the launcher's own tree nodes start.
+///
+/// --- slice: library polish ---
+/// A section is a node of the launcher and not of the site, so it needs an id
+/// no site category can take. The site numbers its categories in the tens;
+/// a million away from them is a number that reads as «not the site's» at a
+/// glance in a log line or a React key.
+///
+/// The section node used to carry the first site id of the table instead, and
+/// that worked only while the tree was flat. With the site's categories back
+/// under the section, **Skins & Player Models** would have had to be both the
+/// parent and one of its own two children.
+pub const NODE_ID_BASE: u32 = 1_000_000;
+
 /// One section of the launcher's catalogue.
 ///
-/// The first id of a game's list is the section's own id: the node the tree
-/// draws carries it, an entry of the index carries it as `category_id`, and
-/// narrowing a search to the section narrows to it. Choosing a real site id
-/// rather than inventing one keeps `category_id` a thing the site knows, so a
-/// listing page of the section still has an address.
+/// The first id of a game's list is the section's site id: the address of the
+/// section on jkhub.org, the head of the tree branch it draws, and what
+/// [`Section::node_id`] turns into the id of the node itself.
 pub struct Section {
     /// Stable key of the section. The locale key under `sections` of
     /// `jkhub.json`, and what the wire carries in `JkhubCategory::section`.
     pub key: &'static str,
     /// English name, and the fallback for a screen without a catalog loaded.
     pub name: &'static str,
-    /// Site categories of Jedi Academy, the first being the section's id.
+    /// Site categories of Jedi Academy, the first being the section's own.
+    ///
+    /// The order is the order the tree draws them in, so keep it the order a
+    /// player reads: the section first, its categories alphabetically after.
     pub ja: &'static [u32],
     /// The same for Jedi Outcast. Empty when the site has no such category.
     pub jo: &'static [u32],
@@ -59,10 +76,20 @@ impl Section {
         }
     }
 
-    /// The id the tree, the index and a search use for this section, or `None`
-    /// when the game has no such category.
+    /// The site id of this section, or `None` when the game has no such
+    /// category.
     pub fn id(&self, game: Game) -> Option<u32> {
         self.ids(game).first().copied()
+    }
+
+    /// The id of the node the tree draws for this section.
+    ///
+    /// --- slice: library polish ---
+    /// A launcher id, not a site one: see [`NODE_ID_BASE`]. Derived from the
+    /// site id rather than from the position in [`SECTIONS`], so reordering
+    /// the table cannot renumber the shelves.
+    pub fn node_id(&self, game: Game) -> Option<u32> {
+        self.id(game).map(|id| NODE_ID_BASE + id)
     }
 }
 
@@ -145,13 +172,16 @@ pub fn of(game: Game, category_id: u32) -> Option<&'static Section> {
         .find(|section| section.ids(game).contains(&category_id))
 }
 
-/// The id a file of this site category is filed under, or `None` when the
-/// category is outside the eight.
+/// The node of the launcher's tree a file of this site category sits under.
 ///
-/// A section id maps to itself, so running an already mapped index through
-/// this changes nothing.
-pub fn id_of(game: Game, category_id: u32) -> Option<u32> {
-    of(game, category_id).and_then(|section| section.id(game))
+/// --- slice: library polish ---
+/// What narrowing a search to a whole section means: a file of **Duel** is
+/// answered under **Maps** because this says so, and a file of **Duel** is
+/// answered under **Duel** because the ids match outright. The search needs
+/// no tree to decide it — the table is enough, and the table is the same
+/// whichever tree the walk brought back.
+pub fn node_id_of(game: Game, category_id: u32) -> Option<u32> {
+    of(game, category_id).and_then(|section| section.node_id(game))
 }
 
 /// Whether the launcher shows this site category at all.
@@ -176,34 +206,61 @@ pub fn prune(game: Game, mut tree: Vec<JkhubCategory>) -> Vec<JkhubCategory> {
     tree
 }
 
-/// The tree the screen draws: one flat node per section, in the order of
-/// [`SECTIONS`].
+/// The tree the screen draws: a node per section, in the order of
+/// [`SECTIONS`], with the site's own categories under it.
 ///
-/// `site` is the pruned site tree, and is read for two things only — whether
-/// the game has the section at all, and how many files the site printed under
-/// it. The counts add up the leaves only: a container such as Maps prints the
-/// total of its children when it prints anything, and adding it in would
-/// count every map twice.
+/// `site` is the pruned site tree, and is read for three things — whether the
+/// game has the section at all, which of the section's categories the site
+/// still has, and how many files it printed under each. The count of a
+/// section adds up the leaves only: a container such as Maps prints the total
+/// of its children when it prints anything, and adding it in would count
+/// every map twice.
 ///
 /// A section the game has but the tree has not yet learned about still gets a
-/// node, with no count: the tab must list `Vehicles` of Jedi Outcast even on
-/// the day the site's tree says nothing about it.
+/// node, with no count and no children: the tab must list `Vehicles` of Jedi
+/// Outcast even on the day the site's tree says nothing about it.
+///
+/// --- slice: library polish ---
+/// Two rules decide what appears under a section, and both are about not
+/// drawing the same shelf twice:
+///
+/// * a section made of one site category has no children — the node *is* that
+///   category, and a lone `Audio` under `Audio` says nothing;
+/// * the head of a section whose other members are its children on the site
+///   has no row either — `Maps` (71) holds no files of its own and every
+///   gametype hangs off it, so the section node stands in for it.
+///
+/// What is left is the case the flat tree could not express: **Skins** and
+/// **Player Models** are siblings on the site, neither can be the parent of
+/// the other, and both get a row under a section node that is the launcher's
+/// own.
 pub fn tree(game: Game, site: &[JkhubCategory]) -> Vec<JkhubCategory> {
     let mut nodes = Vec::with_capacity(SECTIONS.len());
     for section in &SECTIONS {
-        let Some(id) = section.id(game) else { continue };
-        let members: Vec<&JkhubCategory> = site
+        let (Some(id), Some(node_id)) = (section.id(game), section.node_id(game)) else {
+            continue;
+        };
+        // In the order of the table rather than of the walk: the table is
+        // written the way the rail reads, the walk is written the way the
+        // site serves.
+        let members: Vec<&JkhubCategory> = section
+            .ids(game)
             .iter()
-            .filter(|entry| section.ids(game).contains(&entry.id))
+            .filter_map(|wanted| site.iter().find(|entry| entry.id == *wanted))
             .collect();
         let counted: Vec<u32> = members
             .iter()
             .filter(|entry| entry.has_files)
             .filter_map(|entry| entry.file_count)
             .collect();
-        let head = members.iter().find(|entry| entry.id == id);
+        let head = members.iter().find(|entry| entry.id == id).copied();
+        // The head is the container of the branch when the rest of the
+        // section hangs off it, and then the section node stands in for it.
+        let head_is_the_branch = members
+            .iter()
+            .any(|entry| entry.parent_id == Some(id) && entry.id != id);
         nodes.push(JkhubCategory {
-            id,
+            id: node_id,
             slug: head.map(|entry| entry.slug.clone()).unwrap_or_default(),
             // The site's own name, kept as the fallback of a screen that has
             // no catalog for the language. What the player reads comes from
@@ -213,33 +270,62 @@ pub fn tree(game: Game, site: &[JkhubCategory]) -> Vec<JkhubCategory> {
             game: JkhubGame::from(game),
             file_count: (!counted.is_empty()).then(|| counted.iter().sum()),
             // Every section is selectable, container or not: the grid answers
-            // out of the index, which files a map under `Maps` and not under
-            // the gametype the site put it in.
+            // out of the index, and narrowing to a section takes in every
+            // category under it.
             has_files: true,
             url: head
                 .map(|entry| entry.url.clone())
                 .unwrap_or_else(|| super::parse::category_url(id, "")),
             section: Some(section.key.to_string()),
+            site_id: Some(id),
         });
+        if members.len() < 2 {
+            continue;
+        }
+        let drawn: Vec<u32> = members
+            .iter()
+            .map(|entry| entry.id)
+            .filter(|member| !(*member == id && head_is_the_branch))
+            .collect();
+        for member in members.iter().filter(|entry| drawn.contains(&entry.id)) {
+            // A member whose parent is drawn too keeps it; everything else
+            // hangs off the section itself — a gametype whose container is
+            // the section, and a node the pruning orphaned when it dropped a
+            // game root.
+            let parent = member
+                .parent_id
+                .filter(|parent| drawn.contains(parent))
+                .unwrap_or(node_id);
+            nodes.push(JkhubCategory {
+                parent_id: Some(parent),
+                // The site's name, and no section key: the launcher named the
+                // shelf, not the drawers in it.
+                section: None,
+                site_id: None,
+                ..(*member).clone()
+            });
+        }
     }
     nodes
 }
 
-/// Files an index onto the sections, dropping what no longer belongs.
+/// Drops the entries of an index that are no longer catalogue.
 ///
-/// Answers how many entries were dropped. Two things happen at once, and both
-/// are needed by an index written before this table existed: an entry of a
-/// gametype under Maps is moved to the Maps section, and an entry of Cosmetic
-/// Mods is thrown away.
+/// Answers how many went. An index written before the sections existed
+/// carries a file of **Cosmetic Mods** under `10`, and this is the one place
+/// every reader of an index goes through.
+///
+/// --- slice: library polish ---
+/// The site's own category is left exactly as it is. It used to be rewritten
+/// to the id of the section, which is what made a rail of eight flat shelves
+/// the only tree the index could serve: once a map of **Duel** and a map of
+/// **Siege** both read `71`, no amount of work on the front end could tell
+/// them apart again. The section of an entry is now worked out from the
+/// table when it is needed, by [`node_id_of`], and the field keeps what the
+/// site said.
 pub fn retain(game: Game, files: &mut Vec<super::index::IndexedFile>) -> usize {
     let before = files.len();
-    files.retain_mut(|file| match id_of(game, file.category_id) {
-        Some(id) => {
-            file.category_id = id;
-            true
-        }
-        None => false,
-    });
+    files.retain(|file| covers(game, file.category_id));
     before - files.len()
 }
 
@@ -249,7 +335,27 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::jkhub::index::IndexedFile;
     use crate::jkhub::snapshot;
+
+    /// One entry of an index, with the only two fields these tests read.
+    fn indexed(id: u32, category_id: u32) -> IndexedFile {
+        IndexedFile {
+            id,
+            slug: format!("f{id}"),
+            title: format!("File {id}"),
+            author_name: None,
+            author_url: None,
+            category_id,
+            game: JkhubGame::Ja,
+            thumbnail_url: None,
+            description: String::new(),
+            downloads: None,
+            submitted_at: None,
+            updated_at: None,
+            tags: Vec::new(),
+        }
+    }
 
     fn node(id: u32, parent: Option<u32>, count: Option<u32>, has_files: bool) -> JkhubCategory {
         JkhubCategory {
@@ -262,6 +368,7 @@ mod tests {
             has_files,
             url: format!("https://jkhub.org/files/category/{id}-c{id}/"),
             section: None,
+            site_id: None,
         }
     }
 
@@ -343,11 +450,21 @@ mod tests {
         for id in [63, 45, 47] {
             assert!(!covers(Game::JediOutcast, id), "jo: {id} is not catalogue");
         }
-        // And the eight that are.
-        assert_eq!(id_of(Game::JediAcademy, 13), Some(71), "a gametype is Maps");
-        assert_eq!(id_of(Game::JediAcademy, 5), Some(4), "models are Skins");
-        assert_eq!(id_of(Game::JediAcademy, 30), Some(30), "and an id maps to itself");
-        assert_eq!(id_of(Game::JediOutcast, 36), None, "jo has no NPCs");
+        // And the eight that are, by the node of the rail they answer under.
+        let maps = NODE_ID_BASE + 71;
+        assert_eq!(node_id_of(Game::JediAcademy, 13), Some(maps), "a gametype is under Maps");
+        assert_eq!(node_id_of(Game::JediAcademy, 71), Some(maps), "and so is the container");
+        assert_eq!(
+            node_id_of(Game::JediAcademy, 5),
+            Some(NODE_ID_BASE + 4),
+            "player models are under Skins & Player Models"
+        );
+        assert_eq!(
+            node_id_of(Game::JediAcademy, 30),
+            Some(NODE_ID_BASE + 30),
+            "a section of one category still gets a node of its own"
+        );
+        assert_eq!(node_id_of(Game::JediOutcast, 36), None, "jo has no NPCs");
     }
 
     #[test]
@@ -366,8 +483,32 @@ mod tests {
         assert_eq!(pruned[1].parent_id, Some(71), "Maps did");
     }
 
+    /// --- slice: library polish ---
+    /// An index written by the build that rewrote `category_id` carries the
+    /// id of the section itself: a map of **Duel** reads `71`, the id of
+    /// **Maps**. Such an entry has to survive the read and answer under
+    /// **Maps** — `71` is a category of the table like any other, the first
+    /// of the Maps list. The gametype is gone and only a rebuild brings it
+    /// back; the file is not gone with it.
     #[test]
-    fn a_section_is_one_node_carrying_the_sum_of_its_leaves() {
+    fn an_entry_an_older_index_rolled_up_to_a_section_stays_under_maps() {
+        let mut files = vec![indexed(1, 71), indexed(2, 13), indexed(3, 10)];
+        let dropped = retain(Game::JediAcademy, &mut files);
+        assert_eq!(dropped, 1, "cosmetic mods are not catalogue");
+        assert_eq!(
+            files.iter().map(|entry| entry.category_id).collect::<Vec<_>>(),
+            vec![71, 13],
+            "the rolled-up entry is kept, and kept as it was written"
+        );
+        assert_eq!(
+            node_id_of(Game::JediAcademy, files[0].category_id),
+            Some(NODE_ID_BASE + 71),
+            "and answers under the shelf the older build filed it on"
+        );
+    }
+
+    #[test]
+    fn a_section_carries_the_sum_of_its_leaves_and_the_site_under_it() {
         let site = prune(
             Game::JediAcademy,
             vec![
@@ -379,29 +520,62 @@ mod tests {
             ],
         );
         let nodes = tree(Game::JediAcademy, &site);
-        assert_eq!(nodes.len(), 8, "every section of Jedi Academy has a node");
+        let sections: Vec<&JkhubCategory> =
+            nodes.iter().filter(|entry| entry.parent_id.is_none()).collect();
+        assert_eq!(sections.len(), 8, "every section of Jedi Academy has a node");
         assert!(
-            nodes.iter().all(|entry| entry.parent_id.is_none() && entry.has_files),
-            "the launcher tree is flat and every node opens"
+            sections.iter().all(|entry| entry.has_files && entry.section.is_some()),
+            "a section opens and is named by the launcher"
+        );
+        assert!(
+            nodes
+                .iter()
+                .filter(|entry| entry.parent_id.is_some())
+                .all(|entry| entry.section.is_none()),
+            "a category under a section keeps the site's own name"
         );
 
-        let maps = &nodes[0];
-        assert_eq!(maps.id, 71);
+        let maps = sections[0];
+        assert_eq!(maps.id, NODE_ID_BASE + 71);
         assert_eq!(maps.section.as_deref(), Some("maps"));
         assert_eq!(
             maps.file_count,
             Some(489),
             "the container's own 999 would count every map twice"
         );
-
-        let skins = &nodes[1];
-        assert_eq!(skins.id, 4, "the section is filed under Skins");
-        assert_eq!(skins.file_count, Some(1228), "and shows both categories");
-
+        let under_maps: Vec<u32> = children(&nodes, maps.id);
         assert_eq!(
-            nodes[7].file_count, None,
-            "a section the tree knows nothing about shows no badge"
+            under_maps,
+            vec![28, 13],
+            "the gametypes hang off the section in the order of the table — Duel, then Free \
+             For All — and 71 itself does not: it is the section"
         );
+
+        let skins = sections[1];
+        assert_eq!(skins.id, NODE_ID_BASE + 4, "neither site category can be the parent");
+        assert_eq!(skins.file_count, Some(1228), "and it shows both of them");
+        assert_eq!(
+            children(&nodes, skins.id),
+            vec![4, 5],
+            "Skins and Player Models are siblings on the site and children here"
+        );
+
+        let audio = sections[7];
+        assert_eq!(audio.file_count, None, "a section the tree knows nothing about shows no badge");
+        assert!(children(&nodes, audio.id).is_empty(), "and a section of one category has no children");
+    }
+
+    #[test]
+    fn a_section_of_one_category_stays_one_row() {
+        let site = prune(Game::JediAcademy, vec![node(38, Some(41), Some(52), true)]);
+        let nodes = tree(Game::JediAcademy, &site);
+        let audio: Vec<&JkhubCategory> = nodes
+            .iter()
+            .filter(|entry| entry.section.as_deref() == Some("audio"))
+            .collect();
+        assert_eq!(audio.len(), 1, "Audio under Audio would say nothing");
+        assert_eq!(audio[0].file_count, Some(52));
+        assert!(children(&nodes, audio[0].id).is_empty());
     }
 
     #[test]
@@ -409,5 +583,15 @@ mod tests {
         let nodes = tree(Game::JediOutcast, &[]);
         assert_eq!(nodes.len(), 7);
         assert!(nodes.iter().all(|entry| entry.section.as_deref() != Some("npcs")));
+    }
+
+    /// Site ids of the nodes directly under one node, in the order they are
+    /// drawn.
+    fn children(nodes: &[JkhubCategory], parent: u32) -> Vec<u32> {
+        nodes
+            .iter()
+            .filter(|entry| entry.parent_id == Some(parent))
+            .map(|entry| entry.id)
+            .collect()
     }
 }
