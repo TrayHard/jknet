@@ -910,6 +910,17 @@ export interface PlayerModel {
    * skin. The presence of this field is the «assembled» flag.
    */
   parts: ModelParts | null;
+  // --- slice: skins and hilts ---
+  /**
+   * Absolute path of the composed picture of {@link value}: the icons of its
+   * head, torso and legs stacked on a light ground. `null` for an ordinary
+   * skin.
+   *
+   * The card of a custom character draws this instead of the head icon alone.
+   * A combination the player builds afterwards is composed by
+   * {@link profilesIpc.assembledSkinPreview}.
+   */
+  preview: string | null;
   /** The archive the skin was found in. */
   source: string;
 }
@@ -1016,6 +1027,16 @@ export const profilesIpc = {
   /** Every saber hilt this client can offer. Empty for a game with none. */
   listSaberHilts: (clientId: string) =>
     call<SaberHilt[]>("list_saber_hilts", { clientId }),
+  // --- slice: skins and hilts ---
+  /**
+   * The composed picture of one combination of head, torso and legs.
+   *
+   * `value` is the whole cvar, `jedi_hm/head_a1|torso_a1|lower_a1`. Answers
+   * `null` for a value that is not an assembled skin of this client, and for
+   * one whose part icons could none of them be read.
+   */
+  assembledSkinPreview: (clientId: string, value: string) =>
+    call<string | null>("assembled_skin_preview", { clientId, value }),
 };
 
 /**
