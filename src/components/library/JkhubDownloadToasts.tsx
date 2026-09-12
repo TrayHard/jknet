@@ -118,7 +118,7 @@ function InstallCard({ entry, progress, clientName }: InstallCardProps) {
         )
       }
       action={
-        installed && result?.folderPath ? (
+        installed && installed.files.length > 0 && result?.folderPath ? (
           <Button
             size="sm"
             icon={<FolderOpen size={14} />}
