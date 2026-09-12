@@ -261,12 +261,12 @@
       },
       "saberTypes": {
         "single": "Одно лезвие",
-        "staff": "Двойное лезвие"
+        "staff": "Посох"
       },
       "saberModes": {
         "label": "Тип меча",
         "single": "Один",
-        "staff": "Стафф",
+        "staff": "Посох",
         "duals": "Два меча"
       }
     }
