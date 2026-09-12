@@ -108,8 +108,6 @@
   },
   "install": {
     "pickClient": "Előbb válasszon fent egy klienst: a fájl mindig egy kliensbe kerül.",
-    "toastTitle": "Telepítve ide: {{client}}",
-    "failedTitle": "A telepítés nem sikerült",
     "categoriesTitle": "A kategóriák frissültek",
     "categoriesText": "{{count}} kategória beolvasva a JKHub oldaláról."
   },

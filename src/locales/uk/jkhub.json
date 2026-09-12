@@ -118,8 +118,6 @@
   },
   "install": {
     "pickClient": "Спершу виберіть клієнт угорі: файл встановлюється в клієнт.",
-    "toastTitle": "Встановлено в клієнт {{client}}",
-    "failedTitle": "Встановлення не вдалося",
     "categoriesTitle": "Категорії оновлено",
     "categoriesText": "З JKHub прочитано категорій: {{count}}."
   },
