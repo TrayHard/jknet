@@ -335,7 +335,27 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::jkhub::index::IndexedFile;
     use crate::jkhub::snapshot;
+
+    /// One entry of an index, with the only two fields these tests read.
+    fn indexed(id: u32, category_id: u32) -> IndexedFile {
+        IndexedFile {
+            id,
+            slug: format!("f{id}"),
+            title: format!("File {id}"),
+            author_name: None,
+            author_url: None,
+            category_id,
+            game: JkhubGame::Ja,
+            thumbnail_url: None,
+            description: String::new(),
+            downloads: None,
+            submitted_at: None,
+            updated_at: None,
+            tags: Vec::new(),
+        }
+    }
 
     fn node(id: u32, parent: Option<u32>, count: Option<u32>, has_files: bool) -> JkhubCategory {
         JkhubCategory {
@@ -461,6 +481,30 @@ mod tests {
         assert_eq!(ids, vec![71, 13], "source files and cosmetic mods are gone");
         assert_eq!(pruned[0].parent_id, None, "the game root did not survive");
         assert_eq!(pruned[1].parent_id, Some(71), "Maps did");
+    }
+
+    /// --- slice: library polish ---
+    /// An index written by the build that rewrote `category_id` carries the
+    /// id of the section itself: a map of **Duel** reads `71`, the id of
+    /// **Maps**. Such an entry has to survive the read and answer under
+    /// **Maps** — `71` is a category of the table like any other, the first
+    /// of the Maps list. The gametype is gone and only a rebuild brings it
+    /// back; the file is not gone with it.
+    #[test]
+    fn an_entry_an_older_index_rolled_up_to_a_section_stays_under_maps() {
+        let mut files = vec![indexed(1, 71), indexed(2, 13), indexed(3, 10)];
+        let dropped = retain(Game::JediAcademy, &mut files);
+        assert_eq!(dropped, 1, "cosmetic mods are not catalogue");
+        assert_eq!(
+            files.iter().map(|entry| entry.category_id).collect::<Vec<_>>(),
+            vec![71, 13],
+            "the rolled-up entry is kept, and kept as it was written"
+        );
+        assert_eq!(
+            node_id_of(Game::JediAcademy, files[0].category_id),
+            Some(NODE_ID_BASE + 71),
+            "and answers under the shelf the older build filed it on"
+        );
     }
 
     #[test]
