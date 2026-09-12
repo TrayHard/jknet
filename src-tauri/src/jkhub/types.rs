@@ -206,9 +206,20 @@ pub struct JkhubFile {
     pub category_name: Option<String>,
     pub author: Option<JkhubAuthor>,
     /// Plain text: the JSON-LD copy of the description, with the markup of
-    /// the site removed. The launcher has no HTML sanitizer and renders this
-    /// as paragraphs, never as markup.
+    /// the site removed and its HTML entities resolved. What the catalogue
+    /// index searches, and what the window falls back to when the block below
+    /// is empty.
     pub description: String,
+    /// --- slice: jkhub details ---
+    /// The same description with the author's markup kept, rebuilt from the
+    /// allowlist in [`super::richtext`]. Safe to render: no element, attribute
+    /// or address reaches this string unless that file names it.
+    ///
+    /// Empty when the theme moved the block. `serde(default)` because a file
+    /// page cached by an older build has no such key, and a cache that fails
+    /// to read is a page fetched again for nothing.
+    #[serde(default)]
+    pub description_html: String,
     pub submitted_at: Option<String>,
     pub updated_at: Option<String>,
     pub version: Option<String>,

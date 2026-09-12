@@ -17,6 +17,7 @@
 //! | `snapshot.rs` | the category tree bundled with the build |
 //! | `index.rs` | the local catalogue index, and the search that runs on it |
 //! | `parse.rs` | pure parsers, tested against saved pages |
+//! | `richtext.rs` | the allowlist the description of a file page is rebuilt from |
 //! | `source.rs` | the trait, the HTML reader, the REST placeholder |
 //! | `download.rs` | the `csrfKey` flow and the streaming download |
 //! | `install.rs` | pulling the pk3 files out of an archive into a client |
@@ -37,6 +38,10 @@ pub mod parse;
 // Builds the catalogue index a few seconds after the launcher starts, instead
 // of under the player who typed the first word of a search.
 pub mod prewarm;
+// --- slice: jkhub details ---
+// The description of a file page, rebuilt from an allowlist of tags so the
+// window can render it as markup instead of as one long line of text.
+pub mod richtext;
 pub mod snapshot;
 pub mod source;
 pub mod types;
@@ -1318,6 +1323,7 @@ mod tests {
             category_name: Some("Skins".into()),
             author: None,
             description: String::new(),
+            description_html: String::new(),
             submitted_at: None,
             updated_at: Some("2020-01-01T00:00:00Z".into()),
             version: Some("1.0".into()),
