@@ -94,11 +94,58 @@ const PICTURE_ATTRS: &str = "\" loading=\"lazy\" decoding=\"async\" referrerpoli
 /// inventing a rule.
 const BOILERPLATE_CLASS: &str = "dmca";
 
+/// Longest run of markup one description may produce, in bytes.
+///
+/// Both text copies of a description have had a ceiling from the start —
+/// `MAX_CARD_DESCRIPTION` in `parse.rs`, `MAX_DESCRIPTION` in `index.rs` —
+/// and this one had none, although it travels furthest of the three: it sits
+/// in the file cache for half an hour and reaches the window as a single
+/// `dangerouslySetInnerHTML`. The page writes the description, so its length
+/// is the site's to decide and not the launcher's to trust.
+///
+/// The number is a guard rail rather than a layout rule: no description read
+/// off jkhub.org comes close, and a page that does is one nobody scrolls to
+/// the end of anyway.
+const MAX_HTML: usize = 256 * 1024;
+
+/// What closes a description the budget cut short.
+///
+/// An ellipsis and not a sentence: this file knows nothing of the player's
+/// language, and adding a translated string would mean carrying one through
+/// the core to a string built from an allowlist. Three dots read the same in
+/// all eight catalogs. The class is a literal written here, like
+/// `jkhub-video`, never one copied off the page.
+const CUT_MARK: &str = "<p class=\"jkhub-cut\">…</p>";
+
 /// Cleans one description block, given the element that holds it.
 pub fn sanitize_element(root: ElementRef<'_>) -> String {
-    let mut out = String::new();
+    let mut out = Sink::default();
     render_children(root, &mut out);
-    out.trim().to_string()
+    if out.cut {
+        out.html.push_str(CUT_MARK);
+    }
+    out.html.trim().to_string()
+}
+
+/// The markup as it is built, plus the one thing the string cannot say for
+/// itself: whether [`MAX_HTML`] ended the description early.
+#[derive(Default)]
+struct Sink {
+    html: String,
+    cut: bool,
+}
+
+impl Sink {
+    /// Whether the budget is spent, asked once before each child.
+    ///
+    /// A cut therefore always falls between two nodes, never inside a tag or
+    /// halfway through an address, and every element already open still gets
+    /// its closing tag written on the way back out. The overshoot is one
+    /// node: whatever the last child of the description happened to hold.
+    fn full(&mut self) -> bool {
+        self.cut |= self.html.len() >= MAX_HTML;
+        self.cut
+    }
 }
 
 /// Cleans a fragment of markup.
@@ -111,10 +158,13 @@ fn sanitize_fragment(html: &str) -> String {
     sanitize_element(document.root_element())
 }
 
-fn render_children(parent: ElementRef<'_>, out: &mut String) {
+fn render_children(parent: ElementRef<'_>, out: &mut Sink) {
     for child in parent.children() {
+        if out.full() {
+            break;
+        }
         match child.value() {
-            Node::Text(text) => escape_text(text, out),
+            Node::Text(text) => escape_text(text, &mut out.html),
             Node::Element(_) => {
                 if let Some(element) = ElementRef::wrap(child) {
                     render_element(element, out);
@@ -127,7 +177,7 @@ fn render_children(parent: ElementRef<'_>, out: &mut String) {
     }
 }
 
-fn render_element(element: ElementRef<'_>, out: &mut String) {
+fn render_element(element: ElementRef<'_>, out: &mut Sink) {
     let name = element.value().name().to_ascii_lowercase();
     if DROPPED.contains(&name.as_str()) || is_boilerplate(element) {
         return;
@@ -138,7 +188,7 @@ fn render_element(element: ElementRef<'_>, out: &mut String) {
     // a link to the video with the still the site itself publishes for it.
     if name == "iframe" {
         if let Some(id) = element.value().attr("src").and_then(youtube_id) {
-            push_video(&id, out);
+            push_video(&id, &mut out.html);
         }
         return;
     }
@@ -154,11 +204,14 @@ fn render_element(element: ElementRef<'_>, out: &mut String) {
             let Some(src) = element.value().attr("src").and_then(picture_url) else {
                 return;
             };
-            out.push_str("<img src=\"");
-            escape_attr(&src, out);
-            out.push_str("\" alt=\"");
-            escape_attr(element.value().attr("alt").unwrap_or_default(), out);
-            out.push_str(PICTURE_ATTRS);
+            out.html.push_str("<img src=\"");
+            escape_attr(&src, &mut out.html);
+            out.html.push_str("\" alt=\"");
+            escape_attr(
+                element.value().attr("alt").unwrap_or_default(),
+                &mut out.html,
+            );
+            out.html.push_str(PICTURE_ATTRS);
         }
         "a" => {
             let Some(href) = element.value().attr("href").and_then(link_url) else {
@@ -167,24 +220,24 @@ fn render_element(element: ElementRef<'_>, out: &mut String) {
                 render_children(element, out);
                 return;
             };
-            out.push_str("<a href=\"");
-            escape_attr(&href, out);
-            out.push_str("\">");
+            out.html.push_str("<a href=\"");
+            escape_attr(&href, &mut out.html);
+            out.html.push_str("\">");
             render_children(element, out);
-            out.push_str("</a>");
+            out.html.push_str("</a>");
         }
         _ => {
-            out.push('<');
-            out.push_str(&name);
+            out.html.push('<');
+            out.html.push_str(&name);
             if VOID.contains(&name.as_str()) {
-                out.push_str(" />");
+                out.html.push_str(" />");
                 return;
             }
-            out.push('>');
+            out.html.push('>');
             render_children(element, out);
-            out.push_str("</");
-            out.push_str(&name);
-            out.push('>');
+            out.html.push_str("</");
+            out.html.push_str(&name);
+            out.html.push('>');
         }
     }
 }
@@ -581,5 +634,62 @@ mod tests {
         assert_eq!(decode_entities("A&B&C"), "A&B&C");
         assert_eq!(decode_entities("plain text"), "plain text");
         assert_eq!(decode_entities("&"), "&");
+    }
+
+    #[test]
+    fn a_description_within_the_budget_is_not_marked_as_cut() {
+        let clean = sanitize_fragment("<p>a readme of ordinary length</p>");
+        assert_eq!(clean, "<p>a readme of ordinary length</p>");
+        assert!(
+            !clean.contains("jkhub-cut"),
+            "the mark belongs to a description that was actually shortened"
+        );
+    }
+
+    #[test]
+    fn a_description_past_the_budget_is_cut_between_two_elements() {
+        let paragraph = "<p>the readme goes on and on</p>";
+        let clean = sanitize_fragment(&paragraph.repeat(20_000));
+
+        assert!(
+            clean.len() <= MAX_HTML + paragraph.len() + CUT_MARK.len(),
+            "the output stays within the budget plus the node that crossed it, got {}",
+            clean.len()
+        );
+        assert!(
+            clean.len() > MAX_HTML - paragraph.len(),
+            "everything up to the budget is kept, got {}",
+            clean.len()
+        );
+        assert!(
+            clean.ends_with(CUT_MARK),
+            "the reader is told the description goes on"
+        );
+        assert_eq!(
+            clean.matches("<p").count(),
+            clean.matches("</p>").count(),
+            "the cut never lands inside a tag"
+        );
+    }
+
+    #[test]
+    fn a_cut_inside_a_list_still_closes_the_list() {
+        let item = "<li>one line of a list that never ends</li>";
+        let clean = sanitize_fragment(&format!("<ul>{}</ul><p>after</p>", item.repeat(20_000)));
+
+        assert!(clean.ends_with(CUT_MARK));
+        assert!(
+            clean.contains("</ul>"),
+            "the element the cut fell inside is closed on the way out"
+        );
+        assert!(
+            !clean.contains("<p>after</p>"),
+            "what follows a spent budget is left out"
+        );
+        assert_eq!(
+            clean.matches("<li>").count(),
+            clean.matches("</li>").count(),
+            "every item that opened also closed"
+        );
     }
 }
