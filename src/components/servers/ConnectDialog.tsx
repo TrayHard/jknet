@@ -375,6 +375,9 @@ export function ConnectDialog({
                   values={manual}
                   hilts={hilts}
                   hasHilts={hasHilts}
+                  // The client above empties the hilt fields when it changes;
+                  // the shape switch is emptied with them.
+                  resetKey={client.id}
                   size="sm"
                   onChange={(values) => edit(values)}
                 />

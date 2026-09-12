@@ -45,6 +45,7 @@ export function HiltFields({
   values,
   hilts,
   hasHilts,
+  resetKey,
   size,
   onChange,
 }: {
@@ -58,6 +59,12 @@ export function HiltFields({
    * still manages them.
    */
   hasHilts: boolean;
+  /**
+   * What the values belong to. The control outlives them where it stands over
+   * a picker of its own — the client of the **Connect…** dialog — and a new
+   * key there means the values under it were replaced wholesale.
+   */
+  resetKey?: string;
   size?: SelectSize;
   onChange: (values: SaberValues) => void;
 }) {
@@ -77,6 +84,20 @@ export function HiltFields({
     if (touched.current) return;
     setMode(derived);
   }, [derived]);
+
+  // A touch lasts as long as the values it was a touch of. Where the control
+  // stays mounted across a change of `resetKey` — the **Connect…** dialog
+  // switching clients under it, which empties the hilts of the client that is
+  // going away — the shape goes back to being read out of the values, or a
+  // **Duals** picked for one client's hilts would stay lit over another
+  // client's empty fields. Adjusting state while rendering, as React
+  // prescribes for a prop the state has to follow.
+  const [keyed, setKeyed] = useState(resetKey);
+  if (keyed !== resetKey) {
+    setKeyed(resetKey);
+    touched.current = false;
+    setMode(derived);
+  }
 
   const edit = (next: SaberValues, to: SaberMode = mode) =>
     onChange(saberValuesFor(to, next, found));
