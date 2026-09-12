@@ -764,7 +764,7 @@ pub async fn jkhub_search(
         per_page: answer.per_page,
         pages: answer.pages,
         cards: answer.cards,
-        category_counts: index::roll_up(&answer.category_counts, &tree),
+        category_counts: index::roll_up(game, &answer.category_counts, &tree),
         indexed_at: loaded.index.updated_at.clone(),
         stale: is_stale(&loaded),
     })

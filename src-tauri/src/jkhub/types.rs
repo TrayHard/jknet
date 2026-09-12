@@ -70,6 +70,18 @@ pub struct JkhubCategory {
     /// [`super::sections`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub section: Option<String>,
+    // --- slice: library polish ---
+    /// Site category a section node stands for; `None` for every other node.
+    ///
+    /// A section node carries an id of the launcher's own (see
+    /// [`super::sections::NODE_ID_BASE`]) because it can be the parent of the
+    /// very category the site names it after. This is that category: the
+    /// address of the shelf on jkhub.org, and the id an entry of the index
+    /// carries when the site filed a file on the shelf itself rather than in
+    /// a drawer of it. The screen reads it to say which section a card came
+    /// out of.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub site_id: Option<u32>,
 }
 
 /// The answer of `jkhub_categories`.

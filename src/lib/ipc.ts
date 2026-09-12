@@ -1648,6 +1648,17 @@ export interface JkhubCategory {
    * `src-tauri/src/jkhub/sections.rs`.
    */
   section?: string;
+  // --- slice: library polish ---
+  /**
+   * Site category a section node stands for; absent on every other node.
+   *
+   * A section carries an id of the launcher's own — it can be the parent of
+   * the very category the site names it after — and this is the id jkhub.org
+   * knows the shelf by. A card of the grid carries a site category, and this
+   * is how a card of a section that has no drawers, such as **Audio**, still
+   * finds the shelf it came off.
+   */
+  siteId?: number;
 }
 
 export interface JkhubCategories {
