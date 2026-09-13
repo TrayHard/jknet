@@ -2,7 +2,6 @@
   "title": "Biblioteca",
   "searchPlaceholder": "Buscar archivos",
   "clearSearch": "Clear search",
-  "browseJkhub": "Explorar JKHub",
   "addFiles": "Agregar archivos",
   "pickTitle": "Agregar archivos pk3",
   "pickFilter": "Archivos de Jedi Academy",
@@ -12,13 +11,17 @@
   "tabs": {
     "installed": "Instalados",
     "jkhub": "Explorar JKHub",
-    "updates": "Actualizaciones"
+    "baseGame": "Juego base"
   },
   "sort": {
     "label": "Ordenar por",
-    "recent": "Recientes",
+    "recent": "Fecha de adición",
     "name": "Nombre",
-    "size": "Tamaño"
+    "size": "Tamaño",
+    "ascending": "Asc.",
+    "descending": "Desc.",
+    "setAscending": "Ordenar de forma ascendente",
+    "setDescending": "Ordenar de forma descendente"
   },
   "categories": {
     "all": "Todos",
@@ -28,7 +31,8 @@
     "mod": "Mods",
     "hud": "HUD e interfaz",
     "sound": "Sonidos",
-    "other": "Otros"
+    "other": "Otros",
+    "conflicts": "Conflictos"
   },
   "categoryOne": {
     "skin": "Skin",
@@ -55,11 +59,9 @@
     "noClientsText": "Un archivo de biblioteca se instala en un cliente. Cree uno y esta lista empezará a llenarse.",
     "newClient": "Nuevo cliente",
     "noFilesTitle": "{{client}} aún no tiene archivos",
-    "noFilesText": "Encuentre skins, empuñaduras, mapas y mods en JKHub y agregue aquí los archivos pk3. También puede soltarlos directamente sobre esta ventana.",
+    "noFilesText": "Añade archivos pk3 locales con «Añadir archivos» o arrástralos a esta ventana. También puedes instalar archivos desde la pestaña JKHub.",
     "filteredTitle": "Nada coincide",
-    "filteredText": "Ningún archivo de este cliente coincide con la búsqueda y los filtros. Bórrelos para ver toda la biblioteca.",
-    "updatesTitle": "Aún no hay actualizaciones",
-    "updatesText": "Cuando los archivos lleven una versión de JKHub, los que tengan una publicación más reciente aparecerán aquí."
+    "filteredText": "Ningún archivo de este cliente coincide con la búsqueda y los filtros. Bórrelos para ver toda la biblioteca."
   },
   "fallback": {
     "thisClient": "este cliente",
@@ -107,11 +109,67 @@
       "map": "A level the server can load.",
       "ui": "A menu screen or the text inside it.",
       "other": "Another file the game reads."
-    }
+    },
+    "showNotice": "Mostrar aviso de conflictos",
+    "dismissNotice": "Cerrar aviso de conflictos"
   },
   "remove": {
     "title": "¿Quitar {{file}} de {{client}}?",
     "body": "{{fileName}}, {{size}}. El archivo se elimina de la carpeta {{folder}} del cliente. Los demás clientes conservan su propia copia.",
     "confirm": "Quitar archivo"
+  },
+  "preview": {
+    "open": "Vista previa de {{name}}",
+    "loading": "Preparando vista previa…",
+    "search": "Buscar objetos",
+    "contents": "Objetos",
+    "empty": "No hay objetos para previsualizar",
+    "emptyText": "No hay objetos para previsualizar en esta selección.",
+    "previous": "Objeto anterior",
+    "next": "Objeto siguiente",
+    "audioFailed": "No se pudo reproducir este archivo de audio.",
+    "kind": {
+      "all": "Todos los objetos",
+      "skin": "Personajes y skins",
+      "hilt": "Empuñaduras",
+      "weapon": "Armas",
+      "npc": "PNJ",
+      "vehicle": "Vehículos",
+      "music": "Música",
+      "sound": "Efectos de sonido",
+      "map": "Mapas"
+    },
+    "weaponOnly": "Solo arma",
+    "withCharacter": "Con personaje",
+    "selectClient": "Selecciona un cliente para elegir un personaje instalado"
+  },
+  "mapPreview": {
+    "title": "Vista previa del mapa",
+    "viewport": "Navegación del mapa",
+    "loading": "Preparando mapa…",
+    "viewpoint": "Punto de vista",
+    "overview": "Vista general",
+    "spawn": "Punto de aparición {{number}}",
+    "controls": "Arrastrar: mirar · Arrastrar con botón derecho: desplazar · Rueda: avanzar · WASD / flechas: volar · Q/E: bajar/subir · Mayús: acelerar",
+    "missingTextures": "Algunas texturas no están disponibles ({{count}}).",
+    "invalid": "Los datos del mapa están dañados.",
+    "unsupported": "Este formato de mapa no es compatible.",
+    "tooLarge": "Este mapa supera los límites de la vista previa.",
+    "empty": "Este mapa no tiene geometría visible.",
+    "missing": "No se encuentra el archivo del mapa.",
+    "fullscreen": "Pantalla completa",
+    "exitFullscreen": "Salir de pantalla completa",
+    "fullscreenFailed": "No se pudo cambiar el modo de pantalla completa. Inténtalo de nuevo."
+  },
+  "baseGame": {
+    "loading": "Preparando el contenido del juego…",
+    "description": "Contenido original de los archivos del juego. Los mods instalados no sustituyen estas vistas previas.",
+    "search": "Buscar contenido del juego",
+    "archive": "Archivo del juego",
+    "allArchives": "Todos los archivos",
+    "missingTitle": "No se encontraron archivos del juego",
+    "missingText": "Elige la carpeta del juego en Ajustes para explorar su contenido original.",
+    "openSettings": "Abrir Ajustes",
+    "noResults": "Ningún objeto del juego coincide con estos filtros. Borra la búsqueda o elige otra categoría o archivo."
   }
 }

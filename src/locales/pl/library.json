@@ -2,7 +2,6 @@
   "title": "Biblioteka",
   "searchPlaceholder": "Szukaj plików",
   "clearSearch": "Clear search",
-  "browseJkhub": "Przeglądaj JKHub",
   "addFiles": "Dodaj pliki",
   "pickTitle": "Dodaj pliki pk3",
   "pickFilter": "Archiwa Jedi Academy",
@@ -12,13 +11,17 @@
   "tabs": {
     "installed": "Zainstalowane",
     "jkhub": "Przeglądaj JKHub",
-    "updates": "Aktualizacje"
+    "baseGame": "Gra podstawowa"
   },
   "sort": {
     "label": "Sortuj według",
-    "recent": "Ostatnie",
+    "recent": "Data dodania",
     "name": "Nazwa",
-    "size": "Rozmiar"
+    "size": "Rozmiar",
+    "ascending": "Rosn.",
+    "descending": "Mal.",
+    "setAscending": "Sortuj rosnąco",
+    "setDescending": "Sortuj malejąco"
   },
   "categories": {
     "all": "Wszystkie",
@@ -28,7 +31,8 @@
     "mod": "Mody",
     "hud": "HUD i UI",
     "sound": "Dźwięki",
-    "other": "Inne"
+    "other": "Inne",
+    "conflicts": "Konflikty"
   },
   "categoryOne": {
     "skin": "Skin",
@@ -55,11 +59,9 @@
     "noClientsText": "Plik biblioteki instaluje się do klienta. Utwórz pierwszego, a lista zacznie się zapełniać.",
     "newClient": "Nowy klient",
     "noFilesTitle": "{{client}} nie ma jeszcze plików",
-    "noFilesText": "Znajdź skiny, rękojeści, mapy i mody na JKHub, a potem dodaj tutaj pliki pk3. Można je też upuścić prosto na to okno.",
+    "noFilesText": "Dodaj lokalne pliki pk3 przyciskiem „Dodaj pliki” lub przeciągnij je do tego okna. Pliki można też instalować z karty JKHub.",
     "filteredTitle": "Brak wyników",
-    "filteredText": "Żaden plik tego klienta nie pasuje do wyszukiwania i filtrów. Wyczyść je, aby zobaczyć całą bibliotekę.",
-    "updatesTitle": "Brak aktualizacji",
-    "updatesText": "Gdy pliki będą miały wersję z JKHub, pojawią się tu te z nowszym wydaniem."
+    "filteredText": "Żaden plik tego klienta nie pasuje do wyszukiwania i filtrów. Wyczyść je, aby zobaczyć całą bibliotekę."
   },
   "fallback": {
     "thisClient": "Ten klient",
@@ -108,11 +110,67 @@
       "map": "A level the server can load.",
       "ui": "A menu screen or the text inside it.",
       "other": "Another file the game reads."
-    }
+    },
+    "showNotice": "Pokaż powiadomienie o konfliktach",
+    "dismissNotice": "Zamknij powiadomienie o konfliktach"
   },
   "remove": {
     "title": "{{client}}: usunąć {{file}}?",
     "body": "{{fileName}}, {{size}}. Plik zostanie skasowany z folderu {{folder}} tego klienta. Pozostali klienci zachowują własną kopię.",
     "confirm": "Usuń plik"
+  },
+  "preview": {
+    "open": "Podgląd: {{name}}",
+    "loading": "Przygotowywanie podglądu…",
+    "search": "Szukaj obiektów",
+    "contents": "Obiekty",
+    "empty": "Brak obiektów do podglądu",
+    "emptyText": "Brak obiektów do podglądu w tym wyborze.",
+    "previous": "Poprzedni obiekt",
+    "next": "Następny obiekt",
+    "audioFailed": "Nie udało się odtworzyć pliku audio.",
+    "kind": {
+      "all": "Wszystkie obiekty",
+      "skin": "Postacie i skiny",
+      "hilt": "Rękojeści",
+      "weapon": "Broń",
+      "npc": "NPC",
+      "vehicle": "Pojazdy",
+      "music": "Muzyka",
+      "sound": "Efekty dźwiękowe",
+      "map": "Mapy"
+    },
+    "weaponOnly": "Tylko broń",
+    "withCharacter": "Z postacią",
+    "selectClient": "Wybierz klienta, aby wybrać zainstalowaną postać"
+  },
+  "mapPreview": {
+    "title": "Podgląd mapy",
+    "viewport": "Nawigacja po mapie",
+    "loading": "Przygotowywanie mapy…",
+    "viewpoint": "Punkt widzenia",
+    "overview": "Widok ogólny",
+    "spawn": "Punkt odrodzenia {{number}}",
+    "controls": "Przeciągnij: rozglądaj się · Prawy przycisk: przesuń · Kółko: ruch · WASD / strzałki: lot · Q/E: dół/góra · Shift: szybciej",
+    "missingTextures": "Niektóre tekstury są niedostępne ({{count}}).",
+    "invalid": "Dane mapy są uszkodzone.",
+    "unsupported": "Ten format mapy nie jest obsługiwany.",
+    "tooLarge": "Ta mapa przekracza limity podglądu.",
+    "empty": "Ta mapa nie ma widocznej geometrii.",
+    "missing": "Nie znaleziono pliku mapy.",
+    "fullscreen": "Pełny ekran",
+    "exitFullscreen": "Opuść pełny ekran",
+    "fullscreenFailed": "Nie udało się zmienić trybu pełnoekranowego. Spróbuj ponownie."
+  },
+  "baseGame": {
+    "loading": "Przygotowywanie zawartości gry…",
+    "description": "Oryginalna zawartość archiwów gry. Zainstalowane mody nie zastępują zasobów w tym podglądzie.",
+    "search": "Szukaj w zawartości gry",
+    "archive": "Archiwum gry",
+    "allArchives": "Wszystkie archiwa",
+    "missingTitle": "Nie znaleziono plików gry",
+    "missingText": "Wybierz folder gry w ustawieniach, aby przeglądać jej podstawową zawartość.",
+    "openSettings": "Otwórz ustawienia",
+    "noResults": "Żaden obiekt gry nie pasuje do tych filtrów. Wyczyść wyszukiwanie lub wybierz inną kategorię albo archiwum."
   }
 }

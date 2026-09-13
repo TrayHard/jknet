@@ -52,6 +52,9 @@ pub enum Game {
 }
 
 impl Game {
+    pub fn demo_extensions(self) -> &'static [&'static str] {
+        match self { Game::JediAcademy => &["dm_25", "dm_26"], Game::JediOutcast => &["dm_15", "dm_16"] }
+    }
     /// Both games, in the order the interface lists them.
     pub const ALL: [Game; 2] = [Game::JediAcademy, Game::JediOutcast];
 

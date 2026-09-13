@@ -12,6 +12,62 @@ import {
   useQueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
+import { filePreviewIpc, modelPreviewIpc, type FilePreviewSource } from "./ipc";
+import { mediaIpc, configsIpc } from "./ipc";
+
+export function useMedia() { return useQuery({ queryKey: ["media"], queryFn: () => mediaIpc.list(true), enabled: isTauri(), staleTime: 15000 }); }
+export function useMediaActions() {
+  const cache = useQueryClient();
+  return {
+    preparePreview: useMutation({ mutationFn: mediaIpc.preparePreview, onSuccess: () => cache.invalidateQueries({ queryKey: ["media"] }) }),
+    remove: useMutation({ mutationFn: (ids: string[]) => ids.length === 1 ? mediaIpc.remove(ids[0]) : mediaIpc.removeBatch(ids), onSuccess: (_, ids) => {
+      const removed = new Set(ids);
+      cache.setQueryData(["media"], (items: import("./ipc").MediaItem[] | undefined) => items?.filter(item => !removed.has(item.id)));
+      return cache.invalidateQueries({ queryKey: ["media"] });
+    } }),
+    exportVideo: useMutation({ mutationFn: ({ demoId, clientId, settings }: { demoId: string; clientId: string; settings: import("./ipc").VideoSettings }) => mediaIpc.exportVideo(demoId, clientId, settings), onSuccess: () => { void cache.invalidateQueries({ queryKey: ["video-jobs"] }); void cache.invalidateQueries({ queryKey: ["video-preferences"] }); } }),
+    savePreset: useMutation({ mutationFn: mediaIpc.savePreset, onSuccess: () => cache.invalidateQueries({ queryKey: ["video-preferences"] }) }),
+    deletePreset: useMutation({ mutationFn: mediaIpc.deletePreset, onSuccess: () => cache.invalidateQueries({ queryKey: ["video-preferences"] }) }),
+    cancelVideo: useMutation({ mutationFn: mediaIpc.cancelVideo, onSuccess: () => cache.invalidateQueries({ queryKey: ["video-jobs"] }) }),
+    edit: useMutation({ mutationFn: ({ id, name, tags }: { id: string; name: string; tags: string[] }) => mediaIpc.update(id, name, tags), onSuccess: () => cache.invalidateQueries({ queryKey: ["media"] }) }),
+    copy: useMutation({ mutationFn: mediaIpc.copy }),
+    open: useMutation({ mutationFn: mediaIpc.openFolder }),
+    play: useMutation({ mutationFn: ({ id, clientId }: { id: string; clientId: string }) => mediaIpc.play(id, clientId), onSuccess: () => cache.invalidateQueries({ queryKey: ["running-game"] }) }),
+  };
+}
+export function useVideoJobs() {
+  const cache = useQueryClient();
+  const jobs = useQuery({ queryKey: ["video-jobs"], queryFn: mediaIpc.jobs, enabled: isTauri(), refetchInterval: 1000, refetchIntervalInBackground: true });
+  const completed = jobs.data?.filter(j => j.status === "complete").map(j => j.id).join(",");
+  useEffect(() => { if (completed) void cache.invalidateQueries({ queryKey: ["media"] }); }, [completed, cache]);
+  return jobs;
+}
+export function useVideoPreferences() { return useQuery({ queryKey: ["video-preferences"], queryFn: mediaIpc.videoPreferences, enabled: isTauri() }); }
+export function useConfigs() { return useQuery({ queryKey: ["configs"], queryFn: configsIpc.list, enabled: isTauri() }); }
+export function useClientConfigContext(clientId: string) { return useQuery({ queryKey: ["client-config-context", clientId], queryFn: () => configsIpc.context(clientId), enabled: isTauri() && !!clientId, staleTime: 0 }); }
+export function useClientConfigFiles(clientId: string) { return useQuery({ queryKey: ["client-config-files", clientId], queryFn: () => configsIpc.clientFiles(clientId), enabled: isTauri() && !!clientId }); }
+export function useConfigConflicts(ids: string[]) { return useQuery({ queryKey: ["config-conflicts", ids], queryFn: () => configsIpc.conflicts(ids), enabled: isTauri() && ids.length > 1 }); }
+export function useConfigActions() {
+  const cache = useQueryClient(); const updated = () => { void cache.invalidateQueries({ queryKey: ["configs"] }); void cache.invalidateQueries({ queryKey: ["config-conflicts"] }); };
+  return {
+    save: useMutation({ mutationFn: configsIpc.save, onSuccess: updated }),
+    remove: useMutation({ mutationFn: configsIpc.remove, onSuccess: updated }),
+    layers: useMutation({ mutationFn: ({ clientId, layers }: { clientId: string; layers: import("./ipc").ConfigLayer[] }) => configsIpc.layers(clientId, layers), onSuccess: updated }),
+    defaultConfig: useMutation({ mutationFn: ({ clientId, source }: { clientId: string; source: string | null }) => configsIpc.setDefault(clientId, source), onSuccess: updated }),
+    merge: useMutation({ mutationFn: ({ ids, choices, name }: { ids: string[]; choices: Record<string, string>; name: string }) => configsIpc.merge(ids, choices, name), onSuccess: updated }),
+    bind: useMutation({ mutationFn: ({ clientId, profileId, configId }: { clientId: string; profileId: string; configId: string | null }) => configsIpc.profileBind(clientId, profileId, configId) }),
+  };
+}
+import type { PreviewRequest } from "./modelScene";
+
+export function useModelPreview(clientId: string, request: PreviewRequest, enabled = true, source?: FilePreviewSource) {
+  return useQuery({
+    queryKey: ["model-preview", clientId, request.kind, request.value, request.skins, request.saber, source],
+    queryFn: async () => (await import("./modelScene")).loadModelScene(request,
+      names => source ? filePreviewIpc.assets(source, names) : modelPreviewIpc.assets(clientId, names)),
+    enabled: enabled && isTauri() && !!request.value, staleTime: 30_000, gcTime: 60_000, retry: false,
+  });
+}
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 // --- slice: i18n ---
@@ -64,6 +120,7 @@ import {
   type JkhubCategoriesUpdated,
   type JkhubDownloadProgress,
   type JkhubFile,
+  type JkhubComments,
   // --- slice: jkhub index ---
   type JkhubIndexProgress,
   type JkhubIndexStatus,
@@ -71,6 +128,7 @@ import {
   type JkhubListing,
   type JkhubSearchResult,
   type JkhubSort,
+  type SortDirection,
   type Levelshot,
   type LibraryItem,
   type PlayerModel,
@@ -527,6 +585,7 @@ export function useAppearanceEvents(): void {
 
     void listen(LIBRARY_CHANGED_EVENT, () => {
       void queryClient.invalidateQueries({ queryKey: appearanceKeys.all });
+      void queryClient.invalidateQueries({ queryKey: ["model-preview"] });
     }).then((unlisten) => {
       if (cancelled) unlisten();
       else stop = unlisten;
@@ -1843,6 +1902,7 @@ export function useFriendsEvents(): void {
 // what it has, which is also what the client-side filter searches over.
 
 export const jkhubKeys = {
+  comments: (id: number, page: number) => ["jkhub", "comments", id, page] as const,
   all: ["jkhub"] as const,
   categories: (game: Game) => ["jkhub", "categories", game] as const,
   list: (game: Game, categoryId: number, sort: JkhubSort, page: number) =>
@@ -1855,7 +1915,8 @@ export const jkhubKeys = {
     categoryId: number | null,
     sort: JkhubSort,
     perPage: number,
-  ) => ["jkhub", "search", game, query, categoryId, sort, perPage] as const,
+    direction: SortDirection,
+  ) => ["jkhub", "search", game, query, categoryId, sort, perPage, direction] as const,
   index: (game: Game) => ["jkhub", "index", game] as const,
 };
 
@@ -1936,6 +1997,16 @@ export function useJkhubFile(id: number | null): UseQueryResult<JkhubFile> {
     queryFn: () => jkhubIpc.file(id as number),
     enabled: id != null && isTauri(),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useJkhubComments(id: number, page: number): UseQueryResult<JkhubComments> {
+  return useQuery({
+    queryKey: jkhubKeys.comments(id, page),
+    queryFn: () => jkhubIpc.comments(id, page),
+    enabled: isTauri(),
+    staleTime: 5 * 60_000,
+    retry: false,
   });
 }
 
@@ -2084,11 +2155,12 @@ export function useJkhubSearch(
   categoryId: number | null,
   sort: JkhubSort,
   perPage: number,
+  direction: SortDirection,
 ): UseQueryResult<JkhubSearchResult> {
   return useQuery({
-    queryKey: jkhubKeys.search(game, query, categoryId, sort, perPage),
+    queryKey: jkhubKeys.search(game, query, categoryId, sort, perPage, direction),
     queryFn: () =>
-      jkhubIpc.search({ game, query, categoryId, sort, page: 1, perPage }),
+      jkhubIpc.search({ game, query, categoryId, sort, direction, page: 1, perPage }),
     enabled: isTauri(),
     staleTime: Infinity,
     // The previous answer stays on screen while a longer page or a narrower

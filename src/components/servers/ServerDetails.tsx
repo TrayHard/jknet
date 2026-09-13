@@ -369,9 +369,8 @@ function PlayerList({
   }
 
   // --- slice: servers robustness ---
-  // A silent `getstatus` is not a broken server. It is shown as what it is:
-  // the last list the launcher has with the time on it, or a sentence about
-  // this server rather than about the network.
+  // A timed-out query does not prove that the server hides its players.
+  // Keep the last list with its age, or explain that retrieval failed.
   if (failed) {
     // The button goes with both halves of the refusal: a server that was
     // reloading a map answers the next question, whether or not this launcher
@@ -391,7 +390,7 @@ function PlayerList({
     if (remembered === null || remembered.length === 0) {
       return (
         <div className="flex flex-col gap-6">
-          <p className="text-body-sm text-fg-muted">{t("details.playersClosed")}</p>
+          <p className="text-body-sm text-fg-muted">{t("details.playersUnavailable")}</p>
           {again}
         </div>
       );

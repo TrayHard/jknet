@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useUnsavedGuard } from "./client/UnsavedGuard";
 import { cn } from "../lib/format";
 import { gameLabel, useSetActiveGame } from "../lib/game";
 import { GAMES } from "../lib/ipc";
@@ -26,6 +27,7 @@ import { useGames } from "../lib/queries";
  */
 export function GameSwitch({ className }: { className?: string }) {
   const { t } = useTranslation("nav");
+  const guard = useUnsavedGuard();
   const { game, setGame } = useSetActiveGame();
   const games = useGames().data;
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
@@ -33,8 +35,11 @@ export function GameSwitch({ className }: { className?: string }) {
   /** Selects a segment by index and takes the focus with it. */
   const move = (index: number) => {
     const wrapped = (index + GAMES.length) % GAMES.length;
-    setGame(GAMES[wrapped]);
-    buttons.current[wrapped]?.focus();
+    if (GAMES[wrapped] === game) return;
+    guard.ask(() => {
+      setGame(GAMES[wrapped]);
+      buttons.current[wrapped]?.focus();
+    });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -86,7 +91,7 @@ export function GameSwitch({ className }: { className?: string }) {
             // navigation below.
             tabIndex={selected ? 0 : -1}
             title={label}
-            onClick={() => setGame(option)}
+            onClick={() => { if (!selected) guard.ask(() => setGame(option)); }}
             onKeyDown={(event) => onKeyDown(event, index)}
             className={cn(
               // Barely any horizontal padding: half of a 232 px sidebar is

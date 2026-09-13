@@ -48,8 +48,8 @@ interface DialogProps {
   /** Escape, a click on the overlay and the Cancel button all end here. */
   onClose: () => void;
   variant?: DialogVariant;
-  /** Wider shell for a list, as the conflict dialog needs. */
-  wide?: boolean;
+  /** Wider shells for lists and visual previews. */
+  wide?: boolean | "preview";
   /** Anything between the body and the footer: a list, a form, a warning. */
   children?: ReactNode;
 }
@@ -177,7 +177,7 @@ export function Dialog({
         className={cn(
           "w-full rounded-xl border bg-surface p-24 shadow-popover outline-none",
           danger ? "border-line-danger" : "border-line",
-          wide ? "max-w-[720px]" : "max-w-[480px]",
+          wide === "preview" ? "max-w-[1600px] max-h-[calc(100dvh-48px)] overflow-y-auto" : wide ? "max-w-[720px]" : "max-w-[480px]",
         )}
       >
         <h2 className={cn("text-display-md", danger ? "text-fg-danger" : "text-fg")}>

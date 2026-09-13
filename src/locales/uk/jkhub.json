@@ -1,20 +1,46 @@
 {
   "sort": {
     "label": "Сортування",
-    "recentlyUpdated": "Нещодавно оновлені",
-    "newest": "Найновіші",
-    "mostDownloaded": "Найбільше завантажень",
-    "topRated": "Найвищий рейтинг",
+    "recentlyUpdated": "Дата оновлення",
+    "newest": "Дата публікації",
+    "mostDownloaded": "Завантаження",
+    "topRated": "Рейтинг",
     "name": "За назвою"
   },
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_few": "{{count}} results in {{game}}",
     "results_many": "{{count}} results in {{game}}",
-    "results_other": "{{count}} results in {{game}}"
+    "results_other": "{{count}} results in {{game}}",
+    "helpTitle": "Довідка з пошуку",
+    "helpScope": "Ці можливості діють на вкладці JKHub для вибраної гри й категорії.",
+    "helpCombine": "Поєднуйте слова й оператори в будь-якому порядку. Запис має відповідати всім умовам. Повторні фільтри дат звужують період.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Уведіть дату у форматі YYYY-MM-DD. Для файлів без оновлень використовується дата публікації. Регістр і діакритика латиниці не враховуються. Лапки діють лише після by:. Символи підстановки, OR та інші оператори не підтримуються. Некоректна дата вважається словом пошуку.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Кожне слово має траплятися в назві, імені автора, тегах або описі. Пошук знаходить і частини слів."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Знайдіть авторів, чиї імена містять указаний текст."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "Знайдіть автора за повним ім’ям, включно з пробілами."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "Оновлено після вказаної дати. Граничний день виключено (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "Оновлено до вказаної дати. Граничний день виключено (UTC)."
+      }
+    }
   },
   "refresh": "Оновити",
   "sections": {
@@ -83,7 +109,11 @@
     "reinstall": "Перевстановити",
     "fallbackAuthor": "JKHub",
     "updated": "Оновлено {{date}}",
-    "submitted": "Викладено {{date}}"
+    "submitted": "Викладено {{date}}",
+    "reviews_one": "{{count}} відгук",
+    "reviews_few": "{{count}} відгуки",
+    "reviews_many": "{{count}} відгуків",
+    "reviews_other": "{{count}} відгуку"
   },
   "details": {
     "loadingTitle": "Завантаження…",
@@ -106,7 +136,8 @@
     "comments": "коментарів: {{count}}",
     "versions": "Версії",
     "downloading": "Завантаження… {{received}}",
-    "downloadingOf": "Завантаження… {{received}} із {{total}}"
+    "downloadingOf": "Завантаження… {{received}} із {{total}}",
+    "preview": "Завантажити для перегляду"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -132,5 +163,21 @@
     "conflicts_few": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
     "conflicts_many": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати.",
     "conflicts_other": "Файли {{files}} уже лежать у папці {{folder}}. Натисніть «Замінити й встановити», щоб перезаписати."
+  },
+  "comments": {
+    "title": "Коментарі",
+    "loading": "Завантаження коментарів…",
+    "empty": "Коментарів поки немає.",
+    "stale": "Показано збережені коментарі. JKHub недоступний.",
+    "pages": "Сторінки коментарів",
+    "previous": "Назад",
+    "next": "Далі",
+    "page": "Сторінка {{page}} з {{total}}"
+  },
+  "gallery": {
+    "previous": "Попереднє зображення",
+    "next": "Наступне зображення",
+    "position": "{{current}} з {{total}}",
+    "hint": "Гортайте кнопками, коліщатком миші або клавішами ← / →. Escape закриває зображення."
   }
 }

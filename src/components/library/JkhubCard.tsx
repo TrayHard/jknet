@@ -1,4 +1,4 @@
-import { ArrowDownCircle, Check, Download, Star } from "lucide-react";
+import { ArrowDownCircle, Check, Download } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useFormat, type Formatters } from "../../i18n/useFormat";
 import type { JkhubCardData } from "../../lib/ipc";
 import { Badge, Button } from "../ui";
+import { JkhubRating } from "./JkhubRating";
 
 interface JkhubCardProps {
   card: JkhubCardData;
@@ -179,14 +180,9 @@ export function JkhubCard({
               {format.number(card.downloads)}
             </span>
           ) : null}
-          {card.rating ? (
-            <span className="inline-flex items-center gap-4 whitespace-nowrap">
-              <Star size={12} aria-hidden />
-              {card.rating.value.toFixed(1)}
-            </span>
-          ) : null}
           <span className="whitespace-nowrap">{dateLine(card, t, format)}</span>
         </div>
+        <JkhubRating rating={card.rating} />
 
         {/* No icon on this one. Three cards to a row leave 216 px inside a
             card at the 1280 px of the design, and the longest translation of

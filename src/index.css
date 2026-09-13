@@ -341,6 +341,20 @@
     margin: 8px 0;
   }
 
+  /* Include cached comments whose sanitizer predates the emoji marker. */
+  .jkhub-richtext img.jkhub-emoji,
+  .jkhub-richtext img[src*="/twemoji"],
+  .jkhub-richtext img[src*="/emoticons/"] {
+    display: inline-block;
+    width: 1.2em;
+    height: 1.2em;
+    max-width: none;
+    object-fit: contain;
+    vertical-align: -0.2em;
+    border-radius: 0;
+    margin: 0 0.1em;
+  }
+
   /* The still of a video the core turned into a link. The badge says it plays
      somewhere else, which it does: the click opens the system browser. */
   .jkhub-richtext a.jkhub-video {

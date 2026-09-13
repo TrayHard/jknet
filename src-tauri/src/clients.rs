@@ -416,7 +416,7 @@ fn remove_client_dir(dir: &Path) -> Result<()> {
 ///
 /// A folder without a readable record is skipped with a warning rather than
 /// failing the whole list: one broken client must not hide the others.
-fn read_all(paths: &DataPaths) -> Result<Vec<Client>> {
+pub(crate) fn read_all(paths: &DataPaths) -> Result<Vec<Client>> {
     let Ok(entries) = fs::read_dir(&paths.clients) else {
         return Ok(Vec::new());
     };

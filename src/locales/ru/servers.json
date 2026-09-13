@@ -107,7 +107,7 @@
     "watching": "Слежение · обновлено {{age}} назад",
     "watchingSoon": "Слежение · спрашиваем раз в минуту",
     "updated": "Обновлено {{age}} назад",
-    "playersClosed": "Сервер не отдаёт список игроков.",
+    "playersUnavailable": "Не удалось получить список игроков.",
     "playersRemembered": "СПИСОК ИГРОКОВ {{age}} НАЗАД",
     "playersRememberedUnknown": "ПОСЛЕДНИЙ ИЗВЕСТНЫЙ СПИСОК ИГРОКОВ",
     "bots_one": "+{{count}} бот",

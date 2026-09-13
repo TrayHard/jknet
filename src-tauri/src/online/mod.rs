@@ -14,16 +14,12 @@
 //! keeps the account, `crate::friends` does everything else. One connection
 //! pool, one place where a token is attached to a request.
 //!
-//! ## Switched off in a release build
+//! ## Default service
 //!
-//! The service is not deployed yet, so [`default_online_url`] answers with the
-//! local service in a debug build and with nothing in a release build. A blank
-//! address is not a failure: [`online_configured`] is false, every call refuses
-//! with `AppError::OnlineNotConfigured` without touching the network, and the
-//! screens draw a sentence saying the feature is not open yet. Naming the
-//! public origin in `client::RELEASE_ONLINE_URL` switches it on for everybody,
-//! and the **JKNet Online address** field on the Settings screen switches it on
-//! for one machine without a new build.
+//! [`default_online_url`] selects the local service in a debug build and
+//! `https://api.jknet.app` in a release build. The **JKNet Online address** field
+//! overrides the default for one machine. A blank effective address remains
+//! supported: calls return `AppError::OnlineNotConfigured` without networking.
 
 mod client;
 /// `pub(crate)` for its `MockOnline` helper: the live-socket test of

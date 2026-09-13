@@ -10,7 +10,10 @@
     "library": "Бібліотека",
     "clients": "Клієнти",
     "friends": "Друзі",
-    "settings": "Налаштування"
+    "settings": "Налаштування",
+    "playerProfiles": "Player profiles",
+    "media": "Media",
+    "configs": "Configs"
   },
   "user": {
     "guest": "Гість",

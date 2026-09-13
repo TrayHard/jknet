@@ -44,22 +44,16 @@ pub const DEV_ONLINE_URL: &str = "http://127.0.0.1:8787";
 
 /// Where the service runs for a player who installed the launcher.
 ///
-/// Blank on purpose. The service is not deployed — no domain, no OAuth clients
-/// — and a released build that pointed at `127.0.0.1:8787` would offer every
-/// player a sign-in that answers with a connection error. An empty address
-/// means "this build has no service", which [`online_configured`] turns into a calm
-/// explanation on the Account card instead. Put the public origin here once
-/// the service is live: it is the one line that switches the feature on for
-/// everybody, and it needs no other change.
-pub const RELEASE_ONLINE_URL: &str = "";
+/// The production origin shared by installed launchers. The service handles
+/// OAuth credentials and account data; players need no local service.
+pub const RELEASE_ONLINE_URL: &str = "https://api.jknet.app";
 
 /// The service this build talks to unless the player names another one.
 ///
 /// The split follows the build profile rather than a cvar or an environment
 /// variable, because the two audiences are exactly the two profiles. A debug
 /// build is a developer with `scripts/mock-online.mjs` or the real service on
-/// `localhost`; a release build is a player, and until [`RELEASE_ONLINE_URL`]
-/// names an origin there is nothing for that player to talk to. Either way the
+/// `localhost`; a release build connects to [`RELEASE_ONLINE_URL`]. Either way the
 /// **JKNet Online address** field on the Settings screen overrides it, which is what
 /// lets a tester or a self-hoster switch the feature on without a new build.
 pub fn default_online_url() -> &'static str {
@@ -810,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn a_debug_build_talks_to_the_local_service_and_a_release_build_to_none_yet() {
+    fn a_debug_build_talks_to_the_local_service_and_a_release_build_to_the_public_service() {
         // Both branches in one run: `cfg!(debug_assertions)` is fixed while
         // the tests execute, so the profile they are not built in would never
         // be covered.
@@ -818,9 +812,8 @@ mod tests {
         assert_eq!(default_online_url_for(false), RELEASE_ONLINE_URL);
         assert_eq!(default_online_url(), default_online_url_for(cfg!(debug_assertions)));
 
-        // The line to change when the service goes live. Until it does, a
-        // release build has no service, and the Account card says so.
-        assert!(!online_configured(RELEASE_ONLINE_URL));
+        assert_eq!(RELEASE_ONLINE_URL, "https://api.jknet.app");
+        assert!(online_configured(RELEASE_ONLINE_URL));
         assert!(online_configured(DEV_ONLINE_URL));
     }
 
@@ -834,7 +827,7 @@ mod tests {
 
         // The question is asked about the effective address, not about the raw
         // field: an empty field means "the default of this build", and the
-        // default is a service in a debug build and nothing in a release one.
+        // default selects a local or public service for the build profile.
         assert_eq!(
             online_configured(&normalize_online_url("")),
             online_configured(default_online_url())

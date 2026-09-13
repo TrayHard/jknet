@@ -408,9 +408,9 @@ pub struct ServerInfo {
     ///
     /// Filled by the `getstatus` pass of a refresh and by every answered call
     /// of [`get_server_status`]. It is what the details panel shows when the
-    /// server stops answering `getstatus` while staying online — a real
-    /// configuration, not a failure: `203.0.113.49:29070` answered `getinfo`
-    /// in 70 ms and eleven `getstatus` requests with nothing at all.
+    /// server stops answering `getstatus` while staying online. A missing
+    /// response alone cannot identify whether the server or the network
+    /// prevented retrieval.
     #[serde(default)]
     pub last_players: Option<Vec<PlayerInfo>>,
     /// When [`ServerInfo::last_players`] was collected, RFC 3339 in UTC.

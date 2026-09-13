@@ -2,7 +2,6 @@
   "title": "Library",
   "searchPlaceholder": "Search files",
   "clearSearch": "Clear search",
-  "browseJkhub": "Browse JKHub",
   "addFiles": "Add files",
   "pickTitle": "Add pk3 files",
   "pickFilter": "Jedi Academy archives",
@@ -12,13 +11,17 @@
   "tabs": {
     "installed": "Installed",
     "jkhub": "Browse JKHub",
-    "updates": "Updates"
+    "baseGame": "Base game"
   },
   "sort": {
     "label": "Sort by",
-    "recent": "Recent",
+    "recent": "Date added",
     "name": "Name",
-    "size": "Size"
+    "size": "Size",
+    "ascending": "Asc",
+    "descending": "Desc",
+    "setAscending": "Sort ascending",
+    "setDescending": "Sort descending"
   },
   "categories": {
     "all": "All",
@@ -28,7 +31,8 @@
     "mod": "Mods",
     "hud": "HUD & UI",
     "sound": "Sounds",
-    "other": "Other"
+    "other": "Other",
+    "conflicts": "Conflicts"
   },
   "categoryOne": {
     "skin": "Skin",
@@ -55,11 +59,9 @@
     "noClientsText": "A library file is installed into a client. Create one and this list starts filling up.",
     "newClient": "New client",
     "noFilesTitle": "{{client}} has no files yet",
-    "noFilesText": "Find skins, hilts, maps and mods on JKHub, then add the pk3 files here. You can also drop them straight onto this window.",
+    "noFilesText": "Add local pk3 files with Add files or drop them onto this window. You can also install files from the Browse JKHub tab.",
     "filteredTitle": "Nothing matches",
-    "filteredText": "No file in this client matches the search and the filters. Clear them to see the whole library.",
-    "updatesTitle": "No updates yet",
-    "updatesText": "Once files carry a JKHub version, the ones with a newer release show up here."
+    "filteredText": "No file in this client matches the search and the filters. Clear them to see the whole library."
   },
   "fallback": {
     "thisClient": "this client",
@@ -106,11 +108,67 @@
       "ui": "A menu screen or the text inside it.",
       "other": "Another file the game reads."
     },
-    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the files to see the rest."
+    "truncated": "Only the first {{shown}} of {{total}} paths are listed. Disable one of the files to see the rest.",
+    "showNotice": "Show conflict notice",
+    "dismissNotice": "Dismiss conflict notice"
   },
   "remove": {
     "title": "Remove {{file}} from {{client}}?",
     "body": "{{fileName}}, {{size}}. The file is deleted from the client's {{folder}} folder. Other clients keep their own copy.",
     "confirm": "Remove file"
+  },
+  "preview": {
+    "open": "Preview {{name}}",
+    "loading": "Preparing preview…",
+    "search": "Search objects",
+    "contents": "Objects",
+    "empty": "Nothing to preview",
+    "emptyText": "No previewable objects match this selection.",
+    "previous": "Previous object",
+    "next": "Next object",
+    "audioFailed": "This audio file could not be played.",
+    "kind": {
+      "all": "All objects",
+      "skin": "Characters and skins",
+      "hilt": "Hilts",
+      "weapon": "Weapons",
+      "npc": "NPCs",
+      "vehicle": "Vehicles",
+      "music": "Music",
+      "sound": "Sound effects",
+      "map": "Maps"
+    },
+    "weaponOnly": "Weapon only",
+    "withCharacter": "With character",
+    "selectClient": "Select a client to choose an installed character"
+  },
+  "mapPreview": {
+    "title": "Map preview",
+    "viewport": "Map navigation",
+    "loading": "Preparing map…",
+    "viewpoint": "Viewpoint",
+    "overview": "Overview",
+    "spawn": "Spawn {{number}}",
+    "controls": "Drag to look · Right drag to pan · Wheel to move · WASD / arrows to fly · Q/E down/up · Shift faster",
+    "missingTextures": "Some textures are unavailable ({{count}}).",
+    "invalid": "The map data is damaged.",
+    "unsupported": "This map format is not supported.",
+    "tooLarge": "This map exceeds the preview limits.",
+    "empty": "This map has no visible geometry.",
+    "missing": "The map resource is missing.",
+    "fullscreen": "Fullscreen",
+    "exitFullscreen": "Exit fullscreen",
+    "fullscreenFailed": "Could not change fullscreen mode. Try again."
+  },
+  "baseGame": {
+    "loading": "Preparing game content…",
+    "description": "Original content from the game’s asset archives. Installed mods do not replace these previews.",
+    "search": "Search game content",
+    "archive": "Asset archive",
+    "allArchives": "All archives",
+    "missingTitle": "Game files not found",
+    "missingText": "Choose the game folder in Settings to browse its standard content.",
+    "openSettings": "Open Settings",
+    "noResults": "No game objects match these filters. Clear the search or choose another category or archive."
   }
 }

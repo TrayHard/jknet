@@ -1,12 +1,11 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Ban, Loader2, RotateCcw } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { cn } from "../../lib/format";
 import {
-  NO_SECOND_HILT,
   SABER_BLADE_RGB,
   SABER_COLORS,
   type SaberHilt,
@@ -99,6 +98,7 @@ export function HiltFields({
     setMode(derived);
   }
 
+  const selected = saberValuesFor(mode, values, found);
   const edit = (next: SaberValues, to: SaberMode = mode) =>
     onChange(saberValuesFor(to, next, found));
 
@@ -133,12 +133,13 @@ export function HiltFields({
         }}
       />
 
+      <div className={cn("grid gap-12", hasSecondBlade(mode) ? "grid-cols-2" : "grid-cols-1")}>
       <HandRow
         hiltLabel={t("clientWindow.profiles.form.saber1")}
         colorLabel={t("clientWindow.profiles.form.color1")}
-        hilt={values.saber1}
+        hilt={selected.saber1}
         hilts={hiltsForMode(mode, found)}
-        color={values.color1}
+        color={selected.color1}
         size={size}
         onHilt={(saber1) => edit({ ...values, saber1 })}
         onColor={(color1) => edit({ ...values, color1 })}
@@ -151,21 +152,16 @@ export function HiltFields({
         <HandRow
           hiltLabel={t("clientWindow.profiles.form.saber2")}
           colorLabel={t("clientWindow.profiles.form.color2")}
-          hilt={values.saber2}
+          hilt={selected.saber2}
           hilts={hiltsForMode(mode, found)}
-          color={values.color2}
+          color={selected.color2}
           size={size}
-          extra={[
-            {
-              value: NO_SECOND_HILT,
-              label: t("clientWindow.profiles.form.saber2None"),
-            },
-          ]}
           onHilt={(saber2) => edit({ ...values, saber2 })}
           onColor={(color2) => edit({ ...values, color2 })}
         />
       ) : null}
 
+      </div>
       <HiltsNotice hilts={hilts} />
     </div>
   );
@@ -227,7 +223,6 @@ function HandRow({
   hilts,
   color,
   size,
-  extra,
   onHilt,
   onColor,
 }: {
@@ -237,20 +232,18 @@ function HandRow({
   hilts: SaberHilt[];
   color: number | null;
   size?: SelectSize;
-  extra?: SelectOption[];
   onHilt: (value: string | null) => void;
   onColor: (value: number | null) => void;
 }) {
   return (
-    <div className="flex items-end gap-8 flex-wrap">
-      <div className="flex-1 min-w-160 flex flex-col gap-4">
+    <div className="min-w-0 flex flex-col gap-8">
+      <div className="w-full min-w-0 flex flex-col gap-4">
         <span className="text-label-xs text-fg-muted">{hiltLabel}</span>
         <HiltSelect
           value={hilt}
           hilts={hilts}
           label={hiltLabel}
           size={size}
-          extra={extra}
           onChange={onHilt}
         />
       </div>
@@ -318,22 +311,13 @@ function ColorSwatches({
 }) {
   const { t } = useTranslation("clients");
   const box = size === "sm" ? "size-20" : "size-24";
-  const none = t("clientWindow.notSet");
 
   return (
-    <div role="radiogroup" aria-label={label} className="flex items-center gap-4">
-      <Swatch
-        checked={value === null}
-        title={none}
-        box={box}
-        onSelect={() => onChange(null)}
-      >
-        <Ban size={size === "sm" ? 10 : 12} className="text-fg-muted" aria-hidden />
-      </Swatch>
+    <div role="radiogroup" aria-label={label} className="flex items-center flex-wrap gap-4">
       {SABER_COLORS.map((_, index) => (
         <Swatch
           key={index}
-          checked={value === index}
+          checked={(value ?? 4) === index}
           title={t(SABER_COLOR_KEYS[index])}
           box={box}
           color={SABER_BLADE_RGB[index]}
@@ -385,68 +369,19 @@ function Swatch({
   );
 }
 
-/**
- * One hilt list, with «Not set» in front and whatever else the caller adds.
- *
- * --- slice: connect dialog ---
- * The list a player learns in the client window is the list they meet again
- * before joining a server.
- */
-export function HiltSelect({
-  value,
-  hilts,
-  label,
-  extra = [],
-  size,
-  onChange,
-}: {
+/** A selected hilt, labelled by its name; shape is already selected above. */
+function HiltSelect({ value, hilts, label, size, onChange }: {
   value: string | null;
   hilts: SaberHilt[];
   label: string;
-  extra?: SelectOption[];
   size?: SelectSize;
   onChange: (value: string | null) => void;
 }) {
-  const { t } = useTranslation("clients");
-  const shape = (hilt: SaberHilt) => {
-    if (hilt.saberType === "single") {
-      return t("clientWindow.profiles.saberTypes.single");
-    }
-    if (hilt.saberType === "staff") {
-      return t("clientWindow.profiles.saberTypes.staff");
-    }
-    // The dozen shapes only story sabers use have no word of their own: the
-    // value of `saberType` is what the file says and what a mod author reads.
-    return hilt.saberType;
-  };
-  // «Not set» is an option and not only the placeholder: a list whose empty
-  // state is unreachable would let a player pick a hilt and never take it
-  // back, and the profile would go on writing a cvar they no longer want.
-  const options: SelectOption[] = [
-    { value: "", label: t("clientWindow.notSet") },
-    ...extra,
-    ...hilts.map((hilt) => ({
-      value: hilt.id,
-      label: `${hilt.name} · ${shape(hilt)}`,
-    })),
-  ];
-  // A hilt a mod once provided and no longer does still stands in the profile,
-  // so it keeps a place of its own: dropping it would show the list as empty
-  // over a cvar that is set, and the next change would silently be a second one.
-  if (value !== null && !options.some((option) => option.value === value)) {
-    options.push({ value, label: value });
+  const options: SelectOption[] = hilts.map(hilt => ({ value: hilt.id, label: hilt.name }));
+  if (value && !options.some(option => option.value === value)) {
+    options.push({ value, label: value === "Kyle" ? "Katarn" : value === "dual_1" ? "Guardian" : value });
   }
-
-  return (
-    <Select
-      value={value ?? ""}
-      options={options}
-      ariaLabel={label}
-      size={size}
-      placeholder={t("clientWindow.notSet")}
-      onChange={(next) => onChange(next === "" ? null : next)}
-    />
-  );
+  return <Select value={value ?? options[0]?.value ?? "Kyle"} options={options} ariaLabel={label} size={size} onChange={onChange} />;
 }
 
 /**

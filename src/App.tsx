@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter, Route, Routes } from "react-router";
+import {
+  createHashRouter,
+  createRoutesFromElements,
+  HashRouter,
+  Route,
+  RouterProvider,
+  Routes,
+} from "react-router";
 
 // --- slice: account ---
 import { AccountProvider } from "./components/AccountProvider";
@@ -15,6 +22,10 @@ import { ToastsProvider } from "./components/ToastsProvider";
 import { LanguageSync } from "./i18n/LanguageSync";
 // --- slice: client window ---
 import { isClientWindowHash } from "./lib/clientWindow";
+import { PlayerProfilesPage } from "./pages/PlayerProfilesPage";
+import { MediaPage } from "./pages/MediaPage";
+import { ConfigsPage } from "./pages/ConfigsPage";
+import { ProfileNavigationGuard } from "./components/client/ProfileNavigationGuard";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ClientWindowPage } from "./pages/ClientWindowPage";
 import { EnginePage } from "./pages/EnginePage";
@@ -41,7 +52,7 @@ const queryClient = new QueryClient({
 });
 
 /**
- * Routing uses `HashRouter` on purpose. The production build is served from
+ * Both routers use hash history on purpose. The production build is served from
  * the Tauri asset protocol, where a reload on `/servers` would ask for a file
  * that does not exist; `#/servers` never leaves `index.html`.
  */
@@ -89,36 +100,7 @@ export default function App() {
               {/* An invitation arrives on any screen, and answering it
                   navigates away from the one it arrived on. */}
               <FriendsProvider>
-                <HashRouter>
-                  <Routes>
-                    {/* Everything behind the first run. An unknown hash lands
-                        on Home inside the shell, where the navigation is. */}
-                    <Route element={<OnboardingGate />}>
-                      <Route element={<AppShell />}>
-                        <Route path="/" element={<HomePage />} />
-                        <Route path="/servers" element={<ServersPage />} />
-                        <Route path="/library" element={<LibraryPage />} />
-                        <Route path="/clients" element={<ClientsPage />} />
-                        {/* One build, inside the shell: the player came from
-                            a client card or an engine tile and goes back to
-                            the same screen, with the sidebar never gone. */}
-                        <Route path="/engines/:id" element={<EnginePage />} />
-                        <Route path="/friends" element={<FriendsPage />} />
-                        <Route path="/settings" element={<SettingsPage />} />
-                        <Route path="*" element={<HomePage />} />
-                      </Route>
-                    </Route>
-                    <Route element={<AppShell withSidebar={false} />}>
-                      <Route path="/onboarding" element={<OnboardingPage />} />
-                    </Route>
-                    {/* --- slice: client window --- */}
-                    {/* Outside the shell: the window has no sidebar and draws
-                        its own title bar. The route lives here too so that the
-                        gear can open it in the tab under `npm run dev`, where
-                        there are no windows to open. */}
-                    <Route path="/client/:id" element={<ClientWindowPage />} />
-                  </Routes>
-                </HashRouter>
+                <RouterProvider router={getMainRouter()} />
               </FriendsProvider>
             </AccountProvider>
           </AppUpdateProvider>
@@ -153,4 +135,36 @@ function ClientWindowApp() {
       </ToastsProvider>
     </QueryClientProvider>
   );
+}
+
+// Created only in the main app, including under StrictMode. Client windows
+// retain their own HashRouter without a second history listener.
+let mainRouter: ReturnType<typeof createHashRouter> | undefined;
+
+function getMainRouter() {
+  return mainRouter ??= createHashRouter(createRoutesFromElements(
+    <Route element={<ProfileNavigationGuard />}>
+      {/* First-run protection and the ordinary navigation shell. */}
+      <Route element={<OnboardingGate />}>
+        <Route element={<AppShell />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/servers" element={<ServersPage />} />
+          <Route path="/library" element={<LibraryPage />} />
+          <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/player-profiles" element={<PlayerProfilesPage />} />
+          <Route path="/media" element={<MediaPage />} />
+          <Route path="/configs" element={<ConfigsPage />} />
+          <Route path="/engines/:id" element={<EnginePage />} />
+          <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="*" element={<HomePage />} />
+        </Route>
+      </Route>
+      <Route element={<AppShell withSidebar={false} />}>
+        <Route path="/onboarding" element={<OnboardingPage />} />
+      </Route>
+      {/* Browser fallback for opening client settings without a native window. */}
+      <Route path="/client/:id" element={<ClientWindowPage />} />
+    </Route>,
+  ));
 }

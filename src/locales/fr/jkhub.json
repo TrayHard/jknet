@@ -1,19 +1,45 @@
 {
   "sort": {
     "label": "Trier par",
-    "recentlyUpdated": "Récemment mis à jour",
-    "newest": "Plus récents",
-    "mostDownloaded": "Plus téléchargés",
-    "topRated": "Mieux notés",
+    "recentlyUpdated": "Date de mise à jour",
+    "newest": "Date de publication",
+    "mostDownloaded": "Téléchargements",
+    "topRated": "Note",
     "name": "Nom"
   },
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_many": "{{count}} results in {{game}}",
-    "results_other": "{{count}} results in {{game}}"
+    "results_other": "{{count}} results in {{game}}",
+    "helpTitle": "Aide à la recherche",
+    "helpScope": "Ces options s’appliquent dans JKHub au jeu et à la catégorie sélectionnés.",
+    "helpCombine": "Combinez les mots et les opérateurs dans n’importe quel ordre. Toutes les conditions doivent être remplies. Répéter les filtres de date réduit la période.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Format des dates : YYYY-MM-DD. Sans mise à jour, la date de publication est utilisée. La casse et les accents latins sont ignorés. Les guillemets fonctionnent uniquement après by:. Les jokers, OR et les autres opérateurs ne sont pas pris en charge. Une date invalide est traitée comme un mot de recherche.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Chaque mot doit apparaître dans le titre, le nom de l’auteur, les tags ou la description. Les mots partiels sont acceptés."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Trouver les auteurs dont le nom contient ce texte."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "Rechercher le nom complet de l’auteur, espaces compris."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "Mis à jour après cette date. Le jour indiqué est exclu (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "Mis à jour avant cette date. Le jour indiqué est exclu (UTC)."
+      }
+    }
   },
   "refresh": "Actualiser",
   "sections": {
@@ -78,7 +104,10 @@
     "reinstall": "Réinstaller",
     "fallbackAuthor": "JKHub",
     "updated": "Mis à jour le {{date}}",
-    "submitted": "Publié le {{date}}"
+    "submitted": "Publié le {{date}}",
+    "reviews_one": "{{count}} avis",
+    "reviews_many": "{{count}} avis",
+    "reviews_other": "{{count}} avis"
   },
   "details": {
     "loadingTitle": "Chargement…",
@@ -101,7 +130,8 @@
     "comments": "{{count}} commentaires",
     "versions": "Versions",
     "downloading": "Téléchargement… {{received}}",
-    "downloadingOf": "Téléchargement… {{received}} sur {{total}}"
+    "downloadingOf": "Téléchargement… {{received}} sur {{total}}",
+    "preview": "Télécharger pour l’aperçu"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -126,5 +156,21 @@
     "conflicts_one": "{{files}} est déjà dans {{folder}}. Appuyez sur Remplacer et installer pour l’écraser.",
     "conflicts_many": "{{files}} sont déjà dans {{folder}}. Appuyez sur Remplacer et installer pour les écraser.",
     "conflicts_other": "{{files}} sont déjà dans {{folder}}. Appuyez sur Remplacer et installer pour les écraser."
+  },
+  "comments": {
+    "title": "Commentaires",
+    "loading": "Chargement des commentaires…",
+    "empty": "Aucun commentaire.",
+    "stale": "Les commentaires enregistrés sont affichés. JKHub est inaccessible.",
+    "pages": "Pages de commentaires",
+    "previous": "Précédent",
+    "next": "Suivant",
+    "page": "Page {{page}} sur {{total}}"
+  },
+  "gallery": {
+    "previous": "Capture précédente",
+    "next": "Capture suivante",
+    "position": "{{current}} sur {{total}}",
+    "hint": "Utilisez les boutons, la molette ou les touches ← / →. Échap ferme la capture."
   }
 }

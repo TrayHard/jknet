@@ -354,6 +354,7 @@ mod tests {
             submitted_at: None,
             updated_at: None,
             tags: Vec::new(),
+            rating: None,
         }
     }
 

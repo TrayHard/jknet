@@ -83,11 +83,8 @@ pub enum AccountChangeReason {
 pub struct AccountState {
     /// Whether this build has a service to talk to at all.
     ///
-    /// False in a release build until `online::RELEASE_ONLINE_URL` names the public
-    /// origin, and until then the whole account and friends interface is one
-    /// sentence saying so. The player turns it on for their machine by typing
-    /// an address into **JKNet Online address** on the Settings screen, which is why
-    /// that field stays visible in this state.
+    /// Follows the effective service address. Release builds use the public
+    /// origin; **JKNet Online address** can override it for testing or self-hosting.
     pub online_configured: bool,
     /// Whether a token is on file. It says nothing about whether the service still
     /// accepts it: finding that out costs a request, and the sidebar has to
@@ -498,9 +495,8 @@ mod tests {
 
     // --- slice: online gate ---
 
-    /// A context with a token and whatever address the case is about. A blank
-    /// one is what a release build builds until `RELEASE_ONLINE_URL` names an
-    /// origin, and what a debug build cannot produce from `settings.json`.
+    /// A context with a token and whatever address the case is about, including
+    /// a blank effective address for testing the unconfigured-service state.
     fn signed_in_at(base_url: &str) -> OnlineContext {
         OnlineContext {
             base_url: base_url.into(),

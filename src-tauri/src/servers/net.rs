@@ -367,9 +367,16 @@ pub async fn query_status(
                 Some((info, rest)) => (info.to_string(), rest.to_string()),
                 None => (text, String::new()),
             };
-            // A late answer to the previous attempt carries the previous
-            // challenge, so it is skipped rather than taken for this one.
-            if parse_infostring(&infostring).get("challenge") != Some(&challenge) {
+            // Servers may omit the challenge from statusResponse, including
+            // when their serverinfo is too full to append another key/value.
+            // This socket belongs only to this query and is connected to the
+            // server, so such an answer can also complete a later retry of
+            // the same query. Unlike getinfo, status does not measure RTT.
+            // If a challenge is present, still reject a mismatched token.
+            if parse_infostring(&infostring)
+                .get("challenge")
+                .is_some_and(|echoed| echoed != &challenge)
+            {
                 continue;
             }
             return Ok(StatusReply {
@@ -486,6 +493,155 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_status_without_a_challenge_keeps_full_serverinfo_and_every_player() {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = match server.local_addr().unwrap() {
+            std::net::SocketAddr::V4(v4) => v4,
+            other => panic!("expected IPv4, got {other}"),
+        };
+        let players: String = (0..20)
+            .map(|index| format!("{index} 42 \"^3Player {index} <3\"\n"))
+            .collect();
+        let expected_players = players.clone();
+        // Luminous answers with 1,011 bytes of serverinfo: a long challenge
+        // cannot fit in the engine's 1,024-byte infostring buffer.
+        let mut infostring = "\\sv_hostname\\Legacy\\sv_maxclients\\32\\g_motd\\".to_string();
+        infostring.push_str(&"x".repeat(1_011 - infostring.len()));
+        let expected_infostring = infostring.clone();
+
+        let responder = tokio::spawn(async move {
+            let mut buffer = vec![0u8; MAX_DATAGRAM];
+            let (read, from) = server.recv_from(&mut buffer).await.unwrap();
+            let (command, _) = split_command(oob_payload(&buffer[..read]).unwrap());
+            assert_eq!(command, b"getstatus");
+            let reply = oob_packet(&format!("statusResponse\n{infostring}\n{players}"));
+            server.send_to(&reply, from).await.unwrap();
+        });
+
+        let reply = query_status(address, Duration::from_millis(800), 1)
+            .await
+            .expect("legacy status replies need not echo a challenge");
+        responder.await.unwrap();
+        assert_eq!(reply.infostring, expected_infostring);
+        assert_eq!(parse_infostring(&reply.infostring)["sv_hostname"], "Legacy");
+        assert_eq!(reply.players, expected_players);
+        let players = protocol::parse_status_players(&reply.players);
+        assert_eq!(players.len(), 20);
+        assert_eq!(players[19].name_raw, "^3Player 19 <3");
+    }
+
+    #[tokio::test]
+    async fn a_status_with_an_explicit_wrong_or_empty_challenge_is_rejected() {
+        for echoed in ["stale", ""] {
+            let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+            let address = match server.local_addr().unwrap() {
+                std::net::SocketAddr::V4(v4) => v4,
+                other => panic!("expected IPv4, got {other}"),
+            };
+            let responder = tokio::spawn(async move {
+                let mut buffer = vec![0u8; MAX_DATAGRAM];
+                let (_, from) = server.recv_from(&mut buffer).await.unwrap();
+                let reply = oob_packet(&format!(
+                    "statusResponse\n\\challenge\\{echoed}\\sv_hostname\\Wrong\n1 42 \"Kyle\"\n"
+                ));
+                server.send_to(&reply, from).await.unwrap();
+            });
+
+            assert!(query_status(address, Duration::from_millis(100), 1)
+                .await
+                .is_err());
+            responder.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn a_status_retry_skips_the_previous_challenge_and_accepts_its_own() {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = match server.local_addr().unwrap() {
+            std::net::SocketAddr::V4(v4) => v4,
+            other => panic!("expected IPv4, got {other}"),
+        };
+        let responder = tokio::spawn(async move {
+            let mut buffer = vec![0u8; MAX_DATAGRAM];
+            let (read, _) = server.recv_from(&mut buffer).await.unwrap();
+            let (_, previous) = split_command(oob_payload(&buffer[..read]).unwrap());
+            let previous = String::from_utf8_lossy(previous).to_string();
+            let (read, from) = server.recv_from(&mut buffer).await.unwrap();
+            let (_, current) = split_command(oob_payload(&buffer[..read]).unwrap());
+            let current = String::from_utf8_lossy(current).to_string();
+            assert_ne!(previous, current);
+            for (challenge, name) in [(previous, "Stale"), (current, "Current")] {
+                let reply = oob_packet(&format!(
+                    "statusResponse\n\\challenge\\{challenge}\\sv_hostname\\{name}\n1 42 \"Kyle\"\n"
+                ));
+                server.send_to(&reply, from).await.unwrap();
+            }
+        });
+
+        let reply = query_status(address, Duration::from_millis(150), 2)
+            .await
+            .expect("a valid answer after a stale one must still be read");
+        responder.await.unwrap();
+        assert_eq!(
+            parse_infostring(&reply.infostring)["sv_hostname"],
+            "Current"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_late_legacy_status_can_complete_the_same_query_after_a_retry() {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = match server.local_addr().unwrap() {
+            std::net::SocketAddr::V4(v4) => v4,
+            other => panic!("expected IPv4, got {other}"),
+        };
+        let responder = tokio::spawn(async move {
+            let mut buffer = vec![0u8; MAX_DATAGRAM];
+            let (_, first_from) = server.recv_from(&mut buffer).await.unwrap();
+            let (_, retry_from) = server.recv_from(&mut buffer).await.unwrap();
+            assert_eq!(first_from, retry_from);
+            server
+                .send_to(
+                    &oob_packet("statusResponse\n\\sv_hostname\\Legacy\n7 42 \"Jaden\"\n"),
+                    first_from,
+                )
+                .await
+                .unwrap();
+        });
+
+        let reply = query_status(address, Duration::from_millis(150), 2)
+            .await
+            .expect("a legacy reply on this query's socket is still usable");
+        responder.await.unwrap();
+        assert_eq!(parse_infostring(&reply.infostring)["sv_hostname"], "Legacy");
+    }
+
+    #[tokio::test]
+    async fn an_info_reply_still_requires_a_challenge() {
+        let server = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let address = match server.local_addr().unwrap() {
+            std::net::SocketAddr::V4(v4) => v4,
+            other => panic!("expected IPv4, got {other}"),
+        };
+        let responder = tokio::spawn(async move {
+            let mut buffer = vec![0u8; MAX_DATAGRAM];
+            let (_, from) = server.recv_from(&mut buffer).await.unwrap();
+            server
+                .send_to(
+                    &oob_packet("infoResponse\n\\hostname\\Missing challenge\\clients\\2"),
+                    from,
+                )
+                .await
+                .unwrap();
+        });
+
+        assert!(query_info(address, Duration::from_millis(100), 1)
+            .await
+            .is_none());
+        responder.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn an_unanswered_status_is_an_error() {
         let reply = query_status(
             "127.0.0.1:1".parse().unwrap(),
@@ -494,6 +650,46 @@ mod tests {
         )
         .await;
         assert!(reply.is_err());
+    }
+
+    /// Exercises the production status path for explicitly supplied servers.
+    /// Set JKNET_STATUS_SERVERS to comma-separated IPv4:port addresses before
+    /// running this ignored test. It never queries a master or discovers peers.
+    #[tokio::test]
+    #[ignore = "queries only the live servers supplied in JKNET_STATUS_SERVERS"]
+    async fn reads_live_status_from_explicit_servers() {
+        let configured = std::env::var("JKNET_STATUS_SERVERS")
+            .expect("set JKNET_STATUS_SERVERS to comma-separated IPv4:port addresses");
+        let addresses: Vec<SocketAddrV4> = configured
+            .split(',')
+            .map(|value| {
+                value
+                    .trim()
+                    .parse()
+                    .expect("every JKNET_STATUS_SERVERS entry must be an IPv4:port address")
+            })
+            .collect();
+        let mut failures = Vec::new();
+        for address in addresses {
+            match query_status(address, Duration::from_secs(2), 2).await {
+                Ok(reply) => {
+                    let players = protocol::parse_status_players(&reply.players);
+                    let (humans, bots) = protocol::count_humans_and_bots(&players);
+                    let has_challenge =
+                        parse_infostring(&reply.infostring).contains_key("challenge");
+                    println!(
+                        "{address}: {} player rows, {humans} humans, {bots} bots, echoed challenge: {has_challenge}, {} serverinfo bytes",
+                        players.len(),
+                        reply.infostring.len()
+                    );
+                }
+                Err(error) => {
+                    eprintln!("{address}: {error}");
+                    failures.push(address);
+                }
+            }
+        }
+        assert!(failures.is_empty(), "servers did not answer: {failures:?}");
     }
 
     // --- slice: servers robustness ---

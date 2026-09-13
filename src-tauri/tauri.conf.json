@@ -43,8 +43,8 @@
     "createUpdaterArtifacts": true,
     "publisher": "JKNet",
     "category": "Game",
-    "shortDescription": "Launcher for Jedi Academy multiplayer",
-    "longDescription": "JKNet installs Jedi Academy multiplayer engines, keeps a pk3 library per client and browses live servers.",
+    "shortDescription": "Launcher for Jedi Academy and Jedi Outcast",
+    "longDescription": "JKNet manages Jedi Academy and Jedi Outcast clients, installs community engines and JKHub mods, previews game assets, browses servers and connects friends.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

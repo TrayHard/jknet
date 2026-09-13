@@ -2,7 +2,6 @@
   "title": "Bibliothèque",
   "searchPlaceholder": "Rechercher un fichier",
   "clearSearch": "Clear search",
-  "browseJkhub": "Parcourir JKHub",
   "addFiles": "Ajouter des fichiers",
   "pickTitle": "Ajouter des fichiers pk3",
   "pickFilter": "Archives Jedi Academy",
@@ -12,13 +11,17 @@
   "tabs": {
     "installed": "Installés",
     "jkhub": "Parcourir JKHub",
-    "updates": "Mises à jour"
+    "baseGame": "Jeu de base"
   },
   "sort": {
     "label": "Trier par",
-    "recent": "Récents",
+    "recent": "Date d’ajout",
     "name": "Nom",
-    "size": "Taille"
+    "size": "Taille",
+    "ascending": "Croiss.",
+    "descending": "Décroiss.",
+    "setAscending": "Trier par ordre croissant",
+    "setDescending": "Trier par ordre décroissant"
   },
   "categories": {
     "all": "Tous",
@@ -28,7 +31,8 @@
     "mod": "Mods",
     "hud": "HUD et interface",
     "sound": "Sons",
-    "other": "Autres"
+    "other": "Autres",
+    "conflicts": "Conflits"
   },
   "categoryOne": {
     "skin": "Skin",
@@ -55,11 +59,9 @@
     "noClientsText": "Un fichier de bibliothèque s’installe dans un client. Créez-en un et cette liste commence à se remplir.",
     "newClient": "Nouveau client",
     "noFilesTitle": "{{client}} n’a encore aucun fichier",
-    "noFilesText": "Trouvez des skins, des manches, des cartes et des mods sur JKHub, puis ajoutez les fichiers pk3 ici. Vous pouvez aussi les déposer directement sur cette fenêtre.",
+    "noFilesText": "Ajoutez des fichiers pk3 locaux avec « Ajouter des fichiers » ou déposez-les dans cette fenêtre. Vous pouvez aussi installer des fichiers depuis l’onglet JKHub.",
     "filteredTitle": "Aucun résultat",
-    "filteredText": "Aucun fichier de ce client ne correspond à la recherche et aux filtres. Effacez-les pour voir toute la bibliothèque.",
-    "updatesTitle": "Aucune mise à jour",
-    "updatesText": "Dès que les fichiers portent une version JKHub, ceux qui ont une publication plus récente apparaissent ici."
+    "filteredText": "Aucun fichier de ce client ne correspond à la recherche et aux filtres. Effacez-les pour voir toute la bibliothèque."
   },
   "fallback": {
     "thisClient": "ce client",
@@ -107,11 +109,67 @@
       "map": "A level the server can load.",
       "ui": "A menu screen or the text inside it.",
       "other": "Another file the game reads."
-    }
+    },
+    "showNotice": "Afficher l’avis de conflits",
+    "dismissNotice": "Fermer l’avis de conflits"
   },
   "remove": {
     "title": "Retirer {{file}} de {{client}} ?",
     "body": "{{fileName}}, {{size}}. Le fichier est supprimé du dossier {{folder}} du client. Les autres clients gardent leur copie.",
     "confirm": "Retirer le fichier"
+  },
+  "preview": {
+    "open": "Aperçu de {{name}}",
+    "loading": "Préparation de l’aperçu…",
+    "search": "Rechercher des objets",
+    "contents": "Objets",
+    "empty": "Aucun objet à prévisualiser",
+    "emptyText": "Aucun objet à prévisualiser ne correspond à cette sélection.",
+    "previous": "Objet précédent",
+    "next": "Objet suivant",
+    "audioFailed": "Impossible de lire ce fichier audio.",
+    "kind": {
+      "all": "Tous les objets",
+      "skin": "Personnages et skins",
+      "hilt": "Poignées",
+      "weapon": "Armes",
+      "npc": "PNJ",
+      "vehicle": "Véhicules",
+      "music": "Musique",
+      "sound": "Effets sonores",
+      "map": "Cartes"
+    },
+    "weaponOnly": "Arme seule",
+    "withCharacter": "Avec un personnage",
+    "selectClient": "Sélectionnez un client pour choisir un personnage installé"
+  },
+  "mapPreview": {
+    "title": "Aperçu de la carte",
+    "viewport": "Navigation dans la carte",
+    "loading": "Préparation de la carte…",
+    "viewpoint": "Point de vue",
+    "overview": "Vue générale",
+    "spawn": "Point de départ {{number}}",
+    "controls": "Glisser : regarder · Glisser droit : décaler · Molette : avancer · WASD / flèches : voler · Q/E : descendre/monter · Maj : accélérer",
+    "missingTextures": "Certaines textures sont indisponibles ({{count}}).",
+    "invalid": "Les données de la carte sont endommagées.",
+    "unsupported": "Ce format de carte est incompatible.",
+    "tooLarge": "Cette carte dépasse les limites de l’aperçu.",
+    "empty": "Cette carte ne contient aucune géométrie visible.",
+    "missing": "Le fichier de la carte est introuvable.",
+    "fullscreen": "Plein écran",
+    "exitFullscreen": "Quitter le plein écran",
+    "fullscreenFailed": "Impossible de changer le mode plein écran. Réessayez."
+  },
+  "baseGame": {
+    "loading": "Préparation du contenu du jeu…",
+    "description": "Contenu original des archives du jeu. Les mods installés ne remplacent pas ces aperçus.",
+    "search": "Rechercher dans le jeu",
+    "archive": "Archive du jeu",
+    "allArchives": "Toutes les archives",
+    "missingTitle": "Fichiers du jeu introuvables",
+    "missingText": "Choisissez le dossier du jeu dans les paramètres pour parcourir son contenu de base.",
+    "openSettings": "Ouvrir les paramètres",
+    "noResults": "Aucun objet du jeu ne correspond à ces filtres. Effacez la recherche ou choisissez une autre catégorie ou archive."
   }
 }

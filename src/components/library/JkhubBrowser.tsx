@@ -4,9 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useToasts } from "../ToastsProvider";
-import { Button, EmptyState, Select, type SelectOption } from "../ui";
+import { Button, EmptyState } from "../ui";
+import { LibrarySearch } from "./LibrarySearch";
+import { LibrarySort } from "./LibrarySort";
 import { JkhubCard } from "./JkhubCard";
 import { JkhubDetails } from "./JkhubDetails";
+import { FilePreviewDialog } from "./FilePreviewDialog";
 // --- slice: jkhub catalog ---
 import { byAuthor } from "./jkhubQuery";
 import { useSectionName } from "./jkhubSections";
@@ -16,7 +19,7 @@ import { JkhubTree } from "./JkhubTree";
 // --- slice: i18n ---
 import { useErrorText } from "../../i18n/errors";
 import { useActiveGame, useGameNames } from "../../lib/game";
-import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem } from "../../lib/ipc";
+import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem, SortDirection } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
   useCancelJkhubIndex,
@@ -33,12 +36,7 @@ import {
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 
-// --- slice: i18n --- the ids go to the site, the labels come from the catalog.
-//
-// --- slice: jkhub index ---
-// `topRated` is missing on purpose: the tab lists from the local index, and a
-// listing card of this theme prints no stars, so no crawl ever saw a rating.
-const SORT_IDS: JkhubSort[] = ["recentlyUpdated", "newest", "mostDownloaded", "name"];
+const SORT_IDS: JkhubSort[] = ["recentlyUpdated", "newest", "mostDownloaded", "topRated", "name"];
 
 /** Cards added by one press of **Load more**, and the most the grid holds. */
 const PAGE = 25;
@@ -100,9 +98,8 @@ interface JkhubBrowserProps {
   /**
    * What the screen's search box holds, raw.
    *
-   * The tab has no box of its own: one field in the header serves all three
-   * tabs, so a query survives a switch between them. The debounce below this
-   * stays here, because it is this tab that pays for a keystroke.
+   * The field lives in the tab's toolbar. Its value belongs to LibraryPage
+   * so a query survives tab switches; only this catalogue search is debounced.
    */
   search: string;
   // --- slice: jkhub catalog ---
@@ -148,6 +145,8 @@ export function JkhubBrowser({
   const sectionName = useSectionName();
   const [scope, setScope] = useState<Scope | null>(null);
   const [sort, setSort] = useState<JkhubSort>("recentlyUpdated");
+  const [direction, setDirection] = useState<SortDirection>("desc");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [shown, setShown] = useState(PAGE);
   // Opening the tab with a word already in the box searches for it at once:
   // the wait below is for the next keystroke, not for text typed on another
@@ -198,6 +197,7 @@ export function JkhubBrowser({
   useEffect(() => {
     setScope(null);
     setOpenFile(null);
+    setPreviewOpen(false);
   }, [game]);
 
   // The first section is the landing page of the tab. It is filled in while
@@ -232,9 +232,9 @@ export function JkhubBrowser({
   // A change of scope, order or query starts the grid over at one page.
   useEffect(() => {
     setShown(PAGE);
-  }, [scoped, sort, query]);
+  }, [scoped, sort, direction, query]);
 
-  const search = useJkhubSearch(game, query, scoped, sort, shown);
+  const search = useJkhubSearch(game, query, scoped, sort, shown, direction);
   const cards = search.data?.cards ?? [];
   const total = search.data?.total ?? 0;
   const counts = query ? (search.data?.categoryCounts ?? {}) : null;
@@ -304,8 +304,7 @@ export function JkhubBrowser({
   // arrives within a frame or two, and a waiting panel that appears and goes
   // again in that time is worse than one that is briefly hopeful.
   //
-  // --- slice: library cleanup --- the search box reads the same answer from
-  // `LibraryPage`, where the box now lives.
+  // The grid and the search field share the catalogue's readiness state.
   const browsable = status.data?.available !== false;
   // The event is the fresher of the two; the answer of the status is what a tab
   // opened halfway through a crawl has instead of the events it missed.
@@ -496,6 +495,22 @@ export function JkhubBrowser({
         </div>
       ) : null}
 
+      <div className="flex flex-wrap items-center gap-12 pb-16">
+        <LibrarySearch value={typed} onChange={onSearch} jkhub disabled={status.data?.available === false} />
+        <div className="ml-auto">
+          <LibrarySort
+            value={sort}
+            onChange={value => setSort(value as JkhubSort)}
+            options={SORT_IDS.map(id => ({ value: id, label: t(`sort.${id}`) }))}
+            direction={direction}
+            onDirection={setDirection}
+          />
+        </div>
+        <Button icon={<RefreshCw size={16} />} disabled={refreshing || building} onClick={() => runRefresh(false)}>
+          {t("refresh")}
+        </Button>
+      </div>
+
       <div className="flex items-start gap-24">
         <aside className="w-232 shrink-0">
           <JkhubTree
@@ -508,35 +523,6 @@ export function JkhubBrowser({
         </aside>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-12 pb-12">
-            {/* --- slice: jkhub catalog ---
-                The one line about the search box, which lives in the header
-                of the screen and belongs to all three tabs. It sits here
-                because the operator does: on the other two tabs the box is a
-                plain filter. */}
-            <span className="flex-1 min-w-0 text-body-sm text-fg-muted truncate">
-              {t("search.hint")}
-            </span>
-            <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
-            <Select
-              ariaLabel={t("sort.label")}
-              options={SORT_IDS.map<SelectOption>((id) => ({
-                value: id,
-                label: t(`sort.${id}`),
-              }))}
-              value={sort}
-              onChange={(value) => setSort(value as JkhubSort)}
-              className="w-176"
-            />
-            <Button
-              icon={<RefreshCw size={16} />}
-              disabled={refreshing || building}
-              onClick={() => runRefresh(false)}
-            >
-              {t("refresh")}
-            </Button>
-          </div>
-
           {/* --- slice: library cleanup ---
               How many files answered, and nothing else. The line that named
               the category and the client, and the one that dated the index
@@ -555,7 +541,7 @@ export function JkhubBrowser({
               crawl ran behind it, which reads as a broken screen rather than
               as a wait, so the wait takes its place — with the progress, the
               reason and one button to stop it. The bar above stays, and so
-              does the search box in the header of the screen — switched off
+              does the search box in the tab's toolbar — switched off
               while this tab is open, because the catalogue is what is
               missing, not the tab. Every shipped build carries a snapshot, so
               this is a safety net and not the normal first run. */}
@@ -649,7 +635,9 @@ export function JkhubBrowser({
       </div>
 
       {openFile != null ? (
+        <div inert={previewOpen}>
         <JkhubDetails
+          key={openFile}
           file={details.data}
           loading={details.isLoading}
           error={details.error ? errorText(details.error) : null}
@@ -659,6 +647,7 @@ export function JkhubBrowser({
           progress={progress.get(openFile) ?? null}
           result={result?.fileId === openFile ? result : null}
           onClose={() => {
+            if (previewOpen) return;
             setOpenFile(null);
             setResult(null);
           }}
@@ -666,8 +655,15 @@ export function JkhubBrowser({
           onOpenSite={() => openSite(openFile)}
           onRevealArchive={reveal}
           onAuthor={searchAuthor}
+          onPreview={() => setPreviewOpen(true)}
         />
+        </div>
       ) : null}
+      {previewOpen && openFile != null ? <FilePreviewDialog
+        target={{ kind: "jkhub", id: openFile, clientId, title: details.data?.title ?? t("details.fallbackTitle") }}
+        progress={progress.get(openFile) ?? null}
+        onClose={() => setPreviewOpen(false)}
+      /> : null}
     </>
   );
 }

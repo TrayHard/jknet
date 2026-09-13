@@ -165,6 +165,14 @@ pub struct JkhubCard {
     pub rating: Option<JkhubRating>,
 }
 
+/// Direction chosen separately from the catalogue's sort field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
 /// How a listing is ordered. The values map to the `sortby` parameter of the
 /// site (report, section 3).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -179,6 +187,10 @@ pub enum JkhubSort {
 }
 
 impl JkhubSort {
+    pub fn default_direction(self) -> SortDirection {
+        if self == Self::Name { SortDirection::Asc } else { SortDirection::Desc }
+    }
+
     /// `(sortby, sortdirection)` as the site spells them.
     pub fn query(self) -> (&'static str, &'static str) {
         match self {

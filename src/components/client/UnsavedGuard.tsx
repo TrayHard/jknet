@@ -21,11 +21,12 @@ interface Guard {
    * window close over a draft that is no longer there.
    */
   setDirty: (dirty: boolean) => void;
+  isDirty: () => boolean;
   /**
    * Runs `next` at once when nothing is unsaved, and after the player agrees
    * to lose the edits when something is.
    */
-  ask: (next: () => void) => void;
+  ask: (next: () => void, cancel?: () => void) => void;
 }
 
 const GuardContext = createContext<Guard | null>(null);
@@ -39,6 +40,7 @@ const GuardContext = createContext<Guard | null>(null);
  */
 const NO_GUARD: Guard = {
   setDirty: () => undefined,
+  isDirty: () => false,
   ask: (next) => next(),
 };
 
@@ -51,11 +53,9 @@ export function useUnsavedGuard(): Guard {
  * Holds the confirmation between a form with unsaved edits and whatever wants
  * to take that form off the screen.
  *
- * Two things want to: the **Cancel** button of the profile form, which is how
- * a player goes back to the list and on to another profile, and the close
- * button of the window, which takes the whole page with it. Both ask the same
- * question through [`Guard.ask`], and both get the same dialog, because losing
- * a half-written profile feels the same either way.
+ * Form cancellation, navigation, client/game selection and window closing
+ * share one confirmation. A pending navigation also supplies its reset action
+ * so staying on the form cannot leave the router blocked.
  *
  * The flag lives in a ref and not in state on purpose: the window's
  * `onCloseRequested` handler is registered once and reads the flag much later,
@@ -65,48 +65,63 @@ export function useUnsavedGuard(): Guard {
 export function UnsavedGuardProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation("clients");
   const dirty = useRef(false);
-  /** What runs once the player says the edits may go. */
-  const [pending, setPending] = useState<(() => void) | null>(null);
+  const request = useRef<{ next: () => void; cancel?: () => void } | null>(null);
+  const [pending, setPending] = useState(false);
+  const isDirty = useCallback(() => dirty.current, []);
+
+  const keep = useCallback(() => {
+    const previous = request.current;
+    request.current = null;
+    setPending(false);
+    previous?.cancel?.();
+  }, []);
 
   const setDirty = useCallback((value: boolean) => {
     dirty.current = value;
-  }, []);
+    // A completed save or an unmounted form must not leave a stale action.
+    if (!value) keep();
+  }, [keep]);
 
-  const ask = useCallback((next: () => void) => {
+  const ask = useCallback((next: () => void, cancel?: () => void) => {
+    if (request.current !== null) {
+      // The first intent wins while its dialog is open. Release any later
+      // router attempt instead of leaving it blocked behind this question.
+      if (request.current.next !== next) cancel?.();
+      return;
+    }
     if (!dirty.current) {
       next();
       return;
     }
-    // Wrapped in a function of its own: `useState` calls a function it is
-    // handed rather than storing it.
-    setPending(() => next);
+    request.current = { next, cancel };
+    setPending(true);
   }, []);
 
-  const value = useMemo(() => ({ setDirty, ask }), [setDirty, ask]);
+  const value = useMemo(() => ({ setDirty, isDirty, ask }), [setDirty, isDirty, ask]);
 
   const discard = () => {
-    const next = pending;
-    // Before the action, not after: closing the window unmounts nothing in
-    // time, and a flag still raised would meet the next close request.
-    dirty.current = false;
-    setPending(null);
-    next?.();
+    const previous = request.current;
+    request.current = null;
+    setPending(false);
+    // The form clears dirty when it unmounts. An asynchronous game switch
+    // can fail, in which case the still-visible draft must remain guarded.
+    previous?.next();
   };
 
   return (
     <GuardContext.Provider value={value}>
       {children}
-      {pending !== null ? (
+      {pending ? (
         <Dialog
           variant="danger"
           title={t("clientWindow.profiles.unsaved.title")}
           body={t("clientWindow.profiles.unsaved.body")}
           // Escape and a click outside mean «I did not mean to leave», which
           // is the safe half of this question.
-          onClose={() => setPending(null)}
+          onClose={keep}
           actions={
             <>
-              <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+              <Button size="sm" variant="ghost" onClick={keep}>
                 {t("clientWindow.profiles.unsaved.keep")}
               </Button>
               <Button size="sm" variant="danger" onClick={discard}>

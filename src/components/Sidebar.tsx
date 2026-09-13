@@ -1,4 +1,4 @@
-import { Library, Monitor, Server, Settings, Users } from "lucide-react";
+import { ContactRound, Library, Monitor, Server, Settings, Users, Images, FileSliders } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -64,6 +64,9 @@ export function Sidebar() {
             label={t("items.clients")}
             count={clients.isSuccess ? gameClients.length : undefined}
           />
+          <NavItem to="/player-profiles" icon={<ContactRound size={20} />} label={t("items.playerProfiles")} />
+          <NavItem to="/media" icon={<Images size={20} />} label={t("items.media")} />
+          <NavItem to="/configs" icon={<FileSliders size={20} />} label={t("items.configs")} />
         </Group>
 
         <Group title={t("groups.community")}>

@@ -12,8 +12,8 @@ import {
   type ModelPart,
   type PlayerModel,
 } from "../../lib/ipc";
-import { useAssembledPreview, usePlayerModels } from "../../lib/queries";
-import { Input } from "../ui";
+import { usePlayerModels } from "../../lib/queries";
+import { Button, Input } from "../ui";
 
 // --- slice: connect dialog ---
 /**
@@ -32,21 +32,17 @@ const SIZES: Record<
   { icon: string; column: string; list: string; card: string }
 > = {
   // --- slice: skins and hilts ---
-  // The card is the icon three times over, because the composed preview is
-  // three square rows stacked: a frame of any other shape would either
-  // letterbox the picture or cut a row off it.
-  sm: { icon: "size-44", column: "52px", list: "max-h-160", card: "w-44 h-132" },
-  md: { icon: "size-64", column: "72px", list: "max-h-232", card: "w-64 h-192" },
+  // Species use square portraits; the live model appears in ProfileForm.
+  sm: { icon: "size-44", column: "52px", list: "max-h-160", card: "size-44" },
+  md: { icon: "size-64", column: "72px", list: "max-h-232", card: "size-64" },
 };
 
 /**
  * The grid of skins a profile may pick from.
  *
  * Icons and not a dropdown, because that is what the game's own menu does and
- * because `kyle/red` says nothing about what it looks like. There is no 3D
- * preview and there cannot be one: `.glm` is Raven's Ghoul2 and the only code
- * that draws it is the engine's own renderer. The 128×128 icon inside the pk3
- * is what exists, so it is what this shows.
+ * because `kyle/red` says nothing about what it looks like. These are the
+ * game's own icons; ProfileForm renders the resulting Ghoul2 model.
  *
  * A skin whose icon could not be read — a TGA the decoder refuses, a picture
  * past the size limit — keeps its place as a text tile rather than vanishing:
@@ -61,11 +57,8 @@ const SIZES: Record<
  *
  * --- slice: skins and hilts ---
  * Those six stand in a group of their own, **Custom characters**, under the
- * grid of whole skins, and each wears a picture of the character it is
- * currently set to rather than the icon of its head. Among the whole skins
- * they were a tile that looked like the others and behaved differently, and
- * the head icon alone was a cut-out face over a dark surface. The picture is
- * composed by the core; see `appearance::compose_preview`.
+ * grid of whole skins. A portrait identifies each species; tabs beneath it
+ * expose the original head, torso and leg thumbnails.
  */
 export function SkinPicker({
   clientId,
@@ -73,6 +66,7 @@ export function SkinPicker({
   onChange,
   size = "md",
   tintBelow = false,
+  allowDefault = true,
 }: {
   clientId: string;
   /** The `model` of the profile, or `null` when it sets none. */
@@ -87,6 +81,7 @@ export function SkinPicker({
    * leaves this off rather than pointing at a control that is not there.
    */
   tintBelow?: boolean;
+  allowDefault?: boolean;
 }) {
   const { t } = useTranslation("clients");
   const errorText = useErrorText();
@@ -132,10 +127,6 @@ export function SkinPicker({
   // panel under it. While it is in flight the card keeps the picture of the
   // combination the list opened on, which is the same character in different
   // clothes rather than an empty frame.
-  const composed = useAssembledPreview(
-    clientId,
-    building === null ? null : assembledSkinValue(building.picked),
-  );
 
   if (models.error) {
     return (
@@ -180,12 +171,12 @@ export function SkinPicker({
               "rounded-md border border-line bg-input",
             )}
           >
-            <Tile
+            {allowDefault ? <Tile
               selected={value === null}
               caption={t("clientWindow.profiles.form.skinNone")}
               frame={metrics.icon}
               onSelect={() => onChange(null)}
-            />
+            /> : null}
             {stock.map((model) => (
               <SkinTile
                 key={model.value}
@@ -215,9 +206,7 @@ export function SkinPicker({
                     // it answers for every value that names it.
                     selected={building?.model === model.model}
                     preview={
-                      building?.model === model.model
-                        ? (composed.data ?? model.preview)
-                        : model.preview
+                      model.parts?.heads.find(p => p.id === building?.picked.head)?.icon ?? model.parts?.heads[0]?.icon ?? model.icon
                     }
                     picked={
                       building?.model === model.model ? building.picked : null
@@ -246,9 +235,7 @@ export function SkinPicker({
             <PartsPanel
               parts={building.parts}
               picked={building.picked}
-              preview={composed.data ?? null}
-              frame={metrics.icon}
-              card={metrics.card}
+              frame={size === "sm" ? "size-64" : "size-96"}
               tintBelow={tintBelow}
               onChange={(next) => onChange(assembledSkinValue(next))}
             />
@@ -293,38 +280,31 @@ const ROWS = [
  * player sees the character and not only the parts. It is the same composed
  * file the card in the group above wears.
  */
-function PartsPanel({
+export function PartsPanel({
   parts,
   picked,
-  preview,
   frame,
-  card,
   tintBelow,
   onChange,
 }: {
   parts: NonNullable<PlayerModel["parts"]>;
   picked: AssembledSkin;
-  preview: string | null;
   frame: string;
-  card: string;
   tintBelow: boolean;
   onChange: (value: AssembledSkin) => void;
 }) {
   const { t } = useTranslation("clients");
+  const [active, setActive] = useState<typeof ROWS[number]['key']>('heads');
 
   return (
     <div className="flex gap-8 rounded-md border border-line bg-input p-8">
-      <Picture
-        src={preview}
-        frame={card}
-        alt={t("clientWindow.profiles.form.skinPreview", { model: picked.model })}
-      />
       <div className="flex-1 min-w-0 flex flex-col gap-8">
         <p className="text-label-xs text-fg-accent">
           {t("clientWindow.profiles.form.skinAssembled")}
           <span className="text-fg-muted normal-case tracking-normal"> {picked.model}</span>
         </p>
-        {ROWS.map((row) => (
+        <div className="flex gap-4">{ROWS.map(row => <Button type="button" size="sm" variant={active === row.key ? "primary" : "ghost"} key={row.key} onClick={() => setActive(row.key)}>{t(row.label)}</Button>)}</div>
+        {ROWS.filter(row => row.key === active).map((row) => (
           <PartRow
             key={row.key}
             label={t(row.label)}

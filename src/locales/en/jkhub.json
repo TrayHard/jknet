@@ -1,10 +1,10 @@
 {
   "sort": {
     "label": "Sort by",
-    "recentlyUpdated": "Recently updated",
-    "newest": "Newest",
-    "mostDownloaded": "Most downloaded",
-    "topRated": "Top rated",
+    "recentlyUpdated": "Date updated",
+    "newest": "Date submitted",
+    "mostDownloaded": "Downloads",
+    "topRated": "Rating",
     "name": "Name"
   },
   "search": {
@@ -12,7 +12,33 @@
     "results_one": "{{count}} result in {{game}}",
     "results_other": "{{count}} results in {{game}}",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match."
+    "helpTitle": "Search help",
+    "helpScope": "These options apply to Browse JKHub in the selected game and category.",
+    "helpCombine": "Combine words and operators in any order. Every condition must match. Repeat date filters to narrow the range.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Dates use YYYY-MM-DD. Files never updated use their submission date. Text ignores case and Latin accents. Quotes are supported only after by:. Wildcards, OR and other operators are not supported. An invalid date is treated as a search word.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Every word must occur in the title, author, tags or description. Words can match parts of text."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Find authors whose names contain this text."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "Match the whole author name, including spaces."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "Updated after this date. The specified day is excluded (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "Updated before this date. The specified day is excluded (UTC)."
+      }
+    }
   },
   "refresh": "Refresh",
   "sections": {
@@ -73,7 +99,9 @@
     "reinstall": "Reinstall",
     "fallbackAuthor": "JKHub",
     "updated": "Updated {{date}}",
-    "submitted": "Submitted {{date}}"
+    "submitted": "Submitted {{date}}",
+    "reviews_one": "{{count}} review",
+    "reviews_other": "{{count}} reviews"
   },
   "details": {
     "loadingTitle": "Loading…",
@@ -96,7 +124,8 @@
     "comments": "{{count}} comments",
     "versions": "Versions",
     "downloading": "Downloading… {{received}}",
-    "downloadingOf": "Downloading… {{received}} of {{total}}"
+    "downloadingOf": "Downloading… {{received}} of {{total}}",
+    "preview": "Download for preview"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -120,5 +149,21 @@
     "unsupported": "The archive is a .{{format}}, which JKNet cannot open yet. Open the file on JKHub and unpack it by hand.",
     "noPk3": "The archive holds no pk3 file, so there is nothing to install into a client. Inside it: {{entries}}",
     "showArchive": "Show the archive"
+  },
+  "comments": {
+    "title": "Comments",
+    "loading": "Loading comments…",
+    "empty": "No comments yet.",
+    "stale": "Showing saved comments. JKHub could not be reached.",
+    "pages": "Comment pages",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {{page}} of {{total}}"
+  },
+  "gallery": {
+    "previous": "Previous screenshot",
+    "next": "Next screenshot",
+    "position": "{{current}} of {{total}}",
+    "hint": "Use the buttons, mouse wheel or ← / → keys. Escape closes the screenshot."
   }
 }

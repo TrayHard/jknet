@@ -1,10 +1,13 @@
 import { AlertTriangle, Power, PowerOff, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import type { LibraryItem } from "../../lib/ipc";
+import { isTauri } from "../../lib/runtime";
 // --- slice: selection context menu ---
 import { Badge, Toggle, useContextMenu, type MenuItem } from "../ui";
 import { categoryInfo } from "./categories";
@@ -15,27 +18,36 @@ interface LibraryCardProps {
   conflicting: boolean;
   onToggle: (enabled: boolean) => void;
   onRemove: () => void;
+  onConflict?: () => void;
+  onPreview?: () => void;
   busy?: boolean;
 }
 
 /**
  * One file of the library, the ModCard of the design.
  *
- * The thumbnail is the category icon: JKHub previews arrive with downloads,
- * and an empty grey box says less than the icon does.
+ * Artwork comes from this archive, with the catalogue thumbnail as fallback.
  */
 export function LibraryCard({
   item,
   conflicting,
   onToggle,
   onRemove,
+  onConflict,
+  onPreview,
   busy = false,
 }: LibraryCardProps) {
   const { t } = useTranslation("library");
   const { t: tCommon } = useTranslation("common");
   const format = useFormat();
   const info = categoryInfo(item.category);
-  const Icon = info.icon;
+  const localImage = isTauri() && item.previewPath ? convertFileSrc(item.previewPath) : null;
+  const revision = JSON.stringify([item.id, localImage, item.thumbnailUrl]);
+  const [failures, setFailures] = useState<{ revision: string; urls: string[] }>({ revision, urls: [] });
+  const failedImages = failures.revision === revision ? failures.urls : [];
+  const image = [localImage, item.thumbnailUrl].find(
+    (url): url is string => Boolean(url) && !failedImages.includes(url as string),
+  );
 
   // --- slice: selection context menu ---
   // The two controls the card already carries: the switch that loads the
@@ -79,32 +91,39 @@ export function LibraryCard({
         "flex flex-col rounded-lg border bg-surface overflow-hidden",
         "transition-colors duration-150",
         item.enabled ? "border-line" : "border-line-subtle",
+        onPreview && "cursor-pointer hover:border-line-accent",
       )}
       // --- slice: selection context menu ---
       onContextMenu={(event) => menu.open(event, item)}
+      onClick={event => {
+        if (!(event.target as HTMLElement).closest("button, input, a, [role='switch']")) onPreview?.();
+      }}
     >
       {menu.menu}
-      <div
-        className={cn(
-          "flex items-center justify-center h-96 bg-elevated",
-          item.enabled ? "text-fg-secondary" : "text-fg-disabled",
-        )}
-      >
-        <Icon size={28} />
-      </div>
+      {image ? (
+        <img src={image} alt="" loading="lazy" className="w-full h-96 object-contain bg-elevated"
+          key={image}
+          onError={() => setFailures((previous) => ({
+            revision,
+            urls: [...new Set([...(previous.revision === revision ? previous.urls : []), image])],
+          }))} />
+      ) : null}
 
       <div className="flex flex-col gap-8 p-12">
         <div className="flex items-start gap-8">
           <div className="flex-1 min-w-0 flex flex-col gap-2">
-            <span
+            <button
+              type="button"
+              onClick={onPreview}
+              aria-label={t("preview.open", { name: item.displayName })}
               className={cn(
-                "text-body-md-medium truncate",
+                "text-body-md-medium truncate text-left cursor-pointer",
                 item.enabled ? "text-fg" : "text-fg-muted",
               )}
               title={item.displayName}
             >
               {item.displayName}
-            </span>
+            </button>
             <span className="text-body-sm text-fg-muted truncate" title={item.fileName}>
               {sourceLine(item, t)}
             </span>
@@ -117,6 +136,11 @@ export function LibraryCard({
           />
         </div>
 
+        {item.mapNames?.length ? (
+          <ul className="flex flex-col gap-2 text-mono-xs text-fg-secondary">
+            {item.mapNames.map((name) => <li key={name} className="break-all">{name}</li>)}
+          </ul>
+        ) : null}
         <div className="flex items-center gap-8">
           {/* The row wraps instead of squeezing: a size that breaks across
               two lines is unreadable, a badge on the next line is not. */}
@@ -126,9 +150,16 @@ export function LibraryCard({
               {format.bytes(item.size)}
             </span>
             {conflicting ? (
-              <Badge tone="warm" icon={<AlertTriangle size={12} />}>
-                {t("card.conflict")}
-              </Badge>
+              <button
+                type="button"
+                onClick={onConflict}
+                title={t("conflicts.showNotice")}
+                className="cursor-pointer rounded-sm"
+              >
+                <Badge tone="warm" icon={<AlertTriangle size={12} />}>
+                  {t("card.conflict")}
+                </Badge>
+              </button>
             ) : null}
           </div>
           <button

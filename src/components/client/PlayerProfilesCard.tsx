@@ -8,10 +8,14 @@ import type { Client, PlayerProfile } from "../../lib/ipc";
 import {
   useDeleteProfile,
   useProfiles,
+  useSaberHilts,
+  useGameInfo,
   useSetDefaultProfile,
 } from "../../lib/queries";
 // --- slice: selection context menu ---
 import { Badge, Button, Dialog, useContextMenu, type MenuItem } from "../ui";
+import { ModelPreview } from "../ModelPreview";
+import { saberModeOf, saberValuesFor } from "../../lib/sabers";
 import { ColoredNickname } from "./ColoredNickname";
 import { blankProfile, ProfileForm } from "./ProfileForm";
 
@@ -40,6 +44,8 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
   /** The profile the confirmation dialog is about. */
   const [removing, setRemoving] = useState<PlayerProfile | null>(null);
 
+  const hasHilts = useGameInfo(client.game)?.hasSaberHilts ?? true;
+  const hilts = useSaberHilts(client.id, hasHilts);
   const profiles = book.data?.profiles ?? [];
   const defaultId = book.data?.defaultProfileId ?? null;
   const failure = book.error ?? remove.error ?? setDefault.error;
@@ -110,6 +116,7 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
               // --- slice: selection context menu ---
               onContextMenu={(event) => menu.open(event, profile)}
             >
+              <ModelPreview clientId={client.id} kind="character" value={profile.model ?? "kyle/default"} tint={profile.charColor} sabers={hasHilts ? saberValuesFor(saberModeOf(profile, hilts.data ?? []), profile, hilts.data ?? []) : undefined} thumbnail height={88} className="w-88 shrink-0" />
               <span className="flex-1 min-w-0 flex flex-col gap-2">
                 <span className="flex items-center gap-8 min-w-0">
                   <span className="text-body-md text-fg truncate">{profile.name}</span>

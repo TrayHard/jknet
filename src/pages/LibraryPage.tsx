@@ -2,10 +2,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
-  ExternalLink,
   Info,
   Library,
   Plus,
@@ -21,7 +19,11 @@ import { useNavigate } from "react-router";
 import { NEW_CLIENT_PARAM } from "../components/MissingClientToast";
 import { ConflictsDialog } from "../components/library/ConflictsDialog";
 import { JkhubBrowser } from "../components/library/JkhubBrowser";
+import { LibrarySearch } from "../components/library/LibrarySearch";
+import { LibrarySort } from "../components/library/LibrarySort";
 import { LibraryCard } from "../components/library/LibraryCard";
+import { FilePreviewDialog } from "../components/library/FilePreviewDialog";
+import { BaseGameBrowser } from "../components/library/BaseGameBrowser";
 import { RemoveItemDialog } from "../components/library/RemoveItemDialog";
 import { CATEGORIES } from "../components/library/categories";
 import { Page, PageHeader } from "../components/PageHeader";
@@ -29,7 +31,6 @@ import {
   Badge,
   Button,
   EmptyState,
-  Input,
   Select,
   Toggle,
   type SelectOption,
@@ -43,6 +44,7 @@ import {
   type LibraryChanged,
   type LibraryItem,
   type SkippedFile,
+  type SortDirection,
 } from "../lib/ipc";
 // --- slice: game switch ---
 import {
@@ -55,42 +57,35 @@ import {
   libraryKeys,
   useAddLibraryFiles,
   useClients,
-  useJkhubIndexStatus,
   useLibrary,
   useLibraryConflicts,
   useRemoveLibraryItem,
   useSetLibraryItemEnabled,
   useSettings,
+  useUpdateSettings,
 } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 
-/** Where the community publishes the files this screen installs. */
-const JKHUB_FILES = "https://jkhub.org/files/";
-
-type LibraryTab = "installed" | "jkhub" | "updates";
+type LibraryTab = "installed" | "baseGame" | "jkhub";
 type SortMode = "recent" | "name" | "size";
+type InstalledCategory = LibraryCategory | "all" | "conflicts";
 
 // --- slice: i18n --- the ids are the state, the labels come from the catalog.
-const TAB_IDS: LibraryTab[] = ["installed", "jkhub", "updates"];
+const TAB_IDS: LibraryTab[] = ["installed", "baseGame", "jkhub"];
 const SORT_IDS: SortMode[] = ["recent", "name", "size"];
 
 /**
- * The Library screen: the pk3 files of one client.
- *
- * Everything on the screen is scoped to the client picked in the bar under
- * the title. A file belongs to a client, not to the launcher, because the
- * engine reads it from that client's `home\` folder — JKNet never writes into
- * the game folder.
+ * Client packages, the active game's original assets, and the JKHub catalogue.
+ * Installed files belong to the selected client; original assets are read-only
+ * and remain available without a client. JKNet never writes into the game folder.
  */
 export function LibraryPage() {
   const { t } = useTranslation("library");
   const { t: tCommon } = useTranslation("common");
-  // --- slice: library cleanup --- one search box serves the three tabs, and
-  // the reason it can be off belongs to the JKHub catalogue.
-  const { t: tJkhub } = useTranslation("jkhub");
   const errorText = useErrorText();
   const clients = useClients();
   const settings = useSettings();
+  const updateSettings = useUpdateSettings();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   // --- slice: game switch ---
@@ -104,13 +99,17 @@ export function LibraryPage() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [tab, setTab] = useState<LibraryTab>("installed");
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<LibraryCategory | "all">("all");
+  const [category, setCategory] = useState<InstalledCategory>("all");
   const [sort, setSort] = useState<SortMode>("recent");
+  const [direction, setDirection] = useState<SortDirection>("desc");
   const [onlyEnabled, setOnlyEnabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [skipped, setSkipped] = useState<SkippedFile[]>([]);
   const [removing, setRemoving] = useState<LibraryItem | null>(null);
+  const [previewing, setPreviewing] = useState<LibraryItem | null>(null);
   const [conflictsOpen, setConflictsOpen] = useState(false);
+  const [showConflictNotice, setShowConflictNotice] = useState<boolean | null>(null);
+  const noticeRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
 
   const items = useLibrary(clientId);
@@ -124,6 +123,8 @@ export function LibraryPage() {
     [clients.data, activeGame],
   );
   const client = clientList.find((entry) => entry.id === clientId) ?? null;
+
+  useEffect(() => { setPreviewing(null); }, [clientId, activeGame]);
 
   // Follows the default client until the player picks another one, and
   // recovers when the selected client is deleted on the Clients screen.
@@ -221,11 +222,6 @@ export function LibraryPage() {
     }
   };
 
-  const browseJkhub = () => {
-    if (!isTauri()) return;
-    void openUrl(JKHUB_FILES).catch((e: unknown) => setError(errorText(e)));
-  };
-
   // ---------------------------------------------------------------------
   // Filtering
   // ---------------------------------------------------------------------
@@ -252,51 +248,38 @@ export function LibraryPage() {
     return map;
   }, [matching]);
 
-  const shown = useMemo(() => {
-    const list = matching.filter(
-      (item) => category === "all" || item.category === category,
-    );
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      if (sort === "name") {
-        return a.displayName.localeCompare(b.displayName, undefined, {
-          sensitivity: "base",
-        });
-      }
-      if (sort === "size") return b.size - a.size;
-      return b.addedAt.localeCompare(a.addedAt);
-    });
-    return sorted;
-  }, [matching, category, sort]);
-
   const conflictReport = conflicts.data ?? null;
   const conflicting = useMemo(
     () => new Set(conflictReport?.files ?? []),
     [conflictReport],
   );
 
-  // --- slice: library cleanup ---
-  // The box in the header is the only search on the screen: depending on the
-  // tab it filters the installed files or queries the JKHub catalogue, and it
-  // keeps what was typed across a switch. **Updates** has nothing to filter
-  // yet — the tab is an empty state — and the query is waiting for it.
-  //
-  // **Browse JKHub** answers out of the catalogue index, which the core may
-  // not have yet. That is the one state the box switches itself off in, with
-  // the reason in its tooltip — off only while that tab is open, because the
-  // files of a client do not depend on jkhub.org. Reading the status here is
-  // a second reader of the entry the tab already holds, not a second request.
-  const indexStatus = useJkhubIndexStatus(activeGame, tab === "jkhub");
-  const searchOff = tab === "jkhub" && indexStatus.data?.available === false;
-
-  // --- slice: library polish ---
-  // Clearing puts the caret back where the player was typing: the box is the
-  // one control of the screen they came back to, and a cleared field they
-  // then have to click into costs the same keystroke twice.
-  const searchBox = useRef<HTMLInputElement>(null);
-  const clearSearch = () => {
-    setSearch("");
-    searchBox.current?.focus();
+  const shown = useMemo(() => {
+    const list = matching.filter((item) => {
+      if (category === "all") return true;
+      if (category === "conflicts") return conflicting.has(item.id);
+      return item.category === category;
+    });
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      const order = sort === "name"
+        ? a.displayName.localeCompare(b.displayName, undefined, { sensitivity: "base" })
+        : sort === "size" ? a.size - b.size : a.addedAt.localeCompare(b.addedAt);
+      return (direction === "asc" ? order : -order) || a.id.localeCompare(b.id);
+    });
+    return sorted;
+  }, [matching, category, sort, direction, conflicting]);
+  const noticeVisible =
+    showConflictNotice ?? (settings.data?.libraryConflictNoticeDismissed === false);
+  const dismissConflicts = () => {
+    setShowConflictNotice(false);
+    updateSettings.mutate({ libraryConflictNoticeDismissed: true }, {
+      onError: (failure) => setError(errorText(failure)),
+    });
+  };
+  const showConflicts = () => {
+    setShowConflictNotice(true);
+    requestAnimationFrame(() => noticeRef.current?.scrollIntoView({ block: "nearest" }));
   };
 
   const queryError = clients.error ?? items.error ?? conflicts.error ?? null;
@@ -310,54 +293,7 @@ export function LibraryPage() {
 
   return (
     <Page>
-      <PageHeader
-        title={t("title")}
-        actions={
-          <>
-            {/* --- slice: library polish ---
-                The box searches three tabs, and on **Browse JKHub** it takes
-                operators such as `by:author` on top of the words — 232 px hid
-                the second half of anything longer than two words. It starts
-                at 360 px and grows with the window to 480; at the 1100 px
-                minimum the header row wraps and the buttons take a line of
-                their own, which is what `PageHeader` has a basis for. */}
-            <Input
-              ref={searchBox}
-              icon={<Search size={16} />}
-              placeholder={t("searchPlaceholder")}
-              value={search}
-              className="w-[clamp(360px,30vw,480px)]"
-              disabled={searchOff}
-              title={searchOff ? tJkhub("search.unavailable") : undefined}
-              onChange={(event) => setSearch(event.target.value)}
-              trailing={
-                search !== "" ? (
-                  <button
-                    type="button"
-                    aria-label={t("clearSearch")}
-                    title={t("clearSearch")}
-                    onClick={clearSearch}
-                    className="inline-flex size-20 items-center justify-center rounded-sm text-fg-muted hover:text-fg cursor-pointer select-none"
-                  >
-                    <X size={14} />
-                  </button>
-                ) : undefined
-              }
-            />
-            <Button icon={<ExternalLink size={16} />} onClick={browseJkhub}>
-              {t("browseJkhub")}
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Plus size={16} />}
-              disabled={!clientId || busy}
-              onClick={() => void pickFiles()}
-            >
-              {t("addFiles")}
-            </Button>
-          </>
-        }
-      />
+      <PageHeader title={t("title")} />
 
       {failure ? (
         <div
@@ -369,10 +305,8 @@ export function LibraryPage() {
         </div>
       ) : null}
 
-      {/* Client bar ------------------------------------------------------
-          --- slice: library cleanup --- the picker and its label, nothing
-          else: which client a file goes into is a choice, not a paragraph. */}
-      <section className="flex items-center gap-12 rounded-lg border border-line bg-surface p-12 mb-16">
+      {/* The target client and the local install action stay together. */}
+      <section className="flex flex-wrap items-center gap-12 rounded-lg border border-line bg-surface p-12 mb-16">
         <span className="text-label-xs text-fg-muted">{t("clientBar.label")}</span>
         <Select
           ariaLabel={t("clientBar.label")}
@@ -382,6 +316,15 @@ export function LibraryPage() {
           onChange={setClientId}
           className="w-200"
         />
+        <Button
+          variant="primary"
+          icon={<Plus size={16} />}
+          disabled={!clientId || busy}
+          onClick={() => void pickFiles()}
+          className="ml-auto"
+        >
+          {t("addFiles")}
+        </Button>
       </section>
 
       {/* Tabs ------------------------------------------------------------ */}
@@ -424,11 +367,20 @@ export function LibraryPage() {
           onCategory={setCategory}
           sort={sort}
           onSort={setSort}
+          direction={direction}
+          onDirection={setDirection}
+          search={search}
+          onSearch={setSearch}
           onlyEnabled={onlyEnabled}
           onOnlyEnabled={setOnlyEnabled}
           conflicting={conflicting}
           conflictCount={conflictReport?.files.length ?? 0}
           onShowConflicts={() => setConflictsOpen(true)}
+          noticeVisible={noticeVisible}
+          noticeRef={noticeRef}
+          onDismissNotice={dismissConflicts}
+          onConflict={showConflicts}
+          conflictMatches={matching.filter(item => conflicting.has(item.id)).length}
           busy={busy}
           onToggle={(item, enabled) =>
             setEnabled.mutate(
@@ -437,10 +389,9 @@ export function LibraryPage() {
             )
           }
           onRemove={setRemoving}
-          onBrowse={browseJkhub}
-          onAdd={() => void pickFiles()}
+          onPreview={setPreviewing}
         />
-      ) : tab === "jkhub" ? (
+      ) : tab === "baseGame" ? <BaseGameBrowser key={activeGame} game={activeGame} clientId={clientId} /> : (
         // --- slice: jkhub ---
         <JkhubBrowser
           clientId={clientId}
@@ -448,12 +399,6 @@ export function LibraryPage() {
           installed={all}
           search={search}
           onSearch={setSearch}
-        />
-      ) : (
-        <EmptyState
-          icon={<ExternalLink size={24} />}
-          title={t("empty.updatesTitle")}
-          text={t("empty.updatesText")}
         />
       )}
 
@@ -518,6 +463,11 @@ export function LibraryPage() {
         />
       ) : null}
 
+      {previewing && clientId ? <FilePreviewDialog
+        target={{ kind: "installed", clientId, itemId: previewing.id, title: previewing.displayName }}
+        onClose={() => setPreviewing(null)}
+      /> : null}
+
       {removing ? (
         <RemoveItemDialog
           item={removing}
@@ -552,20 +502,28 @@ interface InstalledTabProps {
   all: LibraryItem[];
   shown: LibraryItem[];
   counts: Map<LibraryCategory, number>;
-  category: LibraryCategory | "all";
-  onCategory: (category: LibraryCategory | "all") => void;
+  category: InstalledCategory;
+  onCategory: (category: InstalledCategory) => void;
   sort: SortMode;
   onSort: (sort: SortMode) => void;
+  direction: SortDirection;
+  onDirection: (direction: SortDirection) => void;
+  search: string;
+  onSearch: (search: string) => void;
   onlyEnabled: boolean;
   onOnlyEnabled: (value: boolean) => void;
   conflicting: Set<string>;
   conflictCount: number;
   onShowConflicts: () => void;
+  noticeVisible: boolean;
+  noticeRef: React.RefObject<HTMLDivElement | null>;
+  onDismissNotice: () => void;
+  onConflict: () => void;
+  conflictMatches: number;
   busy: boolean;
   onToggle: (item: LibraryItem, enabled: boolean) => void;
   onRemove: (item: LibraryItem) => void;
-  onBrowse: () => void;
-  onAdd: () => void;
+  onPreview: (item: LibraryItem) => void;
 }
 
 /** The Installed tab: categories on the left, cards on the right. */
@@ -583,16 +541,24 @@ function InstalledTab({
   onCategory,
   sort,
   onSort,
+  direction,
+  onDirection,
+  search,
+  onSearch,
   onlyEnabled,
   onOnlyEnabled,
   conflicting,
   conflictCount,
   onShowConflicts,
+  noticeVisible,
+  noticeRef,
+  onDismissNotice,
+  onConflict,
+  conflictMatches,
   busy,
   onToggle,
   onRemove,
-  onBrowse,
-  onAdd,
+  onPreview,
 }: InstalledTabProps) {
   const { t } = useTranslation("library");
   const { t: tCommon } = useTranslation("common");
@@ -624,26 +590,17 @@ function InstalledTab({
         icon={<Library size={24} />}
         title={t("empty.noFilesTitle", { client: clientName })}
         text={t("empty.noFilesText")}
-        action={
-          <div className="flex items-center gap-8">
-            <Button icon={<ExternalLink size={16} />} onClick={onBrowse}>
-              {t("browseJkhub")}
-            </Button>
-            <Button variant="primary" icon={<Plus size={16} />} onClick={onAdd}>
-              {t("addFiles")}
-            </Button>
-          </div>
-        }
       />
     );
   }
 
   return (
     <>
-      {conflictCount > 1 ? (
+      {noticeVisible && conflictCount > 1 ? (
         <div
+          ref={noticeRef}
           role="status"
-          className="flex items-center gap-8 rounded-md border border-line-warm bg-warm-subtle p-12 mb-16"
+          className="flex flex-wrap items-center gap-8 rounded-md border border-line-warm bg-warm-subtle p-12 mb-16"
         >
           <AlertTriangle size={16} className="text-fg-warm shrink-0" />
           <span className="text-body-sm text-fg flex-1">
@@ -652,8 +609,33 @@ function InstalledTab({
           <Button size="sm" onClick={onShowConflicts}>
             {t("conflicts.see")}
           </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="px-8"
+            aria-label={t("conflicts.dismissNotice")}
+            title={t("conflicts.dismissNotice")}
+            onClick={onDismissNotice}
+          >
+            <X size={16} aria-hidden />
+          </Button>
         </div>
       ) : null}
+
+      <div className="flex flex-wrap items-center gap-12 pb-16">
+        <LibrarySearch value={search} onChange={onSearch} />
+        <label className="flex items-center gap-8 cursor-pointer ml-auto">
+          <Toggle label={t("onlyEnabledSwitch")} checked={onlyEnabled} onChange={onOnlyEnabled} />
+          <span className="text-body-sm text-fg-secondary">{t("onlyEnabled")}</span>
+        </label>
+        <LibrarySort
+          value={sort}
+          onChange={value => onSort(value as SortMode)}
+          options={SORT_IDS.map(id => ({ value: id, label: t(`sort.${id}`) }))}
+          direction={direction}
+          onDirection={onDirection}
+        />
+      </div>
 
       <div className="flex items-start gap-24">
         <aside className="w-200 shrink-0 flex flex-col gap-2">
@@ -662,6 +644,12 @@ function InstalledTab({
             count={[...counts.values()].reduce((sum, n) => sum + n, 0)}
             active={category === "all"}
             onClick={() => onCategory("all")}
+          />
+          <CategoryButton
+            label={t("categories.conflicts")}
+            count={conflictMatches}
+            active={category === "conflicts"}
+            onClick={() => onCategory("conflicts")}
           />
           {CATEGORIES.map((entry) => (
             <CategoryButton
@@ -675,28 +663,6 @@ function InstalledTab({
         </aside>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-12 pb-12">
-            <label className="flex items-center gap-8 cursor-pointer">
-              <Toggle
-                label={t("onlyEnabledSwitch")}
-                checked={onlyEnabled}
-                onChange={onOnlyEnabled}
-              />
-              <span className="text-body-sm text-fg-secondary">
-                {t("onlyEnabled")}
-              </span>
-            </label>
-            <span className="flex-1" />
-            <span className="text-label-xs text-fg-muted">{t("sort.label")}</span>
-            <Select
-              ariaLabel={t("sort.label")}
-              options={SORT_IDS.map((id) => ({ value: id, label: t(`sort.${id}`) }))}
-              value={sort}
-              onChange={(value) => onSort(value as SortMode)}
-              className="w-136"
-            />
-          </div>
-
           {shown.length === 0 ? (
             <EmptyState
               icon={<Search size={24} />}
@@ -711,8 +677,10 @@ function InstalledTab({
                   item={item}
                   busy={busy}
                   conflicting={conflicting.has(item.id)}
+                  onConflict={onConflict}
                   onToggle={(enabled) => onToggle(item, enabled)}
                   onRemove={() => onRemove(item)}
+                  onPreview={() => onPreview(item)}
                 />
               ))}
             </ul>

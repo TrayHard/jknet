@@ -35,6 +35,18 @@ mod account;
 // owns the pk3 files of a client, this one looks inside them and inside the
 // retail archives of the game, which the library never touches.
 mod appearance;
+mod model_preview;
+mod file_preview;
+mod base_game;
+mod file_preview_products;
+mod media;
+mod user_files;
+mod configs;
+mod video;
+mod video_encoder;
+mod video_process;
+mod video_settings;
+mod video_progress;
 // --- slice: client window ---
 // Opening, finding and closing the `client-<slug>` windows. Kept apart from
 // `clients` because it is about windows, not records, and `clients` has to
@@ -59,6 +71,7 @@ mod launch;
 mod launch_tokens;
 mod levelshots;
 mod library;
+mod library_preview;
 // The one client of JKNet Online API v1. `account` calls its sign-in half and
 // `friends` the rest, so a token is attached to a request in one place and
 // one connection pool serves both.
@@ -88,6 +101,13 @@ use tauri_plugin_log::{Target, TargetKind};
 /// Keeps a log file small enough to attach to a bug report.
 const MAX_LOG_FILE_SIZE: u128 = 2 * 1024 * 1024;
 
+/// Reqwest enables aws-lc-rs and the updater enables ring. Select one before
+/// any client builds its TLS configuration; otherwise secure WebSockets panic.
+fn configure_tls() {
+    // A process may already have selected its provider (for example in tests).
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+}
+
 /// Resolves the folder that holds `settings.json`.
 ///
 /// Tauri answers `%LOCALAPPDATA%\org.jknet.launcher`, the folder named after
@@ -111,8 +131,11 @@ fn resolve_config_root(app: &tauri::App) -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    configure_tls();
     tauri::Builder::default()
+        .manage(video::VideoState::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         // --- slice: i18n ---
         // `locale()` alone: a launcher set to «System language» has to know
@@ -125,8 +148,8 @@ pub fn run() {
         // The launcher is one application with one way out. A client window
         // has no navigation of its own, so a `main` that closed while two of
         // them stayed open would leave a process alive behind windows that
-        // cannot reach anything else. Both events are handled: `CloseRequested`
-        // is the ordinary path and `Destroyed` covers a close that skipped it.
+        // cannot reach anything else. Only actual destruction closes secondary
+        // windows: the main frontend can cancel a close over an unsaved draft.
         //
         // Both are logged for every window, not only for `main`. A window that
         // refuses to close and a window that closed without the frontend
@@ -144,9 +167,10 @@ pub fn run() {
                 }
                 _ => return,
             }
-            if label != "main" {
+            if label != "main" || !matches!(event, tauri::WindowEvent::Destroyed) {
                 return;
             }
+            video::cancel_all(&window.state::<video::VideoState>());
             // Best effort by design: `close_all` logs whatever refuses to
             // close and never panics, so the way out of the launcher cannot be
             // blocked by a window that is already gone.
@@ -308,6 +332,36 @@ pub fn run() {
         // a disabled button, because a reloaded window would press it again.
         .manage(RefreshState::default())
         .invoke_handler(tauri::generate_handler![
+            video::list_video_jobs,
+            video::export_demo_video,
+            video::cancel_video_job,
+            video_settings::video_preferences,
+            video_settings::save_video_preset,
+            video_settings::delete_video_preset,
+            video::prepare_video_preview,
+            configs::list_configs,
+            configs::save_config,
+            configs::delete_config,
+            configs::set_config_layers,
+            configs::config_conflicts,
+            configs::merge_configs,
+            configs::client_config_files,
+            configs::client_config_context,
+            configs::set_default_config,
+            configs::profile_bind_command,
+            media::list_media,
+            media::update_media,
+            media::delete_media,
+            media::delete_media_batch,
+            media::open_media_folder,
+            media::copy_screenshot,
+            media::play_media_demo,
+            model_preview::get_preview_assets,
+            file_preview::preview_library_file,
+            base_game::preview_base_game,
+            file_preview::get_file_preview_assets,
+            file_preview::release_file_preview,
+            jkhub::jkhub_preview,
             settings::get_settings,
             settings::update_settings,
             paths::get_data_paths,
@@ -388,6 +442,7 @@ pub fn run() {
             jkhub::jkhub_categories,
             jkhub::jkhub_list,
             jkhub::jkhub_file,
+            jkhub::jkhub_comments,
             jkhub::jkhub_resolve_download,
             jkhub::jkhub_install,
             jkhub::jkhub_open,

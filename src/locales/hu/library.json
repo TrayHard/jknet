@@ -2,7 +2,6 @@
   "title": "Könyvtár",
   "searchPlaceholder": "Fájlok keresése",
   "clearSearch": "Clear search",
-  "browseJkhub": "JKHub böngészése",
   "addFiles": "Fájlok hozzáadása",
   "pickTitle": "pk3-fájlok hozzáadása",
   "pickFilter": "Jedi Academy archívumok",
@@ -12,13 +11,17 @@
   "tabs": {
     "installed": "Telepítve",
     "jkhub": "JKHub böngészése",
-    "updates": "Frissítések"
+    "baseGame": "Alapjáték"
   },
   "sort": {
     "label": "Rendezés",
-    "recent": "Legutóbbi",
+    "recent": "Hozzáadás dátuma",
     "name": "Név",
-    "size": "Méret"
+    "size": "Méret",
+    "ascending": "Növ.",
+    "descending": "Csökk.",
+    "setAscending": "Növekvő rendezés",
+    "setDescending": "Csökkenő rendezés"
   },
   "categories": {
     "all": "Mind",
@@ -28,7 +31,8 @@
     "mod": "Modok",
     "hud": "HUD és UI",
     "sound": "Hangok",
-    "other": "Egyéb"
+    "other": "Egyéb",
+    "conflicts": "Ütközések"
   },
   "categoryOne": {
     "skin": "Skin",
@@ -55,11 +59,9 @@
     "noClientsText": "A könyvtár fájljai mindig egy kliensbe kerülnek. Hozzon létre egyet, és ez a lista megtelik.",
     "newClient": "Új kliens",
     "noFilesTitle": "{{client}} még nem tartalmaz fájlt",
-    "noFilesText": "Keressen skineket, markolatokat, pályákat és modokat a JKHub oldalán, majd adja hozzá itt a pk3-fájlokat. Rá is húzhatja őket erre az ablakra.",
+    "noFilesText": "Helyi pk3-fájlokat a „Fájlok hozzáadása” gombbal adhatsz hozzá, vagy behúzhatod őket ebbe az ablakba. A JKHub lapról is telepíthetsz fájlokat.",
     "filteredTitle": "Nincs találat",
-    "filteredText": "Ebben a kliensben egy fájl sem felel meg a keresésnek és a szűrőknek. Törölje őket, és a teljes könyvtár látszik.",
-    "updatesTitle": "Még nincs frissítés",
-    "updatesText": "Ha a fájlok JKHub-verziót kapnak, itt jelennek meg azok, amelyekhez újabb kiadás jött ki."
+    "filteredText": "Ebben a kliensben egy fájl sem felel meg a keresésnek és a szűrőknek. Törölje őket, és a teljes könyvtár látszik."
   },
   "fallback": {
     "thisClient": "ez a kliens",
@@ -106,11 +108,67 @@
       "map": "A level the server can load.",
       "ui": "A menu screen or the text inside it.",
       "other": "Another file the game reads."
-    }
+    },
+    "showNotice": "Ütközési értesítés megjelenítése",
+    "dismissNotice": "Ütközési értesítés bezárása"
   },
   "remove": {
     "title": "{{file}} eltávolítása innen: {{client}}?",
     "body": "{{fileName}}, {{size}}. A JKNet törli a fájlt a kliens {{folder}} mappájából. A többi kliens megtartja a saját példányát.",
     "confirm": "Fájl eltávolítása"
+  },
+  "preview": {
+    "open": "Előnézet: {{name}}",
+    "loading": "Előnézet előkészítése…",
+    "search": "Objektumok keresése",
+    "contents": "Objektumok",
+    "empty": "Nincs megtekinthető objektum",
+    "emptyText": "Ebben a kijelölésben nincs előnézetben megjeleníthető objektum.",
+    "previous": "Előző objektum",
+    "next": "Következő objektum",
+    "audioFailed": "Ez a hangfájl nem játszható le.",
+    "kind": {
+      "all": "Minden objektum",
+      "skin": "Karakterek és skinek",
+      "hilt": "Markolatok",
+      "weapon": "Fegyverek",
+      "npc": "NPC-k",
+      "vehicle": "Járművek",
+      "music": "Zene",
+      "sound": "Hangeffektusok",
+      "map": "Pályák"
+    },
+    "weaponOnly": "Csak fegyver",
+    "withCharacter": "Karakterrel",
+    "selectClient": "Válassz klienst egy telepített karakter kiválasztásához"
+  },
+  "mapPreview": {
+    "title": "Pálya előnézete",
+    "viewport": "Pályanavigáció",
+    "loading": "Pálya előkészítése…",
+    "viewpoint": "Nézőpont",
+    "overview": "Áttekintés",
+    "spawn": "Kezdőpont {{number}}",
+    "controls": "Húzás: körülnézés · Jobb húzás: eltolás · Görgő: mozgás · WASD / nyilak: repülés · Q/E: le/fel · Shift: gyorsítás",
+    "missingTextures": "Néhány textúra nem érhető el ({{count}}).",
+    "invalid": "A pálya adatai sérültek.",
+    "unsupported": "Ez a pályaformátum nem támogatott.",
+    "tooLarge": "Ez a pálya meghaladja az előnézet korlátait.",
+    "empty": "A pályán nincs látható geometria.",
+    "missing": "A pályafájl nem található.",
+    "fullscreen": "Teljes képernyő",
+    "exitFullscreen": "Kilépés a teljes képernyőből",
+    "fullscreenFailed": "Nem sikerült váltani a teljes képernyős módot. Próbálja újra."
+  },
+  "baseGame": {
+    "loading": "A játék tartalmának előkészítése…",
+    "description": "A játék archívumainak eredeti tartalma. A telepített modok nem módosítják ezeket az előnézeteket.",
+    "search": "Keresés a játék tartalmában",
+    "archive": "Játékarchívum",
+    "allArchives": "Összes archívum",
+    "missingTitle": "A játék fájljai nem találhatók",
+    "missingText": "Válassza ki a játék mappáját a beállításokban az alapjáték tartalmának böngészéséhez.",
+    "openSettings": "Beállítások megnyitása",
+    "noResults": "Egyetlen játékobjektum sem felel meg ezeknek a szűrőknek. Töröld a keresést, vagy válassz másik kategóriát vagy archívumot."
   }
 }

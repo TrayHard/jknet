@@ -75,13 +75,11 @@
 //! own menu draws a live Ghoul2 model next to a plain text list — so the list
 //! here is text: the name, and whether the hilt is one blade or a staff.
 //!
-//! ## Why there is no 3D preview of either
+//! ## Preview resources
 //!
-//! `.glm` and `.gla` are Raven's Ghoul2, parsed by the engine's own renderer
-//! (`codemp/rd-vanilla/tr_ghoul2.cpp`) and by nothing else. There is no
-//! JavaScript or WebAssembly reader for the format, and the game's own menu
-//! does not draw a picture either: it runs the real engine underneath the list.
-//! A 128×128 icon is what the game has, so it is what the launcher shows.
+//! The shared frontend Ghoul2 reader renders GLM/GLA resources supplied by
+//! `model_preview`. This scanner provides the picker icons and part choices;
+//! the library uses the same scanner for an explicitly opened package.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::{self, File};
@@ -104,7 +102,7 @@ use crate::settings::Settings;
 use crate::state::AppState;
 
 /// Folder of the extracted skin icons inside `cache\`.
-const CACHE_DIR: &str = "skins";
+const CACHE_DIR: &str = "skins-v2";
 
 /// Folder inside an archive that holds the player models.
 const MODEL_PREFIX: &str = "models/players/";
@@ -208,7 +206,7 @@ const PREVIEW_SIDE: u32 = 128;
 /// straight onto the page showed the dark surface through everything the
 /// artist had cut away. The composed picture has no alpha at all, so there is
 /// nothing left to show through.
-const PREVIEW_GROUND: [u8; 3] = [0xb9, 0xc1, 0xd1];
+const PREVIEW_GROUND: [u8; 3] = [0x33, 0x33, 0x33];
 
 // ---------------------------------------------------------------------------
 // Documents
@@ -352,6 +350,48 @@ struct Source {
     /// Modification time in Unix seconds, `0` when the system reports none.
     mtime: u64,
     size: u64,
+}
+
+/// Reuse the character picker scanner for an explicitly opened package.
+pub(crate) fn preview_models(path: &Path, cache: &Path) -> Result<Vec<PlayerModel>> {
+    preview_models_from_sources(&[path.to_path_buf()], cache)
+}
+
+pub(crate) fn preview_models_from_sources(paths: &[PathBuf], cache: &Path) -> Result<Vec<PlayerModel>> {
+    scan_models(&preview_archive_sources(paths)?, cache)
+}
+
+pub(crate) fn preview_hilts(paths: &[PathBuf]) -> Result<Vec<SaberHilt>> {
+    Ok(scan_hilts(&preview_archive_sources(paths)?))
+}
+
+fn preview_archive_sources(paths: &[PathBuf]) -> Result<Vec<Source>> {
+    let mut sources = Vec::new();
+    for path in paths {
+        let meta = fs::metadata(path).map_err(|error| AppError::io_path("cannot inspect", path, error))?;
+        sources.push(Source {
+            path: path.to_path_buf(),
+            mtime: meta.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|since| since.as_secs()).unwrap_or(0),
+            size: meta.len(),
+        });
+    }
+    Ok(sources)
+}
+
+pub(crate) fn preview_sources(paths: &DataPaths, settings: &Settings, client: &Client) -> Vec<PathBuf> {
+    let mut sources = Vec::new();
+    let engine = crate::engines::require(&client.engine_id).ok();
+    let active = client.fs_game.as_deref().or(engine.and_then(|e| e.default_fs_game));
+    let mut folders = vec!["base"];
+    if let Some(active) = active.filter(|f| *f != "base") { folders.push(active); }
+    for folder in folders {
+        if crate::user_files::valid_folder(folder).is_err() { continue; }
+        if let Some(game_data) = settings.game_data_path(client.game) { collect_from_folder(&Path::new(game_data).join(folder), &mut sources); }
+        collect_from_folder(&paths.client_engine_dir(&client.id).join(folder), &mut sources);
+        collect_from_folder(&paths.client_home_dir(&client.id).join(folder), &mut sources);
+    }
+    sources.into_iter().map(|source| source.path).collect()
 }
 
 /// Every archive one client loads, in the order the engine loads them.
@@ -663,7 +703,8 @@ fn store_icon(
         return Ok(None);
     };
 
-    let encoded = if fits && format != ImageFormat::Tga {
+    let tint_mask = PART_PREFIXES.iter().any(|prefix| variant.starts_with(prefix));
+    let encoded = if fits && format != ImageFormat::Tga && !tint_mask {
         bytes.to_vec()
     } else {
         let decoded = match reader(bytes, format).decode() {
@@ -689,7 +730,9 @@ fn store_icon(
                 .to_rgb8()
                 .write_with_encoder(JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY))?;
         } else {
-            decoded.write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?;
+            // Part icon alpha is a dye mask; the game draws the full RGB base.
+            if tint_mask { decoded.to_rgb8().write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?; }
+            else { decoded.write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?; }
         }
         out
     };
@@ -1617,7 +1660,7 @@ where
 /// `asset protocol not configured to allow the path`. That is what happened to
 /// the map pictures on 11 September 2026. Allowing the file itself closes the
 /// gap: the same call canonicalises the same string.
-fn allow_icons(app: &AppHandle, models: &[PlayerModel]) {
+pub(crate) fn allow_icons(app: &AppHandle, models: &[PlayerModel]) {
     for icon in models.iter().flat_map(icons_of) {
         allow_file(app, icon);
     }
@@ -2500,7 +2543,7 @@ dual_1
         assert!(!sources.is_empty(), "no archive in {}", base.display());
 
         let temp = TempDir::new().expect("temp dir");
-        let dir = temp.path().join("skins");
+        let dir = std::env::var_os("JKNET_ICON_QA_DIR").map(PathBuf::from).unwrap_or_else(|| temp.path().join("skins"));
 
         let started = Instant::now();
         let models = scan_models(&sources, &dir).expect("the skin list");
@@ -2549,6 +2592,10 @@ dual_1
 
         let started = Instant::now();
         let hilts = scan_hilts(&sources);
+        if std::env::var_os("JKNET_ICON_QA_DIR").is_some() {
+            fs::write(dir.join("models.json"), serde_json::to_vec(&models).unwrap()).unwrap();
+            fs::write(dir.join("hilts.json"), serde_json::to_vec(&hilts).unwrap()).unwrap();
+        }
         println!(
             "{} hilts in {} ms: {}",
             hilts.len(),

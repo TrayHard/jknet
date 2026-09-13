@@ -1,20 +1,46 @@
 {
   "sort": {
     "label": "Sortuj według",
-    "recentlyUpdated": "Ostatnio zaktualizowane",
-    "newest": "Najnowsze",
-    "mostDownloaded": "Najczęściej pobierane",
-    "topRated": "Najwyżej oceniane",
+    "recentlyUpdated": "Data aktualizacji",
+    "newest": "Data publikacji",
+    "mostDownloaded": "Pobrania",
+    "topRated": "Ocena",
     "name": "Nazwa"
   },
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_few": "{{count}} results in {{game}}",
     "results_many": "{{count}} results in {{game}}",
-    "results_other": "{{count}} results in {{game}}"
+    "results_other": "{{count}} results in {{game}}",
+    "helpTitle": "Pomoc wyszukiwania",
+    "helpScope": "Te opcje działają w JKHub dla wybranej gry i kategorii.",
+    "helpCombine": "Łącz słowa i operatory w dowolnej kolejności. Wszystkie warunki muszą pasować. Powtarzanie filtrów dat zawęża zakres.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Format daty: YYYY-MM-DD. Bez aktualizacji używana jest data publikacji. Wielkość liter i łacińskie znaki diakrytyczne są pomijane. Cudzysłowy działają tylko po by:. Symbole wieloznaczne, OR i inne operatory nie są obsługiwane. Nieprawidłowa data jest traktowana jak słowo wyszukiwania.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Każde słowo musi wystąpić w tytule, nazwie autora, tagach lub opisie. Pasują też fragmenty słów."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Znajdź autorów, których nazwy zawierają ten tekst."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "Wyszukaj pełną nazwę autora, łącznie ze spacjami."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "Zaktualizowano po tej dacie. Podany dzień jest wykluczony (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "Zaktualizowano przed tą datą. Podany dzień jest wykluczony (UTC)."
+      }
+    }
   },
   "refresh": "Odśwież",
   "sections": {
@@ -83,7 +109,11 @@
     "reinstall": "Zainstaluj ponownie",
     "fallbackAuthor": "JKHub",
     "updated": "Zaktualizowano {{date}}",
-    "submitted": "Dodano {{date}}"
+    "submitted": "Dodano {{date}}",
+    "reviews_one": "{{count}} recenzja",
+    "reviews_few": "{{count}} recenzje",
+    "reviews_many": "{{count}} recenzji",
+    "reviews_other": "{{count}} recenzji"
   },
   "details": {
     "loadingTitle": "Wczytywanie…",
@@ -106,7 +136,8 @@
     "comments": "Komentarze: {{count}}",
     "versions": "Wersje",
     "downloading": "Pobieranie… {{received}}",
-    "downloadingOf": "Pobieranie… {{received}} z {{total}}"
+    "downloadingOf": "Pobieranie… {{received}} z {{total}}",
+    "preview": "Pobierz do podglądu"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -132,5 +163,21 @@
     "conflicts_few": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
     "conflicts_many": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać.",
     "conflicts_other": "{{files}} już są w {{folder}}. Naciśnij Zastąp i zainstaluj, aby nadpisać."
+  },
+  "comments": {
+    "title": "Komentarze",
+    "loading": "Wczytywanie komentarzy…",
+    "empty": "Brak komentarzy.",
+    "stale": "Wyświetlane są zapisane komentarze. JKHub jest niedostępny.",
+    "pages": "Strony komentarzy",
+    "previous": "Wstecz",
+    "next": "Dalej",
+    "page": "Strona {{page}} z {{total}}"
+  },
+  "gallery": {
+    "previous": "Poprzedni zrzut ekranu",
+    "next": "Następny zrzut ekranu",
+    "position": "{{current}} z {{total}}",
+    "hint": "Użyj przycisków, kółka myszy lub klawiszy ← / →. Escape zamyka zrzut ekranu."
   }
 }

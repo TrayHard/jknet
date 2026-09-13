@@ -147,12 +147,19 @@ pub struct LibraryItem {
     pub sha1: Option<String>,
     /// Free text the player typed. Nothing writes it yet.
     pub notes: Option<String>,
+    #[serde(default)]
+    pub map_names: Vec<String>,
+    #[serde(default)]
+    pub preview_path: Option<String>,
+    #[serde(default)]
+    pub thumbnail_url: Option<String>,
 }
 
 /// What `inspect_pk3` reads out of an archive without installing it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Pk3Report {
+    pub map_names: Vec<String>,
     pub path: String,
     pub file_name: String,
     pub category: LibraryCategory,
@@ -288,9 +295,34 @@ impl ScannedFile {
 /// filled in for anything it does not know and pruned of anything that is
 /// gone.
 #[tauri::command]
-pub fn list_library(state: tauri::State<'_, AppState>, client_id: String) -> Result<Vec<LibraryItem>> {
+pub async fn list_library(app: tauri::AppHandle, state: tauri::State<'_, AppState>, client_id: String) -> Result<Vec<LibraryItem>> {
+    use tauri::Manager;
     let data = state.paths()?;
-    read_library(&data, &client_id)
+    let snapshots = crate::jkhub::snapshot::bundled_dir(&app);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut items = read_library(&data, &client_id)?;
+        let game = crate::clients::read_record(&data, &client_id)?.game;
+        let index = crate::jkhub::index::load(&data, snapshots.as_ref(), game);
+        for item in &mut items {
+            if let Some(path) = &item.preview_path {
+                if !Path::new(path).is_file() || app.asset_protocol_scope().allow_file(path).is_err() {
+                    item.preview_path = None;
+                }
+            }
+            item.thumbnail_url = item.provenance.as_ref().and_then(|origin| {
+                index.as_ref().and_then(|loaded| loaded.index.get(origin.file_id))
+                    .and_then(|file| file.thumbnail_url.clone())
+                    .or_else(|| {
+                        let cached = crate::jkhub::cache::read::<crate::jkhub::types::JkhubFile>(
+                            &data, &crate::jkhub::cache::file_name(origin.file_id),
+                        )?;
+                        let shot = cached.payload.screenshots.first()?;
+                        shot.thumbnail_url.clone().or_else(|| Some(shot.url.clone()))
+                    })
+            });
+        }
+        Ok(items)
+    }).await.map_err(|e| AppError::Image(format!("library scan did not finish: {e}")))?
 }
 
 /// Reads an archive without installing it: category, size, SHA-1 and a
@@ -392,6 +424,7 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
     let mut changed = false;
     let mut items = Vec::with_capacity(files.len());
     let mut present = BTreeSet::new();
+    let mut preview_paths = Vec::new();
 
     for file in &files {
         let id = file.id();
@@ -415,6 +448,10 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
             Some(entry) => Some(entry.source.clone()),
             None => meta.source,
         };
+        let (map_names, preview_path) = crate::library_preview::inspect_protected(
+            &file.path, &data.cache.join("library-previews"), &preview_paths,
+        );
+        if let Some(path) = &preview_path { preview_paths.push(path.clone()); }
         items.push(LibraryItem {
             id,
             folder: file.folder.clone(),
@@ -428,6 +465,9 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
             sha1: meta.sha1,
             notes: meta.notes,
             provenance: from_jkhub,
+            map_names,
+            preview_path,
+            thumbnail_url: None,
         });
     }
 
@@ -615,6 +655,21 @@ fn parse_item_id(id: &str) -> Result<(String, String)> {
     Ok((folder.to_string(), file_name.to_string()))
 }
 
+pub(crate) fn preview_path(data: &DataPaths, client_id: &str, id: &str) -> Result<PathBuf> {
+    let dir = client_dir(data, client_id)?;
+    let (folder, file_name) = parse_item_id(id)?;
+    let home = dir.join("home").canonicalize().map_err(|e| AppError::io_path("cannot read client home", &dir, e))?;
+    for name in [&file_name, &format!("{file_name}{DISABLED_SUFFIX}")] {
+        let path = home.join(&folder).join(name);
+        if path.is_file() {
+            let canonical = path.canonicalize().map_err(|e| AppError::io_path("cannot resolve library file", &path, e))?;
+            if !canonical.starts_with(&home) { return Err(AppError::InvalidInput("library preview escapes client home".into())); }
+            return Ok(canonical);
+        }
+    }
+    Err(AppError::NotFound(format!("library item {id}")))
+}
+
 /// The name a card shows until the player renames it.
 fn default_display_name(file_name: &str) -> String {
     file_name
@@ -653,6 +708,7 @@ fn inspect(path: &Path) -> Result<Pk3Report> {
     top_level.dedup();
 
     Ok(Pk3Report {
+        map_names: crate::library_preview::map_names(&entries),
         path: path.display().to_string(),
         file_name: path
             .file_name()
@@ -871,6 +927,9 @@ fn add_files(
             sha1: meta.sha1,
             notes: None,
             provenance: None,
+            map_names: report.map_names,
+            preview_path: None,
+            thumbnail_url: None,
         });
     }
 

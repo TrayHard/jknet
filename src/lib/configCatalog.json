@@ -1,0 +1,170 @@
+[
+  {
+    "name": "sensitivity",
+    "defaultValue": "5",
+    "group": "input",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "m_pitch",
+    "defaultValue": "0.022",
+    "group": "input",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "m_yaw",
+    "defaultValue": "0.022",
+    "group": "input",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "m_filter",
+    "defaultValue": "0",
+    "group": "input",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "cl_run",
+    "defaultValue": "1",
+    "group": "input",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "rate",
+    "defaultValue": "25000",
+    "group": "network",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "snaps",
+    "defaultValue": "40",
+    "group": "network",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "cl_maxpackets",
+    "defaultValue": "63",
+    "group": "network",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "cl_packetdup",
+    "defaultValue": "1",
+    "group": "network",
+    "source": "codemp/client/cl_main.cpp"
+  },
+  {
+    "name": "r_picmip",
+    "defaultValue": "0",
+    "group": "graphics",
+    "source": "codemp/rd-vanilla/tr_init.cpp"
+  },
+  {
+    "name": "r_dynamiclight",
+    "defaultValue": "1",
+    "group": "graphics",
+    "source": "codemp/rd-vanilla/tr_init.cpp"
+  },
+  {
+    "name": "r_textureMode",
+    "defaultValue": "GL_LINEAR_MIPMAP_NEAREST",
+    "group": "graphics",
+    "source": "codemp/rd-vanilla/tr_init.cpp"
+  },
+  {
+    "name": "r_ext_texture_filter_anisotropic",
+    "defaultValue": "16",
+    "group": "graphics",
+    "source": "codemp/rd-vanilla/tr_init.cpp"
+  },
+  {
+    "name": "r_gamma",
+    "defaultValue": "1",
+    "group": "graphics",
+    "source": "codemp/rd-vanilla/tr_init.cpp"
+  },
+  {
+    "name": "r_finish",
+    "defaultValue": "0",
+    "group": "graphics",
+    "source": "codemp/rd-vanilla/tr_init.cpp"
+  },
+  {
+    "name": "cg_fov",
+    "defaultValue": "80",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_drawFPS",
+    "defaultValue": "0",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_drawTimer",
+    "defaultValue": "0",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_drawCrosshair",
+    "defaultValue": "1",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_crosshairSize",
+    "defaultValue": "24",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_drawGun",
+    "defaultValue": "1",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_lagometer",
+    "defaultValue": "0",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_simpleItems",
+    "defaultValue": "0",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "cg_drawRewards",
+    "defaultValue": "1",
+    "group": "hud",
+    "source": "codemp/cgame/cg_xcvar.h"
+  },
+  {
+    "name": "s_volume",
+    "defaultValue": "0.5",
+    "group": "audio",
+    "source": "codemp/client/snd_dma.cpp"
+  },
+  {
+    "name": "s_musicvolume",
+    "defaultValue": "0.25",
+    "group": "audio",
+    "source": "codemp/client/snd_dma.cpp"
+  },
+  {
+    "name": "s_khz",
+    "defaultValue": "44",
+    "group": "audio",
+    "source": "codemp/client/snd_dma.cpp"
+  },
+  {
+    "name": "s_doppler",
+    "defaultValue": "1",
+    "group": "audio",
+    "source": "codemp/client/snd_dma.cpp"
+  }
+]

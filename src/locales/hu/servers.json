@@ -101,7 +101,7 @@
     "watching": "Watching · updated {{age}} ago",
     "watchingSoon": "Watching · asking again every minute",
     "updated": "Updated {{age}} ago",
-    "playersClosed": "This server does not publish its player list.",
+    "playersUnavailable": "Nem sikerült lekérni a játékoslistát.",
     "playersRemembered": "PLAYER LIST FROM {{age}} AGO",
     "playersRememberedUnknown": "LAST KNOWN PLAYER LIST",
     "bots_one": "+{{count}} bot",

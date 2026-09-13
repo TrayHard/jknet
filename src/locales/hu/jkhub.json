@@ -1,18 +1,44 @@
 {
   "sort": {
     "label": "Rendezés",
-    "recentlyUpdated": "Legutóbb frissített",
-    "newest": "Legújabb",
-    "mostDownloaded": "Legtöbbet letöltött",
-    "topRated": "Legjobbra értékelt",
+    "recentlyUpdated": "Frissítés dátuma",
+    "newest": "Közzététel dátuma",
+    "mostDownloaded": "Letöltések",
+    "topRated": "Értékelés",
     "name": "Név"
   },
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
-    "results_other": "{{count}} results in {{game}}"
+    "results_other": "{{count}} results in {{game}}",
+    "helpTitle": "Keresési súgó",
+    "helpScope": "Ezek a lehetőségek a JKHub lapon, a kiválasztott játékban és kategóriában működnek.",
+    "helpCombine": "A szavak és operátorok bármilyen sorrendben kombinálhatók. Minden feltételnek teljesülnie kell. Az ismételt dátumszűrők szűkítik az időszakot.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Dátumformátum: YYYY-MM-DD. Frissítés nélkül a közzététel dátuma számít. A kis- és nagybetűk, valamint a latin ékezetek nem számítanak. Idézőjelek csak a by: után használhatók. Helyettesítő karakterek, OR és más operátorok nem támogatottak. Az érvénytelen dátum keresőszónak számít.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Minden szónak szerepelnie kell a címben, a szerző nevében, a címkékben vagy a leírásban. Szórészletek is megfelelnek."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Olyan szerzők keresése, akiknek a neve tartalmazza ezt a szöveget."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "A szerző teljes nevének keresése, szóközökkel együtt."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "E dátum után frissítve. A megadott nap nem tartozik bele (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "E dátum előtt frissítve. A megadott nap nem tartozik bele (UTC)."
+      }
+    }
   },
   "refresh": "Frissítés",
   "sections": {
@@ -73,7 +99,9 @@
     "reinstall": "Újratelepítés",
     "fallbackAuthor": "JKHub",
     "updated": "Frissítve: {{date}}",
-    "submitted": "Beküldve: {{date}}"
+    "submitted": "Beküldve: {{date}}",
+    "reviews_one": "{{count}} értékelés",
+    "reviews_other": "{{count}} értékelés"
   },
   "details": {
     "loadingTitle": "Betöltés…",
@@ -96,7 +124,8 @@
     "comments": "{{count}} hozzászólás",
     "versions": "Verziók",
     "downloading": "Letöltés… {{received}}",
-    "downloadingOf": "Letöltés… {{received}} / {{total}}"
+    "downloadingOf": "Letöltés… {{received}} / {{total}}",
+    "preview": "Letöltés előnézethez"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -120,5 +149,21 @@
     "showArchive": "Az archívum megjelenítése",
     "conflicts_one": "{{files}} már megvan itt: {{folder}}. A felülíráshoz nyomja meg a Felülírás és telepítés gombot.",
     "conflicts_other": "{{files}} már megvan itt: {{folder}}. A felülíráshoz nyomja meg a Felülírás és telepítés gombot."
+  },
+  "comments": {
+    "title": "Hozzászólások",
+    "loading": "Hozzászólások betöltése…",
+    "empty": "Még nincsenek hozzászólások.",
+    "stale": "A mentett hozzászólások láthatók. A JKHub nem érhető el.",
+    "pages": "Hozzászólások oldalai",
+    "previous": "Előző",
+    "next": "Következő",
+    "page": "{{page}}. oldal / {{total}}"
+  },
+  "gallery": {
+    "previous": "Előző képernyőkép",
+    "next": "Következő képernyőkép",
+    "position": "{{current}} / {{total}}",
+    "hint": "Használja a gombokat, az egérgörgőt vagy a ← / → billentyűket. Az Escape bezárja a képernyőképet."
   }
 }

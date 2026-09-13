@@ -10,7 +10,10 @@
     "library": "Könyvtár",
     "clients": "Kliensek",
     "friends": "Barátok",
-    "settings": "Beállítások"
+    "settings": "Beállítások",
+    "playerProfiles": "Player profiles",
+    "media": "Media",
+    "configs": "Configs"
   },
   "user": {
     "guest": "Vendég",

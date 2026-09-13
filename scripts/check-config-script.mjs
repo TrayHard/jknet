@@ -1,0 +1,37 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+const root=path.resolve(import.meta.dirname,'..'),out=path.join(root,'node_modules/.cache/config-check');
+fs.mkdirSync(out,{recursive:true});
+for(const name of ['quakeConfig','gameKeys','configScript']) {
+ const source=fs.readFileSync(path.join(root,`src/lib/${name}.ts`),'utf8');
+ const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText.replace(/require\("\.\/(quakeConfig|gameKeys)"\)/g,'require("./$1.cjs")');
+ fs.writeFileSync(path.join(out,`${name}.cjs`),code);
+}
+fs.copyFileSync(path.join(root,'src/lib/configCatalog.json'),path.join(out,'configCatalog.json'));
+const require=createRequire(import.meta.url),{configAssignments,setConfigValue,scriptIssues}=require(path.join(out,'configScript.cjs')),{configBinds,appendBind}=require(path.join(out,'quakeConfig.cjs'));
+assert.equal(configAssignments('set url "https://example.test/a;b" // comment').get('url'),'https://example.test/a;b');
+assert.equal(setConfigValue('seta sensitivity "4" // keep\n','sensitivity','7'),'seta sensitivity "7" // keep\n');
+const compound='seta sensitivity 4; set cg_fov 100';
+assert(setConfigValue(compound,'sensitivity','7').startsWith(compound));
+assert.equal(configAssignments(setConfigValue(compound,'sensitivity','7')).get('sensitivity'),'7');
+assert.deepEqual(configBinds('bind F1 "+attack"\nunbindall\nbind F2 "say ^2Hello; wave"'),[{key:'F2',command:'say ^2Hello; wave'}]);
+assert.deepEqual(configBinds('bind F1 "+attack"\nbind F1 ""'),[]);
+for(const key of ['SEMICOLON',"'",'\\','KP_INS','MWHEELUP'])assert.equal(configBinds(appendBind('',key,'+attack'))[0].key,key);
+assert(scriptIssues('bind F1 "vstr absent"').some(i=>i.kind==='vstr'));
+assert(!scriptIssues('set url "https://example.test" // "comment').some(i=>i.kind==='quote'));
+assert(scriptIssues('seta x "open').some(i=>i.kind==='quote'));
+console.log('Config preservation, overrides, key tokens, quoted commands and diagnostics checks passed.');
+const {effectiveBinds}=require(path.join(out,'quakeConfig.cjs'));
+const baseline={source:'client.cfg',kind:'inherited',text:'bind W +forward; bind X +use; bind SHIFT +speed'};
+const draft={source:'Duel',kind:'edited',text:'bind W +back; unbind X'};
+const later={source:'Priority',kind:'layer',text:'bind W +moveup'};
+let binds=effectiveBinds([baseline,draft,later]);
+assert.deepEqual(binds.find(b=>b.key==='W'),{key:'W',command:'+moveup',source:'Priority',kind:'layer'});
+assert(!binds.some(b=>b.key==='X'));
+assert.equal(binds.find(b=>b.key==='SHIFT').source,'client.cfg');
+assert.deepEqual(effectiveBinds([baseline,{...draft,text:'unbindall; bind w +back'}]),[{key:'W',command:'+back',source:'Duel',kind:'edited'}]);
+assert.deepEqual(effectiveBinds([baseline,{...draft,text:'bind W ""; unbind X; unbind SHIFT'}]),[]);
+console.log('Inherited keys, per-source precedence, unbind and unbindall checks passed.');

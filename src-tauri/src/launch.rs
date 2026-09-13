@@ -1125,7 +1125,9 @@ pub(crate) fn start_client(
         Some(address) => Some(validate_address(address)?),
         None => None,
     };
-    let args = build_launch_args(&inputs.plan(extra_args, connect));
+    let mut layered_args = crate::configs::launch_layers(state, client)?;
+    layered_args.extend_from_slice(extra_args);
+    let args = build_launch_args(&inputs.plan(&layered_args, connect));
 
     log::info!(
         "launching {} ({}): {} {}",
@@ -1237,7 +1239,9 @@ pub fn preview_launch_args(
         Some(address) => Some(validate_address(address)?),
         None => None,
     };
-    let args = build_launch_args(&inputs.plan(&extra_args.unwrap_or_default(), connect));
+    let mut layered_args = crate::configs::preview_layers(&state, &client_id)?;
+    layered_args.extend(extra_args.unwrap_or_default());
+    let args = build_launch_args(&inputs.plan(&layered_args, connect));
     let warning = launch_warning(inputs.engine.id, &args).map(str::to_string);
     Ok(LaunchPreview { args, warning })
 }

@@ -190,7 +190,7 @@
       "remove": "Delete {{profile}}",
       "makeDefault": "Set as default",
       "actions": "Profile actions",
-      "noNickname": "No nickname",
+      "noNickname": "Padawan",
       "removeDialog": {
         "title": "Delete {{profile}}?",
         "body": "The nickname, the skin and the saber settings of this profile go with it. The client, its engine and its files stay as they are.",
@@ -279,5 +279,12 @@
   "launchWarning": {
     "title": "Check the launch arguments",
     "eternaljkSInitsound": "EternalJK crashes when the sound system is disabled (s_initsound 0). Remove it from the launch arguments."
+  },
+  "playerProfiles": {
+    "title": "Player profiles",
+    "subtitle": "Choose a client to manage the player profiles used when launching it.",
+    "client": "Client",
+    "empty": "No {{game}} clients yet. Create a client to add player profiles.",
+    "manageClients": "Manage clients"
   }
 }

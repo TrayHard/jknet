@@ -69,7 +69,7 @@ interface Anchor {
  * white under the dark text of the app, which left the Servers filters
  * unreadable. Nothing in CSS reaches inside an OS popup, so the list is ours.
  *
- * The list renders into `document.body` through a portal. Inside the flow it
+ * The list renders into the fullscreen element or `document.body` through a portal. Inside the flow it
  * would be clipped by the first ancestor that scrolls or hides its overflow —
  * the servers table and the details panel both do.
  *
@@ -469,7 +469,7 @@ export function Select({
                 );
               })}
             </ul>,
-            document.body,
+            document.fullscreenElement ?? document.body,
           )
         : null}
     </>

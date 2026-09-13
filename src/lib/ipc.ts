@@ -26,6 +26,75 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return invoke<T>(command, args);
 }
 
+export interface PreviewAsset { name: string; path: string | null; text: string | null }
+export interface FilePreviewEntry {
+  id: string;
+  archive: number;
+  name: string;
+  label: string;
+  kind: "map" | "skin" | "hilt" | "weapon" | "npc" | "vehicle" | "music" | "sound";
+  model: string | null;
+  skins: string[];
+  audio: { name: string; label: string }[];
+  appearance: PlayerModel | null;
+  hiltId: string | null;
+}
+export interface FilePreview { id: string; archives: string[]; entries: FilePreviewEntry[] }
+export interface FilePreviewSource { previewId: string; archive: number }
+export const filePreviewIpc = {
+  baseGame: (game: Game) => call<FilePreview>("preview_base_game", { game }),
+  installed: (clientId: string, itemId: string) => call<FilePreview>("preview_library_file", { clientId, itemId }),
+  jkhub: (id: number, clientId: string | null) => call<FilePreview>("jkhub_preview", { id, clientId }),
+  assets: async (source: FilePreviewSource, names: string[]): Promise<PreviewAsset[]> =>
+    (await call<PreviewAsset[]>("get_file_preview_assets", { ...source, names })).map(asset => ({ ...asset, path: asset.path ? convertFileSrc(asset.path) : null })),
+  release: (previewId: string) => call<void>("release_file_preview", { previewId }),
+};
+export const modelPreviewIpc = {
+  assets: async (clientId: string, names: string[]): Promise<PreviewAsset[]> => (await call<PreviewAsset[]>("get_preview_assets", { clientId, names })).map(asset => ({ ...asset, path: asset.path ? convertFileSrc(asset.path) : null })),
+};
+
+export interface MediaOrigin { clientId: string; clientName: string; source: string; createdAt: number; modifiedAt: number; size: number; dateIsModified: boolean }
+export interface MediaItem { id: string; name: string; kind: "demos" | "screenshots" | "videos"; game: Game; extension: string; tags: string[]; origins: MediaOrigin[]; size: number; preview: string | null; sourceDemo: string | null }
+export interface ConfigDocument { id: string; name: string; game: Game; text: string; sourceClient: string | null; sourceFile: string | null }
+export interface ConfigLayer { configId: string; priority: number; enabled: boolean }
+export interface ConfigBook { documents: ConfigDocument[]; clients: Record<string, ConfigLayer[]>; defaults: Record<string, string> }
+export interface ClientConfigContext { sources: ClientConfigFile[]; unresolved: string[] }
+export interface ConfigConflict { key: string; values: { configId: string; configName: string; value: string }[] }
+export interface ClientConfigFile { path: string; text: string }
+export const mediaIpc = {
+  jobs: () => call<VideoJob[]>("list_video_jobs"),
+  exportVideo: (demoId: string, clientId: string, settings: VideoSettings) => call<VideoJob>("export_demo_video", { demoId, clientId, settings }),
+  videoPreferences: () => call<VideoPreferences>("video_preferences"),
+  savePreset: (preset: VideoPreset) => call<VideoPreset>("save_video_preset", { preset }),
+  deletePreset: (id: string) => call<void>("delete_video_preset", { id }),
+  preparePreview: (id: string) => call<void>("prepare_video_preview", { id }),
+  cancelVideo: (id: string) => call<void>("cancel_video_job", { id }),
+  list: async (refresh: boolean): Promise<MediaItem[]> => (await call<MediaItem[]>("list_media", { refresh })).map(item => ({ ...item, preview: item.preview ? convertFileSrc(item.preview) : null })),
+  update: (id: string, name: string, tags: string[]) => call<void>("update_media", { id, name, tags }),
+  remove: (id: string) => call<void>("delete_media", { id }),
+  removeBatch: (ids: string[]) => call<void>("delete_media_batch", { ids }),
+  openFolder: (id: string) => call<void>("open_media_folder", { id }),
+  copy: (id: string) => call<void>("copy_screenshot", { id }),
+  play: (id: string, clientId: string) => call<RunningGame>("play_media_demo", { id, clientId }),
+};
+export interface VideoSettings { format: string; fps: number; fov: number; commands: string }
+export interface VideoPreset { id: string; name: string; settings: VideoSettings }
+export interface VideoPreferences extends VideoSettings { presets: VideoPreset[] }
+export interface VideoProgress { frames: number; capturedSeconds: number; outputBytes: number; encodedSeconds: number; encodingPercent: number | null }
+export interface VideoJob { id: string; demoId: string; demoName: string; clientId: string; elapsedSeconds: number; progress: VideoProgress; status: "rendering" | "complete" | "failed" | "cancelled"; error: string | null; videoIds: string[]; phase: "preparing" | "capturing" | "encoding" | "finalizing" }
+export const configsIpc = {
+  list: () => call<ConfigBook>("list_configs"),
+  save: (document: ConfigDocument) => call<ConfigDocument>("save_config", { document }),
+  remove: (id: string) => call<void>("delete_config", { id }),
+  layers: (clientId: string, layers: ConfigLayer[]) => call<void>("set_config_layers", { clientId, layers }),
+  conflicts: (ids: string[]) => call<ConfigConflict[]>("config_conflicts", { ids }),
+  merge: (ids: string[], choices: Record<string, string>, name: string) => call<ConfigDocument>("merge_configs", { ids, choices, name }),
+  clientFiles: (clientId: string) => call<ClientConfigFile[]>("client_config_files", { clientId }),
+  context: (clientId: string) => call<ClientConfigContext>("client_config_context", { clientId }),
+  setDefault: (clientId: string, source: string | null) => call<void>("set_default_config", { clientId, source }),
+  profileBind: (clientId: string, profileId: string, configId: string | null) => call<string>("profile_bind_command", { clientId, profileId, configId }),
+};
+
 // ---------------------------------------------------------------------------
 // --- slice: game core ---
 // The `game` dimension. JKNet launches two games, and every entity that
@@ -89,6 +158,7 @@ export interface Settings {
   defaultClientIds: Partial<Record<Game, string>>;
   /** Hide the launcher while the game runs. */
   closeOnLaunch: boolean;
+  libraryConflictNoticeDismissed: boolean;
   /** Absolute path that replaces the default data folder. */
   dataDirOverride: string | null;
   /** Tokens appended to every command line, written as in a shortcut. */
@@ -153,6 +223,7 @@ export interface SettingsPatch {
   /** Per-game default clients, merged the same way as the folders. */
   defaultClientIds?: Partial<Record<Game, string | null>>;
   closeOnLaunch?: boolean;
+  libraryConflictNoticeDismissed?: boolean;
   dataDirOverride?: string | null;
   extraLaunchArgs?: string;
   favoriteServers?: string[];
@@ -540,6 +611,9 @@ export type LibraryCategory =
 
 /** One pk3 in the home folder of one client. */
 export interface LibraryItem {
+  mapNames: string[];
+  previewPath: string | null;
+  thumbnailUrl: string | null;
   /** `<folder>/<file name>`, stable across the enable toggle. */
   id: string;
   /** `base` or the `fs_game` folder the file belongs to. */
@@ -562,6 +636,7 @@ export interface LibraryItem {
 
 /** What `inspect_pk3` reads out of an archive without installing it. */
 export interface Pk3Report {
+  mapNames: string[];
   path: string;
   fileName: string;
   category: LibraryCategory;
@@ -1382,11 +1457,9 @@ export interface AccountState {
   /**
    * Whether this build has a service to talk to at all.
    *
-   * False in a release build until the JKNet Online service is deployed and
-   * `RELEASE_ONLINE_URL` in `src-tauri/src/online/client.rs` names its origin. While
-   * it is false the account and friends interface is one sentence saying so:
-   * no provider buttons, no counters, no calls. The **JKNet Online address** field on
-   * the Settings screen turns it on for this machine.
+   * Release builds use https://api.jknet.app; debug builds use the local service.
+   * The **JKNet Online address** field overrides the default for this machine.
+   * A blank effective address disables provider buttons, counters and calls.
    */
   onlineConfigured: boolean;
   /**
@@ -1663,6 +1736,8 @@ export const friendsIpc = {
 export type JkhubGame = Game | "both";
 
 /** How a listing is ordered. Maps to the `sortby` parameter of the site. */
+export type SortDirection = "asc" | "desc";
+
 export type JkhubSort =
   | "recentlyUpdated"
   | "newest"
@@ -1771,6 +1846,22 @@ export interface JkhubListing {
 }
 
 /** Everything a file page carries. `jkhub_file` adds `fetchedAt` and `stale`. */
+export interface JkhubComment {
+  id: number;
+  author: string;
+  postedAt: string | null;
+  /** Sanitized in the core with the file description allowlist. */
+  contentHtml: string;
+}
+
+export interface JkhubComments {
+  items: JkhubComment[];
+  page: number;
+  pages: number;
+  fetchedAt: string;
+  stale: boolean;
+}
+
 export interface JkhubFile {
   id: number;
   slug: string;
@@ -1785,9 +1876,9 @@ export interface JkhubFile {
   /**
    * --- slice: jkhub details ---
    * The same description with the author's markup, rebuilt by the core out of
-   * an allowlist of tags (`src-tauri/src/jkhub/richtext.rs`). This is the one
-   * string of the launcher that may go through `dangerouslySetInnerHTML`, and
-   * only because no element, attribute or address reaches it that the core did
+   * an allowlist of tags (`src-tauri/src/jkhub/richtext.rs`). The description,
+   * like comment content, may go through `dangerouslySetInnerHTML`
+   * because no element, attribute or address reaches it that the core did
    * not write itself. Empty when the theme moved the block, and then the plain
    * copy above is what the window prints.
    */
@@ -1996,6 +2087,7 @@ export interface JkhubSearchQuery {
   query: string;
   categoryId: number | null;
   sort: JkhubSort;
+  direction?: SortDirection;
   page: number;
   perPage: number;
 }
@@ -2045,6 +2137,8 @@ export const jkhubIpc = {
     }),
   file: (id: number, refresh = false) =>
     call<JkhubFile>("jkhub_file", { id, refresh }),
+  comments: (id: number, page: number, refresh = false) =>
+    call<JkhubComments>("jkhub_comments", { id, page, refresh }),
   /** Follows the download button without fetching the archive. */
   resolveDownload: (id: number) =>
     call<JkhubDownload>("jkhub_resolve_download", { id }),
@@ -2062,9 +2156,9 @@ export const jkhubIpc = {
    * Answered from the local index and never from the site, so it costs
    * nothing and can run on every keystroke behind a short debounce.
    */
-  search: ({ game, query, categoryId, sort, page, perPage }: JkhubSearchQuery) =>
+  search: ({ game, query, categoryId, sort, direction, page, perPage }: JkhubSearchQuery) =>
     call<JkhubSearchResult>("jkhub_search", {
-      request: { game: game ?? null, query, categoryId, sort, page, perPage },
+      request: { game: game ?? null, query, categoryId, sort, direction, page, perPage },
     }),
   /**
    * What the index of one game holds.

@@ -6,6 +6,7 @@ import { cn } from "../../lib/format";
 import type { JkhubCategory } from "../../lib/ipc";
 import { Badge } from "../ui";
 import { useSectionName } from "./jkhubSections";
+import { LibraryObjectIcon } from "./LibraryObjectIcon";
 
 interface JkhubTreeProps {
   categories: JkhubCategory[];
@@ -169,6 +170,7 @@ export function JkhubTree({
                 : "text-fg-secondary hover:bg-hover-overlay hover:text-fg",
             )}
           >
+            {depth === 0 ? <LibraryObjectIcon kind={category.section ?? ""} /> : null}
             <span className="flex-1 text-left truncate" title={label}>
               {label}
             </span>

@@ -20,6 +20,25 @@ use std::time::{Duration, Instant};
 
 use super::client::{OnlineClient, OnlineContext};
 
+/// Exercises the production TLS handshake without using any account credentials.
+#[tokio::test]
+#[ignore = "requires access to the public JKNet Online service"]
+async fn the_public_websocket_completes_tls_before_refusing_an_invalid_token() {
+    crate::configure_tls();
+    let response = tokio::time::timeout(
+        Duration::from_secs(15),
+        tokio_tungstenite::connect_async("wss://api.jknet.app/v1/ws?token=deployment-check"),
+    )
+    .await
+    .expect("the public TLS handshake finishes within its budget");
+    match response {
+        Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status().as_u16(), 401);
+        }
+        other => panic!("expected an HTTP 401 after TLS, received {other:?}"),
+    }
+}
+
 /// Not 8787: a developer running these tests may well have the real service, or
 /// another mock, on the stock port already. One port per test, because
 /// `cargo test` runs them at the same time and a shared port leaves the second

@@ -94,10 +94,9 @@ pub fn is_language_setting(value: &str) -> bool {
 /// `Default` is written out rather than derived, because one field has a value
 /// that is not the zero of its type in a debug build: `online_url` names the service
 /// of the build profile, and the container-level `#[serde(default)]` fills a
-/// missing field from this implementation, so a `settings.json` written before
-/// the service existed reads as the development service rather than as nothing. A
-/// release build has no service yet, so there the same default is blank on
-/// purpose; see `online::default_online_url`.
+/// missing field from this implementation. Older settings therefore select the
+/// local development service or the public production service by build profile;
+/// see `online::default_online_url`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
@@ -149,6 +148,8 @@ pub struct Settings {
     pub default_client_ids: BTreeMap<Game, String>,
     /// Hide the launcher window while the game is running.
     pub close_on_launch: bool,
+    /// Once dismissed, the library conflict notice only opens on explicit request.
+    pub library_conflict_notice_dismissed: bool,
     /// Absolute path that replaces the config root for `clients`, `library`,
     /// `cache` and `logs`. Ignored when it is relative or blank.
     pub data_dir_override: Option<String>,
@@ -208,10 +209,8 @@ pub struct Settings {
     // --- slice: account ---
     /// JKNet Online, without a trailing slash.
     ///
-    /// Empty means there is no service, which is what a release build defaults to
-    /// until the service is deployed. The field is editable on the Settings
-    /// screen, and typing an address there is what switches the account and
-    /// friends interface on for one machine.
+    /// An empty saved value resolves to the build's default service. The field
+    /// is editable on the Settings screen for testing or self-hosting.
     ///
     /// The alias reads a `settings.json` from 0.2.0, where the service was
     /// called JKNet Hub and the three keys below it were `hubUrl`, `hubToken`
@@ -245,6 +244,7 @@ impl Default for Settings {
             default_client_id: None,
             default_client_ids: BTreeMap::new(),
             close_on_launch: false,
+            library_conflict_notice_dismissed: false,
             data_dir_override: None,
             extra_launch_args: String::new(),
             favorite_servers: Vec::new(),
@@ -492,6 +492,7 @@ pub struct SettingsPatch {
     /// Per-game default clients, merged the same way as the folders above.
     pub default_client_ids: Option<BTreeMap<Game, Option<String>>>,
     pub close_on_launch: Option<bool>,
+    pub library_conflict_notice_dismissed: Option<bool>,
     #[serde(deserialize_with = "sent")]
     pub data_dir_override: Option<Option<String>>,
     pub extra_launch_args: Option<String>,
@@ -586,6 +587,9 @@ impl SettingsPatch {
         }
         if let Some(value) = self.close_on_launch {
             settings.close_on_launch = value;
+        }
+        if let Some(value) = self.library_conflict_notice_dismissed {
+            settings.library_conflict_notice_dismissed = value;
         }
         if let Some(value) = self.data_dir_override {
             settings.data_dir_override = non_empty(value);
@@ -800,6 +804,7 @@ mod tests {
             ]),
             close_on_launch: false,
             data_dir_override: Some("D:\\JKNet".into()),
+            library_conflict_notice_dismissed: false,
             extra_launch_args: "+set r_fullscreen 0 +set r_mode 4".into(),
             favorite_servers: vec!["203.0.113.10:29070".into()],
             server_history: vec![ServerHistoryEntry {
@@ -837,6 +842,25 @@ mod tests {
 
     fn patch(json: &str) -> SettingsPatch {
         serde_json::from_str(json).expect("the patch parses")
+    }
+
+    #[test]
+    fn dismissing_library_conflicts_survives_reload_and_unrelated_patches() {
+        let mut settings = filled();
+        patch(r#"{"libraryConflictNoticeDismissed":true}"#).apply(&mut settings);
+        let mut expected = filled();
+        expected.library_conflict_notice_dismissed = true;
+        assert_eq!(settings, expected, "dismissal changes only its preference");
+
+        let saved = serde_json::to_string(&settings).unwrap();
+        let mut reloaded: Settings = serde_json::from_str(&saved).unwrap();
+        patch(r#"{"activeGame":"jo","defaultClientId":"other"}"#).apply(&mut reloaded);
+        assert!(reloaded.library_conflict_notice_dismissed);
+
+        let mut legacy = serde_json::to_value(&settings).unwrap();
+        legacy.as_object_mut().unwrap().remove("libraryConflictNoticeDismissed");
+        let migrated: Settings = serde_json::from_value(legacy).unwrap();
+        assert!(!migrated.library_conflict_notice_dismissed, "old settings show the notice once");
     }
 
     #[test]
@@ -1089,8 +1113,7 @@ mod tests {
         patch(r#"{"onlineUrl":"  http://127.0.0.1:9000/  "}"#).apply(&mut settings);
         assert_eq!(settings.online_url, "http://127.0.0.1:9000");
 
-        // Clearing the field is the way back to the default of the build,
-        // which in a release build is no service at all.
+        // Clearing the field restores the build's default service.
         patch(r#"{"onlineUrl":""}"#).apply(&mut settings);
         assert_eq!(settings.online_url, crate::online::default_online_url());
     }

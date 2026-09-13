@@ -1,19 +1,45 @@
 {
   "sort": {
     "label": "Ordenar por",
-    "recentlyUpdated": "Actualizados hace poco",
-    "newest": "Más nuevos",
-    "mostDownloaded": "Más descargados",
-    "topRated": "Mejor valorados",
+    "recentlyUpdated": "Fecha de actualización",
+    "newest": "Fecha de publicación",
+    "mostDownloaded": "Descargas",
+    "topRated": "Valoración",
     "name": "Nombre"
   },
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
     "results_many": "{{count}} results in {{game}}",
-    "results_other": "{{count}} results in {{game}}"
+    "results_other": "{{count}} results in {{game}}",
+    "helpTitle": "Ayuda de búsqueda",
+    "helpScope": "Estas opciones se aplican en JKHub al juego y la categoría seleccionados.",
+    "helpCombine": "Combina palabras y operadores en cualquier orden. Todas las condiciones deben cumplirse. Repetir filtros de fecha reduce el intervalo.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Formato de fecha: YYYY-MM-DD. Si no hubo actualizaciones, se usa la fecha de publicación. Se ignoran las mayúsculas y los acentos latinos. Las comillas solo funcionan después de by:. No se admiten comodines, OR ni otros operadores. Una fecha no válida se trata como una palabra de búsqueda.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Cada palabra debe aparecer en el título, el autor, las etiquetas o la descripción. También se buscan partes de palabras."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Buscar autores cuyos nombres contengan este texto."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "Buscar el nombre completo del autor, incluidos los espacios."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "Actualizado después de esta fecha. El día indicado queda excluido (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "Actualizado antes de esta fecha. El día indicado queda excluido (UTC)."
+      }
+    }
   },
   "refresh": "Actualizar",
   "sections": {
@@ -78,7 +104,10 @@
     "reinstall": "Reinstalar",
     "fallbackAuthor": "JKHub",
     "updated": "Actualizado el {{date}}",
-    "submitted": "Enviado el {{date}}"
+    "submitted": "Enviado el {{date}}",
+    "reviews_one": "{{count}} reseña",
+    "reviews_many": "{{count}} reseñas",
+    "reviews_other": "{{count}} reseñas"
   },
   "details": {
     "loadingTitle": "Cargando…",
@@ -101,7 +130,8 @@
     "comments": "{{count}} comentarios",
     "versions": "Versiones",
     "downloading": "Descargando… {{received}}",
-    "downloadingOf": "Descargando… {{received}} de {{total}}"
+    "downloadingOf": "Descargando… {{received}} de {{total}}",
+    "preview": "Descargar para vista previa"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -126,5 +156,21 @@
     "conflicts_one": "{{files}} ya está en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlo.",
     "conflicts_many": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos.",
     "conflicts_other": "{{files}} ya están en {{folder}}. Haga clic en Reemplazar e instalar para sobrescribirlos."
+  },
+  "comments": {
+    "title": "Comentarios",
+    "loading": "Cargando comentarios…",
+    "empty": "Aún no hay comentarios.",
+    "stale": "Se muestran los comentarios guardados. JKHub no está disponible.",
+    "pages": "Páginas de comentarios",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "page": "Página {{page}} de {{total}}"
+  },
+  "gallery": {
+    "previous": "Captura anterior",
+    "next": "Captura siguiente",
+    "position": "{{current}} de {{total}}",
+    "hint": "Usa los botones, la rueda del ratón o las teclas ← / →. Escape cierra la captura."
   }
 }

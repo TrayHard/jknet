@@ -10,7 +10,10 @@
     "library": "Biblioteca",
     "clients": "Clientes",
     "friends": "Amigos",
-    "settings": "Ajustes"
+    "settings": "Ajustes",
+    "playerProfiles": "Player profiles",
+    "media": "Media",
+    "configs": "Configs"
   },
   "user": {
     "guest": "Invitado",

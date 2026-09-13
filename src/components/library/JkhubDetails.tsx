@@ -1,4 +1,3 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ArrowDownCircle,
   Check,
@@ -6,6 +5,7 @@ import {
   ExternalLink,
   FolderOpen,
   ImageOff,
+  Eye,
   MessageSquare,
   Star,
 } from "lucide-react";
@@ -16,8 +16,10 @@ import { useTranslation } from "react-i18next";
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import type { JkhubFile, JkhubInstallResult } from "../../lib/ipc";
-import { isTauri } from "../../lib/runtime";
 import { Badge, Button, Dialog } from "../ui";
+import { JkhubComments } from "./JkhubComments";
+import { JkhubGallery } from "./JkhubGallery";
+import { openJkhubLink } from "./jkhubLinks";
 
 interface JkhubDetailsProps {
   file: JkhubFile | undefined;
@@ -41,6 +43,7 @@ interface JkhubDetailsProps {
    * a card takes: it writes `by:"name"` into the search box of the screen.
    */
   onAuthor?: (author: string) => void;
+  onPreview?: () => void;
 }
 
 /**
@@ -55,8 +58,8 @@ interface JkhubDetailsProps {
  * links, pictures and the still of an embedded video. The markup does not come
  * off the page, it comes out of `jkhub::richtext` in the core, which rebuilds
  * it from an allowlist of tags and refuses every attribute and every address
- * it does not name itself. That is what makes the one
- * `dangerouslySetInnerHTML` of the launcher defensible, and why the string is
+ * it does not name itself. Descriptions and comments use that same allowlist,
+ * which is why the string is
  * never touched on this side. A page whose block the theme moved answers with
  * an empty string, and the plain copy below takes over.
  *
@@ -79,11 +82,12 @@ export function JkhubDetails({
   onOpenSite,
   onRevealArchive,
   onAuthor,
+  onPreview,
 }: JkhubDetailsProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
   const format = useFormat();
-  const [zoomed, setZoomed] = useState<string | null>(null);
+  const [zoomed, setZoomed] = useState<number | null>(null);
   // Addresses that answered with an error. A picture the site withdrew shows
   // its own placeholder instead of an empty frame, and the thumbnail failing
   // says nothing about the full-size copy, so both are tracked by address.
@@ -101,9 +105,11 @@ export function JkhubDetails({
   // A page with no author named answers with nothing to search for, so the
   // line stays plain text in that case.
   const author = file?.author?.name ?? null;
+  const galleryOpen = zoomed != null && !!file?.screenshots.length;
 
   return (
     <>
+      <div inert={galleryOpen}>
       <Dialog
         title={title}
         wide
@@ -138,6 +144,9 @@ export function JkhubDetails({
         {file ? (
           <div className="flex flex-col gap-16 pt-16 max-h-[60vh] overflow-y-auto pr-4">
             <div className="flex flex-wrap items-center gap-8">
+              {onPreview ? <Button icon={<Eye size={16} />} onClick={onPreview} disabled={busy}>
+                {t("details.preview")}
+              </Button> : null}
               {installed ? (
                 <Badge tone="success" icon={<Check size={12} />}>
                   {t("card.installed")}
@@ -150,14 +159,14 @@ export function JkhubDetails({
             </div>
 
             {file.screenshots.length > 0 ? (
-              <ul className="flex gap-8 overflow-x-auto pb-4">
-                {file.screenshots.map((shot) => {
+              <ul className="flex shrink-0 gap-8 overflow-x-auto pb-4">
+                {file.screenshots.map((shot, index) => {
                   const preview = shot.thumbnailUrl ?? shot.url;
                   return (
                     <li key={shot.url} className="shrink-0">
                       <button
                         type="button"
-                        onClick={() => setZoomed(shot.url)}
+                        onClick={() => setZoomed(index)}
                         aria-label={t("details.openScreenshot")}
                         // --- slice: jkhub details ---
                         // The frame is fixed and the picture is not. JKHub
@@ -257,7 +266,7 @@ export function JkhubDetails({
             {file.descriptionHtml ? (
               <div
                 className="jkhub-richtext"
-                onClick={openLink}
+                onClick={openJkhubLink}
                 // Cleaned in the core, by `jkhub::richtext`. Nothing on this
                 // side may put another string here.
                 dangerouslySetInnerHTML={{ __html: file.descriptionHtml }}
@@ -283,6 +292,8 @@ export function JkhubDetails({
               </div>
             ) : null}
 
+            <JkhubComments key={file.id} fileId={file.id} count={file.comments} />
+
             {progress ? (
               <p className="text-body-sm text-fg-secondary">
                 {progress.total > 0
@@ -306,31 +317,10 @@ export function JkhubDetails({
           </p>
         ) : null}
       </Dialog>
+      </div>
 
-      {zoomed ? (
-        <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-overlay p-24"
-          role="dialog"
-          aria-modal="true"
-          aria-label={t("details.screenshot")}
-          onClick={() => setZoomed(null)}
-        >
-          {broken.has(zoomed) ? (
-            <p className="flex items-center gap-8 rounded-md border border-line bg-surface p-24 text-body-sm text-fg-muted">
-              <ImageOff size={16} />
-              {t("details.screenshotMissing")}
-            </p>
-          ) : (
-            <img
-              src={zoomed}
-              alt=""
-              decoding="async"
-              referrerPolicy="no-referrer"
-              onError={() => fail(zoomed)}
-              className="max-h-full max-w-full rounded-md border border-line"
-            />
-          )}
-        </div>
+      {galleryOpen && file ? (
+        <JkhubGallery shots={file.screenshots} initialIndex={zoomed ?? 0} onClose={() => setZoomed(null)} />
       ) : null}
     </>
   );
@@ -473,30 +463,6 @@ function Fact({
       </dd>
     </div>
   );
-}
-
-/**
- * --- slice: jkhub details ---
- * Sends a link of the description to the system browser.
- *
- * The window is the launcher, not a browser: following a link inside it would
- * replace the application with a web page and leave no way back. One handler
- * on the container rather than a listener per link, because the markup is
- * inserted as a string and React has no element to hang a prop on.
- *
- * The address is checked a second time here. The core already refused
- * everything that is not `http(s)`, and this costs one regular expression to
- * make the rule true at the point where the address is actually used.
- */
-function openLink(event: React.MouseEvent<HTMLDivElement>) {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const anchor = target.closest("a[href]");
-  if (!(anchor instanceof HTMLAnchorElement)) return;
-  event.preventDefault();
-  const href = anchor.getAttribute("href") ?? "";
-  if (!/^https?:\/\//i.test(href) || !isTauri()) return;
-  void openUrl(href).catch(() => undefined);
 }
 
 /**

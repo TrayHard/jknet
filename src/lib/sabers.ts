@@ -42,6 +42,13 @@ export type SaberMode = "single" | "staff" | "duals";
 /** The three, in the order the control draws them. */
 export const SABER_MODES: readonly SaberMode[] = ["single", "staff", "duals"];
 
+export const DEFAULT_SINGLE_HILT = "Kyle";
+export const DEFAULT_STAFF_HILT = "dual_1";
+
+export function isVisibleHilt(id: string | null): id is string {
+  return !!id && !/^(?:none|invisible)$/i.test(id);
+}
+
 /** The four profile fields the hilt control owns. */
 export interface SaberValues {
   saber1: string | null;
@@ -72,8 +79,8 @@ export function hiltTypeOf(hilts: SaberHilt[], id: string | null): string | null
  * **Single**, which is the shape a player who has picked nothing is in.
  */
 export function saberModeOf(values: SaberValues, hilts: SaberHilt[]): SaberMode {
-  if (values.saber2 !== null && values.saber2 !== NO_SECOND_HILT) return "duals";
-  if (hiltTypeOf(hilts, values.saber1) === "staff") return "staff";
+  if (isVisibleHilt(values.saber2)) return "duals";
+  if (hiltTypeOf(hilts, values.saber1) === "staff" || /^dual_[1-5]$/i.test(values.saber1 ?? "")) return "staff";
   return "single";
 }
 
@@ -92,8 +99,8 @@ export function saberModeOf(values: SaberValues, hilts: SaberHilt[]): SaberMode 
  * hand, which is what that mode is.
  */
 export function hiltsForMode(mode: SaberMode, hilts: SaberHilt[]): SaberHilt[] {
-  if (mode === "staff") return hilts.filter((hilt) => hilt.saberType === "staff");
-  return hilts.filter((hilt) => hilt.saberType !== "staff");
+  return hilts.filter((hilt) => isVisibleHilt(hilt.id) && !/^invisible$/i.test(hilt.name)
+    && (hilt.saberType === "staff") === (mode === "staff"));
 }
 
 /**
@@ -106,53 +113,26 @@ export function hasSecondBlade(mode: SaberMode): boolean {
   return mode === "duals";
 }
 
-/**
- * The four values one mode produces out of whatever the form holds.
- *
- * Run on every change of the control, not only on a change of mode, so the
- * four fields can never drift into a set that reads as another shape. Three
- * rules:
- *
- * - **A hilt of the wrong shape goes.** Switching to **Staff** with a
- *   one-bladed hilt in hand keeps nothing: the value would name a hilt the
- *   mode does not offer, and the list would show it as the odd option out.
- *   A hilt of a shape the list has never heard of stays, because the launcher
- *   knows nothing about it and throwing it away would lose a mod's work.
- * - **One hilt says the other hand is empty.** `saber2` becomes `none`, the
- *   engine's own word for it (`G_SetSaber(ent, 1, …, "none")` at
- *   `codemp/game/g_client.c:2240`). Leaving the field unset would leave the
- *   second hand to whatever the player's own `jampconfig.cfg` holds, and a
- *   profile that says **Single** would hand out two sabers.
- * - **No hilt says nothing at all.** A profile with no `saber1` manages no
- *   saber, so it writes neither cvar and the engine keeps its own — which is
- *   what an empty field means everywhere else in the form.
- */
-export function saberValuesFor(
-  mode: SaberMode,
-  values: SaberValues,
-  hilts: SaberHilt[],
-): SaberValues {
-  const kept = (id: string | null, staff: boolean): string | null => {
-    if (id === null || id === NO_SECOND_HILT) return null;
-    const type = hiltTypeOf(hilts, id);
-    if (type === null) return id;
-    return (type === "staff") === staff ? id : null;
+/** Resolve every active hand and colour, including old unset profiles. */
+export function saberValuesFor(mode: SaberMode, values: SaberValues, hilts: SaberHilt[]): SaberValues {
+  const available = hiltsForMode(mode, hilts);
+  const preferred = mode === "staff" ? DEFAULT_STAFF_HILT : DEFAULT_SINGLE_HILT;
+  const fallback = available.find(h => h.id.toLowerCase() === preferred.toLowerCase())?.id
+    ?? available[0]?.id ?? preferred;
+  const kept = (id: string | null) => {
+    if (!isVisibleHilt(id)) return fallback;
+    const match = available.find(h => h.id.toLowerCase() === id.toLowerCase());
+    if (match) return match.id;
+    // A known wrong shape is replaced even while the catalog is loading.
+    const staff = hiltTypeOf(hilts, id) === "staff" || /^dual_[1-5]$/i.test(id);
+    if (staff !== (mode === "staff") || hilts.length) return fallback;
+    return id;
   };
-
-  if (mode === "duals") {
-    return {
-      saber1: kept(values.saber1, false),
-      saber2: kept(values.saber2, false),
-      color1: values.color1,
-      color2: values.color2,
-    };
-  }
-
-  const saber1 = kept(values.saber1, mode === "staff");
+  const color = (n: number | null) => n !== null && Number.isInteger(n) && n >= 0 && n <= 5 ? n : 4;
   return {
-    saber1,
-    saber2: saber1 === null ? null : NO_SECOND_HILT,
-    color1: values.color1,
-    color2: null,
+    saber1: kept(values.saber1),
+    saber2: mode === "duals" ? kept(values.saber2) : NO_SECOND_HILT,
+    color1: color(values.color1),
+    color2: mode === "duals" ? color(values.color2) : null,
   };
 }

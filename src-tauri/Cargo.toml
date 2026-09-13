@@ -1,7 +1,7 @@
 [package]
 name = "jknet"
 version = "0.3.0"
-description = "Launcher for Star Wars Jedi Knight: Jedi Academy multiplayer"
+description = "Launcher for Star Wars Jedi Knight: Jedi Academy and Jedi Outcast"
 authors = ["JKNet"]
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -32,16 +32,19 @@ tauri-plugin-log = "2.9.1"
 tauri-plugin-dialog = "2.7.3"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 sha1 = "0.11.0"
+sha2 = "0.10.9"
 futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "gzip", "stream", "http2", "cookies"] }
+rustls = { version = "0.23.44", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 tokio = { version = "1.53.1", features = ["net", "time", "sync", "rt", "macros", "fs", "io-util"] }
 tauri-plugin-process = "2.3.1"
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tga"] }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tga", "bmp"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["rustls-tls-webpki-roots", "connect", "handshake"] }
 scraper = { version = "0.27.0", default-features = false, features = ["main", "errors"] }
 percent-encoding = "2.3.2"
 sevenz-rust2 = { version = "0.22.2", default-features = false }
 tauri-plugin-os = "2.3.2"
+tauri-plugin-clipboard-manager = "2"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

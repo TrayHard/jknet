@@ -31,6 +31,7 @@
 
 pub mod cache;
 pub mod client;
+pub mod comments;
 pub mod download;
 pub mod index;
 pub mod install;
@@ -466,6 +467,53 @@ pub async fn jkhub_file(
     source.file(id).await
 }
 
+/// One page of comments for the open file. The normal file request supplies its slug.
+#[tauri::command]
+pub async fn jkhub_comments(
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+    id: u32,
+    page: u32,
+    refresh: Option<bool>,
+) -> Result<comments::JkhubComments> {
+    let data = state.paths()?;
+    let client = jkhub.client()?;
+    let view = HtmlSource::new(client, &data).file(id).await?;
+    comments::fetch(client, &data, id, &view.file.slug, page, refresh.unwrap_or(false)).await
+}
+
+/// An explicit preview request downloads to the cache without installing files.
+#[tauri::command]
+pub async fn jkhub_preview(
+    app: AppHandle, state: tauri::State<'_, AppState>, jkhub: tauri::State<'_, JkhubState>,
+    id: u32, client_id: Option<String>,
+) -> Result<crate::file_preview::FilePreview> {
+    let data = state.paths()?;
+    let http = jkhub.client()?;
+    let _guard = jkhub.claim(id)?;
+    let view = HtmlSource::new(http, &data).file(id).await?;
+    let settings = state.settings()?;
+    let game = match view.file.game {
+        types::JkhubGame::Ja => Game::JediAcademy,
+        types::JkhubGame::Jo => Game::JediOutcast,
+        types::JkhubGame::Both => settings.active_game,
+    };
+    let deps = crate::file_preview::dependencies(&data, &settings, client_id.as_deref(), game)?;
+    let (url, file_name, size) = match download::resolve(http, id, &view.file.slug).await? {
+        JkhubDownload::Hosted { url, file_name, size, .. } => (url, file_name, size),
+        JkhubDownload::External { .. } => return Err(AppError::JkhubDownload("This file is hosted elsewhere. Open its JKHub page to download it.".into())),
+    };
+    let dir = cache::download_dir(&data, id)?;
+    let archive = download::fetch(&app, http, id, &url, &dir, &file_name, size).await?;
+    let preview = tokio::task::spawn_blocking(move || {
+        let cache = data.cache.join("file-previews").join("packages");
+        let sources = crate::file_preview::unpack(&archive, &cache)?;
+        crate::file_preview::prepare(&data, sources, deps)
+    }).await.map_err(|e|AppError::State(e.to_string()))??;
+    crate::file_preview::allow_icons(&app, &preview);
+    Ok(preview)
+}
+
 /// Follows the download button and says where it leads, without fetching the
 /// archive.
 ///
@@ -658,6 +706,7 @@ pub struct JkhubSearchArgs {
     pub category_id: Option<u32>,
     #[serde(default)]
     pub sort: JkhubSort,
+    pub direction: Option<types::SortDirection>,
     /// One-based, the way the site numbers its pages.
     pub page: Option<u32>,
     pub per_page: Option<u32>,
@@ -751,6 +800,7 @@ pub async fn jkhub_search(
         query: request.query,
         category_id: request.category_id,
         sort: request.sort,
+        direction: request.direction,
         page: request.page.unwrap_or(1),
         per_page: request.per_page.unwrap_or(index::RESULTS_PER_PAGE),
     });

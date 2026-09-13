@@ -1,18 +1,44 @@
 {
   "sort": {
     "label": "Sortieren nach",
-    "recentlyUpdated": "Zuletzt aktualisiert",
-    "newest": "Neueste",
-    "mostDownloaded": "Meistgeladen",
-    "topRated": "Bestbewertet",
+    "recentlyUpdated": "Aktualisiert am",
+    "newest": "Veröffentlicht am",
+    "mostDownloaded": "Downloads",
+    "topRated": "Bewertung",
     "name": "Name"
   },
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "hint": "Type by:name to search one author, or by:\"full name\" for an exact match.",
     "results_one": "{{count}} result in {{game}}",
-    "results_other": "{{count}} results in {{game}}"
+    "results_other": "{{count}} results in {{game}}",
+    "helpTitle": "Suchhilfe",
+    "helpScope": "Diese Optionen gelten unter JKHub für das ausgewählte Spiel und die Kategorie.",
+    "helpCombine": "Wörter und Operatoren in beliebiger Reihenfolge kombinieren. Alle Bedingungen müssen zutreffen. Wiederholte Datumsfilter engen den Zeitraum ein.",
+    "helpExample": "duel by:\"Circa\" after:2024-12-31 before:2026-01-01",
+    "helpRules": "Datumsformat: YYYY-MM-DD. Ohne Aktualisierung gilt das Veröffentlichungsdatum. Großschreibung und lateinische Akzente werden ignoriert. Anführungszeichen gelten nur nach by:. Platzhalter, OR und andere Operatoren werden nicht unterstützt. Ein ungültiges Datum wird als Suchwort behandelt.",
+    "help": {
+      "words": {
+        "example": "duel arena",
+        "text": "Jedes Wort muss im Titel, Autorennamen, in Tags oder der Beschreibung vorkommen. Auch Wortteile werden gefunden."
+      },
+      "author": {
+        "example": "by:circa",
+        "text": "Autoren finden, deren Namen diesen Text enthalten."
+      },
+      "exactAuthor": {
+        "example": "by:\"Szico VII\"",
+        "text": "Den vollständigen Autorennamen einschließlich Leerzeichen suchen."
+      },
+      "after": {
+        "example": "after:2025-01-01",
+        "text": "Nach diesem Datum aktualisiert. Der angegebene Tag ist ausgeschlossen (UTC)."
+      },
+      "before": {
+        "example": "before:2026-01-01",
+        "text": "Vor diesem Datum aktualisiert. Der angegebene Tag ist ausgeschlossen (UTC)."
+      }
+    }
   },
   "refresh": "Aktualisieren",
   "sections": {
@@ -73,7 +99,9 @@
     "reinstall": "Neu installieren",
     "fallbackAuthor": "JKHub",
     "updated": "Aktualisiert {{date}}",
-    "submitted": "Eingereicht {{date}}"
+    "submitted": "Eingereicht {{date}}",
+    "reviews_one": "{{count}} Bewertung",
+    "reviews_other": "{{count}} Bewertungen"
   },
   "details": {
     "loadingTitle": "Wird geladen…",
@@ -96,7 +124,8 @@
     "comments": "{{count}} Kommentare",
     "versions": "Versionen",
     "downloading": "Herunterladen… {{received}}",
-    "downloadingOf": "Herunterladen… {{received}} von {{total}}"
+    "downloadingOf": "Herunterladen… {{received}} von {{total}}",
+    "preview": "Für Vorschau herunterladen"
   },
   "download": {
     "fallbackTitle": "JKHub file",
@@ -120,5 +149,21 @@
     "showArchive": "Archiv anzeigen",
     "conflicts_one": "{{files}} liegt bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben.",
     "conflicts_other": "{{files}} liegen bereits in {{folder}}. Drücken Sie Ersetzen und installieren, um sie zu überschreiben."
+  },
+  "comments": {
+    "title": "Kommentare",
+    "loading": "Kommentare werden geladen…",
+    "empty": "Noch keine Kommentare.",
+    "stale": "Gespeicherte Kommentare werden angezeigt. JKHub ist nicht erreichbar.",
+    "pages": "Kommentarseiten",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "page": "Seite {{page}} von {{total}}"
+  },
+  "gallery": {
+    "previous": "Vorheriger Screenshot",
+    "next": "Nächster Screenshot",
+    "position": "{{current}} von {{total}}",
+    "hint": "Mit den Schaltflächen, dem Mausrad oder ← / → blättern. Escape schließt den Screenshot."
   }
 }

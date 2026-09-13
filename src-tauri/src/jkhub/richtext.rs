@@ -220,7 +220,9 @@ fn render_element(element: ElementRef<'_>, out: &mut Sink) {
             let Some(src) = element.value().attr("src").and_then(picture_url) else {
                 return;
             };
-            out.html.push_str("<img src=\"");
+            let emoji = element.value().classes().any(|class| matches!(class, "ipsEmoji" | "ipsEmoticon"))
+                || element.value().attr("data-emoticon").is_some();
+            out.html.push_str(if emoji { "<img class=\"jkhub-emoji\" src=\"" } else { "<img src=\"" });
             escape_attr(&src, &mut out.html);
             out.html.push_str("\" alt=\"");
             escape_attr(
@@ -535,6 +537,15 @@ fn entity_at(text: &str) -> Option<(String, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn emoji_images_keep_only_the_launchers_inline_marker() {
+        let clean = sanitize_fragment("<p>Hello <img class='ipsEmoji huge' data-emoticon='true' src='https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f604.png' alt='😄' width='720' style='width:720px' onerror='alert(1)'></p>");
+        assert!(clean.contains("class=\"jkhub-emoji\""));
+        assert!(clean.contains("alt=\"😄\""));
+        for dropped in ["huge", "width=", "style=", "onerror="] { assert!(!clean.contains(dropped)); }
+        assert!(!sanitize_fragment("<img src='https://jkhub.org/shot.jpg'>").contains("jkhub-emoji"));
+    }
 
     #[test]
     fn the_tags_of_a_readme_survive_and_the_wrapper_does_not() {
