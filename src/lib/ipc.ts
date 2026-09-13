@@ -26,6 +26,10 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   return invoke<T>(command, args);
 }
 
+export const communityIpc = {
+  request: <T>(method: string, path: string, body?: unknown) => call<T>("community_request", { method, path, body: body ?? null }),
+};
+
 export interface PreviewAsset { name: string; path: string | null; text: string | null }
 export interface FilePreviewEntry {
   id: string;
@@ -381,6 +385,9 @@ export interface Engine {
   installable: boolean;
   /** Why `installable` is false. */
   notInstallableReason: string | null;
+  /** Native host system and a translated reason when it is unsupported. */
+  system: string;
+  compatibilityError: "unsupportedEngineSystem" | null;
   /** Mod folder the build needs as `+set fs_game`. jaMME runs in `mme`. */
   defaultFsGame: string | null;
 }
@@ -2143,8 +2150,8 @@ export const jkhubIpc = {
   resolveDownload: (id: number) =>
     call<JkhubDownload>("jkhub_resolve_download", { id }),
   /** Downloads if needed and installs into a client. */
-  install: (id: number, clientId: string, replace = false) =>
-    call<JkhubInstallResult>("jkhub_install", { id, clientId, replace }),
+  install: (id: number, clientId: string, replace = false, allowIdentical = false) =>
+    call<JkhubInstallResult>("jkhub_install", { id, clientId, replace, allowIdentical }),
   /** Opens the file page in the system browser. */
   open: (id: number) => call<void>("jkhub_open", { id }),
   clearCache: () => call<void>("jkhub_clear_cache"),

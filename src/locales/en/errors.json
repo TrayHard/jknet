@@ -37,5 +37,6 @@
   "frontend": {
     "noRuntime": "Tauri runtime is not available",
     "unexpected": "Unexpected error"
-  }
+  },
+  "unsupportedEngineSystem": "Automatic engine installation is not supported on {{system}}. JKNet supports Windows x86 and x64 builds."
 }

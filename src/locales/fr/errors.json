@@ -37,5 +37,6 @@
   "frontend": {
     "noRuntime": "L’environnement Tauri n’est pas disponible",
     "unexpected": "Erreur inattendue"
-  }
+  },
+  "unsupportedEngineSystem": "L’installation automatique des moteurs n’est pas disponible sur {{system}}. JKNet prend en charge les versions pour Windows x86 et x64."
 }

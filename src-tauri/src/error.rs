@@ -59,6 +59,9 @@ pub enum AppError {
     #[error("invalid input: {0}")]
     InvalidInput(String),
 
+    #[error("Automatic engine installation is not supported on {system}. JKNet supports Windows x86 and x64 builds.")]
+    UnsupportedEngineSystem { system: String },
+
     /// A conflicting entity already exists.
     #[error("already exists: {0}")]
     AlreadyExists(String),
@@ -270,6 +273,7 @@ impl AppError {
             AppError::Path(_) => "path",
             AppError::NotFound(_) => "notFound",
             AppError::InvalidInput(_) => "invalidInput",
+            AppError::UnsupportedEngineSystem { .. } => "unsupportedEngineSystem",
             AppError::AlreadyExists(_) => "alreadyExists",
             AppError::Busy(_) => "busy",
             AppError::State(_) => "state",
@@ -315,6 +319,7 @@ impl AppError {
             AppError::Path(path) => json!({ "path": path }),
             AppError::NotFound(what) => json!({ "what": what }),
             AppError::InvalidInput(reason) => json!({ "reason": reason }),
+            AppError::UnsupportedEngineSystem { system } => json!({ "system": system }),
             AppError::AlreadyExists(what) => json!({ "what": what }),
             AppError::Busy(reason) => json!({ "reason": reason }),
             AppError::State(reason) => json!({ "reason": reason }),
@@ -431,6 +436,7 @@ mod tests {
             AppError::Path("x".into()),
             AppError::NotFound("x".into()),
             AppError::InvalidInput("x".into()),
+            AppError::UnsupportedEngineSystem { system: "macos (aarch64)".into() },
             AppError::AlreadyExists("x".into()),
             AppError::Busy("x".into()),
             AppError::State("x".into()),

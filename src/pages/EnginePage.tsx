@@ -14,6 +14,7 @@ import { useEngineNote } from "../i18n/useEngineNote";
 import { useFormat } from "../i18n/useFormat";
 import { useGameNames } from "../lib/game";
 import type { Engine } from "../lib/ipc";
+import { engineUnavailableReason } from "../lib/engines";
 import { useEngineReleases, useEngines } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 
@@ -122,6 +123,7 @@ function EngineHead({
   const { t } = useTranslation("clients");
   const { label } = useGameNames();
   const note = useEngineNote()(engine.status);
+  const errorText = useErrorText();
 
   return (
     <div className="flex items-start gap-16">
@@ -146,7 +148,7 @@ function EngineHead({
         ) : null}
         {engine.installable ? null : (
           <p className="text-body-sm text-fg-muted">
-            {engine.notInstallableReason ?? t("card.manualInstall")}
+            {engineUnavailableReason(engine, errorText) ?? t("card.manualInstall")}
           </p>
         )}
       </div>
@@ -155,6 +157,7 @@ function EngineHead({
         icon={<Plus size={16} />}
         className="shrink-0"
         onClick={onNewClient}
+        disabled={!engine.installable}
       >
         {t("enginePage.newClient")}
       </Button>
@@ -253,7 +256,7 @@ function Versions({ engine }: { engine: Engine }) {
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const format = useFormat();
-  const releases = useEngineReleases(engine.id);
+  const releases = useEngineReleases(engine.installable ? engine.id : null);
 
   return (
     <section className="rounded-lg border border-line bg-surface p-16">
@@ -263,7 +266,9 @@ function Versions({ engine }: { engine: Engine }) {
       <p className="text-body-sm text-fg-secondary pb-12">
         {t("enginePage.versionsText")}
       </p>
-      {releases.isLoading ? (
+      {!engine.installable ? (
+        <p className="text-body-sm text-fg-muted">{engineUnavailableReason(engine, errorText) ?? t("card.manualInstall")}</p>
+      ) : releases.isLoading ? (
         <p className="text-body-sm text-fg-muted">{tCommon("states.loading")}</p>
       ) : releases.error ? (
         <p className="text-body-sm text-fg-danger">{errorText(releases.error)}</p>
@@ -274,6 +279,7 @@ function Versions({ engine }: { engine: Engine }) {
           {(releases.data ?? []).map((release) => (
             <li key={release.tag} className="flex items-center gap-8 flex-wrap">
               <span className="text-mono-sm text-fg">{release.tag}</span>
+              <span className="text-mono-xs text-fg-muted break-all">{release.assetName}</span>
               {release.prerelease ? (
                 <Badge tone="warm">{t("enginePage.prerelease")}</Badge>
               ) : null}

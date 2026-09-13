@@ -17,7 +17,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 // --- slice: servers home tweaks ---
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
@@ -468,6 +468,7 @@ export function ServersPage() {
         }
         actions={
           <>
+            <Link to="/community" className="text-accent text-body-sm-medium">{t("community.browse")}</Link>
             <Input
               icon={<Search size={16} />}
               placeholder={t("searchPlaceholder")}

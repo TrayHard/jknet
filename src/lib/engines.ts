@@ -11,3 +11,13 @@
 export function engineRoute(engineId: string): string {
   return `/engines/${engineId}`;
 }
+
+/** Uses the same translated error for disabled choices and refused IPC calls. */
+export function engineUnavailableReason(
+  engine: import("./ipc").Engine,
+  errorText: (error: unknown) => string,
+): string | null {
+  return engine.compatibilityError
+    ? errorText({ code: engine.compatibilityError, message: engine.notInstallableReason ?? "", details: { system: engine.system } })
+    : engine.notInstallableReason;
+}

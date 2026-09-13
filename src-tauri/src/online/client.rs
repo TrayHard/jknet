@@ -535,6 +535,10 @@ impl OnlineClient {
 
     // -- Transport ----------------------------------------------------------
 
+    pub async fn community(&self, ctx: &OnlineContext, method: Method, path: &str, body: Option<Value>, auth: bool) -> Result<Value> {
+        self.call(ctx, method, path, body, auth).await?.json()
+    }
+
     /// Sends one request and turns anything but a 2xx into an [`AppError`].
     ///
     /// The retry is deliberately narrow. A service that answered with an error has

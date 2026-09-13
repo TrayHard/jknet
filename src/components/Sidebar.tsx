@@ -1,4 +1,4 @@
-import { ContactRound, Library, Monitor, Server, Settings, Users, Images, FileSliders } from "lucide-react";
+import { ContactRound, Library, Monitor, Server, Settings, Users, Images, FileSliders, Globe } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -18,6 +18,7 @@ import { Avatar, NavItem } from "./ui";
  */
 export function Sidebar() {
   const { t } = useTranslation("nav");
+  const { t: communityText } = useTranslation("servers");
   const navigate = useNavigate();
   const clients = useClients();
   // --- slice: account ---
@@ -69,7 +70,8 @@ export function Sidebar() {
           <NavItem to="/configs" icon={<FileSliders size={20} />} label={t("items.configs")} />
         </Group>
 
-        <Group title={t("groups.community")}>
+          <Group title={t("groups.community")}>
+            <NavItem to="/community" icon={<Globe size={20} />} label={communityText("community.browse")} />
           <NavItem
             to="/friends"
             icon={<Users size={20} />}

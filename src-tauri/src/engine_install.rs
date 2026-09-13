@@ -3,7 +3,7 @@
 //! Three jobs, in the order a player triggers them:
 //!
 //! 1. **Ask** — read the last ten releases of the project through the GitHub
-//!    REST API and keep only those that carry a Windows 32-bit archive.
+//!    REST API and keep only those with an archive compatible with the host.
 //! 2. **Download** — stream the archive into `cache\downloads\`, reusing a file
 //!    that is already there with the right size.
 //! 3. **Unpack** — wipe `clients\<slug>\engine\` and extract into it, then
@@ -29,6 +29,7 @@ use tokio::io::AsyncWriteExt;
 use crate::clients::{self, Client};
 use crate::engines::{self, Engine, EngineRelease};
 use crate::error::{AppError, Result};
+use crate::host_system::HostSystem;
 use crate::paths::{self, DataPaths};
 use crate::timestamp;
 
@@ -104,34 +105,40 @@ fn memory_cache() -> &'static Mutex<HashMap<String, CachedReleases>> {
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Returns the releases of an engine that carry a Windows 32-bit archive,
+/// Returns the releases of an engine that carry a compatible archive,
 /// newest first.
 ///
 /// Order of preference: a fresh entry in memory, a fresh file in `cache\`,
 /// then GitHub. When GitHub cannot be reached the stale file is served with a
 /// warning, because an outdated list beats an empty screen.
 pub async fn releases(engine: &'static Engine, cache_dir: &Path) -> Result<Vec<EngineRelease>> {
+    releases_for_system(engine, cache_dir, HostSystem::current()).await
+}
+
+async fn releases_for_system(engine: &'static Engine, cache_dir: &Path, host: HostSystem) -> Result<Vec<EngineRelease>> {
+    engine.require_host(host)?;
     if !engine.installable {
         return Ok(Vec::new());
     }
     let now = timestamp::now_unix();
+    let cache_key = host.cache_key(engine.id);
 
-    if let Some(cached) = read_memory(engine.id) {
-        if cached.is_fresh(now) {
+    if let Some(cached) = read_memory(&cache_key) {
+        if cached.is_fresh(now) && cache_is_compatible(engine, host, &cached) {
             return Ok(cached.releases);
         }
     }
 
-    let file = release_cache_file(cache_dir, engine.id);
-    let on_disk = read_disk(&file);
+    let file = release_cache_file(cache_dir, &cache_key);
+    let on_disk = read_disk(&file).filter(|cached| cache_is_compatible(engine, host, cached));
     if let Some(cached) = &on_disk {
         if cached.is_fresh(now) {
-            write_memory(engine.id, cached.clone());
+            write_memory(&cache_key, cached.clone());
             return Ok(cached.releases.clone());
         }
     }
 
-    match fetch_releases(engine).await {
+    match fetch_releases(engine, host).await {
         Ok(releases) => {
             let cached = CachedReleases {
                 fetched_at: timestamp::now_rfc3339(),
@@ -139,7 +146,7 @@ pub async fn releases(engine: &'static Engine, cache_dir: &Path) -> Result<Vec<E
                 releases,
             };
             write_disk(&file, &cached);
-            write_memory(engine.id, cached.clone());
+            write_memory(&cache_key, cached.clone());
             Ok(cached.releases)
         }
         Err(e) => match on_disk {
@@ -154,6 +161,12 @@ pub async fn releases(engine: &'static Engine, cache_dir: &Path) -> Result<Vec<E
             None => Err(e),
         },
     }
+}
+
+fn cache_is_compatible(engine: &Engine, host: HostSystem, cached: &CachedReleases) -> bool {
+    host.supports_engines() && cached.releases.iter().all(|release| {
+        engines::match_asset(engine.rules_for_system(host), [release.asset_name.as_str()]).is_some()
+    })
 }
 
 fn release_cache_file(cache_dir: &Path, engine_id: &str) -> PathBuf {
@@ -238,7 +251,7 @@ fn http_client() -> Result<reqwest::Client> {
 }
 
 /// Asks GitHub for the last releases and keeps the ones JKNet can install.
-async fn fetch_releases(engine: &'static Engine) -> Result<Vec<EngineRelease>> {
+async fn fetch_releases(engine: &'static Engine, host: HostSystem) -> Result<Vec<EngineRelease>> {
     let url = format!(
         "https://api.github.com/repos/{}/releases?per_page={RELEASES_PER_PAGE}",
         engine.repo
@@ -269,7 +282,7 @@ async fn fetch_releases(engine: &'static Engine) -> Result<Vec<EngineRelease>> {
         .into_iter()
         .filter(|release| !release.draft)
         .filter(|release| engine.allow_prerelease || !release.prerelease)
-        .filter_map(|release| to_engine_release(engine, release))
+        .filter_map(|release| to_engine_release(engine, release, host))
         .collect();
 
     log::info!(
@@ -281,13 +294,13 @@ async fn fetch_releases(engine: &'static Engine) -> Result<Vec<EngineRelease>> {
 }
 
 /// Turns a GitHub release into ours, or drops it when no asset matches.
-fn to_engine_release(engine: &Engine, release: GithubRelease) -> Option<EngineRelease> {
+fn to_engine_release(engine: &Engine, release: GithubRelease, host: HostSystem) -> Option<EngineRelease> {
     let names: Vec<&str> = release
         .assets
         .iter()
         .map(|asset| asset.name.as_str())
         .collect();
-    let index = engines::match_asset(engine.rules_for_host(), names.iter().copied())?;
+    let index = engines::match_asset(engine.rules_for_system(host), names.iter().copied())?;
     let asset = &release.assets[index];
 
     Some(EngineRelease {
@@ -435,6 +448,7 @@ async fn install_inner(
 ) -> Result<Client> {
     let mut client = clients::read_record(paths, client_id)?;
     let engine = engines::require(&client.engine_id)?;
+    engine.require_host(HostSystem::current())?;
     if !engine.installable {
         return Err(AppError::InvalidInput(format!(
             "{} cannot be installed automatically: {}",
@@ -449,17 +463,17 @@ async fn install_inner(
             .into_iter()
             .find(|release| release.tag == tag)
             .ok_or_else(|| {
-                AppError::NotFound(format!("release {tag} of {} with a Windows build", engine.name))
+                AppError::NotFound(format!("release {tag} of {} compatible with {}", engine.name, HostSystem::current().label()))
             })?,
         None => available.into_iter().next().ok_or_else(|| {
-            AppError::NotFound(format!("a release of {} with a Windows build", engine.name))
+            AppError::NotFound(format!("a release of {} compatible with {}", engine.name, HostSystem::current().label()))
         })?,
     };
 
     let archive = download(app, paths, client_id, engine, &release).await?;
 
     let engine_dir = extract_target(paths, client_id);
-    let executable = engine.executable;
+    let executable = engine.executable_for_asset(&release.asset_name);
     emit(
         app,
         InstallProgress {
@@ -534,13 +548,13 @@ async fn download(
     engine: &Engine,
     release: &EngineRelease,
 ) -> Result<PathBuf> {
+    engine.require_host(HostSystem::current())?;
+    if engines::match_asset(engine.rules_for_host(), [release.asset_name.as_str()]).is_none() {
+        return Err(AppError::UnsupportedEngineSystem { system: HostSystem::current().label() });
+    }
     let dir = paths.cache.join("downloads");
     paths::create_dir(&dir)?;
-    let file = dir.join(format!(
-        "{}-{}.zip",
-        engine.id,
-        sanitize_file_stem(&release.tag)
-    ));
+    let file = download_cache_file(&dir, engine, release);
 
     if let Ok(metadata) = fs::metadata(&file) {
         if metadata.len() == release.asset_size && release.asset_size > 0 {
@@ -638,6 +652,14 @@ async fn download(
     fs::rename(&partial, &file).map_err(|e| AppError::io_path("cannot rename", &partial, e))?;
     log::info!("downloaded {downloaded} bytes into {}", file.display());
     Ok(file)
+}
+
+fn download_cache_file(dir: &Path, engine: &Engine, release: &EngineRelease) -> PathBuf {
+    dir.join(format!("{}-{}-{}-{}.zip",
+        HostSystem::current().cache_key(engine.id),
+        sanitize_file_stem(&release.tag),
+        sanitize_file_stem(&release.published_at),
+        sanitize_file_stem(&release.asset_name)))
 }
 
 // ---------------------------------------------------------------------------
@@ -1363,6 +1385,72 @@ mod tests {
         assert!(cached.is_fresh(999_000));
     }
 
+    fn cached_asset(asset_name: &str) -> CachedReleases {
+        CachedReleases {
+            fetched_at: "2026-09-13T00:00:00Z".into(),
+            fetched_at_unix: timestamp::now_unix(),
+            releases: vec![EngineRelease {
+                tag: "latest".into(), name: "latest".into(),
+                published_at: "2026-09-13T00:00:00Z".into(), prerelease: true,
+                asset_name: asset_name.into(), asset_size: 123,
+                asset_url: "https://example.invalid/build.zip".into(),
+            }],
+        }
+    }
+
+    #[test]
+    fn incompatible_cached_archives_are_rejected_even_when_fresh() {
+        let engine = engines::require("openjk").unwrap();
+        let x86 = HostSystem { os: "windows", arch: "x86" };
+        let x64 = HostSystem { os: "windows", arch: "x86_64" };
+        let cached = cached_asset("OpenJK-windows-x86_64.zip");
+        assert!(cached.is_fresh(timestamp::now_unix()));
+        assert!(!cache_is_compatible(engine, x86, &cached));
+        assert!(cache_is_compatible(engine, x64, &cached));
+        for asset in ["OpenJK-macos-arm64.zip", "OpenJO-windows-x86.zip", "OpenJK-windows-x86.zip.sha256"] {
+            assert!(!cache_is_compatible(engine, x86, &cached_asset(asset)));
+        }
+    }
+
+    #[test]
+    fn downloads_of_different_architectures_and_rolling_builds_never_share_a_file() {
+        let engine = engines::require("openjk").unwrap();
+        let x86 = cached_asset("OpenJK-windows-x86.zip").releases.remove(0);
+        let x64 = cached_asset("OpenJK-windows-x86_64.zip").releases.remove(0);
+        let dir = Path::new("cache");
+        assert_ne!(download_cache_file(dir, engine, &x86), download_cache_file(dir, engine, &x64));
+        let mut next = x86.clone();
+        next.published_at = "2026-09-14T00:00:00Z".into();
+        assert_ne!(download_cache_file(dir, engine, &x86), download_cache_file(dir, engine, &next));
+    }
+
+    #[test]
+    fn unsupported_system_cannot_use_a_cache_or_start_a_request() {
+        let temp = tempfile::tempdir().unwrap();
+        let engine = engines::require("openjk").unwrap();
+        let host = HostSystem { os: "windows", arch: "aarch64" };
+        let key = host.cache_key(engine.id);
+        let file = release_cache_file(temp.path(), &key);
+        write_disk(&file, &cached_asset("OpenJK-windows-x86_64.zip"));
+        let error = tauri::async_runtime::block_on(releases_for_system(engine, temp.path(), host)).unwrap_err();
+        assert_eq!(error.code(), "unsupportedEngineSystem");
+        assert!(read_memory(&key).is_none());
+        assert!(!temp.path().join("downloads").exists());
+    }
+
+    #[test]
+    fn cache_round_trip_preserves_the_selected_architecture() {
+        let temp = tempfile::tempdir().unwrap();
+        let engine = engines::require("openjk").unwrap();
+        for (arch, asset) in [("x86", "OpenJK-windows-x86.zip"), ("x86_64", "OpenJK-windows-x86_64.zip")] {
+            let host = HostSystem { os: "windows", arch };
+            let key = host.cache_key(engine.id);
+            write_disk(&release_cache_file(temp.path(), &key), &cached_asset(asset));
+            let releases = tauri::async_runtime::block_on(releases_for_system(engine, temp.path(), host)).unwrap();
+            assert_eq!(releases[0].asset_name, asset);
+        }
+    }
+
     #[test]
     fn only_an_exhausted_quota_reads_as_a_rate_limit() {
         use reqwest::header::HeaderMap;
@@ -1404,11 +1492,12 @@ mod tests {
     }
 
     /// The one test that needs the internet. Run it by hand:
-    /// `cargo test -- --ignored downloads_and_unpacks_the_real_openjk_build`.
+    /// `cargo test --lib downloads_and_unpacks_native_engine_builds -- --ignored --nocapture`.
     #[test]
-    #[ignore = "downloads 6 MB from github.com"]
-    fn downloads_and_unpacks_the_real_openjk_build() {
-        let engine = engines::find("openjk").expect("openjk is in the registry");
+    #[ignore = "downloads OpenJK and TaystJK archives from github.com"]
+    fn downloads_and_unpacks_native_engine_builds() {
+      for id in ["openjk", "taystjk"] {
+        let engine = engines::require(id).unwrap();
         let temp = tempfile::tempdir().expect("temp dir");
 
         let found = tauri::async_runtime::block_on(releases(engine, temp.path()))
@@ -1434,9 +1523,18 @@ mod tests {
         let target = temp.path().join("engine");
         extract_archive(&archive, &target).expect("the archive unpacks");
         assert!(
-            target.join(engine.executable).is_file(),
+            target.join(engine.executable_for_asset(&newest.asset_name)).is_file(),
             "{} is missing from the unpacked build",
             engine.executable
         );
+        // Read the PE machine field without executing either game.
+        let binary = fs::read(engine.installed_executable(&target)).unwrap();
+        assert_eq!(&binary[..2], b"MZ");
+        let offset = u32::from_le_bytes(binary[0x3c..0x40].try_into().unwrap()) as usize;
+        assert_eq!(&binary[offset..offset + 4], b"PE\0\0");
+        let machine = u16::from_le_bytes(binary[offset + 4..offset + 6].try_into().unwrap());
+        assert_eq!(machine, if HostSystem::current().arch == "x86_64" { 0x8664 } else { 0x014c });
+        println!("{id}: executable and native PE architecture verified");
+      }
     }
 }

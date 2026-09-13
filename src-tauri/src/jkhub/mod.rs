@@ -546,6 +546,7 @@ pub async fn jkhub_install(
     id: u32,
     client_id: String,
     replace: Option<bool>,
+    allow_identical: Option<bool>,
 ) -> Result<JkhubInstallResult> {
     let data = state.paths()?;
     let http = jkhub.client()?;
@@ -559,6 +560,9 @@ pub async fn jkhub_install(
     }
 
     let view = HtmlSource::new(http, &data).file(id).await?;
+    if !view.file.game.matches(client.game) {
+        return Err(AppError::InvalidInput("This JKHub file belongs to another game".into()));
+    }
     let resolved = download::resolve(http, id, &view.file.slug).await?;
     let (url, file_name, size) = match resolved {
         JkhubDownload::Hosted {
@@ -591,7 +595,11 @@ pub async fn jkhub_install(
     let archive_for_task = archive.clone();
     let target_for_task = target.clone();
     let unpacked = tokio::task::spawn_blocking(move || {
-        unpack(&archive_for_task, &target_for_task, replace)
+        if allow_identical.unwrap_or(false) && !replace {
+            unpack_recommended(&archive_for_task, &target_for_task)
+        } else {
+            unpack(&archive_for_task, &target_for_task, replace)
+        }
     })
     .await
     .map_err(|e| AppError::Archive(format!("the unpacker stopped: {e}")))?;
@@ -1081,6 +1089,51 @@ fn unpack(archive: &Path, target: &Path, replace: bool) -> Result<JkhubInstallOu
     Ok(JkhubInstallOutcome::Installed { files })
 }
 
+/// Stage the whole pack before comparing: missing members of an earlier install
+/// are restored, identical members stay untouched, changed/disabled files require
+/// the existing explicit replacement flow. No write precedes conflict detection.
+fn unpack_recommended(archive: &Path, target: &Path) -> Result<JkhubInstallOutcome> {
+    use std::io::{Read, Write};
+    let staging = tempfile::tempdir().map_err(|e| AppError::io_path("cannot stage recommended files", target, e))?;
+    let outcome = unpack(archive, staging.path(), false)?;
+    let JkhubInstallOutcome::Installed { files } = &outcome else { return Ok(outcome); };
+    let mut conflicts = Vec::new();
+    let mut missing = Vec::new();
+    for name in files {
+        let destination = target.join(name);
+        if target.join(format!("{name}.disabled")).exists() { conflicts.push(name.clone()); continue; }
+        if !destination.exists() { missing.push(name); continue; }
+        let same = (|| -> std::io::Result<bool> {
+            let mut source = std::fs::File::open(staging.path().join(name))?;
+            let mut existing = std::fs::File::open(&destination)?;
+            if source.metadata()?.len() != existing.metadata()?.len() { return Ok(false); }
+            let mut a = [0u8; 65536]; let mut b = [0u8; 65536];
+            loop {
+                let n = source.read(&mut a)?;
+                if n == 0 { return Ok(true); }
+                existing.read_exact(&mut b[..n])?;
+                if a[..n] != b[..n] { return Ok(false); }
+            }
+        })().map_err(|e| AppError::io_path("cannot compare installed files", target, e))?;
+        if !same { conflicts.push(name.clone()); }
+    }
+    if !conflicts.is_empty() { return Ok(JkhubInstallOutcome::Conflicts { files: conflicts }); }
+    for name in missing {
+        let staged = staging.path().join(name);
+        let destination = target.join(name);
+        let mut source = std::fs::File::open(&staged).map_err(|e| AppError::io_path("cannot read staged file", target, e))?;
+        // create_new preserves a file another install may have written meanwhile.
+        let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&destination)
+            .map_err(|e| AppError::io_path("cannot create recommended file", target, e))?;
+        if let Err(error) = std::io::copy(&mut source, &mut output).and_then(|_| output.flush()) {
+            drop(output);
+            let _ = std::fs::remove_file(&destination);
+            return Err(AppError::io_path("cannot write recommended file", target, error));
+        }
+    }
+    Ok(outcome)
+}
+
 /// Fills in the two fields the unpacker cannot know: where the archive landed
 /// and which page it came from.
 fn with_archive_path(
@@ -1155,6 +1208,33 @@ pub fn manage(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn recommended_install_keeps_identical_restores_missing_and_preserves_changes() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().unwrap();
+        let archive = dir.path().join("pack.zip");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
+        for (name, bytes) in [("one.pk3", b"first".as_slice()), ("two.pk3", b"second".as_slice())] {
+            zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+            zip.write_all(bytes).unwrap();
+        }
+        zip.finish().unwrap();
+        let target = dir.path().join("base"); std::fs::create_dir(&target).unwrap();
+        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Installed { .. }));
+        let before = std::fs::metadata(target.join("one.pk3")).unwrap().modified().unwrap();
+        std::fs::remove_file(target.join("two.pk3")).unwrap();
+        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Installed { .. }));
+        assert_eq!(std::fs::read(target.join("two.pk3")).unwrap(),b"second");
+        assert_eq!(std::fs::metadata(target.join("one.pk3")).unwrap().modified().unwrap(),before);
+        std::fs::write(target.join("one.pk3"),b"edited").unwrap();
+        std::fs::remove_file(target.join("two.pk3")).unwrap();
+        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Conflicts { .. }));
+        assert_eq!(std::fs::read(target.join("one.pk3")).unwrap(),b"edited");
+        assert!(!target.join("two.pk3").exists());
+        std::fs::remove_file(target.join("one.pk3")).unwrap();
+        std::fs::write(target.join("one.pk3.disabled"),b"first").unwrap();
+        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Conflicts { .. }));
+    }
     use crate::clients::Client;
     // Only the fixture below names a shelf of the site; the commands speak
     // the launcher's `Game`, which `super::*` already brings in.

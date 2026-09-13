@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useErrorText } from "../../i18n/errors";
 import { useFormat } from "../../i18n/useFormat";
 import type { Client, Engine } from "../../lib/ipc";
+import { engineUnavailableReason } from "../../lib/engines";
 import {
   useEngineReleases,
   useEngineUpdate,
@@ -41,9 +42,9 @@ export function ClientEngineRow({
   const pendingInstalls = usePendingInstalls();
   const { installs, clearInstall } = useGameEventsContext();
   const [checkRequested, setCheckRequested] = useState(false);
-  const update = useEngineUpdate(checkRequested ? client.id : null);
+  const update = useEngineUpdate(checkRequested && engine?.installable ? client.id : null);
   const installed = client.engineVersion !== null;
-  const releases = useEngineReleases(installed ? null : client.engineId);
+  const releases = useEngineReleases(installed || !engine?.installable ? null : client.engineId);
   const [failure, setFailure] = useState<string | null>(null);
 
   const progress = installs[client.id];
@@ -58,6 +59,7 @@ export function ClientEngineRow({
   const updateAvailable = update.data?.updateAvailable === true;
 
   const install = () => {
+    if (!engine?.installable) return;
     setFailure(null);
     clearInstall(client.id);
     installEngine.mutate(
@@ -85,9 +87,9 @@ export function ClientEngineRow({
         ) : null}
       </div>
 
-      {engine && !engine.installable ? (
+      {!engine?.installable ? (
         <p className="text-body-sm text-fg-muted">
-          {engine.notInstallableReason ?? t("card.manualInstall")}
+          {engine ? (engineUnavailableReason(engine, errorText) ?? t("card.manualInstall")) : tCommon("states.loading")}
         </p>
       ) : (
         <div className="flex items-center gap-8 flex-wrap">
@@ -126,7 +128,7 @@ export function ClientEngineRow({
               size="sm"
               icon={<Download size={14} />}
               onClick={install}
-              disabled={installing}
+              disabled={installing || !latestTag}
             >
               {installing
                 ? tCommon("states.installing")
@@ -144,6 +146,11 @@ export function ClientEngineRow({
       ) : null}
       {update.error ? (
         <p className="text-body-sm text-fg-danger">{errorText(update.error)}</p>
+      ) : null}
+      {releases.error ? (
+        <p className="text-body-sm text-fg-danger">{errorText(releases.error)}</p>
+      ) : !installed && engine?.installable && releases.isSuccess && !latestTag ? (
+        <p className="text-body-sm text-fg-muted">{t("enginePage.versionsEmpty")}</p>
       ) : null}
       {failure ? (
         <p role="alert" className="text-body-sm text-fg-danger">

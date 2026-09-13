@@ -37,5 +37,6 @@
   "frontend": {
     "noRuntime": "Среда Tauri недоступна",
     "unexpected": "Непредвиденная ошибка"
-  }
+  },
+  "unsupportedEngineSystem": "Автоматическая установка движков недоступна для {{system}}. JKNet поддерживает сборки для Windows x86 и x64."
 }

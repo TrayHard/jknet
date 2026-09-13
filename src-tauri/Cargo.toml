@@ -1,6 +1,6 @@
 [package]
 name = "jknet"
-version = "0.3.0"
+version = "0.4.0"
 description = "Launcher for Star Wars Jedi Knight: Jedi Academy and Jedi Outcast"
 authors = ["JKNet"]
 edition = "2021"
@@ -19,6 +19,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+tempfile = "3.27.0"
 # `protocol-asset` registers the `asset:` handler the map pictures are served
 # through. Its scope is `app.security.assetProtocol` plus the folder
 # `levelshots::allow_cache_folder` adds at startup.
@@ -69,4 +70,3 @@ junction = { version = "2.0.0", default-features = false }
 winreg = "0.56.0"
 
 [dev-dependencies]
-tempfile = "3.27.0"

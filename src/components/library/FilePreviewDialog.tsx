@@ -6,6 +6,7 @@ import { useErrorText } from "../../i18n/errors";
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import { DEFAULT_SINGLE_HILT } from "../../lib/sabers";
+import { matchesPreviewSearch } from "../../lib/previewSearch";
 import { assembledSkinValue, parseAssembledSkin, skinIconUrl, filePreviewIpc, type CharColor, type FilePreview, type FilePreviewEntry, type FilePreviewSource } from "../../lib/ipc";
 import { ModelPreview } from "../ModelPreview";
 import { PartsPanel, SkinPicker } from "../client/SkinPicker";
@@ -103,7 +104,7 @@ function Contents({ preview, clientId, initialId, initialKind = "all" }: { previ
   const [picked, setPicked] = useState(initialId ?? preview.entries[0]?.id);
   const [shown, setShown] = useState(100);
   const entries = useMemo(() => KINDS.flatMap(group => preview.entries.filter(entry => entry.kind === group && (kind === "all" || entry.kind === kind)
-    && entry.label.toLowerCase().includes(search.trim().toLowerCase()))), [preview, search, kind]);
+    && matchesPreviewSearch(entry, search))), [preview, search, kind]);
   const selected = entries.find(entry => entry.id === picked) ?? entries[0];
   const characterHilt = preview.entries.find(entry => entry.kind === "hilt" && entry.hiltId?.toLowerCase() === DEFAULT_SINGLE_HILT.toLowerCase())
     ?? preview.entries.find(entry => entry.kind === "hilt" && entry.model === "models/weapons2/saber/saber_w.glm");

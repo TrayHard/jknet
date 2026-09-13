@@ -37,5 +37,6 @@
   "frontend": {
     "noRuntime": "Середовище Tauri недоступне",
     "unexpected": "Непередбачена помилка"
-  }
+  },
+  "unsupportedEngineSystem": "Автоматичне встановлення рушіїв недоступне для {{system}}. JKNet підтримує збірки для Windows x86 і x64."
 }

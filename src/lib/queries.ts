@@ -1085,8 +1085,8 @@ export function useAddServerHistory() {
   const queryClient = useQueryClient();
   const game = useActiveGame();
   return useMutation({
-    mutationFn: ({ address, clientId }: { address: string; clientId?: string }) =>
-      serversIpc.addServerHistory(address, clientId, game),
+    mutationFn: ({ address, clientId, game: targetGame }: { address: string; clientId?: string; game?: Game }) =>
+      serversIpc.addServerHistory(address, clientId, targetGame ?? game),
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings, settings);
     },

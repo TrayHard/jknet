@@ -29,6 +29,7 @@
 //! | `jkhub`          | browsing jkhub.org and installing its files     |
 
 mod account;
+mod community;
 // --- slice: player profiles ---
 // The skins and saber hilts a client can offer a profile, read out of the
 // archives it loads. Its own module rather than a part of `library`: that one
@@ -55,6 +56,7 @@ mod client_window;
 mod clients;
 mod engine_install;
 mod engines;
+mod host_system;
 mod error;
 mod friends;
 mod game;
@@ -424,6 +426,7 @@ pub fn run() {
             levelshots::list_levelshots,
             // --- slice: account ---
             account::get_account_state,
+            community::community_request,
             account::begin_sign_in,
             account::poll_sign_in,
             account::sign_out,

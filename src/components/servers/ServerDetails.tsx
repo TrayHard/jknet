@@ -1,6 +1,7 @@
 import { Check, Copy, Eye, Lock, Play, RefreshCw, Users } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 // --- slice: i18n ---
 import { useFormat } from "../../i18n/useFormat";
@@ -128,6 +129,7 @@ export function ServerDetails({
     <aside className="flex flex-col gap-16 w-320 shrink-0 min-h-0 rounded-lg border border-line bg-surface p-16">
       {/* --- slice: maps --- */}
       <MapPreview map={server.map} game={server.game} compact className="h-96" />
+      <Link className="text-accent text-body-sm-medium" to={`/community?${new URLSearchParams({ address: server.address, name: server.hostnameClean, game: server.game })}`}>{t("community.page")}</Link>
 
       {/* --- slice: selection context menu --- */}
       <div

@@ -35,6 +35,7 @@ import { LibraryPage } from "./pages/LibraryPage";
 import { OnboardingGate } from "./pages/onboarding/OnboardingGate";
 import { OnboardingPage } from "./pages/onboarding/OnboardingPage";
 import { ServersPage } from "./pages/ServersPage";
+import { CommunityPage } from "./pages/CommunityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 /**
@@ -149,6 +150,8 @@ function getMainRouter() {
         <Route element={<AppShell />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/servers" element={<ServersPage />} />
+          <Route path="/community" element={<CommunityPage />} />
+          <Route path="/community/:id" element={<CommunityPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/player-profiles" element={<PlayerProfilesPage />} />

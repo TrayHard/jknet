@@ -8,6 +8,7 @@ import { Badge, Button, Input, RadioCard } from "../../components/ui";
 import { useErrorText } from "../../i18n/errors";
 import { useFormat } from "../../i18n/useFormat";
 import type { Engine, EngineInstallProgress } from "../../lib/ipc";
+import { engineUnavailableReason } from "../../lib/engines";
 import {
   useClients,
   useCreateClient,
@@ -70,7 +71,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
   const game = firstClientGame(settings.data);
   const engineList = (engines.data ?? []).filter((engine) => engine.game === game);
   const existing = orderClients(clients.data ?? [], settings.data?.defaultClientId);
-  const versions = useEngineVersions(engineList.map((engine) => engine.id));
+  const versions = useEngineVersions(engineList.filter((engine) => engine.installable).map((engine) => engine.id));
 
   // Preselect once both lists are in: the client the player already has, or
   // the engine JKNet recommends. Waiting for both keeps a slow client list
@@ -85,7 +86,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
       return;
     }
     const recommended =
-      engineList.find((engine) => engine.status.kind === "recommended") ?? engineList[0];
+      engineList.find((engine) => engine.installable && engine.status.kind === "recommended") ?? engineList.find((engine) => engine.installable);
     if (recommended) setChoice({ kind: "engine", engineId: recommended.id });
   }, [choice, clients.data, engines.data, engineList, settings.data]);
 
@@ -101,7 +102,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
       : null;
   const canStart =
     choice !== null &&
-    (choice.kind === "existing" || (name.trim().length > 0 && chosenEngine !== null));
+    (choice.kind === "existing" || (name.trim().length > 0 && chosenEngine?.installable === true));
 
   /** Moves on once and only once, whatever answers late. */
   const leave = () => {
@@ -291,7 +292,7 @@ export function StepClient({ onBack, onContinue }: StepClientProps) {
                   <span className="block text-body-sm text-fg-muted">
                     {engine.installable
                       ? engine.description
-                      : (engine.notInstallableReason ??
+                      : (engineUnavailableReason(engine, errorText) ??
                         t("client.manualInstall"))}
                   </span>
                 </RadioCard>

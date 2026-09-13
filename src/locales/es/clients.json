@@ -61,8 +61,8 @@
     "releases": "All releases",
     "homepage": "Project site",
     "versionsHeading": "Versions",
-    "versionsText": "The newest builds JKNet can install, newest first. Installing one is done from a client, not from here.",
-    "versionsEmpty": "The project publishes no archive JKNet can install.",
+    "versionsText": "Hasta diez versiones compatibles con su sistema. JKNet selecciona el archivo automáticamente.",
+    "versionsEmpty": "No hay versiones compatibles con su sistema.",
     "prerelease": "Pre-release",
     "newClient": "New client with this engine",
     "facts": {

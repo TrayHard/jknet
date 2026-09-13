@@ -37,5 +37,6 @@
   "frontend": {
     "noRuntime": "Środowisko Tauri jest niedostępne",
     "unexpected": "Nieoczekiwany błąd"
-  }
+  },
+  "unsupportedEngineSystem": "Automatyczna instalacja silników jest niedostępna w systemie {{system}}. JKNet obsługuje wersje dla Windows x86 i x64."
 }

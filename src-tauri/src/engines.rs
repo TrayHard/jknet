@@ -20,9 +20,10 @@ use crate::clients::Client;
 use crate::engine_install;
 use crate::error::{AppError, Result};
 use crate::game::Game;
+use crate::host_system::HostSystem;
 use crate::state::AppState;
 
-/// One attempt at recognising the Windows 32-bit archive of a release.
+/// One attempt at recognising a Windows archive of a release.
 ///
 /// Matching is substring based and case insensitive, because the four projects
 /// spell their platforms four different ways (`windows-x86`, `win32-portable`)
@@ -126,31 +127,59 @@ pub struct Engine {
     pub allow_prerelease: bool,
     /// Rules tried in order until one recognises an asset of the release.
     ///
-    /// These are the rules for a 32-bit launcher. A 64-bit one prefers
+    /// These are the rules for Windows x86. Windows x64 prefers
     /// [`Engine::asset_rules_x64`] when the project publishes a 64-bit build;
     /// read both through [`Engine::rules_for_host`].
     #[serde(skip)]
     pub asset_rules: &'static [AssetRule],
     // --- slice: game core ---
-    /// Rules preferred on a 64-bit launcher, or `None` when the project ships
+    /// Rules preferred on Windows x64, or `None` when the project ships
     /// one architecture only.
     #[serde(skip)]
     pub asset_rules_x64: Option<&'static [AssetRule]>,
 }
 
 impl Engine {
-    // --- slice: game core ---
-    /// The asset rules for the machine this launcher runs on.
-    ///
-    /// The width of the launcher build, not of the operating system, and that
-    /// is the right question: a 32-bit JKNet runs on 64-bit Windows, where the
-    /// 32-bit game build also runs, and a 64-bit JKNet only exists on 64-bit
-    /// Windows. Either way the archive picked is one the machine can start.
+    /// Rules selected by the native OS architecture, including under WOW64.
     pub fn rules_for_host(&self) -> &'static [AssetRule] {
+        self.rules_for_system(HostSystem::current())
+    }
+
+    pub fn rules_for_system(&self, host: HostSystem) -> &'static [AssetRule] {
+        if !self.installable || !host.supports_engines() {
+            return &[];
+        }
         match self.asset_rules_x64 {
-            Some(rules) if cfg!(target_pointer_width = "64") => rules,
+            Some(rules) if host.arch == "x86_64" => rules,
             _ => self.asset_rules,
         }
+    }
+
+    pub fn require_host(&self, host: HostSystem) -> Result<()> {
+        if !host.supports_engines() {
+            return Err(AppError::UnsupportedEngineSystem { system: host.label() });
+        }
+        Ok(())
+    }
+
+    /// x64 archives of OpenJK and TaystJK use a different executable name.
+    pub fn executable_for_asset(&self, asset_name: &str) -> &'static str {
+        if asset_name.to_ascii_lowercase().contains("x86_64") {
+            match self.id {
+                "openjk" => return "openjk.x86_64.exe",
+                "taystjk" => return "taystjk.x86_64.exe",
+                _ => {}
+            }
+        }
+        self.executable
+    }
+
+    /// Existing x86 clients keep working after x64 becomes the default.
+    pub fn installed_executable(&self, dir: &std::path::Path) -> std::path::PathBuf {
+        let original = dir.join(self.executable);
+        if original.is_file() { return original; }
+        let x64 = dir.join(self.executable_for_asset("x86_64"));
+        if x64.is_file() { x64 } else { original }
     }
 }
 
@@ -206,7 +235,10 @@ const ENGINES: &[Engine] = &[
                 forbid: &["x86_64", "openjo", "arm"],
             },
         ],
-        asset_rules_x64: None,
+        asset_rules_x64: Some(&[
+            AssetRule { require: &["openjk-windows-x86_64", ".zip"], forbid: &["sanitizer", "arm"] },
+            AssetRule { require: &["openjk-windows-x86", ".zip"], forbid: &["x86_64", "sanitizer", "arm"] },
+        ]),
     },
     Engine {
         id: "eternaljk",
@@ -236,11 +268,11 @@ const ENGINES: &[Engine] = &[
             AssetRule {
                 require: &["win32", ".zip"],
                 // `ejk-japro-pk3only.zip` is content, not an engine.
-                forbid: &["pk3only"],
+                forbid: &["pk3only", "x64", "x86_64", "arm", "sanitizer"],
             },
             AssetRule {
                 require: &["windows", ".zip"],
-                forbid: &["x86_64", "pk3only"],
+                forbid: &["x86_64", "x64", "pk3only", "arm", "sanitizer"],
             },
         ],
         asset_rules_x64: None,
@@ -271,7 +303,10 @@ const ENGINES: &[Engine] = &[
                 forbid: &["x86_64", "sanitizer", "arm"],
             },
         ],
-        asset_rules_x64: None,
+        asset_rules_x64: Some(&[
+            AssetRule { require: &["taystjk-windows-x86_64", ".zip"], forbid: &["sanitizer", "windowsxp", "arm"] },
+            AssetRule { require: &["taystjk-windows-x86", ".zip"], forbid: &["x86_64", "sanitizer", "windowsxp", "arm"] },
+        ]),
     },
     Engine {
         id: "jamme",
@@ -299,7 +334,7 @@ const ENGINES: &[Engine] = &[
             },
             AssetRule {
                 require: &["windows", ".zip"],
-                forbid: &["x86_64", "android", "macos", "arm"],
+                forbid: &["x86_64", "x64", "android", "macos", "arm", "sanitizer"],
             },
         ],
         asset_rules_x64: None,
@@ -383,22 +418,39 @@ pub fn require_for_game(id: &str, game: Game) -> Result<&'static Engine> {
 /// the registry is static, and refetching it every time a radio button moves
 /// would be a round trip for a constant.
 #[tauri::command]
-pub fn list_engines(game: Option<Game>) -> Result<Vec<Engine>> {
-    Ok(match game {
-        Some(game) => ENGINES
-            .iter()
-            .filter(|engine| engine.game == game)
-            .cloned()
-            .collect(),
-        None => ENGINES.to_vec(),
-    })
+pub fn list_engines(game: Option<Game>) -> Result<Vec<EngineAvailability>> {
+    let host = HostSystem::current();
+    Ok(ENGINES.iter()
+        .filter(|engine| game.is_none_or(|game| engine.game == game))
+        .map(|engine| availability(engine, host))
+        .collect())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineAvailability {
+    #[serde(flatten)]
+    pub engine: Engine,
+    pub system: String,
+    pub compatibility_error: Option<&'static str>,
+}
+
+fn availability(engine: &Engine, host: HostSystem) -> EngineAvailability {
+    let mut engine = engine.clone();
+    let compatibility_error = if host.supports_engines() {
+        None
+    } else {
+        engine.installable = false;
+        Some("unsupportedEngineSystem")
+    };
+    EngineAvailability { engine, system: host.label(), compatibility_error }
 }
 
 // ---------------------------------------------------------------------------
 // Asset matching
 // ---------------------------------------------------------------------------
 
-/// Picks the asset of a release that holds the Windows 32-bit build.
+/// Picks the compatible archive using the host's ordered rules.
 ///
 /// Rules are tried in order and the first rule that matches anything wins, so
 /// a precise rule can sit in front of a loose one. Within a rule the first
@@ -411,7 +463,11 @@ where
     for rule in rules {
         let found = assets.clone().into_iter().position(|name| {
             let name = name.to_ascii_lowercase();
-            rule.require.iter().all(|needle| name.contains(needle))
+            let is_x64 = |text: &str| ["x86_64", "x64", "amd64"].iter().any(|arch| text.contains(arch));
+            name.ends_with(".zip")
+                && (!is_x64(&name) || rule.require.iter().any(|part| is_x64(part)))
+                && !["sanitizer", "debug", "symbols", "arm", "aarch", "linux", "macos", "windowsxp"].iter().any(|needle| name.contains(needle))
+                && rule.require.iter().all(|needle| name.contains(needle))
                 && !rule.forbid.iter().any(|needle| name.contains(needle))
         });
         if found.is_some() {
@@ -602,7 +658,7 @@ mod tests {
 
     fn pick(engine_id: &str, assets: &[&str]) -> Option<String> {
         let engine = find(engine_id).expect("engine is in the registry");
-        match_asset(engine.rules_for_host(), assets.iter().copied())
+        match_asset(engine.rules_for_system(HostSystem { os: "windows", arch: "x86" }), assets.iter().copied())
             .map(|index| assets[index].to_string())
     }
 
@@ -738,11 +794,11 @@ mod tests {
 
         let ja = list_engines(Some(Game::JediAcademy)).expect("the registry answers");
         assert_eq!(ja.len(), 4);
-        assert!(ja.iter().all(|engine| engine.game == Game::JediAcademy));
+        assert!(ja.iter().all(|entry| entry.engine.game == Game::JediAcademy));
 
         let jo = list_engines(Some(Game::JediOutcast)).expect("the registry answers");
         assert_eq!(
-            jo.iter().map(|engine| engine.id).collect::<Vec<_>>(),
+            jo.iter().map(|entry| entry.engine.id).collect::<Vec<_>>(),
             vec!["jk2mv"]
         );
     }
@@ -880,6 +936,77 @@ mod tests {
             pick("jamme", JAMME_ASSETS).as_deref(),
             Some("jamme-windows-x86.zip")
         );
+    }
+
+    #[test]
+    fn selects_native_x64_or_compatible_x86_from_mixed_releases() {
+        let host = HostSystem { os: "windows", arch: "x86_64" };
+        for (id, assets, expected) in [
+            ("openjk", OPENJK_ASSETS, "OpenJK-windows-x86_64.zip"),
+            ("taystjk", TAYSTJK_ASSETS, "TaystJK-windows-x86_64.zip"),
+            ("jk2mv", JK2MV_ASSETS, "jk2mv-v1.4.1-win32-x64-portable.zip"),
+            ("eternaljk", ETERNALJK_ASSETS, "eternaljk-win32-portable.zip"),
+            ("jamme", JAMME_ASSETS, "jamme-windows-x86.zip"),
+        ] {
+            let engine = require(id).unwrap();
+            assert_eq!(pick_with(engine.rules_for_system(host), assets).as_deref(), Some(expected), "{id}");
+            let only_x86: Vec<&str> = assets.iter().copied().filter(|name| !name.contains("x86_64") && !name.contains("x64")).collect();
+            assert!(pick_with(engine.rules_for_system(host), &only_x86).is_some(), "{id}");
+        }
+    }
+
+    #[test]
+    fn unsupported_hosts_disable_catalog_and_refuse_installation() {
+        for host in [
+            HostSystem { os: "linux", arch: "x86_64" },
+            HostSystem { os: "macos", arch: "aarch64" },
+            HostSystem { os: "windows", arch: "aarch64" },
+            HostSystem { os: "windows", arch: "unknown" },
+        ] {
+            for engine in ENGINES {
+                assert!(engine.rules_for_system(host).is_empty());
+                let error = engine.require_host(host).unwrap_err();
+                assert_eq!(error.code(), "unsupportedEngineSystem");
+                assert_eq!(error.details()["system"], host.label());
+                let entry = serde_json::to_value(availability(engine, host)).unwrap();
+                assert_eq!(entry["installable"], false);
+                assert_eq!(entry["compatibilityError"], error.code());
+                assert_eq!(entry["id"], engine.id);
+            }
+        }
+    }
+
+    #[test]
+    fn x86_rules_never_accept_x64_arm_debug_or_non_archives() {
+        let host = HostSystem { os: "windows", arch: "x86" };
+        for engine in ENGINES {
+            let assets = [
+                format!("{}-windows-x86_64.zip", engine.id),
+                format!("{}-windows-x64.zip", engine.id),
+                format!("{}-win32-arm64-portable.zip", engine.id),
+                format!("{}-windows-x86-AddressSanitizer.zip", engine.id),
+                format!("{}-windows-x86.zip.sha256", engine.id),
+                format!("{}-windows-x86-debug.zip", engine.id),
+                format!("{}-win32-x64-portable.zip", engine.id),
+            ];
+            assert!(match_asset(engine.rules_for_system(host), assets.iter().map(String::as_str)).is_none(), "{}", engine.id);
+        }
+    }
+
+    #[test]
+    fn both_existing_x86_and_installed_x64_executables_are_found() {
+        let temp = tempfile::tempdir().unwrap();
+        for id in ["openjk", "taystjk"] {
+            let engine = require(id).unwrap();
+            let dir = temp.path().join(id);
+            std::fs::create_dir(&dir).unwrap();
+            let x64 = dir.join(engine.executable_for_asset("windows-x86_64.zip"));
+            std::fs::write(&x64, b"MZ").unwrap();
+            assert_eq!(engine.installed_executable(&dir), x64);
+            let x86 = dir.join(engine.executable);
+            std::fs::write(&x86, b"MZ").unwrap();
+            assert_eq!(engine.installed_executable(&dir), x86);
+        }
     }
 
     #[test]

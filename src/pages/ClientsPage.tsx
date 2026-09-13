@@ -14,6 +14,7 @@ import {
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
+import { engineUnavailableReason } from "../lib/engines";
 
 // --- slice: client window ---
 import { InstallProgressBar } from "../components/client/InstallProgressBar";
@@ -399,6 +400,7 @@ function ClientCard({
   onMakeDefault,
 }: ClientCardProps) {
   const { t } = useTranslation("clients");
+  const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const format = useFormat();
   const engineNote = useEngineNote();
@@ -573,9 +575,9 @@ function ClientCard({
             keeps a row too wide for the card — a long locale on the minimum
             window of 1100 px — inside it instead of spilling under Launch. */}
         <div className="flex items-center gap-8 flex-nowrap pt-4 min-w-0 overflow-hidden">
-          {engine && !engine.installable ? (
-            <p className="text-body-sm text-fg-muted truncate">
-              {engine.notInstallableReason ?? t("card.manualInstall")}
+          {!engine?.installable ? (
+            <p className="text-body-sm text-fg-muted" title={engine ? (engineUnavailableReason(engine, errorText) ?? undefined) : undefined}>
+              {engine ? (engineUnavailableReason(engine, errorText) ?? t("card.manualInstall")) : tCommon("states.loading")}
             </p>
           ) : (
             <EngineControls
@@ -754,19 +756,26 @@ function EngineControls({
           ) : null}
         </>
       ) : (
-        <Button
-          size="sm"
-          className="shrink-0"
-          icon={<Download size={14} />}
-          onClick={onInstall}
-          disabled={installing}
-        >
-          {installing
-            ? tCommon("states.installing")
-            : latestTag
-              ? t("engine.installVersion", { version: latestTag })
-              : t("engine.install")}
-        </Button>
+        <>
+          <Button
+            size="sm"
+            className="shrink-0"
+            icon={<Download size={14} />}
+            onClick={onInstall}
+            disabled={installing || !latestTag}
+          >
+            {installing
+              ? tCommon("states.installing")
+              : latestTag
+                ? t("engine.installVersion", { version: latestTag })
+                : t("engine.install")}
+          </Button>
+          {releases.error ? (
+            <span className="text-body-sm text-fg-danger">{errorText(releases.error)}</span>
+          ) : releases.isSuccess && !latestTag ? (
+            <span className="text-body-sm text-fg-muted">{t("enginePage.versionsEmpty")}</span>
+          ) : null}
+        </>
       )}
     </>
   );

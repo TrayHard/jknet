@@ -6,7 +6,7 @@ import { Link } from "react-router";
 import { useErrorText } from "../i18n/errors";
 import { useEngineNote } from "../i18n/useEngineNote";
 import type { Game } from "../lib/ipc";
-import { engineRoute } from "../lib/engines";
+import { engineRoute, engineUnavailableReason } from "../lib/engines";
 // --- slice: game switch ---
 import {
   defaultClientPatch,
@@ -92,9 +92,10 @@ export function NewClientDialog({
   // that belongs to the other game the moment the game changes.
   useEffect(() => {
     if (engines.length === 0) return;
-    if (engines.some((engine) => engine.id === engineId)) return;
-    const recommended = engines.find((engine) => engine.status.kind === "recommended");
-    setEngineId((recommended ?? engines[0]).id);
+    if (engines.some((engine) => engine.id === engineId && engine.installable)) return;
+    const available = engines.filter((engine) => engine.installable);
+    const recommended = available.find((engine) => engine.status.kind === "recommended");
+    setEngineId((recommended ?? available[0])?.id ?? "");
   }, [engines, engineId]);
 
   // The first client of a game is that game's default one whether the player
@@ -115,7 +116,7 @@ export function NewClientDialog({
   const selected = engines.find((engine) => engine.id === engineId);
   const selectedNote = selected ? engineNote(selected.status) : null;
 
-  const canSubmit = name.trim().length > 0 && engineId.length > 0;
+  const canSubmit = name.trim().length > 0 && selected?.installable === true;
 
   const submit = () => {
     if (!canSubmit) return;
@@ -160,7 +161,7 @@ export function NewClientDialog({
         if (event.key === "Escape") onClose();
       }}
     >
-      <div className="w-full max-w-[520px] rounded-xl border border-line bg-surface p-24 shadow-popover">
+      <div className="w-full max-w-[520px] max-h-[calc(100dvh-48px)] overflow-y-auto rounded-xl border border-line bg-surface p-24 shadow-popover">
         <h2 className="text-display-md text-fg">{t("newDialog.title")}</h2>
         <p className="text-body-sm text-fg-secondary pt-4">{t("newDialog.text")}</p>
 
@@ -197,7 +198,7 @@ export function NewClientDialog({
               key={engine.id}
               className={[
                 "flex flex-col rounded-md border transition-colors duration-150",
-                engine.id === engineId
+                engine.installable && engine.id === engineId
                   ? "border-line-accent bg-accent-subtle"
                   : "border-line bg-input hover:bg-surface-hover",
               ].join(" ")}
@@ -205,7 +206,8 @@ export function NewClientDialog({
               <button
                 type="button"
                 onClick={() => setEngineId(engine.id)}
-                className="flex flex-1 flex-col items-start gap-4 p-12 pb-4 text-left cursor-pointer"
+                disabled={!engine.installable}
+                className="flex flex-1 flex-col items-start gap-4 p-12 pb-4 text-left cursor-pointer disabled:cursor-not-allowed"
               >
                 <div className="flex items-center gap-8 flex-wrap">
                   <span className="text-body-md-medium text-fg">{engine.name}</span>
@@ -218,8 +220,8 @@ export function NewClientDialog({
                     <Badge tone="warm">{t("engines.legacy")}</Badge>
                   ) : null}
                 </div>
-                <span className="text-body-sm text-fg-muted">
-                  {engine.description}
+                <span className="text-body-sm text-fg-secondary">
+                  {engine.installable ? engine.description : (engineUnavailableReason(engine, errorText) ?? t("card.manualInstall"))}
                 </span>
               </button>
               <Link

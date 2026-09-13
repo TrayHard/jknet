@@ -7,10 +7,12 @@ import { useErrorText } from "../../i18n/errors";
 import { cn } from "../../lib/format";
 import { filePreviewIpc, skinIconUrl, type FilePreviewEntry, type Game, type SortDirection } from "../../lib/ipc";
 import { useSettings } from "../../lib/queries";
+import { matchesPreviewSearch } from "../../lib/previewSearch";
 import { Badge, Button, EmptyState, Input, Select } from "../ui";
 import { PREVIEW_KINDS, ReadyFilePreviewDialog } from "./FilePreviewDialog";
 import { LibraryObjectIcon } from "./LibraryObjectIcon";
 import { LibrarySort } from "./LibrarySort";
+import { BaseGameMapCard, useBaseGameMapShots } from "./BaseGameMapCard";
 
 export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: string | null }) {
   const { t } = useTranslation("library"), { t: common } = useTranslation("common");
@@ -27,6 +29,7 @@ export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: stri
     },
     staleTime: Infinity, gcTime: 0, retry: false,
   });
+  const mapShots = useBaseGameMapShots(query.data);
   const current = useRef<string | undefined>(undefined);
   const [search, setSearch] = useState(""), [kind, setKind] = useState("all"), [archive, setArchive] = useState("all");
   const [direction, setDirection] = useState<SortDirection>("asc"), [shown, setShown] = useState(120);
@@ -39,7 +42,7 @@ export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: stri
     };
   }, [query.data?.id]);
   const matching = useMemo(() => (query.data?.entries ?? []).filter(entry =>
-    (archive === "all" || entry.archive === Number(archive)) && entry.label.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())), [query.data, archive, search]);
+    (archive === "all" || entry.archive === Number(archive)) && matchesPreviewSearch(entry, search)), [query.data, archive, search]);
   const entries = useMemo(() => matching.filter(entry => kind === "all" || entry.kind === kind)
     .sort((a, b) => a.label.localeCompare(b.label) * (direction === "asc" ? 1 : -1)), [matching, kind, direction]);
   useEffect(() => { setShown(120); }, [kind, archive, search, direction]);
@@ -77,13 +80,14 @@ export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: stri
           <h3 className="flex items-center gap-8 text-label-sm text-fg-muted mb-12"><LibraryObjectIcon kind={group} size={16} />{t(`preview.kind.${group}`)}</h3>
           <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">
             {visible.filter(entry => entry.kind === group).map(entry => <li key={entry.id}>
-              <button type="button" className="w-full h-full flex items-center gap-12 p-16 rounded-lg border border-line bg-surface hover:bg-hover-overlay text-left cursor-pointer"
+              {entry.kind === "map" ? <BaseGameMapCard entry={entry} archive={query.data.archives[entry.archive]} images={mapShots.data?.get(entry.id)} onOpen={() => setPicked(entry)} />
+              : <button type="button" className="w-full h-full flex items-center gap-12 p-16 rounded-lg border border-line bg-surface hover:bg-hover-overlay text-left cursor-pointer"
                 aria-label={t("preview.open", { name: entry.label })} onClick={() => setPicked(entry)}>
                 {skinIconUrl(entry.appearance?.icon ?? null) ? <img src={skinIconUrl(entry.appearance?.icon ?? null)!} alt="" loading="lazy" className="size-48 object-contain rounded-md shrink-0" />
                   : <LibraryObjectIcon kind={entry.kind} size={40} className="text-fg-muted shrink-0" />}
                 <span className="min-w-0"><span className="block text-body-md-medium text-fg break-words">{entry.label}</span>
                   <span className="block text-body-xs text-fg-muted mt-4">{query.data.archives[entry.archive]}</span></span>
-              </button>
+              </button>}
             </li>)}
           </ul>
         </section>)}

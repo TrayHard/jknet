@@ -1094,7 +1094,7 @@ pub(crate) fn start_client(
     let engine = inputs.engine;
     game_files::validate(client.game, &inputs.game_data)?;
 
-    let executable = inputs.engine_dir.join(engine.executable);
+    let executable = engine.installed_executable(&inputs.engine_dir);
     if !executable.is_file() {
         return Err(AppError::Launch(format!(
             "{} is not installed for {}. Install the engine on the Clients screen.",

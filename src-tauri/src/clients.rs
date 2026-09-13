@@ -119,7 +119,7 @@ pub fn create_client(
     game: Game,
 ) -> Result<Client> {
     let name = validate_name(&name)?;
-    engines::require_for_game(&engine_id, game)?;
+    engines::require_for_game(&engine_id, game)?.require_host(crate::host_system::HostSystem::current())?;
 
     let paths = state.paths()?;
     paths.ensure()?;

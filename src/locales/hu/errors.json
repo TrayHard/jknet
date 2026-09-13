@@ -37,5 +37,6 @@
   "frontend": {
     "noRuntime": "A Tauri futtatókörnyezet nem érhető el",
     "unexpected": "Váratlan hiba"
-  }
+  },
+  "unsupportedEngineSystem": "A motorok automatikus telepítése nem érhető el ezen a rendszeren: {{system}}. A JKNet a Windows x86 és x64 változatokat támogatja."
 }
