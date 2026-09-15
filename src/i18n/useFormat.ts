@@ -25,7 +25,7 @@ import { FALLBACK_LANGUAGE } from "./languages";
 export interface Formatters {
   /** The BCP 47 tag every `Intl` call in the app runs on. */
   locale: string;
-  /** `12.4 MB`, `12,4 МБ`. An absent count gives the em dash. */
+  /** `12.4 MB`, or `12,4 MB` in a comma-decimal locale. An absent count gives the em dash. */
   bytes: (bytes: number | null | undefined) => string;
   /** A plain number with the language's own separators. */
   number: (value: number) => string;

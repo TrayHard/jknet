@@ -274,7 +274,8 @@ function devLanguageOverride(): Language | null {
  *
  * `main.tsx` awaits this before it mounts React, so the first frame is already
  * in the right language: a window that paints English and corrects itself is
- * both a flash and a layout jump — «Настройки» is not the width of «Settings».
+ * both a flash and a layout jump: a translated «Settings» is not the width of
+ * the English one.
  *
  * Neither input is required. A settings read that fails, an operating system
  * that reports no locale and a plain browser all end at the same place: the

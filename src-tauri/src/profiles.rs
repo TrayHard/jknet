@@ -6,7 +6,7 @@
 //! the blades and of the character itself — nine launch cvars and a name for
 //! the launcher to call the set by.
 //!
-//! The entity the `CLAUDE.md` of this repository forbids is a different one: a
+//! The entity the project rules forbid is a different one: a
 //! wrapper around «engine + files + settings», which is what a **client**
 //! already is. A player profile owns none of that. It belongs *to* a client and
 //! adds cosmetics on top of it.

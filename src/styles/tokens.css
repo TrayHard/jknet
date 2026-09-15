@@ -11,7 +11,7 @@
  * Radii, font families, shadows and the Tailwind spacing multiplier live in the
  * `@theme` block of `src/index.css`: Tailwind v4 owns the `--radius-*`,
  * `--font-*`, `--shadow-*` and `--spacing` namespaces, so declaring them twice
- * would create circular variable references. See CLAUDE.md.
+ * would create circular variable references. See the project rules.
  *
  * The theme is dark only. A light mode can be added later as a second set of
  * semantic values; primitives stay as they are.

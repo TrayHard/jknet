@@ -582,7 +582,7 @@ export function HomePage() {
  * The core reports only the start time, so the clock belongs to the screen that
  * draws it rather than to a command that would have to be polled. The whole
  * sentence is one message with the clock in a slot: the words around a duration
- * change with the language, and «Запущено 3 мин назад» puts them on both sides.
+ * change with the language, and some languages put words on both sides of it.
  */
 // --- slice: servers robustness ---
 /**

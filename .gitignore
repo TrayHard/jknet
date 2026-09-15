@@ -33,3 +33,11 @@ src-tauri/target
 
 # Local convenience scripts: per-machine helpers, not part of the repository
 dev.cmd
+
+# Only the implementation and README are published: no documentation, changelog, editor
+# settings or assistant rule files.
+/docs/
+/CHANGELOG.md
+/AGENTS.md
+/CLAUDE.md
+/.vscode/

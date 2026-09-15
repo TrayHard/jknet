@@ -47,8 +47,7 @@ void start().catch((e: unknown) => {
  * --- slice: i18n ---
  * The catalog is loaded before React mounts. Rendering English first and
  * correcting it a moment later would be both a flash and a layout jump: a
- * sidebar item is «Settings» in one language and «Настройки» in another, and
- * the second is wider.
+ * sidebar item is «Settings» in one language and a longer word in another.
  *
  * Two reads stand between the window opening and the first paint, and neither
  * may block it. `get_settings` reads one local file and `locale()` reads one

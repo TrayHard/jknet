@@ -96,8 +96,8 @@ export function Sidebar() {
               {user ? user.displayName : t("user.guest")}
             </span>
             {/* --- slice: i18n --- the line under the name truncates in a
-                232 px column, and «Клиента ещё нет» is longer than «No client
-                yet». The tooltip carries what the column cuts. */}
+                232 px column, and the Russian "No client yet" is longer than
+                the English one. The tooltip carries what the column cuts. */}
             <span
               className="block text-mono-xs text-fg-muted truncate"
               title={defaultClient ? defaultClient.name : t("user.noClient")}

@@ -277,9 +277,8 @@ pub struct LaunchPlan<'a> {
 /// right and overwrites the cvar on every match, so the last `+set` of a cvar
 /// is the one the engine keeps. Commands such as `+exec` and `+map` do not
 /// override each other at all: `Com_AddStartupCommands` appends every segment
-/// to the command buffer and they run in order. The section «Как движок
-/// разрешает повторы» of `docs/architecture.md` carries the file-and-line
-/// sources.
+/// to the command buffer and they run in order. The architecture notes kept
+/// outside the repository carry the file-and-line sources.
 ///
 /// --- slice: game core ---
 /// The roots come from the game's own spec, because the two engines disagree

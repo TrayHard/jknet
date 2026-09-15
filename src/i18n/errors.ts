@@ -4,8 +4,8 @@
  * Every command answers a failure with `{ code, message, details }` — see
  * `src-tauri/src/error.rs`. The code names a key of the `errors` namespace and
  * `details` fills its placeholders, so «Jedi Outcast game files: the folder is
- * not set» becomes «Файлы Jedi Outcast: папка не задана» without the core
- * knowing a word of Russian.
+ * not set» comes out in the language of the interface without the core
+ * knowing a word of it.
  *
  * The fallback is the rendered English `message`, never a blank line and never
  * a bare code. A variant added to the core before its catalog key exists

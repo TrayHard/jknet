@@ -1,7 +1,8 @@
 //! JKNet Online: sign-in, the account, friends, presence and invites.
 //!
 //! JKNet Online is a small HTTPS service the launcher talks to over JSON; the
-//! contract it implements is API v1, written down in `docs/architecture.md`.
+//! contract it implements is API v1, written down in the architecture notes
+//! kept outside the repository.
 //! This module is the launcher's whole side of it, so a screen never builds a
 //! URL or reads a status code.
 //!

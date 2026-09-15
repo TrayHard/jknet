@@ -15,7 +15,7 @@
  *
  * `--spacing: 1px` makes every spacing utility a pixel value, so the Figma
  * token `space/16` is written `p-16`, `gap-16`, `mt-16`. The naming table is
- * in CLAUDE.md.
+ * in the project rules.
  */
 @theme {
   --color-*: initial;

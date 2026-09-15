@@ -223,9 +223,9 @@ function LanguageCard({ onError }: { onError: (message: string) => void }) {
         value={stored}
         disabled={settings.data === undefined || updateSettings.isPending}
         onChange={save}
-        // Wide enough for «Язык системы (English)», which is the longest
-        // option any language produces: the system entry names the language
-        // it would pick, in that language.
+        // Wide enough for the longest option any language produces: the system
+        // entry names the language it would pick, in that language, and the
+        // Russian variant is the widest.
         className="w-240 shrink-0"
       />
     </section>

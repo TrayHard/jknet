@@ -103,7 +103,7 @@ impl Game {
     /// This is a guess, and it is one on purpose. The honest fix is an optional
     /// `game` in the presence document of the service contract; until it exists,
     /// one rule in one place beats the same arithmetic in three screens. See
-    /// «Игра друга выводится из порта» in `docs/architecture.md`.
+    /// the architecture notes kept outside the repository.
     pub fn from_server_port(port: u16) -> Game {
         Game::ALL
             .into_iter()

@@ -51,7 +51,7 @@
  * document. It overrides the `--font-display` of the `@theme` block in
  * `index.css`: this rule sits outside every cascade layer, and an unlayered
  * rule beats a layered one whatever the specificity. Declaring the token twice
- * inside `@theme` is what CLAUDE.md forbids, and this is not that.
+ * inside `@theme` is what the project rules forbid, and this is not that.
  */
 html[lang="ru"],
 html[lang="uk"] {

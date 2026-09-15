@@ -7,7 +7,7 @@ not listed here is an ordinary sentence with no trap in it.
 This file is English on purpose: it is read by whoever translates *into* a
 language, and English is the source language of the project. The rules of the
 architecture — how to add a language, what the check script demands — are in
-[docs/i18n.md](../../../docs/i18n.md), in Russian.
+the localization notes kept outside the repository.
 
 ## Rules that hold for every key
 

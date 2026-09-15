@@ -404,7 +404,7 @@ pub(crate) fn preview_sources(paths: &DataPaths, settings: &Settings, client: &C
 ///
 /// Loose files are not read. The engine does read an unpacked
 /// `models/players/kyle/model_red.skin`, and nobody ships skins that way; the
-/// limitation is written down in `docs/architecture.md` rather than guessed at.
+/// limitation is written down in the architecture notes rather than guessed at.
 fn collect_sources(paths: &DataPaths, settings: &Settings, client: &Client) -> Vec<Source> {
     let mut sources = Vec::new();
 
