@@ -23,13 +23,13 @@
     "online": "Online",
     "offline": "Offline",
     "lastSeenJustNow": "Zuletzt gerade eben gesehen",
+    "lastSeenOn": "Zuletzt am {{date}} gesehen",
     "lastSeenMinutes_one": "Zuletzt vor {{count}} Minute gesehen",
     "lastSeenMinutes_other": "Zuletzt vor {{count}} Minuten gesehen",
     "lastSeenHours_one": "Zuletzt vor {{count}} Stunde gesehen",
     "lastSeenHours_other": "Zuletzt vor {{count}} Stunden gesehen",
     "lastSeenDays_one": "Zuletzt vor {{count}} Tag gesehen",
-    "lastSeenDays_other": "Zuletzt vor {{count}} Tagen gesehen",
-    "lastSeenOn": "Zuletzt am {{date}} gesehen"
+    "lastSeenDays_other": "Zuletzt vor {{count}} Tagen gesehen"
   },
   "empty": {
     "offTitle": "Freunde sind noch nicht eingeschaltet",

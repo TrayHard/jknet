@@ -10,9 +10,6 @@
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "results_one": "{{count}} result in {{game}}",
-    "results_many": "{{count}} results in {{game}}",
-    "results_other": "{{count}} results in {{game}}",
     "helpTitle": "Aide à la recherche",
     "helpScope": "Ces options s’appliquent dans JKHub au jeu et à la catégorie sélectionnés.",
     "helpCombine": "Combinez les mots et les opérateurs dans n’importe quel ordre. Toutes les conditions doivent être remplies. Répéter les filtres de date réduit la période.",
@@ -39,7 +36,10 @@
         "example": "before:2026-01-01",
         "text": "Mis à jour avant cette date. Le jour indiqué est exclu (UTC)."
       }
-    }
+    },
+    "results_one": "{{count}} result in {{game}}",
+    "results_many": "{{count}} results in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Actualiser",
   "sections": {

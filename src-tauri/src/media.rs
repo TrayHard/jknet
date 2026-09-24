@@ -587,6 +587,7 @@ pub fn play_media_demo(
         None,
         &["+demo".into(), name],
         profiles::ProfileChoice::default(),
+        crate::engines::LaunchMode::Multiplayer,
     )
 }
 

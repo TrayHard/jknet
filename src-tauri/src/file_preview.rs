@@ -20,7 +20,9 @@ use std::{
 };
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
-const MAX_ENTRIES: usize = 50_000;
+/// The limit of one archive: the walk of `crate::archive` shares it with the
+/// report of a library file and the listing of a bundle.
+const MAX_ENTRIES: usize = crate::archive::MAX_ENTRIES;
 const MAX_GAME_ENTRIES: usize = 200_000;
 const MAX_PACKAGE_BYTES: u64 = 1024 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES: u64 = 512 * 1024 * 1024;
@@ -84,6 +86,16 @@ pub(crate) fn logical_name(name: &str) -> Option<String> {
                 | "maps"
                 | "levelshots"
                 | "strings"
+                | "menu"
+                | "fonts"
+                | "botfiles"
+                | "botroutes"
+                | "forcecfg"
+                | "video"
+                | "strip"
+                | "vm"
+                | "configs"
+                | "eagle"
         )
     });
     Some(root.map(|at| parts[at..].join("/")).unwrap_or(name))
@@ -564,12 +576,29 @@ pub(crate) fn read_context_assets(
     model_preview::read_assets(app, &context.cache, &sources, names, true)
 }
 
+/// The archive of an open session a product came from: the one at index
+/// `archive` of its sources, which is what the `archive` field of a product
+/// names. `get_file_preview_image` and `get_file_preview_text` read one
+/// entry out of it.
+pub(crate) fn session_archive(preview_id: &str, archive: usize) -> Result<PathBuf> {
+    CONTEXTS
+        .lock()
+        .map_err(|e| AppError::State(e.to_string()))?
+        .get(preview_id)
+        .ok_or_else(|| AppError::NotFound("preview session; reopen the file".into()))?
+        .sources
+        .get(archive)
+        .cloned()
+        .ok_or_else(|| AppError::InvalidInput("unknown preview archive".into()))
+}
+
 #[tauri::command]
 pub fn release_file_preview(preview_id: String) -> Result<()> {
     CONTEXTS
         .lock()
         .map_err(|e| AppError::State(e.to_string()))?
         .remove(&preview_id);
+    crate::file_preview_contents::forget_session(&preview_id);
     Ok(())
 }
 
@@ -753,6 +782,24 @@ mod tests {
         writer.finish().unwrap();
     }
 
+    /// The finished objects among the products: what the tests of this
+    /// module are about. The files of the archive the taxonomy lists next
+    /// to them are checked by `file_preview_contents`.
+    fn objects(
+        products: &[crate::file_preview_products::PreviewProduct],
+    ) -> Vec<crate::file_preview_products::PreviewProduct> {
+        products
+            .iter()
+            .filter(|p| {
+                matches!(
+                    p.kind.as_str(),
+                    "map" | "skin" | "hilt" | "weapon" | "npc" | "vehicle" | "music" | "sound"
+                )
+            })
+            .cloned()
+            .collect()
+    }
+
     #[test]
     fn assembled_products_reuse_picker_parts_and_keep_package_icons_separate() {
         let temp = Temp::new();
@@ -780,6 +827,12 @@ mod tests {
         let raw = inspect(&sources, &[]).unwrap();
         let mut products = crate::file_preview_products::products(&sources, &raw).unwrap();
         enrich_products(&sources, &mut products, &temp.0.join("icons")).unwrap();
+        assert_eq!(
+            products.iter().filter(|p| p.kind == "icon").count(),
+            8,
+            "the icons of the parts are listed as pictures, four per package"
+        );
+        let products = objects(&products);
         assert_eq!(
             products.len(),
             2,
@@ -913,13 +966,17 @@ mod tests {
         ]);
         let sources = [path];
         let entries = inspect(&sources, &[]).unwrap();
-        let products = crate::file_preview_products::products(&sources, &entries).unwrap();
+        let all = crate::file_preview_products::products(&sources, &entries).unwrap();
+        let products = objects(&all);
         assert_eq!(products.len(), 2);
         assert_eq!(products[0].label, "First arena");
         assert_eq!(products[1].label, "Second arena");
         assert!(products
             .iter()
             .all(|p| p.kind == "map" && p.model.is_none()));
+        // The picture and the texture are listed as files, the `.arena` as data.
+        let kinds: Vec<_> = all.iter().map(|p| p.kind.as_str()).collect();
+        assert!(kinds.contains(&"levelshot") && kinds.contains(&"texture") && kinds.contains(&"data"), "{kinds:?}");
         let assets = model_preview::read_assets(
             None,
             &temp.0.join("cache"),
@@ -967,7 +1024,8 @@ mod tests {
         );
         let sources = [path];
         let entries = inspect(&sources, &[]).unwrap();
-        let products = crate::file_preview_products::products(&sources, &entries).unwrap();
+        let products =
+            objects(&crate::file_preview_products::products(&sources, &entries).unwrap());
         assert_eq!(products.len(), 5, "{products:?}");
         let map = products.iter().find(|p| p.kind == "map").unwrap();
         assert_eq!(map.name, "maps/duel.bsp");
@@ -1103,6 +1161,99 @@ mod tests {
         let png = fs::read(result[0].path.as_ref().unwrap()).unwrap();
         assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
         assert_eq!(fs::read(path).unwrap(), original);
+    }
+
+    /// `JKNET_PK3_SAMPLE=<path to a pk3> cargo test sample_pk3 -- --ignored --nocapture`
+    /// prints what the preview of that archive lists, by kind, and the
+    /// badges its card gets.
+    #[test]
+    #[ignore = "reads the archive JKNET_PK3_SAMPLE names and prints its products"]
+    fn sample_pk3_lists_every_kind_of_content() {
+        let sample = PathBuf::from(std::env::var("JKNET_PK3_SAMPLE").expect("JKNET_PK3_SAMPLE"));
+        let temp = Temp::new();
+        let data = DataPaths::new(temp.0.join("data"));
+        let started = std::time::Instant::now();
+        let preview = prepare(&data, vec![sample.clone()], Vec::new()).unwrap();
+        let elapsed = started.elapsed();
+        let mut by_kind: BTreeMap<&str, usize> = BTreeMap::new();
+        for entry in &preview.entries {
+            *by_kind.entry(entry.kind.as_str()).or_default() += 1;
+        }
+        eprintln!(
+            "{}: {} products in {} ms",
+            sample.display(),
+            preview.entries.len(),
+            elapsed.as_millis()
+        );
+        for (kind, count) in &by_kind {
+            eprintln!("  {kind}: {count}");
+        }
+        let report = library::inspect(&sample).unwrap();
+        eprintln!("  category {:?}, features {:?}", report.category, report.features);
+        assert!(
+            report.features.iter().all(|code| crate::bundles::manifest::is_library_feature(code)),
+            "every badge is a code a bundle manifest accepts: {:?}",
+            report.features
+        );
+        for entry in &preview.entries {
+            let details = match (&entry.image, &entry.strings, &entry.font, &entry.text) {
+                (Some(image), ..) => format!(
+                    "{}x{} {}{}",
+                    image.width,
+                    image.height,
+                    image.format,
+                    entry
+                        .map
+                        .as_ref()
+                        .map(|map| format!(" map={map}"))
+                        .unwrap_or_default()
+                ),
+                (_, Some(strings), _, text) => format!(
+                    "{} keys, {} lines, {}",
+                    strings.keys,
+                    text.as_ref().map(|t| t.lines).unwrap_or(0),
+                    text.as_ref().map(|t| t.encoding.as_str()).unwrap_or("?")
+                ),
+                (_, _, Some(font), _) => format!(
+                    "point size {}, height {}, atlas {:?}",
+                    font.point_size, font.height, font.atlas
+                ),
+                (_, _, _, Some(text)) => format!("{} lines, {}", text.lines, text.encoding),
+                _ => String::new(),
+            };
+            eprintln!(
+                "  [{}] {} <- {} ({} bytes) {details}",
+                entry.kind,
+                entry.label,
+                entry.name,
+                entry.size.unwrap_or(0)
+            );
+        }
+        let strings = preview.entries.iter().find(|entry| entry.kind == "strings");
+        if let Some(strings) = strings {
+            let text =
+                crate::file_preview_contents::text(&sample, &strings.name).unwrap();
+            let sample_lines: Vec<_> = text
+                .text
+                .lines()
+                .filter(|line| line.contains("LANG_") && !line.contains("LANG_ENGLISH"))
+                .take(3)
+                .collect();
+            eprintln!("  {} decoded as {}: {sample_lines:?}", strings.name, text.encoding);
+        }
+        if let Some(picture) = preview.entries.iter().find(|entry| entry.kind == "levelshot") {
+            let thumbnail =
+                crate::file_preview_contents::picture(&sample, &picture.name, Some(192)).unwrap();
+            eprintln!(
+                "  thumbnail of {}: {}x{}, {} bytes of data URL",
+                picture.name,
+                thumbnail.width,
+                thumbnail.height,
+                thumbnail.data_url.len()
+            );
+        }
+        release_file_preview(preview.id).unwrap();
+        assert!(!by_kind.is_empty());
     }
 
     #[test]

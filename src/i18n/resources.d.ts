@@ -13,6 +13,7 @@
  */
 
 import type account from "../locales/en/account.json";
+import type bundles from "../locales/en/bundles.json";
 import type clients from "../locales/en/clients.json";
 import type common from "../locales/en/common.json";
 import type errors from "../locales/en/errors.json";
@@ -23,6 +24,7 @@ import type jkhub from "../locales/en/jkhub.json";
 import type library from "../locales/en/library.json";
 import type nav from "../locales/en/nav.json";
 import type onboarding from "../locales/en/onboarding.json";
+import type pk3 from "../locales/en/pk3.json";
 import type servers from "../locales/en/servers.json";
 import type settings from "../locales/en/settings.json";
 import type update from "../locales/en/update.json";
@@ -47,6 +49,10 @@ declare module "i18next" {
       errors: typeof errors;
       games: typeof games;
       update: typeof update;
+      // --- slice: bundles ---
+      bundles: typeof bundles;
+      // --- slice: pk3 editor ---
+      pk3: typeof pk3;
     };
   }
 }

@@ -565,6 +565,112 @@ pub(crate) fn launch_layers(state: &AppState, client: &clients::Client) -> Resul
     Ok(vec!["+exec".into(), "jknet-active.cfg".into()])
 }
 
+// --- slice: bundles ---
+
+/// The config the engine writes on its own on exit, such as `eternaljk.cfg`.
+///
+/// The publish plan of a bundle leaves it out by default: it carries the
+/// author's resolution, key binds and volume, which are personal.
+pub(crate) fn startup_file(client: &clients::Client) -> &'static str {
+    defaults::startup_file(client)
+}
+
+/// The folder inside `home\` an engine fork keeps its own overlay in, when it
+/// has one. The publish plan walks it next to `base\` and the mod folder.
+pub(crate) fn engine_folder(client: &clients::Client) -> Option<&'static str> {
+    defaults::engine_folder(client)
+}
+
+/// The documents the enabled layers of a client apply, in the order
+/// [`launch_layers`] writes them into `jknet-active.cfg`.
+///
+/// A layer whose document is gone, or belongs to the other game, is skipped
+/// rather than refused: the plan of a bundle describes what the client runs
+/// with, and the launch path would skip the same layer.
+pub(crate) fn assigned_documents(
+    state: &AppState,
+    client: &clients::Client,
+) -> Result<Vec<(ConfigLayer, ConfigDocument)>> {
+    let _guard = state.client_records().enter();
+    let book = book(state)?;
+    let mut layers = book.clients.get(&client.id).cloned().unwrap_or_default();
+    layers.sort_by_key(|layer| layer.priority);
+    Ok(layers
+        .into_iter()
+        .filter(|layer| layer.enabled)
+        .filter_map(|layer| {
+            let doc = book
+                .documents
+                .iter()
+                .find(|doc| doc.id == layer.config_id && doc.game == client.game)?;
+            Some((layer, doc.clone()))
+        })
+        .collect())
+}
+
+/// One document a bundle brings with it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NewDocument {
+    pub name: String,
+    pub text: String,
+    pub priority: i32,
+}
+
+/// Creates the documents of an installed bundle and assigns each one to the
+/// client as an enabled layer, in the order given.
+///
+/// Idempotent by name and text: an install that stops after this step and
+/// runs again finds its documents already assigned and adds nothing, so a
+/// retry never doubles the layers of a client.
+pub(crate) fn install_documents(
+    state: &AppState,
+    client: &clients::Client,
+    docs: &[NewDocument],
+) -> Result<Vec<ConfigDocument>> {
+    let _guard = state.client_records().enter();
+    let mut book = book(state)?;
+    let mut layers = book.clients.get(&client.id).cloned().unwrap_or_default();
+    let mut assigned = Vec::with_capacity(docs.len());
+    for doc in docs {
+        let name = user_files::label(&doc.name)?;
+        checked_text(&doc.text)?;
+        let existing = layers.iter().find_map(|layer| {
+            book.documents.iter().find(|candidate| {
+                candidate.id == layer.config_id
+                    && candidate.game == client.game
+                    && candidate.name == name
+                    && candidate.text == doc.text
+            })
+        });
+        if let Some(existing) = existing {
+            assigned.push(existing.clone());
+            continue;
+        }
+        let document = ConfigDocument {
+            id: user_files::id(),
+            name,
+            game: client.game,
+            text: doc.text.clone(),
+            source_client: None,
+            source_file: None,
+        };
+        user_files::write_bytes(
+            &root(state)?.join(format!("{}.cfg", document.id)),
+            document.text.as_bytes(),
+        )?;
+        book.documents.push(document.clone());
+        layers.push(ConfigLayer {
+            config_id: document.id.clone(),
+            priority: doc.priority,
+            enabled: true,
+        });
+        assigned.push(document);
+    }
+    book.clients.insert(client.id.clone(), layers);
+    save_book(state, &book)?;
+    Ok(assigned)
+}
+
 pub(crate) fn preview_layers(state: &AppState, client_id: &str) -> Result<Vec<String>> {
     let book = book(state)?;
     Ok(
@@ -754,6 +860,34 @@ mod tests {
         assert!(fs::read_to_string(generated)
             .unwrap()
             .ends_with("seta rate 300\n"));
+    }
+
+    // --- slice: bundles ---
+    #[test]
+    fn documents_of_a_bundle_are_assigned_once_however_often_the_install_runs() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::bootstrap(temp.path().into());
+        let client: clients::Client = serde_json::from_value(serde_json::json!({"id":"from-bundle","name":"From bundle","engineId":"openjk","engineVersion":null,"createdAt":"2026-09-15"})).unwrap();
+        let docs = vec![
+            NewDocument { name: "Binds".into(), text: "bind PGDN toggle cg_dismember 0 3\n".into(), priority: 0 },
+            NewDocument { name: "Video".into(), text: "seta r_mode 4\n".into(), priority: 1 },
+        ];
+
+        let first = install_documents(&state, &client, &docs).unwrap();
+        assert_eq!(first.len(), 2);
+        // The retry of an install that stopped after this step.
+        let second = install_documents(&state, &client, &docs).unwrap();
+        assert_eq!(second.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), first.iter().map(|d| d.id.as_str()).collect::<Vec<_>>());
+
+        let assigned = assigned_documents(&state, &client).unwrap();
+        assert_eq!(assigned.len(), 2, "no layer was doubled");
+        assert_eq!(assigned[0].1.name, "Binds");
+        assert_eq!(assigned[0].0.priority, 0);
+        assert_eq!(assigned[1].1.name, "Video");
+        assert!(assigned.iter().all(|(layer, _)| layer.enabled));
+        assert_eq!(super::book(&state).unwrap().documents.len(), 2);
+        // And the launch path reads them back in that order.
+        assert_eq!(launch_layers(&state, &client).unwrap(), ["+exec", "jknet-active.cfg"]);
     }
 
     #[test]

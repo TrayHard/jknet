@@ -1,8 +1,12 @@
-//! Player-facing objects assembled from package resources. Internal files never
-//! become choices in the preview UI.
+//! Player-facing objects assembled from package resources. The parts of an
+//! object — geometry, skins, the voice of a character — never become choices
+//! in the preview UI; everything else the archive carries, from a map
+//! picture to a translation, is listed by `file_preview_contents` under its
+//! own kind.
 use crate::{
     error::Result,
     file_preview::{logical_name, PreviewEntry},
+    file_preview_contents::{self, PreviewFont, PreviewImage, PreviewStrings, PreviewText},
 };
 use serde::Serialize;
 use std::{
@@ -13,7 +17,7 @@ use std::{
 };
 use zip::ZipArchive;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewProduct {
     pub id: String,
@@ -21,12 +25,41 @@ pub struct PreviewProduct {
     /// Resource name, used only by the loader.
     pub name: String,
     pub label: String,
+    /// A finished object: `skin`, `hilt`, `weapon`, `npc`, `vehicle`, `map`,
+    /// `music`, `sound`; or a file of the archive by the taxonomy of
+    /// `file_preview_contents::ContentKind`: `levelshot`, `splash`,
+    /// `menuImage`, `hudImage`, `texture`, `icon`, `image`, `font`,
+    /// `strings`, `shader`, `effect`, `menu`, `config`, `data`, `script`,
+    /// `video`, `other`.
     pub kind: String,
     pub model: Option<String>,
     pub skins: Vec<String>,
     pub audio: Vec<PreviewAudio>,
     pub appearance: Option<crate::appearance::PlayerModel>,
     pub hilt_id: Option<String>,
+    /// Bytes of the entry, on a product that stands for one file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// The header of a picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<PreviewImage>,
+    /// What a text file is, for the products `get_file_preview_text` opens.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<PreviewText>,
+    /// A translation file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strings: Option<PreviewStrings>,
+    /// A font table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font: Option<PreviewFont>,
+    /// The map a `levelshot` stands for, spelled the way `.arena` files
+    /// name it: `mp/ffa3`, `academy1`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map: Option<String>,
+    /// The folder of the entry, for a gallery to group by: `gfx/2d`,
+    /// `levelshots/mp`; the language of a `strings` product.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -291,9 +324,8 @@ fn products_mode(
                     kind: kind.into(),
                     model: Some(model.clone()),
                     skins,
-                    audio: Vec::new(),
-                    appearance: None,
                     hilt_id: (kind == "hilt").then_some(id),
+                    ..PreviewProduct::default()
                 });
                 defined.insert((archive_id, model));
             }
@@ -316,11 +348,8 @@ fn products_mode(
                     .cloned()
                     .unwrap_or_else(|| label(name)),
                 kind: "map".into(),
-                model: None,
-                skins: Vec::new(),
-                audio: Vec::new(),
-                appearance: None,
-                hilt_id: None,
+                size: Some(entry.size),
+                ..PreviewProduct::default()
             });
             continue;
         }
@@ -333,22 +362,15 @@ fn products_mode(
                 .rsplit_once('.')
                 .map(|(stem, _)| stem)
                 .unwrap_or(&entry.name);
+            let music = entry.name.starts_with("music/");
             products.push(PreviewProduct {
                 id: entry.id.clone(),
                 archive: entry.archive,
                 name: entry.name.clone(),
                 label: label(stem),
-                kind: if entry.name.starts_with("music/") {
-                    "music"
-                } else {
-                    "sound"
-                }
-                .into(),
-                model: None,
-                skins: Vec::new(),
-                audio: Vec::new(),
-                appearance: None,
-                hilt_id: None,
+                kind: if music { "music" } else { "sound" }.into(),
+                size: music.then_some(entry.size),
+                ..PreviewProduct::default()
             });
             continue;
         }
@@ -409,9 +431,7 @@ fn products_mode(
                 kind: kind.into(),
                 model: Some(model.clone()),
                 skins: entry.skins.clone(),
-                audio: Vec::new(),
-                appearance: None,
-                hilt_id: None,
+                ..PreviewProduct::default()
             });
         } else if parts[1] == "map_objects" && parts[2].contains("vehicle") {
             let stem = parts.last().unwrap().rsplit_once('.').unwrap().0;
@@ -423,9 +443,7 @@ fn products_mode(
                 kind: "vehicle".into(),
                 model: Some(model.clone()),
                 skins: entry.skins.clone(),
-                audio: Vec::new(),
-                appearance: None,
-                hilt_id: None,
+                ..PreviewProduct::default()
             });
         } else if parts[1] == "weapons2" || parts[1] == "weapons" {
             if parts[2] == "noweap" {
@@ -471,9 +489,7 @@ fn products_mode(
             .into(),
             model: entry.model.clone(),
             skins: entry.skins.clone(),
-            audio: Vec::new(),
-            appearance: None,
-            hilt_id: None,
+            ..PreviewProduct::default()
         });
     }
     // A character's voice and a weapon's effects belong to the finished object.
@@ -569,6 +585,13 @@ fn products_mode(
                 products.push(product);
             }
         }
+    }
+    // What the archive carries besides its finished objects: pictures,
+    // strings, fonts, shaders, text. The combined catalogue of the retail
+    // archives stays a catalogue of objects: its twenty thousand files
+    // would bury the eight hundred objects it exists for.
+    if !combined {
+        products.extend(file_preview_contents::products(sources, entries)?);
     }
     products.sort_by(|a, b| {
         a.kind

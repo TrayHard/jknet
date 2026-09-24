@@ -1,4 +1,4 @@
-import { Check, Download, RefreshCw } from "lucide-react";
+import { Check, Download, RefreshCw, Wrench } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -35,6 +35,8 @@ export function ClientEngineRow({
 }) {
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
+  // --- slice: bundles ---
+  const { t: tBundles } = useTranslation("bundles");
   const errorText = useErrorText();
   const format = useFormat();
 
@@ -42,7 +44,13 @@ export function ClientEngineRow({
   const pendingInstalls = usePendingInstalls();
   const { installs, clearInstall } = useGameEventsContext();
   const [checkRequested, setCheckRequested] = useState(false);
-  const update = useEngineUpdate(checkRequested && engine?.installable ? client.id : null);
+  // --- slice: bundles ---
+  // Files laid over the engine by a bundle: a release update would write
+  // over them, so the row shows the badge and offers no check.
+  const customBuild = client.bundle?.engineOverlay === true;
+  const update = useEngineUpdate(
+    checkRequested && engine?.installable && !customBuild ? client.id : null,
+  );
   const installed = client.engineVersion !== null;
   const releases = useEngineReleases(installed || !engine?.installable ? null : client.engineId);
   const [failure, setFailure] = useState<string | null>(null);
@@ -93,7 +101,15 @@ export function ClientEngineRow({
         </p>
       ) : (
         <div className="flex items-center gap-8 flex-wrap">
-          {installed ? (
+          {installed && customBuild ? (
+            <Badge
+              tone="purple"
+              icon={<Wrench size={12} />}
+              title={tBundles("clientCard.customBuildHint")}
+            >
+              {tBundles("clientCard.customBuild")}
+            </Badge>
+          ) : installed ? (
             <>
               <Button
                 size="sm"

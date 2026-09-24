@@ -68,6 +68,57 @@ export function useModelPreview(clientId: string, request: PreviewRequest, enabl
     enabled: enabled && isTauri() && !!request.value, staleTime: 30_000, gcTime: 60_000, retry: false,
   });
 }
+
+// --- slice: pk3 contents ---
+/**
+ * How many pictures the gallery asks the core for at once.
+ *
+ * A grid of two thousand textures brings its thumbnails in as they scroll
+ * into view, and a fast scroll would otherwise queue hundreds of decodes at
+ * the core in one go. The rest wait here, in the order they were asked for.
+ */
+const IMAGE_LANES = 6;
+let imageLanes = 0;
+const imageQueue: Array<() => void> = [];
+function throttleImage<T>(work: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const run = () => {
+      imageLanes += 1;
+      work().then(resolve, reject).finally(() => {
+        imageLanes -= 1;
+        imageQueue.shift()?.();
+      });
+    };
+    if (imageLanes < IMAGE_LANES) run();
+    else imageQueue.push(run);
+  });
+}
+
+/**
+ * One picture of a preview session, as a data URL.
+ *
+ * Keyed by the session, so the cache is the dialog's: a thumbnail scrolled
+ * out of view and back again is not decoded twice, and the whole set goes
+ * a minute after the dialog closes. `maxSize` asks the core for a thumbnail;
+ * without it the picture comes at its own size, which is what the enlarged
+ * view wants.
+ */
+export function useFilePreviewImage(source: FilePreviewSource, name: string, maxSize: number | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["file-preview-image", source.previewId, source.archive, name, maxSize ?? 0],
+    queryFn: () => throttleImage(() => filePreviewIpc.image(source, name, maxSize)),
+    enabled: enabled && isTauri(), staleTime: Infinity, gcTime: 60_000, retry: false,
+  });
+}
+
+/** One text file of a preview session, decoded by the core. */
+export function useFilePreviewText(source: FilePreviewSource, name: string, enabled = true) {
+  return useQuery({
+    queryKey: ["file-preview-text", source.previewId, source.archive, name],
+    queryFn: () => filePreviewIpc.text(source, name),
+    enabled: enabled && isTauri(), staleTime: Infinity, gcTime: 60_000, retry: false,
+  });
+}
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
 // --- slice: i18n ---
@@ -76,6 +127,9 @@ import { useTranslation } from "react-i18next";
 import {
   accountIpc,
   ACCOUNT_CHANGED_EVENT,
+  // --- slice: bundles ---
+  bundlesIpc,
+  bundleEvents,
   // --- slice: client window ---
   clientEvents,
   errorMessage,
@@ -90,12 +144,38 @@ import {
   levelshotsIpc,
   libraryIpc,
   LIBRARY_CHANGED_EVENT,
+  // --- slice: pk3 editor ---
+  pk3EditorIpc,
   // --- slice: player profiles ---
   profilesIpc,
   serversIpc,
   settingsEvents,
   type AccountChanged,
   type AccountState,
+  // --- slice: bundles ---
+  type BundleDetailsWithLocal,
+  type BundleFileRoot,
+  type BundleList,
+  type BundlePreviewProgress,
+  type BundleQuery,
+  type BundleVersion,
+  type Draft,
+  type Listing,
+  type DraftComponentPatch,
+  type DraftConfig,
+  type DraftIssues,
+  type DraftPatch,
+  type DraftSummary,
+  type LaunchMode,
+  type MyBundles,
+  type NewDraftComponent,
+  type PendingVersion,
+  // --- slice: pk3 editor ---
+  type Pk3EditorSession,
+  type Pk3EditorTarget,
+  type PreviewImage,
+  type PreviewText,
+  type ReleaseView,
   type Client,
   // --- slice: client window ---
   type ClientsChanged,
@@ -145,6 +225,8 @@ import {
   type Settings,
   type SettingsPatch,
 } from "./ipc";
+// --- slice: bundles ---
+import { bundleJobs, draftJobKey, installJobKey } from "./bundleJobs";
 // --- slice: jkhub details ---
 import { jkhubDownloads } from "./jkhubDownloads";
 import { isTauri } from "./runtime";
@@ -339,13 +421,18 @@ export const clientKeys = {
   // --- slice: connect dialog ---
   // So is everything a single run adds. The dialog changes those on every
   // keystroke, and two lines that differ by a nickname must not share an answer.
-  preview: (clientId: string, profileId?: string, run?: LaunchRun) =>
+  //
+  // --- slice: bundles ---
+  // And the mode: the single-player line takes another executable and drops
+  // the profile, so the two lines of one client never share an answer.
+  preview: (clientId: string, profileId?: string, run?: LaunchRun, mode?: LaunchMode) =>
     [
       ...queryKeys.clients,
       clientId,
       "preview",
       profileId ?? "",
       JSON.stringify(run ?? null),
+      mode ?? "multiplayer",
     ] as const,
   // --- slice: clients page ---
   dir: (clientId: string) => [...queryKeys.clients, clientId, "dir"] as const,
@@ -443,9 +530,12 @@ export function useLaunchPreview(
   profileId?: string,
   run?: LaunchRun,
   enabled = true,
+  // --- slice: bundles --- the line of the single-player executable when
+  // asked for; the multiplayer line otherwise, as before.
+  mode?: LaunchMode,
 ): UseQueryResult<LaunchPreview> {
   return useQuery({
-    queryKey: clientKeys.preview(clientId, profileId, run),
+    queryKey: clientKeys.preview(clientId, profileId, run, mode),
     queryFn: () =>
       launchIpc.previewLaunchArgs(
         clientId,
@@ -453,6 +543,7 @@ export function useLaunchPreview(
         run?.inlineProfile,
         run?.extraArgs,
         run?.connect,
+        mode,
       ),
     enabled,
     staleTime: Infinity,
@@ -912,12 +1003,16 @@ export function useLaunchClient() {
       // A profile of this launch alone, filled in by hand. Beside it the core
       // does not read `profileId`.
       inlineProfile,
+      // --- slice: bundles ---
+      // `single` for **Play single player**; left out by every other button.
+      mode,
     }: {
       clientId: string;
       connect?: string;
       extraArgs?: string[];
       profileId?: string;
       inlineProfile?: InlineProfile;
+      mode?: LaunchMode;
     }) =>
       launchIpc.launchClient(
         clientId,
@@ -925,6 +1020,7 @@ export function useLaunchClient() {
         extraArgs,
         profileId,
         inlineProfile,
+        mode,
       ),
     onSuccess: (running) => {
       queryClient.setQueryData(launchKeys.runningGame, running);
@@ -2356,3 +2452,981 @@ export function useJkhubDownloadProgress(): Map<number, JkhubDownloadProgress> {
 
   return progress;
 }
+
+// ---------------------------------------------------------------------------
+// --- slice: bundles ---
+//
+// The catalogue of bundles on JKNet Online, the drafts on this disk, and the
+// long operations — installing a version or a draft into clients and
+// publishing a draft. The reads are ordinary queries under two prefixes; the
+// long operations report into `bundleJobs`, the store the dialogs and the
+// editor read their bars from, so a dialog that was closed and opened again
+// finds the work where it left it.
+// ---------------------------------------------------------------------------
+
+export const bundleKeys = {
+  all: ["bundles"] as const,
+  list: (query: BundleQuery) =>
+    [
+      "bundles",
+      "list",
+      query.game,
+      query.sort,
+      query.q ?? "",
+      query.engineId ?? "",
+      query.tag ?? "",
+      query.limit ?? 50,
+      query.offset ?? 0,
+    ] as const,
+  details: (bundleId: string) => ["bundles", "details", bundleId] as const,
+  version: (bundleId: string, versionId: string) =>
+    ["bundles", "version", bundleId, versionId] as const,
+  /** The bundles of the signed-in account, with the quota. */
+  mine: ["bundles", "mine"] as const,
+  /** The review queue of an administrator. */
+  pending: ["bundles", "pending"] as const,
+  /**
+   * The drafts, outside the `bundles` prefix on purpose: an invalidation of
+   * the catalogue must not re-read the disk under an open editor.
+   */
+  drafts: ["bundle-drafts"] as const,
+  /** One draft in full. Written by every edit, read on the way in. */
+  draft: (draftId: string) => ["bundle-drafts", draftId, "record"] as const,
+  /** The errors and warnings of one draft, re-read after every edit. */
+  draftIssues: (draftId: string) => ["bundle-drafts", draftId, "issues"] as const,
+  /** The release archive of one component with the overlay laid over it. */
+  draftEngineFiles: (draftId: string, componentId: string) =>
+    ["bundle-drafts", draftId, "engine-files", componentId] as const,
+  /** The mutation key of every edit of one draft, for the state the header of the editor reads. */
+  draftEdits: (draftId: string) => ["bundle-drafts", draftId, "edit"] as const,
+  /** The absolute path of one picture of a draft. */
+  draftImagePath: (draftId: string, sha256: string) =>
+    ["bundle-drafts", draftId, "image", sha256] as const,
+  /** The table of contents of one pk3 of a draft. */
+  draftFileListing: (draftId: string, scope: string, root: BundleFileRoot, path: string) =>
+    ["bundle-drafts", draftId, "listing", scope, root, path] as const,
+  /** The text of one cfg of a draft. */
+  draftFileText: (draftId: string, scope: string, root: BundleFileRoot, path: string) =>
+    ["bundle-drafts", draftId, "text", scope, root, path] as const,
+  /** The table of contents of a pk3 of the catalogue, by the hash of its listing file. */
+  fileListing: (sha256: string) => ["bundles", "listing", sha256] as const,
+  /** The text of a cfg of the catalogue, by its hash and the path the manifest gives it. */
+  fileText: (sha256: string, path: string) => ["bundles", "text", sha256, path] as const,
+};
+
+/**
+ * The address of JKNet Online, for the pictures of a description: the
+ * frontend loads them straight from the store, `<service>/v1/blobs/<sha256>`.
+ *
+ * The core is the one that knows the address; outside Tauri, where the
+ * account query cannot answer, a development build reads the same stand-in
+ * `devOnline.ts` talks to, so a browser review has pictures too. Empty
+ * while nothing is known, which draws the picture as missing.
+ */
+export function useOnlineUrl(): string {
+  const account = useAccountState();
+  if (account.data?.onlineUrl) return account.data.onlineUrl;
+  if (import.meta.env.DEV && !isTauri()) {
+    return new URLSearchParams(window.location.search).get("online") ?? "http://127.0.0.1:8787";
+  }
+  return "";
+}
+
+/**
+ * One page of the catalogue.
+ *
+ * The previous answer stays on screen while a narrower query is fetched, so
+ * typing into the search box does not blank the grid between keystrokes.
+ * Outside Tauri a development build still asks: the mock service answers.
+ */
+export function useBundles(query: BundleQuery, enabled = true): UseQueryResult<BundleList> {
+  return useQuery({
+    queryKey: bundleKeys.list(query),
+    queryFn: () => bundlesIpc.list(query),
+    enabled,
+    staleTime: 30_000,
+    placeholderData: (previous) => previous,
+  });
+}
+
+/** One bundle in full, with the clients of this machine that came out of it. */
+export function useBundle(bundleId: string | null): UseQueryResult<BundleDetailsWithLocal> {
+  return useQuery({
+    queryKey: bundleKeys.details(bundleId ?? ""),
+    queryFn: () => bundlesIpc.get(bundleId as string),
+    enabled: bundleId !== null,
+    staleTime: 30_000,
+  });
+}
+
+/** One version with its manifest, for a version other than the latest. */
+export function useBundleVersion(
+  bundleId: string | null,
+  versionId: string | null,
+): UseQueryResult<BundleVersion> {
+  return useQuery({
+    queryKey: bundleKeys.version(bundleId ?? "", versionId ?? ""),
+    queryFn: () => bundlesIpc.version(bundleId as string, versionId as string),
+    enabled: bundleId !== null && versionId !== null,
+    staleTime: Infinity,
+  });
+}
+
+/** The bundles of the signed-in account, every version and status included. */
+export function useMyBundles(enabled = true): UseQueryResult<MyBundles> {
+  return useQuery({
+    queryKey: bundleKeys.mine,
+    queryFn: bundlesIpc.mine,
+    enabled: enabled && isTauri(),
+    staleTime: 15_000,
+  });
+}
+
+/** The versions waiting for an administrator. Ask only when the account is one. */
+export function usePendingBundleVersions(enabled = true): UseQueryResult<PendingVersion[]> {
+  return useQuery({
+    queryKey: bundleKeys.pending,
+    queryFn: bundlesIpc.pending,
+    enabled: enabled && isTauri(),
+    staleTime: 15_000,
+  });
+}
+
+/**
+ * Whether the signed-in account may review bundles.
+ *
+ * `false` until the core says otherwise: the button it hides is the review
+ * queue, and the service checks the right again on every call.
+ */
+export function useIsBundleAdmin(): boolean {
+  const account = useAccountState();
+  return account.data?.onlineSignedIn === true && account.data.isAdmin === true;
+}
+
+/**
+ * Installs chosen components of a version into new clients, or carries on
+ * in the clients of a failed try.
+ *
+ * Every install goes through this hook, so it is the one place that reports
+ * the three moments the dialog draws: the press, the answer and the failure.
+ * The events in between reach the store on their own.
+ */
+export function useInstallBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bundleId,
+      versionId,
+      baseName,
+      componentIds,
+      existingClientIds,
+    }: {
+      bundleId: string;
+      versionId: string;
+      baseName: string;
+      componentIds: string[];
+      existingClientIds?: Record<string, string> | null;
+    }) => bundlesIpc.install(bundleId, versionId, baseName, componentIds, existingClientIds),
+    onMutate: ({ bundleId, versionId, baseName, componentIds, existingClientIds }) => {
+      bundleJobs.startInstall({
+        key: installJobKey(bundleId, versionId),
+        bundleId,
+        versionId,
+        draftId: null,
+        baseName,
+        componentIds,
+        existingClientIds: existingClientIds ?? {},
+      });
+    },
+    onError: (error, { bundleId, versionId }) =>
+      bundleJobs.failInstall(installJobKey(bundleId, versionId), error),
+    onSuccess: (clients, { bundleId, versionId }) => {
+      bundleJobs.finishInstall(installJobKey(bundleId, versionId), clients);
+      // New clients on the Clients screen, new lines under `local` of the
+      // bundle, and a new install in the counters of the catalogue.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.details(bundleId) });
+      void queryClient.invalidateQueries({ queryKey: [...bundleKeys.all, "list"] });
+    },
+  });
+}
+
+/** Installs chosen components of a draft into new clients: **Test locally**. */
+export function useInstallBundleDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      draftId,
+      baseName,
+      componentIds,
+      existingClientIds,
+    }: {
+      draftId: string;
+      baseName: string;
+      componentIds: string[];
+      existingClientIds?: Record<string, string> | null;
+    }) => bundlesIpc.installDraft(draftId, baseName, componentIds, existingClientIds),
+    onMutate: ({ draftId, baseName, componentIds, existingClientIds }) => {
+      bundleJobs.startInstall({
+        key: draftJobKey(draftId),
+        bundleId: null,
+        versionId: null,
+        draftId,
+        baseName,
+        componentIds,
+        existingClientIds: existingClientIds ?? {},
+      });
+    },
+    onError: (error, { draftId }) => bundleJobs.failInstall(draftJobKey(draftId), error),
+    onSuccess: (clients, { draftId }) => {
+      bundleJobs.finishInstall(draftJobKey(draftId), clients);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+/**
+ * Publishes a draft as a bundle, or as a new version of the bundle it is
+ * bound to. A retry is the same call: the core carries on with the bundle
+ * the failed try created, which it wrote into the draft.
+ */
+export function usePublishBundleDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (draftId: string) => bundlesIpc.publishDraft(draftId),
+    onMutate: (draftId) => {
+      bundleJobs.startPublish(draftId);
+    },
+    onError: (error, draftId) => bundleJobs.failPublish(draftId, error),
+    onSuccess: (result, draftId) => {
+      bundleJobs.finishPublish(draftId, result);
+      // The draft now carries `bundleId`, the clients made out of it carry
+      // the version, the account has one more bundle or version, and the
+      // catalogue may have a new card.
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.draft(draftId) });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.drafts });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.all });
+    },
+  });
+}
+
+/** Likes a bundle, or takes the like back. The answer is dropped into the record. */
+export function useLikeBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bundleId, liked }: { bundleId: string; liked: boolean }) =>
+      bundlesIpc.like(bundleId, liked),
+    onSuccess: (answer, { bundleId }) => {
+      queryClient.setQueryData<BundleDetailsWithLocal>(bundleKeys.details(bundleId), (record) =>
+        record === undefined ? record : { ...record, likes: answer.likes, likedByMe: answer.likedByMe },
+      );
+      void queryClient.invalidateQueries({ queryKey: [...bundleKeys.all, "list"] });
+    },
+  });
+}
+
+/** Hides a bundle of the account. The files go to the collector later. */
+export function useDeleteBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (bundleId: string) => bundlesIpc.remove(bundleId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.all });
+      // The clients installed from the bundle keep their link, but the
+      // record behind it is gone: refetch so a stale answer does not stay.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+/** Approves or rejects a version of the review queue. */
+export function useReviewBundleVersion() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      versionId,
+      approve,
+      note,
+    }: {
+      versionId: string;
+      approve: boolean;
+      note?: string | null;
+    }) => bundlesIpc.review(versionId, approve, note),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.all });
+    },
+  });
+}
+
+/** Features or hides a bundle, as an administrator. */
+export function useSetBundleFlags() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      bundleId,
+      featured,
+      hidden,
+    }: {
+      bundleId: string;
+      featured?: boolean;
+      hidden?: boolean;
+    }) => bundlesIpc.setFlags(bundleId, { featured, hidden }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.all });
+    },
+  });
+}
+
+// --- drafts ---
+
+/**
+ * The drafts on this disk, for the strip of the Bundles tab.
+ *
+ * Drafts live in the data folder, so outside Tauri there are none to list
+ * and the query stays idle rather than printing a refusal under the strip.
+ */
+export function useBundleDrafts(): UseQueryResult<DraftSummary[]> {
+  return useQuery({
+    queryKey: bundleKeys.drafts,
+    queryFn: bundlesIpc.listDrafts,
+    enabled: isTauri(),
+    staleTime: 15_000,
+  });
+}
+
+/**
+ * One draft in full, the record the editor works on.
+ *
+ * Every edit answers with the whole draft and writes it here, so the record
+ * is fresh for as long as the editor is open; `staleTime: Infinity` keeps
+ * a remount from re-reading a file nothing else has changed.
+ */
+export function useBundleDraft(draftId: string | null): UseQueryResult<Draft> {
+  return useQuery({
+    queryKey: bundleKeys.draft(draftId ?? ""),
+    queryFn: () => bundlesIpc.getDraft(draftId as string),
+    enabled: draftId !== null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** What stands between a draft and its publication, re-read after every edit. */
+export function useDraftIssues(draftId: string | null, enabled = true): UseQueryResult<DraftIssues> {
+  return useQuery({
+    queryKey: bundleKeys.draftIssues(draftId ?? ""),
+    queryFn: () => bundlesIpc.validateDraft(draftId as string),
+    enabled: enabled && draftId !== null && isTauri(),
+    retry: false,
+  });
+}
+
+/**
+ * The release archive of one component, file by file, with the overlay
+ * marked on it. The first read may download the archive, so the tab that
+ * asks says so while it waits.
+ */
+export function useDraftEngineFiles(
+  draftId: string | null,
+  componentId: string | null,
+): UseQueryResult<ReleaseView> {
+  return useQuery({
+    queryKey: bundleKeys.draftEngineFiles(draftId ?? "", componentId ?? ""),
+    queryFn: () => bundlesIpc.engineFiles(draftId as string, componentId as string),
+    enabled: draftId !== null && componentId !== null && isTauri(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * The absolute path of one picture of a draft, for the editor of the
+ * description: the node of a `blob:` picture shows the file of the draft
+ * through the asset protocol. The path of a picture never changes while
+ * the draft exists.
+ */
+export function useDraftImagePath(draftId: string | null, sha256: string | null): UseQueryResult<string> {
+  return useQuery({
+    queryKey: bundleKeys.draftImagePath(draftId ?? "", sha256 ?? ""),
+    queryFn: () => bundlesIpc.imagePath(draftId as string, sha256 as string),
+    enabled: draftId !== null && sha256 !== null && isTauri(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * Adds a picture to a draft.
+ *
+ * The command answers with the picture, not with the draft, so the record
+ * is re-read for its `images`; the path of the new picture is written into
+ * the cache at once, so the node the editor inserts has it on the first
+ * frame. The checks are re-read too: a picture without a link is a warning.
+ */
+export function useAddDraftImage(draftId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sourcePath: string) => bundlesIpc.addImage(draftId, sourcePath),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.draft(draftId) });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.draftIssues(draftId) });
+    },
+  });
+}
+
+/** The table of contents of a pk3 of a draft, for the **Contents** dialog. */
+export function useDraftFileListing(
+  draftId: string,
+  scope: string,
+  root: BundleFileRoot,
+  path: string,
+  enabled = true,
+): UseQueryResult<Listing> {
+  return useQuery({
+    queryKey: bundleKeys.draftFileListing(draftId, scope, root, path),
+    queryFn: () => bundlesIpc.draftFileListing(draftId, scope, root, path),
+    enabled: enabled && isTauri(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * The table of contents of a pk3 of the catalogue, by the hash of its
+ * listing file. The core keeps the file in its cache, so the second open
+ * of the same archive is a read of the disk.
+ */
+export function useBundleFileListing(sha256: string | null, enabled = true): UseQueryResult<Listing> {
+  return useQuery({
+    queryKey: bundleKeys.fileListing(sha256 ?? ""),
+    queryFn: () => bundlesIpc.fileListing(sha256 as string),
+    enabled: enabled && sha256 !== null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** The text of a cfg of a draft, for the **Contents** dialog. */
+export function useDraftFileText(
+  draftId: string,
+  scope: string,
+  root: BundleFileRoot,
+  path: string,
+  enabled = true,
+): UseQueryResult<string> {
+  return useQuery({
+    queryKey: bundleKeys.draftFileText(draftId, scope, root, path),
+    queryFn: () => bundlesIpc.draftFileText(draftId, scope, root, path),
+    enabled: enabled && isTauri(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** The text of a cfg of the catalogue, by its hash; `path` is what the manifest calls the file. */
+export function useBundleFileText(
+  sha256: string | null,
+  path: string,
+  enabled = true,
+): UseQueryResult<string> {
+  return useQuery({
+    queryKey: bundleKeys.fileText(sha256 ?? "", path),
+    queryFn: () => bundlesIpc.fileText(sha256 as string, path),
+    enabled: enabled && sha256 !== null,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/**
+ * The files of the store coming down for **Preview** in the catalogue, by
+ * hash, from `bundles:preview-progress`. The same shape as
+ * `useJkhubDownloadProgress`, which covers the JKHub files of a bundle.
+ */
+export function useBundlePreviewProgress(): Map<string, BundlePreviewProgress> {
+  const [progress, setProgress] = useState<Map<string, BundlePreviewProgress>>(() => new Map());
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: UnlistenFn | undefined;
+    let disposed = false;
+    void listen<BundlePreviewProgress>(bundleEvents.previewProgress, (event) => {
+      setProgress((current) => {
+        const next = new Map(current);
+        next.set(event.payload.sha256, event.payload);
+        return next;
+      });
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  return progress;
+}
+
+/** Creates a draft, blank or out of a client, and puts it in the cache for the editor. */
+export function useCreateBundleDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      game,
+      name,
+      fromClientId,
+    }: {
+      game: Game;
+      name: string;
+      fromClientId?: string | null;
+    }) => bundlesIpc.createDraft(game, name, fromClientId),
+    onSuccess: (draft) => {
+      queryClient.setQueryData(bundleKeys.draft(draft.id), draft);
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.drafts });
+    },
+  });
+}
+
+/** Creates a draft bound to a published bundle, with the files of a version. */
+export function useCreateBundleDraftFromBundle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ bundleId, versionId }: { bundleId: string; versionId?: string | null }) =>
+      bundlesIpc.createDraftFromBundle(bundleId, versionId),
+    onSuccess: (draft) => {
+      queryClient.setQueryData(bundleKeys.draft(draft.id), draft);
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.drafts });
+    },
+  });
+}
+
+/** Deletes a draft and its files. The clients made out of it stay. */
+export function useDeleteBundleDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (draftId: string) => bundlesIpc.deleteDraft(draftId),
+    onSuccess: (_, draftId) => {
+      queryClient.removeQueries({ queryKey: [...bundleKeys.drafts, draftId] });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.drafts });
+    },
+  });
+}
+
+/**
+ * The order of the edits of one draft, shared by its fourteen writers.
+ *
+ * `sent` numbers every edit as it is pressed; `applied` is the number of
+ * the edit whose answer the cache holds. Two edits can be in flight at
+ * once — a Tab out of one field into the next sends two — and their
+ * answers can come back the other way round, so an answer is applied only
+ * when it is newer than the one in the cache. The `updatedAt` of the draft
+ * cannot tell the two apart: the core stamps it to the second.
+ */
+interface DraftEditOrder {
+  sent: number;
+  applied: number;
+}
+
+/**
+ * The shape of every edit of a draft: the command answers with the whole
+ * draft, which replaces the record in the cache unless a later edit already
+ * has, and the issues are re-read. A refused edit re-reads the record
+ * instead: the disk holds whatever the core left there, and the cache must
+ * not guess.
+ *
+ * `engineFiles` is for an edit that changes what the release looks like
+ * under the overlay — a replacement, an addition, an exclusion, a new tag —
+ * and drops the file list of the component so the tab re-reads it.
+ */
+function useDraftWriter<TVariables>(
+  draftId: string,
+  order: { current: DraftEditOrder },
+  write: (variables: TVariables) => Promise<Draft>,
+  engineFiles = false,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: bundleKeys.draftEdits(draftId),
+    mutationFn: write,
+    onMutate: () => ({ seq: ++order.current.sent }),
+    onSuccess: (draft, _variables, { seq }) => {
+      // An answer to an edit older than the one the cache holds: it lacks
+      // the later edit, and the fields would fall back to what they showed
+      // before it. Dropped; the later answer carried both.
+      if (seq < order.current.applied) return;
+      order.current.applied = seq;
+      queryClient.setQueryData(bundleKeys.draft(draftId), draft);
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.draftIssues(draftId) });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.drafts });
+      if (engineFiles) {
+        void queryClient.invalidateQueries({
+          queryKey: [...bundleKeys.drafts, draftId, "engine-files"],
+        });
+      }
+    },
+    onError: async (_error, _variables, context) => {
+      // A later edit was pressed after this one: its answer, or its own
+      // refusal, brings the record. Otherwise the record is read again —
+      // and kept only if no answer landed in the cache while it was read,
+      // which would be newer than what the disk held at the time.
+      if (context === undefined || context.seq !== order.current.sent) return;
+      const applied = order.current.applied;
+      try {
+        const draft = await bundlesIpc.getDraft(draftId);
+        if (order.current.applied === applied) {
+          queryClient.setQueryData(bundleKeys.draft(draftId), draft);
+        }
+      } catch {
+        // The editor keeps what it has; the next edit answers with the
+        // record or is refused the same way, under the reason in the header.
+      }
+    },
+  });
+}
+
+/**
+ * Every edit of one draft, as mutations.
+ *
+ * One hook rather than fourteen imports in the editor; each mutation is its
+ * own, so a section can show the pending state of the one it pressed. The
+ * order of the edits is one for all of them: an answer is applied only
+ * when no later edit has answered already.
+ */
+export function useDraftActions(draftId: string) {
+  const order = useRef<DraftEditOrder>({ sent: 0, applied: 0 });
+  return {
+    update: useDraftWriter(draftId, order, (patch: DraftPatch) => bundlesIpc.updateDraft(draftId, patch)),
+    addComponent: useDraftWriter(
+      draftId,
+      order,
+      (component: NewDraftComponent) => bundlesIpc.addComponent(draftId, component),
+      true,
+    ),
+    updateComponent: useDraftWriter(
+      draftId,
+      order,
+      ({ componentId, patch }: { componentId: string; patch: DraftComponentPatch }) =>
+        bundlesIpc.updateComponent(draftId, componentId, patch),
+      true,
+    ),
+    removeComponent: useDraftWriter(
+      draftId,
+      order,
+      (componentId: string) => bundlesIpc.removeComponent(draftId, componentId),
+      true,
+    ),
+    addFilesFromDisk: useDraftWriter(
+      draftId,
+      order,
+      ({ scope, folder, paths }: { scope: string; folder: string; paths: string[] }) =>
+        bundlesIpc.addFilesFromDisk(draftId, scope, folder, paths),
+    ),
+    addFileFromJkhub: useDraftWriter(
+      draftId,
+      order,
+      ({ scope, folder, fileId }: { scope: string; folder: string; fileId: number }) =>
+        bundlesIpc.addFileFromJkhub(draftId, scope, folder, fileId),
+    ),
+    addFilesFromClient: useDraftWriter(
+      draftId,
+      order,
+      ({ scope, clientId, itemIds }: { scope: string; clientId: string; itemIds: string[] }) =>
+        bundlesIpc.addFilesFromClient(draftId, scope, clientId, itemIds),
+    ),
+    removeFile: useDraftWriter(
+      draftId,
+      order,
+      ({ scope, root, path }: { scope: string; root: BundleFileRoot; path: string }) =>
+        bundlesIpc.removeFile(draftId, scope, root, path),
+      true,
+    ),
+    setConfigs: useDraftWriter(
+      draftId,
+      order,
+      ({ scope, configs }: { scope: string; configs: DraftConfig[] }) =>
+        bundlesIpc.setConfigs(draftId, scope, configs),
+    ),
+    replaceEngineFile: useDraftWriter(
+      draftId,
+      order,
+      ({ componentId, path, sourcePath }: { componentId: string; path: string; sourcePath: string }) =>
+        bundlesIpc.replaceEngineFile(draftId, componentId, path, sourcePath),
+      true,
+    ),
+    addEngineFiles: useDraftWriter(
+      draftId,
+      order,
+      ({ componentId, folder, paths }: { componentId: string; folder: string; paths: string[] }) =>
+        bundlesIpc.addEngineFiles(draftId, componentId, folder, paths),
+      true,
+    ),
+    excludeEngineFile: useDraftWriter(
+      draftId,
+      order,
+      ({ componentId, path, excluded }: { componentId: string; path: string; excluded: boolean }) =>
+        bundlesIpc.excludeEngineFile(draftId, componentId, path, excluded),
+      true,
+    ),
+    restoreEngineFile: useDraftWriter(
+      draftId,
+      order,
+      ({ componentId, path }: { componentId: string; path: string }) =>
+        bundlesIpc.restoreEngineFile(draftId, componentId, path),
+      true,
+    ),
+    /** Takes a picture the description does not use out of the draft. */
+    removeImage: useDraftWriter(draftId, order, (sha256: string) => bundlesIpc.removeImage(draftId, sha256)),
+  };
+}
+
+/** The mutations of `useDraftActions`, for a section that takes them as a prop. */
+export type DraftActions = ReturnType<typeof useDraftActions>;
+
+/** What the header of the editor says about the edits of a draft. */
+export interface DraftSaveState {
+  /** An edit is in flight — any edit, not only the newest press of each kind. */
+  saving: boolean;
+  /** The newest settled edit went through. False before the first edit. */
+  saved: boolean;
+  /** The refusal of the newest settled edit, or `null` when it went through. */
+  error: unknown;
+}
+
+/**
+ * The state of the edits of one draft, for the header of the editor.
+ *
+ * Read off the mutation cache rather than the fourteen hooks of
+ * `useDraftActions`: a hook reports its newest press only, so with two
+ * presses of one field in flight it would say **Saved** as soon as the
+ * second answered, while the first was still on its way. Every edit of the
+ * draft is in the cache under one key, in the order pressed: saving while
+ * any is in flight, otherwise what the newest settled one answered. Edits
+ * of an earlier visit to the editor, still in the cache, are left out: the
+ * header opens on the autosave hint, not on the outcome of last time.
+ */
+export function useDraftSaveState(draftId: string): DraftSaveState {
+  const [since] = useState(() => Date.now());
+  const edits = useMutationState({
+    filters: {
+      mutationKey: bundleKeys.draftEdits(draftId),
+      predicate: (mutation) => mutation.state.submittedAt >= since,
+    },
+    select: (mutation) => ({ status: mutation.state.status, error: mutation.state.error }),
+  });
+  const settled = edits.filter((edit) => edit.status === "success" || edit.status === "error");
+  const newest = settled[settled.length - 1];
+  return {
+    saving: edits.some((edit) => edit.status === "pending"),
+    saved: newest?.status === "success",
+    error: newest?.status === "error" ? newest.error : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: pk3 editor ---
+//
+// One open archive in the pk3 editor: the session, the text and the pictures
+// of its entries, and the edits. The session is a query keyed by the target,
+// so a dialog opened twice on the same file finds the record; every edit
+// answers with the session and writes it there. **Save** re-reads the owner
+// of the archive — the draft, or the library of the client — the way the
+// mutations of those slices do.
+// ---------------------------------------------------------------------------
+
+export const pk3EditorKeys = {
+  all: ["pk3-editor"] as const,
+  /** The session on the archive of one target. */
+  session: (target: Pk3EditorTarget) =>
+    target.kind === "draft"
+      ? (["pk3-editor", "session", "draft", target.draftId, target.scope, target.root, target.path] as const)
+      : (["pk3-editor", "session", "library", target.clientId, target.itemId] as const),
+  /** Every read of the entries of one session: the prefix an edit invalidates. */
+  reads: (sessionId: string) => ["pk3-editor", "reads", sessionId] as const,
+  /** The reads of one entry: its text and its picture at every size. */
+  entry: (sessionId: string, path: string) => ["pk3-editor", "reads", sessionId, path] as const,
+  text: (sessionId: string, path: string) => ["pk3-editor", "reads", sessionId, path, "text"] as const,
+  image: (sessionId: string, path: string, maxSize: number | undefined) =>
+    ["pk3-editor", "reads", sessionId, path, "image", maxSize ?? 0] as const,
+};
+
+/**
+ * The session of the editor on the archive of a target, opened on the way
+ * in and closed when the dialog goes.
+ *
+ * The close is the same arrangement as the release of a preview session:
+ * the id is remembered while the dialog stands, and the cleanup closes it a
+ * microtask later, only if no remount has taken the same id back — which
+ * is what a StrictMode double mount does, and what would otherwise close a
+ * session the dialog is still using. A session answered after the dialog
+ * closed is closed on the spot: nobody is left to do it later.
+ */
+export function usePk3EditorSession(target: Pk3EditorTarget): UseQueryResult<Pk3EditorSession> {
+  const queryClient = useQueryClient();
+  const key = pk3EditorKeys.session(target);
+  const query = useQuery({
+    queryKey: key,
+    queryFn: async () => {
+      const session = await pk3EditorIpc.open(target);
+      if (!queryClient.getQueryCache().find({ queryKey: key })?.getObserversCount()) {
+        void pk3EditorIpc.close(session.id).catch(() => undefined);
+      }
+      return session;
+    },
+    enabled: isTauri(),
+    staleTime: Infinity,
+    gcTime: 0,
+    retry: false,
+  });
+  const current = useRef<string | undefined>(undefined);
+  const id = query.data?.id;
+  useEffect(() => {
+    current.current = id;
+    return () => {
+      current.current = undefined;
+      queueMicrotask(() => {
+        if (id !== undefined && current.current !== id) {
+          void pk3EditorIpc.close(id).catch(() => undefined);
+          queryClient.removeQueries({ queryKey: pk3EditorKeys.reads(id) });
+        }
+      });
+    };
+  }, [id, queryClient]);
+  return query;
+}
+
+/** The text of one entry of an open session, decoded by the core. */
+export function usePk3EditorText(sessionId: string | null, path: string | null): UseQueryResult<PreviewText> {
+  return useQuery({
+    queryKey: pk3EditorKeys.text(sessionId ?? "", path ?? ""),
+    queryFn: () => pk3EditorIpc.readText(sessionId as string, path as string),
+    enabled: sessionId !== null && path !== null && isTauri(),
+    staleTime: Infinity,
+    gcTime: 60_000,
+    retry: false,
+  });
+}
+
+/** One picture of an open session, at its own size or as a thumbnail no larger than `maxSize`. */
+export function usePk3EditorImage(
+  sessionId: string | null,
+  path: string | null,
+  maxSize?: number,
+): UseQueryResult<PreviewImage> {
+  return useQuery({
+    queryKey: pk3EditorKeys.image(sessionId ?? "", path ?? "", maxSize),
+    queryFn: () => pk3EditorIpc.readImage(sessionId as string, path as string, maxSize),
+    enabled: sessionId !== null && path !== null && isTauri(),
+    staleTime: Infinity,
+    gcTime: 60_000,
+    retry: false,
+  });
+}
+
+/**
+ * The edits of one open session, as mutations.
+ *
+ * Every edit answers with the session and replaces the record; the reads
+ * of the entries it touched are dropped, so the panel re-reads a text that
+ * was written or a picture that was replaced. **Save** re-reads the session
+ * for the states of the entries and the owner of the archive for its size,
+ * hash and features. `sessionId` is `null` until the session is open, and
+ * every edit refuses until then; the dialog keeps the buttons off as well.
+ */
+export function usePk3EditorActions(target: Pk3EditorTarget, sessionId: string | null) {
+  const queryClient = useQueryClient();
+  const sessionKey = pk3EditorKeys.session(target);
+  const withSession = <T,>(work: (id: string) => Promise<T>): Promise<T> =>
+    sessionId === null ? Promise.reject(new Error("the archive is not open")) : work(sessionId);
+  const keep = (session: Pk3EditorSession) => queryClient.setQueryData(sessionKey, session);
+  /** Drops the reads of one entry, or of every entry of the session. */
+  const dropReads = (path?: string) => {
+    if (sessionId === null) return;
+    void queryClient.invalidateQueries({
+      queryKey: path === undefined ? pk3EditorKeys.reads(sessionId) : pk3EditorKeys.entry(sessionId, path),
+    });
+  };
+  const refreshOwner = () => {
+    if (target.kind === "draft") {
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.draft(target.draftId) });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.draftIssues(target.draftId) });
+      void queryClient.invalidateQueries({ queryKey: bundleKeys.drafts });
+      void queryClient.invalidateQueries({
+        queryKey: bundleKeys.draftFileListing(target.draftId, target.scope, target.root, target.path),
+      });
+      if (target.root === "engine") {
+        void queryClient.invalidateQueries({ queryKey: [...bundleKeys.drafts, target.draftId, "engine-files"] });
+      }
+    } else {
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.items(target.clientId) });
+      void queryClient.invalidateQueries({ queryKey: libraryKeys.conflicts(target.clientId) });
+    }
+  };
+
+  return {
+    writeText: useMutation({
+      mutationFn: ({ path, text }: { path: string; text: string }) =>
+        withSession((id) => pk3EditorIpc.writeText(id, path, text)),
+      onSuccess: (session, { path }) => {
+        keep(session);
+        dropReads(path);
+      },
+    }),
+    replace: useMutation({
+      mutationFn: ({ path, sourcePath }: { path: string; sourcePath: string }) =>
+        withSession((id) => pk3EditorIpc.replace(id, path, sourcePath)),
+      onSuccess: (session, { path }) => {
+        keep(session);
+        dropReads(path);
+      },
+    }),
+    addFiles: useMutation({
+      mutationFn: ({ folder, sourcePaths }: { folder: string; sourcePaths: string[] }) =>
+        withSession((id) => pk3EditorIpc.addFiles(id, folder, sourcePaths)),
+      // An added file may stand on the path of an entry already read.
+      onSuccess: (session) => {
+        keep(session);
+        dropReads();
+      },
+    }),
+    remove: useMutation({
+      mutationFn: (paths: string[]) => withSession((id) => pk3EditorIpc.remove(id, paths)),
+      onSuccess: keep,
+    }),
+    rename: useMutation({
+      mutationFn: ({ from, to }: { from: string; to: string }) =>
+        withSession((id) => pk3EditorIpc.rename(id, from, to)),
+      onSuccess: (session) => {
+        keep(session);
+        dropReads();
+      },
+    }),
+    extract: useMutation({
+      mutationFn: ({ paths, targetDir }: { paths: string[]; targetDir: string }) =>
+        withSession((id) => pk3EditorIpc.extract(id, paths, targetDir)),
+    }),
+    save: useMutation({
+      mutationFn: () =>
+        withSession(async (id) => {
+          const saved = await pk3EditorIpc.save(id);
+          return { saved, session: await pk3EditorIpc.state(id) };
+        }),
+      onSuccess: ({ session }) => {
+        keep(session);
+        refreshOwner();
+      },
+    }),
+    discard: useMutation({
+      mutationFn: () => withSession((id) => pk3EditorIpc.discard(id)),
+      onSuccess: (session) => {
+        keep(session);
+        dropReads();
+      },
+    }),
+  };
+}
+
+/** The mutations of `usePk3EditorActions`, for a panel that takes them as a prop. */
+export type Pk3EditorActions = ReturnType<typeof usePk3EditorActions>;

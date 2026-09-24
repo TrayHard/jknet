@@ -153,6 +153,14 @@ pub struct LibraryItem {
     pub preview_path: Option<String>,
     #[serde(default)]
     pub thumbnail_url: Option<String>,
+    /// What the archive carries besides its category, as the badges of the
+    /// card: `levelshots`, `splash`, `menu`, `hud`, `textures`, `fonts`,
+    /// `strings:<language>`, `shaders`, `effects`, `scripts`, `videos`,
+    /// `configs`, `modules`, then the objects the preview assembles:
+    /// `characters`, `hilts`, `weapons`, `npcs`, `vehicles`, `maps`,
+    /// `music`, `sounds`. See [`crate::file_preview_contents::features`].
+    #[serde(default)]
+    pub features: Vec<String>,
 }
 
 /// What `inspect_pk3` reads out of an archive without installing it.
@@ -171,6 +179,9 @@ pub struct Pk3Report {
     pub sha1: String,
     /// First segment of every internal path, deduplicated and sorted.
     pub top_level: Vec<String>,
+    /// The badges of the card, see [`LibraryItem::features`].
+    #[serde(default)]
+    pub features: Vec<String>,
 }
 
 /// A file `add_library_files` refused, with the reason to print next to it.
@@ -258,6 +269,11 @@ struct ItemMeta {
     added_at: String,
     source: Option<String>,
     notes: Option<String>,
+    /// The badges of the card. `None` in a sidecar written before they
+    /// existed: the scan fills them in from the archive without hashing it
+    /// again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    features: Option<Vec<String>>,
 }
 
 /// The sidecar document: item id to metadata.
@@ -415,7 +431,12 @@ pub fn find_library_conflicts(
 // ---------------------------------------------------------------------------
 
 /// Scans the client's home folder and merges the result with the sidecar.
-fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
+///
+/// --- slice: bundles ---
+/// `pub(crate)` for the publish plan of a bundle, which lists the same files
+/// with the same categories and provenance, without a Tauri state to hand to
+/// [`list_library`].
+pub(crate) fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
     let dir = client_dir(data, client_id)?;
     let files = scan_player_files(&dir);
     let mut sidecar = read_sidecar(&dir);
@@ -429,7 +450,7 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
     for file in &files {
         let id = file.id();
         present.insert(id.clone());
-        let meta = match sidecar.items.get(&id) {
+        let mut meta = match sidecar.items.get(&id) {
             // A size that no longer matches means the file was replaced on
             // disk, so its category and hash have to be read again.
             Some(meta) if meta.size == file.size => meta.clone(),
@@ -440,6 +461,13 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
                 meta
             }
         };
+        // A sidecar from before the badges existed: read them off the
+        // central directory, which costs no hash.
+        if meta.features.is_none() {
+            meta.features = Some(features_of(&file.path));
+            changed = true;
+            sidecar.items.insert(id.clone(), meta.clone());
+        }
         // --- slice: jkhub ---
         // The record of a JKHub install outranks whatever the sidecar
         // remembers: it is the only one of the two that names a file id.
@@ -468,6 +496,7 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
             map_names,
             preview_path,
             thumbnail_url: None,
+            features: meta.features.unwrap_or_default(),
         });
     }
 
@@ -492,11 +521,11 @@ fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<LibraryItem>> {
 /// A pk3 that will not open is still listed, as `other` without a hash: one
 /// broken download must not hide the rest of the library.
 fn describe(file: &ScannedFile) -> ItemMeta {
-    let (category, sha1) = match inspect(&file.path) {
-        Ok(report) => (report.category, Some(report.sha1)),
+    let (category, sha1, features) = match inspect(&file.path) {
+        Ok(report) => (report.category, Some(report.sha1), report.features),
         Err(e) => {
             log::warn!("cannot read {}: {e}", file.path.display());
-            (LibraryCategory::Other, None)
+            (LibraryCategory::Other, None, Vec::new())
         }
     };
     ItemMeta {
@@ -507,7 +536,22 @@ fn describe(file: &ScannedFile) -> ItemMeta {
         added_at: timestamp::from_unix_seconds(file.modified),
         source: None,
         notes: None,
+        features: Some(features),
     }
+}
+
+/// The badges of a card read off the central directory of an archive alone,
+/// for a sidecar that was written before they existed. An archive that will
+/// not open has none.
+fn features_of(path: &Path) -> Vec<String> {
+    let Ok(file) = File::open(path) else {
+        return Vec::new();
+    };
+    let Ok(archive) = ZipArchive::new(BufReader::new(file)) else {
+        return Vec::new();
+    };
+    let entries = crate::archive::names(&archive, crate::archive::MAX_ENTRIES);
+    crate::file_preview_contents::features(&entries)
 }
 
 /// Lists every pk3 one level below `home`, enabled or not, one entry per id.
@@ -670,6 +714,76 @@ pub(crate) fn preview_path(data: &DataPaths, client_id: &str, id: &str) -> Resul
     Err(AppError::NotFound(format!("library item {id}")))
 }
 
+// --- slice: pk3 editor ---
+
+/// The file of an item as it lies on disk, under whichever of its two
+/// spellings is there, without resolving links: the path the pk3 editor
+/// opens and rewrites. The id is checked the way every command checks it,
+/// so it cannot leave `home\`.
+pub(crate) fn item_path(data: &DataPaths, client_id: &str, id: &str) -> Result<PathBuf> {
+    let dir = client_dir(data, client_id)?;
+    let (folder, file_name) = parse_item_id(id)?;
+    let folder_path = dir.join("home").join(&folder);
+    for name in [file_name.clone(), format!("{file_name}{DISABLED_SUFFIX}")] {
+        let path = folder_path.join(name);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    Err(AppError::NotFound(format!("library item {id}")))
+}
+
+/// Whether an item is one of the engine's own archives mirrored into
+/// `home\base\`: the pk3 editor opens those read-only, the way the toggle
+/// and the delete refuse them.
+pub(crate) fn is_engine_item(data: &DataPaths, client_id: &str, id: &str) -> Result<bool> {
+    let dir = client_dir(data, client_id)?;
+    let (folder, file_name) = parse_item_id(id)?;
+    Ok(is_engine_file(&engine_archives(&dir), &folder, &file_name))
+}
+
+/// Reads an item again after the pk3 editor rewrote its file, and records
+/// what changed: the size, the hash, the category and the badges go into
+/// the sidecar, the display name, the date and the notes stay.
+///
+/// A note of `provenance.json` about the file goes: it says the file is
+/// what JKHub served, and after a rewrite it no longer is. A draft made
+/// from the client would otherwise point its manifest at the JKHub record,
+/// and an install of that bundle would fetch the original over the edit.
+pub(crate) fn refresh_rewritten_item(data: &DataPaths, client_id: &str, id: &str) -> Result<LibraryItem> {
+    let dir = client_dir(data, client_id)?;
+    let path = item_path(data, client_id, id)?;
+    let report = inspect(&path)?;
+    let mut sidecar = read_sidecar(&dir);
+    let file_name = parse_item_id(id)?.1;
+    let meta = sidecar.items.entry(id.to_string()).or_insert_with(|| ItemMeta {
+        display_name: default_display_name(&file_name),
+        category: report.category,
+        size: report.size,
+        sha1: None,
+        added_at: timestamp::now_rfc3339(),
+        source: Some("local".to_string()),
+        notes: None,
+        features: None,
+    });
+    meta.category = report.category;
+    meta.size = report.size;
+    meta.sha1 = Some(report.sha1);
+    meta.features = Some(report.features);
+    write_sidecar(&dir, &sidecar)?;
+
+    let mut provenance = read_provenance(&dir);
+    if provenance.remove(id).is_some() {
+        write_provenance(&dir, &provenance)?;
+        log::info!("{id} of client {client_id} was rewritten and is no longer the file JKHub served");
+    }
+
+    read_library(data, client_id)?
+        .into_iter()
+        .find(|item| item.id == id)
+        .ok_or_else(|| AppError::NotFound(format!("library item {id}")))
+}
+
 /// The name a card shows until the player renames it.
 fn default_display_name(file_name: &str) -> String {
     file_name
@@ -684,7 +798,17 @@ fn default_display_name(file_name: &str) -> String {
 // ---------------------------------------------------------------------------
 
 /// Opens an archive read-only and reports what it holds.
-fn inspect(path: &Path) -> Result<Pk3Report> {
+///
+/// The report is built on the first [`crate::archive::MAX_ENTRIES`] file
+/// entries of the archive, the limit the preview of the same file and the
+/// listing of a bundle apply: an archive that declares more is classified
+/// by those and counted as those, and no list of its names grows past
+/// them.
+///
+/// --- slice: bundles ---
+/// `pub(crate)` for the draft of a bundle, which classifies a pk3 added from
+/// disk the way the Library screen would.
+pub(crate) fn inspect(path: &Path) -> Result<Pk3Report> {
     let file = File::open(path).map_err(|e| AppError::io_path("cannot open", path, e))?;
     let size = file
         .metadata()
@@ -694,11 +818,7 @@ fn inspect(path: &Path) -> Result<Pk3Report> {
         AppError::InvalidInput(format!("{} is not a readable pk3: {e}", path.display()))
     })?;
 
-    let entries: Vec<String> = archive
-        .file_names()
-        .map(|name| name.replace('\\', "/"))
-        .filter(|name| !name.ends_with('/'))
-        .collect();
+    let entries: Vec<String> = crate::archive::names(&archive, crate::archive::MAX_ENTRIES);
 
     let mut top_level: Vec<String> = entries
         .iter()
@@ -721,6 +841,7 @@ fn inspect(path: &Path) -> Result<Pk3Report> {
         size,
         sha1: sha1_of(path)?,
         top_level,
+        features: crate::file_preview_contents::features(&entries),
     })
 }
 
@@ -910,6 +1031,7 @@ fn add_files(
             added_at: timestamp::now_rfc3339(),
             source: Some("local".to_string()),
             notes: None,
+            features: Some(report.features.clone()),
         };
         sidecar.items.insert(id.clone(), meta.clone());
         taken.insert(file_name.to_lowercase());
@@ -930,6 +1052,7 @@ fn add_files(
             map_names: report.map_names,
             preview_path: None,
             thumbnail_url: None,
+            features: report.features,
         });
     }
 
@@ -1428,6 +1551,27 @@ mod tests {
         assert_eq!(report.top_level, vec!["models", "readme.txt"]);
         assert_eq!(report.sha1.len(), 40);
         assert!(report.sha1.chars().all(|ch| ch.is_ascii_hexdigit()));
+
+        // An archive that declares more entries than the walk keeps is
+        // reported by the first of them: no list grows past the limit, and a
+        // folder entry in front does not count against it.
+        let long = root.0.join("long.pk3");
+        {
+            let file = File::create(&long).expect("test archive");
+            let mut writer = ZipWriter::new(std::io::BufWriter::new(file));
+            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            writer.add_directory("textures", options).expect("a folder");
+            for index in 0..=crate::archive::MAX_ENTRIES {
+                writer.start_file(format!("textures/{index:06}.jpg"), options).expect("start entry");
+            }
+            writer.finish().expect("finish archive");
+        }
+        let report = inspect(&long).expect("inspect");
+        assert_eq!(report.entry_count, crate::archive::MAX_ENTRIES);
+        assert_eq!(report.notable_entries.len(), NOTABLE_ENTRIES);
+        assert_eq!(report.notable_entries[0], "textures/000000.jpg");
+        assert_eq!(report.top_level, vec!["textures"]);
+        assert_eq!(report.category, LibraryCategory::Other);
     }
 
     #[test]

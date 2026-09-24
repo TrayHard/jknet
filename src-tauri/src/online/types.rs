@@ -30,6 +30,13 @@ pub struct OnlineUser {
     /// RFC 3339 in UTC. Empty when the service leaves it out.
     #[serde(default)]
     pub created_at: String,
+    // --- slice: bundles ---
+    /// Whether the account reviews bundles, copied out of [`Me::admin`] at
+    /// sign-in and cached with the rest of the account. Not a field of the
+    /// contract's `User`: the service says it on `GET /v1/me` alone, so every
+    /// `User` that arrives inside a friend or a request reads as `false`.
+    #[serde(default)]
+    pub admin: bool,
 }
 
 /// Where a player is right now.
@@ -123,14 +130,19 @@ impl From<&Presence> for PresenceUpdate {
     }
 }
 
-/// The answer of `GET /v1/me`, which only the tests read: see
+/// The answer of `GET /v1/me`: see
 /// [`OnlineClient::get_me`](super::client::OnlineClient::get_me).
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Me {
     pub user: OnlineUser,
+    #[serde(default)]
     pub presence: Presence,
+    // --- slice: bundles ---
+    /// Whether this account may review bundle versions that carry executables.
+    /// A service older than the bundles feature leaves it out.
+    #[serde(default)]
+    pub admin: bool,
 }
 
 /// Someone on the friends list, with where they are.

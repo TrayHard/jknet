@@ -31,26 +31,72 @@ export const communityIpc = {
 };
 
 export interface PreviewAsset { name: string; path: string | null; text: string | null }
+/**
+ * What one object of a preview session is, `PreviewProduct` in
+ * `src-tauri/src/file_preview_products.rs`.
+ *
+ * --- slice: pk3 contents ---
+ * The first eight kinds are the objects with a scene or a player. The rest
+ * are the contents of the archive by the taxonomy of the pk3 reference:
+ * pictures by the folder they sit in, fonts, string packages and the text
+ * files the game reads. The optional fields carry what the core read out of
+ * the headers, so the list captions an image without decoding it.
+ */
+export type FilePreviewKind =
+  | "map" | "skin" | "hilt" | "weapon" | "npc" | "vehicle" | "music" | "sound"
+  | "levelshot" | "splash" | "menuImage" | "hudImage" | "texture" | "icon" | "image"
+  | "font" | "strings" | "shader" | "effect" | "menu" | "config" | "data" | "script" | "video" | "other";
 export interface FilePreviewEntry {
   id: string;
   archive: number;
   name: string;
   label: string;
-  kind: "map" | "skin" | "hilt" | "weapon" | "npc" | "vehicle" | "music" | "sound";
+  kind: FilePreviewKind;
   model: string | null;
   skins: string[];
   audio: { name: string; label: string }[];
   appearance: PlayerModel | null;
   hiltId: string | null;
+  /** Bytes of the entry inside the archive. */
+  size?: number;
+  /** The header of a picture; `0×0` when the core could not parse it. */
+  image?: { width: number; height: number; format: "jpg" | "png" | "tga" };
+  /** A file the core can read as text: how many lines and in which code page. */
+  text?: { lines: number; encoding: string };
+  /** A `strings/<language>/<package>.str` file: the folder, the package and the number of `REFERENCE` keys. */
+  strings?: { language: string; package: string; keys: number };
+  /** A `.fontdat` with the name of its glyph atlas in the archive, when there is one. */
+  font?: { pointSize: number; height: number; atlas: string | null };
+  /** On a `levelshot`: the map the picture stands for, as `mp/ffa3`. */
+  map?: string;
+  /** The subfolder the entry is grouped under inside its kind. */
+  group?: string;
 }
 export interface FilePreview { id: string; archives: string[]; entries: FilePreviewEntry[] }
 export interface FilePreviewSource { previewId: string; archive: number }
+/**
+ * --- slice: preview modes ---
+ * What the object list of a preview dialog shows: `simple` is what a player
+ * sees in the game, `advanced` is every file of the archive by folder. One
+ * setting for every preview dialog, `previewMode` in `settings.rs`.
+ */
+export type PreviewMode = "simple" | "advanced";
+export const PREVIEW_MODES: readonly PreviewMode[] = ["simple", "advanced"];
+/** A picture of a preview session, decoded by the core: a PNG data URL for a TGA, the file itself otherwise. */
+export interface PreviewImage { dataUrl: string; width: number; height: number }
+/** A text file of a preview session, decoded from its code page; `truncated` when the core cut it. */
+export interface PreviewText { text: string; encoding: string; truncated: boolean }
 export const filePreviewIpc = {
   baseGame: (game: Game) => call<FilePreview>("preview_base_game", { game }),
   installed: (clientId: string, itemId: string) => call<FilePreview>("preview_library_file", { clientId, itemId }),
   jkhub: (id: number, clientId: string | null) => call<FilePreview>("jkhub_preview", { id, clientId }),
   assets: async (source: FilePreviewSource, names: string[]): Promise<PreviewAsset[]> =>
     (await call<PreviewAsset[]>("get_file_preview_assets", { ...source, names })).map(asset => ({ ...asset, path: asset.path ? convertFileSrc(asset.path) : null })),
+  /** A picture of the archive; `maxSize` asks for a thumbnail no wider or taller than that. */
+  image: (source: FilePreviewSource, name: string, maxSize?: number) =>
+    call<PreviewImage>("get_file_preview_image", { ...source, name, maxSize: maxSize ?? null }),
+  /** A text file of the archive, decoded by the core. */
+  text: (source: FilePreviewSource, name: string) => call<PreviewText>("get_file_preview_text", { ...source, name }),
   release: (previewId: string) => call<void>("release_file_preview", { previewId }),
 };
 export const modelPreviewIpc = {
@@ -188,6 +234,9 @@ export interface Settings {
   // --- slice: onboarding ---
   /** False until the player has been through the three first-run steps. */
   onboardingCompleted: boolean;
+  // --- slice: preview modes ---
+  /** The **Simple** / **Advanced** segment of every preview dialog; `simple` on a fresh install. */
+  previewMode: PreviewMode;
   // --- slice: account ---
   /** JKNet Online, without a trailing slash. */
   onlineUrl: string;
@@ -248,6 +297,8 @@ export interface SettingsPatch {
   savedNicknames?: string[];
   // --- slice: onboarding ---
   onboardingCompleted?: boolean;
+  // --- slice: preview modes ---
+  previewMode?: PreviewMode;
   // --- slice: account ---
   /** An `http://` or `https://` address; blank returns to the default service. */
   onlineUrl?: string;
@@ -390,6 +441,34 @@ export interface Engine {
   compatibilityError: "unsupportedEngineSystem" | null;
   /** Mod folder the build needs as `+set fs_game`. jaMME runs in `mme`. */
   defaultFsGame: string | null;
+  // --- slice: bundles ---
+  /**
+   * The ways this build can start: `multiplayer` always, `single` when the
+   * release ships an executable of the single-player game beside it. OpenJK
+   * does; the other builds play multiplayer alone.
+   */
+  modes: LaunchMode[];
+}
+
+// --- slice: bundles ---
+/**
+ * `src-tauri/src/engines.rs`: how a client is started.
+ *
+ * `single` takes the single-player executable of the release and skips the
+ * player profile and `+connect`; everything else on the line is the same.
+ */
+export type LaunchMode = "multiplayer" | "single";
+
+/**
+ * The modes a client offers, read off the record with the engine as the fallback.
+ *
+ * A record written before the field carries none, and the core reads such a
+ * list as «every mode of the engine»; the card does the same, so a client made
+ * yesterday shows the same buttons as one made today.
+ */
+export function clientModes(client: Client, engine: Engine | undefined): LaunchMode[] {
+  if (client.modes && client.modes.length > 0) return client.modes;
+  return engine?.modes ?? ["multiplayer"];
 }
 
 /** A named instance of an engine with its own files and settings. */
@@ -416,6 +495,20 @@ export interface Client {
    * that repeats a `+set` of the same cvar is the value the engine keeps.
    */
   launchArgs: string;
+  // --- slice: bundles ---
+  /**
+   * The modes this client starts in. Empty or absent on a record written
+   * before the field, which means every mode of the engine: read it through
+   * `clientModes`, never directly.
+   */
+  modes?: LaunchMode[];
+  /**
+   * The bundle or the draft this client was installed from.
+   *
+   * Absent or `null` on a client that has nothing to do with a bundle, which
+   * is every client written before the field existed.
+   */
+  bundle?: ClientBundleLink | null;
 }
 
 // --- slice: client window ---
@@ -629,6 +722,16 @@ export interface LibraryItem {
   fileName: string;
   displayName: string;
   category: LibraryCategory;
+  /**
+   * --- slice: pk3 contents ---
+   * What else the archive holds beside its category, as codes of the pk3
+   * taxonomy: `levelshots`, `splash`, `menu`, `hud`, `textures`, `fonts`,
+   * `strings:<language>`, `shaders`, `effects`, `scripts`, `videos`,
+   * `configs`, `modules`, then the objects the preview assembles:
+   * `characters`, `hilts`, `weapons`, `npcs`, `vehicles`, `maps`, `music`,
+   * `sounds`. The card prints them as badges.
+   */
+  features: string[];
   size: number;
   enabled: boolean;
   addedAt: string;
@@ -845,6 +948,11 @@ export const launchIpc = {
    * --- slice: connect dialog ---
    * `inlineProfile` is a profile of this launch alone, nothing is stored and
    * `profileId` is not read beside it.
+   *
+   * --- slice: bundles ---
+   * `mode` is `multiplayer` when left out. `single` starts the single-player
+   * executable of the release and carries neither a profile nor `connect`;
+   * the core refuses it for a client that does not offer the mode.
    */
   launchClient: (
     clientId: string,
@@ -852,6 +960,7 @@ export const launchIpc = {
     extraArgs: string[] = [],
     profileId?: string,
     inlineProfile?: InlineProfile,
+    mode?: LaunchMode,
   ) =>
     call<RunningGame>("launch_client", {
       clientId,
@@ -859,6 +968,7 @@ export const launchIpc = {
       extraArgs,
       profileId: profileId ?? null,
       inlineProfile: inlineProfile ?? null,
+      mode: mode ?? null,
     }),
   getRunningGame: () => call<RunningGame | null>("get_running_game"),
   stopGame: () => call<void>("stop_game"),
@@ -886,6 +996,9 @@ export const launchIpc = {
     inlineProfile?: InlineProfile,
     extraArgs: string[] = [],
     connect?: string,
+    // --- slice: bundles --- the mode the line is built for; `multiplayer`
+    // when left out, as for `launchClient`.
+    mode?: LaunchMode,
   ) =>
     call<LaunchPreview>("preview_launch_args", {
       clientId,
@@ -893,6 +1006,7 @@ export const launchIpc = {
       inlineProfile: inlineProfile ?? null,
       extraArgs,
       connect: connect ?? null,
+      mode: mode ?? null,
     }),
 };
 
@@ -1481,6 +1595,15 @@ export interface AccountState {
   /** Whether the service runs on this machine, which is what shows the Developer
    *  sign-in button. */
   localOnline: boolean;
+  // --- slice: bundles ---
+  /**
+   * Whether the signed-in account is a bundle administrator.
+   *
+   * The service says so in the `admin` field of `GET /v1/me`. Absent means
+   * «not known», and every screen reads it as `false`: the review queue is
+   * the only thing behind it, and the service checks the right again.
+   */
+  isAdmin?: boolean;
 }
 
 /** `src-tauri/src/account.rs`: the session `begin_sign_in` opened. */
@@ -2193,4 +2316,1119 @@ export const jkhubIpc = {
    */
   cancelIndex: (game?: Game) =>
     call<void>("jkhub_cancel_index", { game: game ?? null }),
+};
+
+
+// ---------------------------------------------------------------------------
+// --- slice: bundles ---
+//
+// Bundles: a recipe for a set of clients, published to JKNet Online. A bundle
+// is made of components — each an engine of the registry with a release tag,
+// files laid over that release, pk3 and cfg files, a mod folder, launch
+// arguments and launch modes — plus files and configs every component shares.
+// Installing one creates a client per component; publishing takes a draft the
+// author put together in the editor of the launcher. The types mirror
+// `src-tauri/src/bundles/types.rs`, `manifest.rs` and `draft.rs`, which in
+// turn mirror the service contract, so the three stay readable side by side.
+// Field names are camelCase on every side.
+// ---------------------------------------------------------------------------
+
+/**
+ * Calls a bundles command, or the mock service when the page is in a browser.
+ *
+ * The same arrangement as `callFriends`: outside Tauri a development build
+ * reads the catalogue straight from `scripts/mock-online.mjs`, so the tab has
+ * cards to draw without the core. Drafts live on the disk of the launcher and
+ * installing and publishing need the disk and the token, which a browser has
+ * none of, and `devOnline.ts` refuses them with a sentence saying so.
+ */
+function callBundles<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
+  if (import.meta.env.DEV && !isTauri()) {
+    return import("./devOnline").then((module) => module.devBundles<T>(command, args));
+  }
+  return call<T>(command, args);
+}
+
+/** How the catalogue is ordered: likes then installs, publication date, installs. */
+export type BundleSort = "popular" | "new" | "installs";
+
+/** Where a version of a bundle is in its life. */
+export type BundleVersionStatus = "draft" | "pending" | "published" | "rejected";
+
+/** `home` is `clients\<slug>\home\`, `engine` is `clients\<slug>\engine\`. */
+export type BundleFileRoot = "home" | "engine";
+
+/**
+ * What a file of a bundle is, read off its extension by the service.
+ *
+ * `exe` and `dll` are what makes a version wait for review: a version with
+ * either is `pending` until an administrator approves it.
+ */
+export type BundleFileKind = "pk3" | "cfg" | "dll" | "exe" | "other";
+
+/**
+ * Where a file of a bundle comes from at install time.
+ *
+ * `jkhub` is a pk3 added from JKHub and left as it was: the launcher
+ * downloads it from jkhub.org as the JKHub tab would. `blob` is a file in the
+ * store of the service, addressed by its SHA-256.
+ */
+export type BundleFileSource =
+  | {
+      kind: "jkhub";
+      fileId: number;
+      version?: string | null;
+      title?: string | null;
+      url?: string | null;
+    }
+  | { kind: "blob" };
+
+/**
+ * Where a `blob` file was taken from before the author changed it.
+ *
+ * Only on a file that came from JKHub and no longer matches the record there:
+ * the card says «modified» and links the original, so a player knows what
+ * differs from what jkhub.org serves.
+ */
+export interface BundleFileOrigin {
+  kind: "jkhub";
+  fileId: number;
+  /** The hash of the file as jkhub.org served it. */
+  sha256: string;
+  modified: boolean;
+}
+
+/** The file of the release an overlay file stands in for. */
+export interface BundleFileReplaces {
+  sha256: string;
+  size: number;
+}
+
+/** What the manifest says about a pk3 of `home`, for the card of the file. */
+export interface BundleLibraryInfo {
+  category: LibraryCategory;
+  /** The same codes as `LibraryItem.features`; absent on a manifest written before the core counted them. */
+  features?: string[];
+  displayName: string;
+  /** Entries inside the archive. */
+  entries: number;
+  /** Top-level folder → number of files under it. At most 32 folders. */
+  folders: Record<string, number>;
+  /** Names of the maps inside, at most 64. */
+  maps: string[];
+}
+
+/**
+ * The table of contents of a pk3, as a file of the store.
+ *
+ * The core writes it when the archive is added to a draft — every entry
+ * with its path and size, sorted by path — and the publish uploads it as an
+ * ordinary file. `bundle_file_listing` reads it back by this hash, so the
+ * catalogue can list what an archive holds without downloading the archive.
+ */
+export interface BundleListingRef {
+  sha256: string;
+  size: number;
+}
+
+/** One file of the manifest, in an overlay, a component or the shared part. */
+export interface BundleFile {
+  root: BundleFileRoot;
+  /** Relative, forward slashes, no `..` and no leading slash. */
+  path: string;
+  size: number;
+  /** 64 lowercase hex characters. */
+  sha256: string;
+  kind: BundleFileKind;
+  source: BundleFileSource;
+  /** Only on a pk3 of `home`. */
+  library?: BundleLibraryInfo | null;
+  /** Only on a pk3: the table of contents of the archive in the store. */
+  listing?: BundleListingRef | null;
+  /**
+   * Only on an overlay file that replaces a file of the release: the hash and
+   * size of the original. Absent on a file the overlay adds.
+   */
+  replaces?: BundleFileReplaces | null;
+  /** Only on a `blob` that started as a JKHub file and was changed since. */
+  origin?: BundleFileOrigin | null;
+}
+
+/** One entry of a pk3, as `draft_file_listing` and `bundle_file_listing` list them. */
+export interface ListingEntry {
+  /** Inside the archive, forward slashes. */
+  path: string;
+  size: number;
+}
+
+/**
+ * The table of contents of one pk3: the entries, how many there are and
+ * how many bytes they add up to. Folders are not listed on their own; the
+ * dialog derives them from the paths.
+ */
+export interface Listing {
+  entries: ListingEntry[];
+  total: number;
+  bytes: number;
+}
+
+/** One config document of the manifest, made a layer of the client on install. */
+export interface BundleConfig {
+  name: string;
+  text: string;
+  priority: number;
+}
+
+/** The engine a component is built on. */
+export interface BundleEngineRef {
+  /** An id of the registry in `src-tauri/src/engines.rs`. */
+  engineId: string;
+  /** A GitHub release tag, or `null` for «the latest at install time». */
+  releaseTag: string | null;
+}
+
+/** What a component lays over `engine\`: files replaced or added, files removed. */
+export interface BundleOverlay {
+  /** Files with `root: "engine"`. */
+  files: BundleFile[];
+  /** Paths of the release the install deletes from `engine\`. */
+  remove: string[];
+}
+
+/** One component of the manifest: one client after the install. */
+export interface BundleComponent {
+  /** `[a-z0-9-]{1,32}`, unique in the bundle. */
+  id: string;
+  /** 1–40 characters, the suffix of the client name. */
+  label: string;
+  engine: BundleEngineRef;
+  /** A non-empty subset of the modes of the engine. */
+  modes: LaunchMode[];
+  /** The mod folder, or `null` for `base`. */
+  fsGame: string | null;
+  launchArgs: string;
+  overlay: BundleOverlay;
+  /** Files with `root: "home"`. */
+  files: BundleFile[];
+  configs: BundleConfig[];
+}
+
+/** What every component gets: files of `home` and configs layered after its own. */
+export interface BundleShared {
+  files: BundleFile[];
+  configs: BundleConfig[];
+}
+
+/** The manifest of one version, schema 2. */
+export interface BundleManifest {
+  schema: 2;
+  game: Game;
+  /** 1 to 8. */
+  components: BundleComponent[];
+  shared: BundleShared;
+}
+
+/**
+ * One component as the service sums it up for the card: the engine, the
+ * modes and the size of the overlay. Computed by the service out of the
+ * manifest; the card draws the logos and the «Based on …» line from it.
+ */
+export interface BundleComponentSummary {
+  id: string;
+  label: string;
+  engineId: string;
+  releaseTag: string | null;
+  modes: LaunchMode[];
+  /** Overlay files with `replaces`. */
+  replaced: number;
+  /** Overlay files without `replaces`. */
+  added: number;
+  /** Entries of `overlay.remove`. */
+  removed: number;
+  fileCount: number;
+}
+
+/** Who published a bundle, as the catalogue prints it. */
+export interface BundleOwner {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+/**
+ * The name, the summary and the description of a bundle in one language
+ * other than its default.
+ *
+ * The catalogue list carries every translation without `description`; the
+ * record of a bundle carries it. An empty field means «not translated»: the
+ * screen shows the default language for that field.
+ */
+export interface Translation {
+  name: string;
+  summary: string;
+  description?: string;
+}
+
+/** One card of the catalogue. */
+export interface BundleCard {
+  id: string;
+  slug: string;
+  /** In `language`. */
+  name: string;
+  summary: string;
+  /** The code of the language of `name`, `summary` and `description`: one of the launcher's, `en` by default. */
+  language: string;
+  /** The other languages by code; never the code of `language`. Up to seven. */
+  translations: Record<string, Translation>;
+  game: Game;
+  /** The engine of the first component; empty for a bundle without a published version. */
+  engineId: string;
+  releaseTag: string | null;
+  /** The components of the latest published version; empty before the first one. */
+  components: BundleComponentSummary[];
+  /** `null` when the owner deleted their account: the bundle stays. */
+  owner: BundleOwner | null;
+  tags: string[];
+  /** Bytes the store serves for the latest version: what an install downloads from JKNet. */
+  blobBytes: number;
+  fileCount: number;
+  hasExecutables: boolean;
+  featured: boolean;
+  likes: number;
+  installs: number;
+  latestVersionId: string | null;
+  latestLabel: string | null;
+  /** RFC 3339, `null` while no version is published. */
+  publishedAt: string | null;
+  updatedAt: string;
+  /** Present in answers that carried a token. */
+  likedByMe?: boolean;
+}
+
+/** A version without its manifest, for the **Versions** list. */
+export interface BundleVersionSummary {
+  id: string;
+  bundleId: string;
+  label: string;
+  changelog: string;
+  /** The engine of the first component. */
+  engineId: string;
+  releaseTag: string | null;
+  components: BundleComponentSummary[];
+  fileCount: number;
+  blobBytes: number;
+  hasExecutables: boolean;
+  status: BundleVersionStatus;
+  /** What the administrator wrote when rejecting, or `null`. */
+  reviewNote: string | null;
+  reviewedBy?: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  publishedAt: string | null;
+}
+
+/** A version with its manifest, the answer of `get_bundle_version`. */
+export interface BundleVersion extends BundleVersionSummary {
+  manifest: BundleManifest;
+}
+
+/** The whole record of a bundle: the card, the description, the versions. */
+export interface BundleDetails extends BundleCard {
+  /** Markdown, in `language`; the translations of the record carry theirs. */
+  description: string;
+  website: string | null;
+  discord: string | null;
+  hidden: boolean;
+  /** Sent back with `PUT bundles/{id}`; a stale one answers `409 conflict`. */
+  revision: number;
+  /** The latest published version with its manifest, or `null` when there is none yet. */
+  latest: BundleVersion | null;
+  /** Every status for the owner and an administrator, `published` only for the rest. */
+  versions: BundleVersionSummary[];
+  likedByMe: boolean;
+}
+
+/** One client of this machine that came out of a bundle, as `get_bundle` lists it. */
+export interface InstalledBundleClient {
+  clientId: string;
+  versionId: string;
+  componentId: string;
+  role: "installed";
+  /** True while the install of that client is unfinished. */
+  pending: boolean;
+}
+
+/** What the core adds to `get_bundle`: the clients of this machine that came out of it. */
+export interface BundleLocal {
+  installedClients: InstalledBundleClient[];
+  /**
+   * Whether the engine of each component of the latest version is in this
+   * build's registry, by component id. A component missing from the map is
+   * read as known.
+   */
+  engineKnown: Record<string, boolean>;
+}
+
+/** The answer of `get_bundle`. */
+export interface BundleDetailsWithLocal extends BundleDetails {
+  local: BundleLocal;
+}
+
+/** What `list_bundles` is asked for. */
+export interface BundleQuery {
+  game: Game;
+  sort: BundleSort;
+  q?: string;
+  engineId?: string | null;
+  tag?: string | null;
+  /** At most 100. */
+  limit?: number;
+  offset?: number;
+}
+
+/** The answer of `list_bundles`. */
+export interface BundleList {
+  items: BundleCard[];
+  total: number;
+}
+
+/** The answer of `like_bundle`. */
+export interface BundleLikes {
+  likes: number;
+  likedByMe: boolean;
+}
+
+/** The answer of `my_bundles`. */
+export interface MyBundles {
+  bundles: BundleDetails[];
+  /** Bytes of the distinct files the versions of this account reference. */
+  usedBytes: number;
+  quotaBytes: number;
+}
+
+/** One line of the review queue: a `pending` version with its bundle. */
+export interface PendingVersion {
+  bundle: BundleCard;
+  /** With the manifest: the queue lists the executables and their hashes. */
+  version: BundleVersion;
+}
+
+/**
+ * What `client.json` remembers about the bundle or the draft a client came from.
+ *
+ * There is no bundle object in the launcher beside the client: the bundle
+ * lives on the service, the draft in the data folder, and this is the link.
+ */
+export interface ClientBundleLink {
+  /** `null` on a client installed from a draft that is not published yet. */
+  bundleId: string | null;
+  bundleSlug: string | null;
+  /** The name of the bundle, or of the draft. */
+  bundleName: string;
+  /** The draft `install_bundle_draft` created the client from, if any. */
+  draftId?: string | null;
+  /** `null` on a client from a draft. */
+  versionId: string | null;
+  versionLabel: string | null;
+  componentId: string;
+  componentLabel: string;
+  /** `installed` since this edition: publishing takes a draft, not a client. */
+  role: "installed" | "published";
+  /**
+   * True when the component laid files over `engine\` or removed some. Such
+   * a client offers no **Check updates**: a newer release would write over
+   * the laid files.
+   */
+  engineOverlay: boolean;
+  /** RFC 3339. */
+  linkedAt: string;
+  /**
+   * True from the start of the install to its end: the core writes the link
+   * first and clears the flag last, so a retry can tell which client it may
+   * carry on in. Absent from a link written before the flag existed.
+   */
+  pending?: boolean;
+}
+
+// --- drafts ---
+
+/** The scope of a draft file or config that belongs to every component. */
+export const SHARED_SCOPE = "shared";
+
+/**
+ * Where a file of a draft was taken from.
+ *
+ * `jkhub` carries the hash of the file as jkhub.org served it: while the
+ * current hash matches, the manifest points at JKHub and nothing is uploaded;
+ * once it differs the file goes to the store with `origin.modified`. A
+ * `client` file with a `provenance` is a JKHub file by the same rule.
+ * `release` is the hash of the release file an overlay file replaces.
+ */
+export type DraftFileOrigin =
+  | { kind: "disk"; sourcePath: string }
+  | {
+      kind: "jkhub";
+      fileId: number;
+      version?: string | null;
+      title?: string | null;
+      url?: string | null;
+      sha256: string;
+    }
+  | { kind: "client"; clientId: string; itemId: string; provenance?: JkhubProvenance | null }
+  | { kind: "release"; sha256: string };
+
+/** One file of a draft: a manifest file with its origin instead of a source. */
+export interface DraftFile {
+  root: BundleFileRoot;
+  path: string;
+  size: number;
+  sha256: string;
+  kind: BundleFileKind;
+  library?: BundleLibraryInfo | null;
+  /** Only on a pk3: the table of contents the core wrote when the file was added. */
+  listing?: BundleListingRef | null;
+  origin: DraftFileOrigin;
+}
+
+/**
+ * One picture of the description of a draft, `bundles\drafts\<id>\images\`.
+ *
+ * The description points at it as `![…](blob:<sha256>)`; the publish uploads
+ * it to the store first, so the same address works in the catalogue.
+ */
+export interface DraftImage {
+  sha256: string;
+  size: number;
+  /** `image/png`, `image/jpeg`, `image/gif` or `image/webp`, read off the first bytes. */
+  contentType: string;
+  /** The name of the file it was added from, for the alt text and the list. */
+  fileName: string;
+}
+
+/** One config document of a draft; `sourceConfigId` names the Configs document it came from. */
+export interface DraftConfig {
+  name: string;
+  text: string;
+  priority: number;
+  sourceConfigId?: string | null;
+}
+
+/** The overlay of a draft component: replaced and added files, and paths to remove. */
+export interface DraftOverlay {
+  files: DraftFile[];
+  remove: string[];
+}
+
+/** One component of a draft. */
+export interface DraftComponent {
+  id: string;
+  label: string;
+  engineId: string;
+  releaseTag: string | null;
+  modes: LaunchMode[];
+  fsGame: string | null;
+  launchArgs: string;
+  overlay: DraftOverlay;
+  files: DraftFile[];
+  configs: DraftConfig[];
+}
+
+/** A translation of a draft: every field present, empty where nothing is translated yet. */
+export type DraftTranslation = Translation & { description: string };
+
+/**
+ * `bundles\drafts\<draftId>\draft.json`: a bundle being put together.
+ *
+ * Every edit is a command that rewrites the file and answers with the whole
+ * draft, so a screen never merges: it drops the answer into the cache.
+ */
+export interface Draft {
+  id: string;
+  game: Game;
+  createdAt: string;
+  updatedAt: string;
+  /** The fields of the bundle, with the same limits as the service. */
+  name: string;
+  summary: string;
+  description: string;
+  /**
+   * The language of the three fields above: the interface language of the
+   * launcher when the draft was made, if it is one the launcher speaks.
+   */
+  language: string;
+  /** The other languages by code; never the code of `language`. Up to seven. */
+  translations: Record<string, DraftTranslation>;
+  tags: string[];
+  website: string | null;
+  discord: string | null;
+  /** The fields of the version the next publish creates. */
+  versionLabel: string;
+  changelog: string;
+  /** Set when the draft is bound to a published bundle: a publish adds a version to it. */
+  bundleId: string | null;
+  bundleSlug: string | null;
+  lastVersionId: string | null;
+  components: DraftComponent[];
+  shared: { files: DraftFile[]; configs: DraftConfig[] };
+  /**
+   * The pictures of the description. Absent from a `draft.json` written
+   * before pictures existed, which reads as none.
+   */
+  images?: DraftImage[];
+}
+
+/** One line of `list_bundle_drafts`. */
+export interface DraftSummary {
+  id: string;
+  name: string;
+  game: Game;
+  componentCount: number;
+  fileCount: number;
+  /** Bytes a publish would upload. */
+  blobBytes: number;
+  bundleId: string | null;
+  updatedAt: string;
+}
+
+/** What `update_bundle_draft` changes. A field left out keeps its value. */
+export interface DraftPatch {
+  /** 2–64 characters. */
+  name?: string;
+  /** Up to 200 characters. */
+  summary?: string;
+  /** Markdown, up to 32 KiB. */
+  description?: string;
+  /**
+   * The new default language. The core swaps the fields: the name, the
+   * summary and the description of the draft become the translation of the
+   * old language, and the translation of the new one becomes the fields.
+   */
+  language?: string;
+  /** The whole set of translations: what is sent replaces what the draft held. */
+  translations?: Record<string, DraftTranslation>;
+  /** Up to 10, each `[a-z0-9-]{1,24}`. */
+  tags?: string[];
+  website?: string | null;
+  discord?: string | null;
+  /** Up to 32 characters. */
+  versionLabel?: string;
+  /** Up to 4000 characters. */
+  changelog?: string;
+}
+
+/** What `draft_add_component` is given; the core builds the id out of the label. */
+export interface NewDraftComponent {
+  engineId: string;
+  releaseTag: string | null;
+  label: string;
+  modes: LaunchMode[];
+}
+
+/** What `draft_update_component` changes. */
+export interface DraftComponentPatch {
+  label?: string;
+  releaseTag?: string | null;
+  modes?: LaunchMode[];
+  fsGame?: string | null;
+  launchArgs?: string;
+}
+
+/**
+ * The state of one file of the release under the overlay of a component.
+ *
+ * `release` is untouched, `replaced` has an overlay file over it, `added`
+ * exists in the overlay alone, `removed` is deleted on install.
+ */
+export type ReleaseFileState = "release" | "replaced" | "added" | "removed";
+
+/** One file of `draft_engine_files`. */
+export interface ReleaseFile {
+  path: string;
+  size: number;
+  sha256: string;
+  state: ReleaseFileState;
+}
+
+/** The answer of `draft_engine_files`: the release archive as the install would unpack it. */
+export interface ReleaseView {
+  releaseTag: string | null;
+  files: ReleaseFile[];
+}
+
+/**
+ * Codes of `validate_bundle_draft`: `bundles:editor.issue.<code>`.
+ *
+ * The core may add one this list does not know, which is why a screen reads
+ * the code through `i18n.exists`.
+ */
+export type DraftIssueCode =
+  | "noComponents"
+  | "noEngine"
+  | "engineUnknown"
+  | "noModes"
+  | "emptyBundle"
+  | "nameInvalid"
+  | "tooLarge"
+  | "duplicatePath"
+  | "executablesPresent"
+  | "passwordsStripped"
+  | "configTooLong"
+  | "summaryTooLong"
+  | "descriptionTooLong"
+  | "imageMissing"
+  | "unusedImages";
+
+/** One error or warning of a draft. Everything but the code is optional. */
+export interface DraftIssue {
+  code: DraftIssueCode | string;
+  /**
+   * The part of the draft the issue is about: the id of a component, or
+   * `shared` for the shared files and configs. Absent for the draft as a
+   * whole: its name, its size, that it has no component.
+   */
+  scope?: string | null;
+  /** The component of `scope`, when it is one. Absent for `shared` and for the draft as a whole. */
+  componentId?: string | null;
+  /** The file or config the issue names, when it names one. */
+  path?: string | null;
+  /**
+   * The code of the translation the issue is about — a name outside its
+   * limits, a picture a translated description refers to. Absent for the
+   * default language.
+   */
+  language?: string | null;
+  /**
+   * A count the finding carries: the lines `passwordsStripped` removed,
+   * the characters of a `summaryTooLong`, the bytes of a `descriptionTooLong`.
+   */
+  count?: number | null;
+  /** An English sentence of the core, the fallback when the code has no key. */
+  message?: string | null;
+}
+
+/** The answer of `validate_bundle_draft`. */
+export interface DraftIssues {
+  /** A draft with one of these cannot be published or tested. */
+  errors: DraftIssue[];
+  warnings: DraftIssue[];
+  /** Bytes a publish would upload to the store. */
+  blobBytes: number;
+  /** Bytes an install would fetch from jkhub.org instead. */
+  jkhubBytes: number;
+  fileCount: number;
+  /** Paths of the exe and dll files, the reason a version waits for review. */
+  executables: string[];
+}
+
+/** The answer of `publish_bundle_draft`. */
+export interface PublishResult {
+  bundle: BundleDetails;
+  version: BundleVersion;
+}
+
+// --- events ---
+
+/** Phase of `bundles:install-progress`. */
+export type BundleInstallPhase = "engine" | "files" | "configs" | "done" | "error";
+
+/**
+ * Payload of `bundles:install-progress`.
+ *
+ * An install from the catalogue names `bundleId` and `versionId` and no
+ * `draftId`; a test install from a draft the other way round. `componentId`
+ * and `clientId` name the component being written at the moment.
+ */
+export interface BundleInstallProgress {
+  bundleId: string | null;
+  versionId: string | null;
+  draftId: string | null;
+  componentId: string | null;
+  clientId: string | null;
+  phase: BundleInstallPhase;
+  /** Counted from 1 while `phase` is `files`. */
+  fileIndex: number;
+  fileCount: number;
+  /** Path of the file being fetched, or `null` between files. */
+  currentFile: string | null;
+  /** Bytes of the current file received so far. */
+  downloaded: number;
+  /** Bytes of the current file; zero when unknown. */
+  total: number;
+  /** One line for the bar; on `error` it names the file that failed. */
+  message: string;
+  /** Codes the `done` phase carries, `jkhubDiffers` today; empty otherwise. */
+  warnings?: string[];
+}
+
+/** Phase of `bundles:publish-progress`. */
+export type BundlePublishPhase =
+  | "hashing"
+  | "creating"
+  | "uploading"
+  | "publishing"
+  | "done"
+  | "error";
+
+/** Payload of `bundles:publish-progress`. */
+export interface BundlePublishProgress {
+  draftId: string;
+  /** Always `null`: a publish reads the draft, not a client. */
+  clientId: string | null;
+  phase: BundlePublishPhase;
+  fileIndex: number;
+  fileCount: number;
+  currentFile: string | null;
+  uploaded: number;
+  total: number;
+  message: string;
+  /**
+   * The bundle the version goes into, from the `creating` phase on: the one
+   * the draft is bound to, or the one the core has just created. `null`
+   * before the core knows it.
+   */
+  bundleId?: string | null;
+}
+
+/**
+ * Payload of `bundles:preview-progress`: a file of the store coming down
+ * for **Preview** in the catalogue. A JKHub file reports through
+ * `jkhub:download-progress` instead.
+ */
+export interface BundlePreviewProgress {
+  sha256: string;
+  downloaded: number;
+  /** Bytes of the file; zero when unknown. */
+  total: number;
+}
+
+/** Event names the bundles slice emits. */
+export const bundleEvents = {
+  installProgress: "bundles:install-progress",
+  publishProgress: "bundles:publish-progress",
+  previewProgress: "bundles:preview-progress",
+} as const;
+
+/**
+ * The bundles commands, `src-tauri/src/bundles/mod.rs`.
+ *
+ * The three reads of the catalogue go through `callBundles`, so a browser
+ * review has cards; everything else needs the launcher.
+ */
+export const bundlesIpc = {
+  // --- catalogue ---
+  list: (query: BundleQuery) =>
+    callBundles<BundleList>("list_bundles", {
+      query: {
+        game: query.game,
+        sort: query.sort,
+        q: query.q ?? "",
+        engineId: query.engineId ?? null,
+        tag: query.tag ?? null,
+        limit: query.limit ?? 50,
+        offset: query.offset ?? 0,
+      },
+    }),
+  get: (bundleId: string) =>
+    callBundles<BundleDetailsWithLocal>("get_bundle", { bundleId }),
+  version: (bundleId: string, versionId: string) =>
+    callBundles<BundleVersion>("get_bundle_version", { bundleId, versionId }),
+  /**
+   * Creates one client per chosen component out of a version, or carries on
+   * in the clients of `existingClientIds` after a failed try. Long: the bar
+   * is `bundles:install-progress`.
+   */
+  install: (
+    bundleId: string,
+    versionId: string,
+    baseName: string,
+    componentIds: string[],
+    existingClientIds?: Record<string, string> | null,
+  ) =>
+    callBundles<Client[]>("install_bundle", {
+      bundleId,
+      versionId,
+      baseName,
+      componentIds,
+      existingClientIds: existingClientIds ?? null,
+    }),
+  like: (bundleId: string, liked: boolean) =>
+    callBundles<BundleLikes>("like_bundle", { bundleId, liked }),
+  mine: () => callBundles<MyBundles>("my_bundles"),
+  remove: (bundleId: string) => callBundles<void>("delete_bundle", { bundleId }),
+  pending: () => callBundles<PendingVersion[]>("list_pending_bundle_versions"),
+  review: (versionId: string, approve: boolean, note?: string | null) =>
+    callBundles<BundleVersion>("review_bundle_version", {
+      versionId,
+      approve,
+      note: note ?? null,
+    }),
+  setFlags: (bundleId: string, flags: { featured?: boolean; hidden?: boolean }) =>
+    callBundles<BundleDetails>("set_bundle_flags", {
+      bundleId,
+      featured: flags.featured ?? null,
+      hidden: flags.hidden ?? null,
+    }),
+
+  // --- drafts ---
+  listDrafts: () => callBundles<DraftSummary[]>("list_bundle_drafts"),
+  /**
+   * A draft for one game. With `fromClientId` it opens with one component
+   * read off that client: the engine and its tag, the modes, the mod folder
+   * and the arguments, the enabled pk3 files with their origins, the config
+   * layers and the overlay the client's `engine\` differs from the release by.
+   */
+  createDraft: (game: Game, name: string, fromClientId?: string | null) =>
+    callBundles<Draft>("create_bundle_draft", {
+      game,
+      name,
+      fromClientId: fromClientId ?? null,
+    }),
+  /** A draft bound to a published bundle, with the files of a version downloaded. */
+  createDraftFromBundle: (bundleId: string, versionId?: string | null) =>
+    callBundles<Draft>("create_bundle_draft_from_bundle", {
+      bundleId,
+      versionId: versionId ?? null,
+    }),
+  getDraft: (draftId: string) => callBundles<Draft>("get_bundle_draft", { draftId }),
+  updateDraft: (draftId: string, patch: DraftPatch) =>
+    callBundles<Draft>("update_bundle_draft", { draftId, patch }),
+  deleteDraft: (draftId: string) => callBundles<void>("delete_bundle_draft", { draftId }),
+  addComponent: (draftId: string, component: NewDraftComponent) =>
+    callBundles<Draft>("draft_add_component", { draftId, component }),
+  updateComponent: (draftId: string, componentId: string, patch: DraftComponentPatch) =>
+    callBundles<Draft>("draft_update_component", { draftId, componentId, patch }),
+  removeComponent: (draftId: string, componentId: string) =>
+    callBundles<Draft>("draft_remove_component", { draftId, componentId }),
+  /** `folder` is `base` or a mod folder; `scope` a component id or `shared`. */
+  addFilesFromDisk: (draftId: string, scope: string, folder: string, paths: string[]) =>
+    callBundles<Draft>("draft_add_files_from_disk", { draftId, scope, folder, paths }),
+  /** Downloads the record from jkhub.org; the bar is `jkhub:download-progress`. */
+  addFileFromJkhub: (draftId: string, scope: string, folder: string, fileId: number) =>
+    callBundles<Draft>("draft_add_file_from_jkhub", { draftId, scope, folder, fileId }),
+  /** Copies library files of a client with their origins. */
+  addFilesFromClient: (draftId: string, scope: string, clientId: string, itemIds: string[]) =>
+    callBundles<Draft>("draft_add_files_from_client", { draftId, scope, clientId, itemIds }),
+  removeFile: (draftId: string, scope: string, root: BundleFileRoot, path: string) =>
+    callBundles<Draft>("draft_remove_file", { draftId, scope, root, path }),
+  /** Replaces the whole list of configs of a scope. */
+  setConfigs: (draftId: string, scope: string, configs: DraftConfig[]) =>
+    callBundles<Draft>("draft_set_configs", { draftId, scope, configs }),
+  /** The release archive is taken from the cache or downloaded: slow the first time. */
+  engineFiles: (draftId: string, componentId: string) =>
+    callBundles<ReleaseView>("draft_engine_files", { draftId, componentId }),
+  replaceEngineFile: (draftId: string, componentId: string, path: string, sourcePath: string) =>
+    callBundles<Draft>("draft_replace_engine_file", { draftId, componentId, path, sourcePath }),
+  /** `folder` is the path inside `engine\` the files go under; empty for the root. */
+  addEngineFiles: (draftId: string, componentId: string, folder: string, paths: string[]) =>
+    callBundles<Draft>("draft_add_engine_files", { draftId, componentId, folder, paths }),
+  excludeEngineFile: (draftId: string, componentId: string, path: string, excluded: boolean) =>
+    callBundles<Draft>("draft_exclude_engine_file", { draftId, componentId, path, excluded }),
+  /** Takes a replacement or an addition back; the release file stands again. */
+  restoreEngineFile: (draftId: string, componentId: string, path: string) =>
+    callBundles<Draft>("draft_restore_engine_file", { draftId, componentId, path }),
+  validateDraft: (draftId: string) => callBundles<DraftIssues>("validate_bundle_draft", { draftId }),
+  /**
+   * Creates one client per chosen component out of the draft, the files
+   * copied from its folder. Long: the bar is `bundles:install-progress` with
+   * `draftId`. `existingClientIds` carries a failed try on in its clients.
+   */
+  installDraft: (
+    draftId: string,
+    baseName: string,
+    componentIds: string[],
+    existingClientIds?: Record<string, string> | null,
+  ) =>
+    callBundles<Client[]>("install_bundle_draft", {
+      draftId,
+      baseName,
+      componentIds,
+      existingClientIds: existingClientIds ?? null,
+    }),
+  /** Long: the bar is `bundles:publish-progress`. */
+  publishDraft: (draftId: string) =>
+    callBundles<PublishResult>("publish_bundle_draft", { draftId }),
+
+  // --- description pictures ---
+  /**
+   * Copies a picture into the draft and answers with its record. The core
+   * refuses a file that is not a PNG, JPEG, GIF or WebP, or is larger than
+   * 2 MiB; adding the same picture twice answers with the existing record.
+   */
+  addImage: (draftId: string, sourcePath: string) =>
+    callBundles<DraftImage>("draft_add_image", { draftId, sourcePath }),
+  /** Takes a picture out of the draft and answers with the draft, like every other edit. */
+  removeImage: (draftId: string, sha256: string) =>
+    callBundles<Draft>("draft_remove_image", { draftId, sha256 }),
+  /** The absolute path of a picture of the draft, for `convertFileSrc`. */
+  imagePath: (draftId: string, sha256: string) =>
+    callBundles<string>("draft_image_path", { draftId, sha256 }),
+
+  // --- contents of files ---
+  /** The table of contents of a pk3 of the draft, read off its folder. */
+  draftFileListing: (draftId: string, scope: string, root: BundleFileRoot, path: string) =>
+    callBundles<Listing>("draft_file_listing", { draftId, scope, root, path }),
+  /**
+   * The table of contents of a pk3 of a published bundle, by the hash of its
+   * `listing` file: downloaded from the store the first time, read from
+   * `cache\bundles\listings\` after.
+   */
+  fileListing: (sha256: string) => callBundles<Listing>("bundle_file_listing", { sha256 }),
+  /** The text of a cfg file of the draft, up to 64 KiB. */
+  draftFileText: (draftId: string, scope: string, root: BundleFileRoot, path: string) =>
+    callBundles<string>("draft_file_text", { draftId, scope, root, path }),
+  /**
+   * The text of a cfg file of a published bundle, by its own hash, up to
+   * 64 KiB. `path` is the path the manifest gives the file: the core refuses
+   * a pk3, a dll or an exe by it, the way `draft_file_text` does.
+   */
+  fileText: (sha256: string, path: string) =>
+    callBundles<string>("bundle_file_text", { sha256, path }),
+
+  // --- preview of the objects inside a pk3 ---
+  /**
+   * Opens a preview session on a pk3 of the draft, with the assets of the
+   * game and no client. The rest is `filePreviewIpc`: `assets` and `release`.
+   */
+  previewDraftFile: (draftId: string, scope: string, root: BundleFileRoot, path: string) =>
+    callBundles<FilePreview>("preview_draft_file", { draftId, scope, root, path }),
+  /**
+   * The same on a pk3 of a published version: the core fetches the file
+   * first — from the store with `bundles:preview-progress`, or from JKHub
+   * with `jkhub:download-progress` — and keeps it in `cache\bundles\preview\`.
+   */
+  previewBundleFile: (
+    bundleId: string,
+    versionId: string,
+    scope: string,
+    root: BundleFileRoot,
+    path: string,
+  ) =>
+    callBundles<FilePreview>("preview_bundle_file", { bundleId, versionId, scope, root, path }),
+};
+
+/** The hash a `blob:<sha256>` address of a description points at, or `null` for any other address. */
+export function blobSha256(src: string): string | null {
+  const match = /^blob:([0-9a-f]{64})$/i.exec(src.trim());
+  return match ? match[1].toLowerCase() : null;
+}
+
+/** Where the store serves a file: `<service>/v1/blobs/<sha256>`. */
+export function blobUrl(onlineUrl: string, sha256: string): string {
+  return `${onlineUrl.replace(/\/+$/, "")}/v1/blobs/${sha256}`;
+}
+
+/** The VirusTotal page of a file, by its SHA-256. */
+export function virusTotalUrl(sha256: string): string {
+  return `https://www.virustotal.com/gui/file/${sha256}`;
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: pk3 editor ---
+//
+// The editor of one pk3 archive, `src-tauri/src/pk3_editor.rs`. A session is
+// opened on the archive of a draft file or of a library file and lives in the
+// core until it is closed; every edit is kept beside the archive and answers
+// with the whole session, so the dialog never merges: it drops the answer
+// into the cache. **Save** rewrites the archive and updates its owner — the
+// draft, or the library of the client — which the hooks re-read.
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the archive the editor opens comes from: a file of a draft, by scope
+ * and path, or a file of the library of a client. A JKHub file of the cache
+ * and a file of the catalogue are read through the preview only.
+ */
+export type Pk3EditorTarget =
+  | { kind: "draft"; draftId: string; scope: string; root: BundleFileRoot; path: string }
+  | { kind: "library"; clientId: string; itemId: string };
+
+/** What an entry of the archive is, read off its path by the core. */
+export type Pk3EntryKind = "image" | "text" | "model" | "sound" | "map" | "other";
+
+/**
+ * What the session has done to an entry since the archive was opened.
+ * `removed` entries stay in the list, crossed out, until **Save** or
+ * **Discard**.
+ */
+export type Pk3EntryState = "unchanged" | "modified" | "added" | "renamed" | "removed";
+
+/** One entry of the archive as the session sees it. */
+export interface Pk3EditorEntry {
+  /** Inside the archive, forward slashes. */
+  path: string;
+  size: number;
+  kind: Pk3EntryKind;
+  state: Pk3EntryState;
+  /** The header of a picture, when the core could read it. */
+  image?: { width: number; height: number; format: string } | null;
+  /** A file the core reads and writes as text: the code page it uses. */
+  text?: { encoding: string } | null;
+  /** On a `renamed` entry: the path it had when the archive was opened. */
+  renamedFrom?: string | null;
+}
+
+/** One open archive: the entries with their states and whether anything is unsaved. */
+export interface Pk3EditorSession {
+  id: string;
+  target: Pk3EditorTarget;
+  archivePath: string;
+  /** An edit is waiting for **Save**. */
+  dirty: boolean;
+  entries: Pk3EditorEntry[];
+  /** Bytes of the archive on disk. */
+  bytes: number;
+  /** The archive can be read but not written here. */
+  readOnly: boolean;
+}
+
+/** What `pk3_editor_save` answers with: the archive as written. */
+export interface Pk3EditorSaved {
+  sha256: string;
+  size: number;
+  /** How many entries the written archive holds. */
+  entries: number;
+}
+
+/**
+ * The pk3 editor commands. Every edit answers with the session; the reads
+ * answer with the same shapes the preview uses, `PreviewText` and
+ * `PreviewImage`.
+ */
+export const pk3EditorIpc = {
+  /** Opens a session on the archive of the target, or answers with the one already open on it. */
+  open: (target: Pk3EditorTarget) => call<Pk3EditorSession>("pk3_editor_open", { target }),
+  state: (sessionId: string) => call<Pk3EditorSession>("pk3_editor_state", { sessionId }),
+  /** The text of an entry, up to 512 KiB, decoded by the code page of the entry; an edited entry is read from the session. */
+  readText: (sessionId: string, path: string) =>
+    call<PreviewText>("pk3_editor_read_text", { sessionId, path }),
+  /** A picture of the archive; `maxSize` asks for a thumbnail no wider or taller than that. */
+  readImage: (sessionId: string, path: string, maxSize?: number) =>
+    call<PreviewImage>("pk3_editor_read_image", { sessionId, path, maxSize: maxSize ?? null }),
+  /** Writes the text of an entry in its code page; a path the archive has not got creates the entry. */
+  writeText: (sessionId: string, path: string, text: string) =>
+    call<Pk3EditorSession>("pk3_editor_write_text", { sessionId, path, text }),
+  /** Replaces an entry with a file from the disk; a picture is converted to the format of the entry. */
+  replace: (sessionId: string, path: string, sourcePath: string) =>
+    call<Pk3EditorSession>("pk3_editor_replace", { sessionId, path, sourcePath }),
+  /** Adds files from the disk into `folder` (empty for the root), lowercased; an entry at the same path is replaced. */
+  addFiles: (sessionId: string, folder: string, sourcePaths: string[]) =>
+    call<Pk3EditorSession>("pk3_editor_add_files", { sessionId, folder, sourcePaths }),
+  /** Marks entries for removal; a path with a trailing slash takes a whole folder. */
+  remove: (sessionId: string, paths: string[]) =>
+    call<Pk3EditorSession>("pk3_editor_remove", { sessionId, paths }),
+  /** Renames an entry, or a folder with everything under it when both paths end in a slash. */
+  rename: (sessionId: string, from: string, to: string) =>
+    call<Pk3EditorSession>("pk3_editor_rename", { sessionId, from, to }),
+  /** Writes entries, or whole folders by a trailing slash, into a folder on the disk. */
+  extract: (sessionId: string, paths: string[], targetDir: string) =>
+    call<{ files: number }>("pk3_editor_extract", { sessionId, paths, targetDir }),
+  /** Rewrites the archive and updates its owner; the session stays open on the written archive. */
+  save: (sessionId: string) => call<Pk3EditorSaved>("pk3_editor_save", { sessionId }),
+  /** Throws every unsaved edit away. */
+  discard: (sessionId: string) => call<Pk3EditorSession>("pk3_editor_discard", { sessionId }),
+  /** Ends the session and deletes what it kept beside the archive. */
+  close: (sessionId: string) => call<void>("pk3_editor_close", { sessionId }),
 };

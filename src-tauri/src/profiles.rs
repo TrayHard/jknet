@@ -1101,6 +1101,8 @@ mod tests {
             fs_game: None,
             launch_args: launch_args.to_string(),
             created_at: "2026-09-12T00:00:00Z".to_string(),
+            modes: Vec::new(),
+            bundle: None,
         }
     }
 

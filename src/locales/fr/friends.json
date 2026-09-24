@@ -23,6 +23,7 @@
     "online": "En ligne",
     "offline": "Hors ligne",
     "lastSeenJustNow": "Vu à l’instant",
+    "lastSeenOn": "Vu le {{date}}",
     "lastSeenMinutes_one": "Vu il y a {{count}} minute",
     "lastSeenMinutes_many": "Vu il y a {{count}} minutes",
     "lastSeenMinutes_other": "Vu il y a {{count}} minutes",
@@ -31,8 +32,7 @@
     "lastSeenHours_other": "Vu il y a {{count}} heures",
     "lastSeenDays_one": "Vu il y a {{count}} jour",
     "lastSeenDays_many": "Vu il y a {{count}} jours",
-    "lastSeenDays_other": "Vu il y a {{count}} jours",
-    "lastSeenOn": "Vu le {{date}}"
+    "lastSeenDays_other": "Vu il y a {{count}} jours"
   },
   "empty": {
     "offTitle": "La fonction Amis n’est pas encore activée",

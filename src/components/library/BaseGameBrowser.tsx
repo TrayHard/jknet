@@ -67,7 +67,8 @@ export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: stri
     </div>
     <div className="flex items-start gap-24">
       <aside className="w-200 shrink-0 flex flex-col gap-2">
-        {PREVIEW_KINDS.map(group => <button key={group} type="button" onClick={() => setKind(group)} aria-pressed={kind === group}
+        {/* --- slice: pk3 contents --- the taxonomy has two dozen groups; the rail lists the ones the catalogue holds. */}
+        {PREVIEW_KINDS.filter(group => group === "all" || query.data.entries.some(entry => entry.kind === group)).map(group => <button key={group} type="button" onClick={() => setKind(group)} aria-pressed={kind === group}
           className={cn("flex items-center gap-8 min-h-36 px-12 py-8 rounded-md cursor-pointer text-body-sm transition-colors", kind === group ? "bg-selected-overlay text-fg" : "text-fg-secondary hover:bg-hover-overlay hover:text-fg")}>
           <LibraryObjectIcon kind={group} size={16} className="shrink-0" />
           <span className="flex-1 text-left">{t(`preview.kind.${group}`)}</span>

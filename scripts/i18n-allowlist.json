@@ -49,7 +49,7 @@
     "px",
     "ms"
   ],
-  "exact": ["—", "·", "/", "+", "?", "…", ":", "-", "_"],
+  "exact": ["—", "·", "/", "+", "?", "…", ":", "-", "_", "server.example.com:29070"],
   "files": {
     "comment": "Files the JSX scan skips entirely, with the reason.",
     "src/components/servers/ServerName.tsx": "a colour table and a parser, no interface text",

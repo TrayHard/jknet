@@ -90,6 +90,10 @@ pub(crate) fn map_names(entries: &[String]) -> Vec<String> {
     maps
 }
 
+/// The pictures that may stand for an archive on its card, best first: the
+/// picture of a map the archive itself carries, the portrait of a skin, a
+/// map picture of a map that is not in the archive (a pack of pictures for
+/// the retail maps, sorted by name), then a picture named for the purpose.
 fn candidates(entries: &[String], maps: &[String]) -> Vec<(usize, String)> {
     let mut choices = Vec::new();
     for (index, original) in entries.iter().enumerate() {
@@ -108,7 +112,7 @@ fn candidates(entries: &[String], maps: &[String]) -> Vec<(usize, String)> {
             }) {
                 0
             } else {
-                continue;
+                3
             }
         } else if maps.is_empty()
             && stem.starts_with("models/players/")
@@ -126,7 +130,7 @@ fn candidates(entries: &[String], maps: &[String]) -> Vec<(usize, String)> {
             stem,
             "preview" | "screenshot" | "thumbnail" | "readme/preview" | "splash" | "readme/splash"
         ) {
-            3
+            4
         } else {
             continue;
         };
@@ -338,7 +342,7 @@ mod tests {
         assert!(image.is_none());
     }
     #[test]
-    fn candidates_match_maps_and_ignore_effects_and_unrelated_levelshots() {
+    fn candidates_prefer_own_maps_then_portraits_then_any_levelshot() {
         let entries = [
             "gfx/effects/atlantica/splash.tga",
             "levelshots/other.jpg",
@@ -348,9 +352,36 @@ mod tests {
         .map(String::from);
         assert_eq!(
             candidates(&entries, &["atlantica.bsp".into()]),
-            vec![(2, entries[2].clone())]
+            vec![(2, entries[2].clone()), (1, entries[1].clone())],
+            "the picture of the archive's own map first, the other one after it"
         );
-        assert_eq!(candidates(&entries, &[]), vec![(3, entries[3].clone())]);
+        assert_eq!(
+            candidates(&entries, &[]),
+            vec![(3, entries[3].clone()), (2, entries[2].clone()), (1, entries[1].clone())],
+            "a skin pack shows its portrait; the effects picture is never a cover"
+        );
+    }
+
+    #[test]
+    fn a_pack_of_map_pictures_without_maps_is_covered_by_its_first_picture() {
+        let entries = [
+            "menu/splash.jpg",
+            "levelshots/mp/ffa3.jpg",
+            "levelshots/academy1.jpg",
+            "strings/russian/menus.str",
+        ]
+        .map(String::from);
+        assert_eq!(
+            candidates(&entries, &[]),
+            vec![(2, entries[2].clone()), (1, entries[1].clone())],
+            "sorted by name, and the splash of the client is not a cover"
+        );
+        let root = Temp::new();
+        let path = root.0.join("pictures.pk3");
+        archive(&path, &[("levelshots/mp/ffa3.png", &png()), ("levelshots/academy1.jpg", b"broken")]);
+        let (maps, cover) = inspect(&path, &root.0.join("cache"));
+        assert!(maps.is_empty());
+        assert!(cover.is_some(), "the broken first picture falls through to the next");
     }
     #[test]
     fn corruption_falls_through_and_cached_image_is_repaired() {

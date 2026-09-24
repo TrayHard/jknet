@@ -26,6 +26,8 @@ import { PlayerProfilesPage } from "./pages/PlayerProfilesPage";
 import { MediaPage } from "./pages/MediaPage";
 import { ConfigsPage } from "./pages/ConfigsPage";
 import { ProfileNavigationGuard } from "./components/client/ProfileNavigationGuard";
+// --- slice: bundles ---
+import { BundleEditorPage } from "./pages/BundleEditorPage";
 import { ClientsPage } from "./pages/ClientsPage";
 import { ClientWindowPage } from "./pages/ClientWindowPage";
 import { EnginePage } from "./pages/EnginePage";
@@ -154,6 +156,8 @@ function getMainRouter() {
           <Route path="/community/:id" element={<CommunityPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          {/* --- slice: bundles --- the editor of one draft, a page of the main window. */}
+          <Route path="/bundles/drafts/:id" element={<BundleEditorPage />} />
           <Route path="/player-profiles" element={<PlayerProfilesPage />} />
           <Route path="/media" element={<MediaPage />} />
           <Route path="/configs" element={<ConfigsPage />} />

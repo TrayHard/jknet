@@ -1,6 +1,7 @@
 {
   "actions": {
     "add": "Hozzáadás",
+    "apply": "Apply",
     "back": "Vissza",
     "cancel": "Mégse",
     "close": "Bezárás",

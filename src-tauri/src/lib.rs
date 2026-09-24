@@ -27,8 +27,21 @@
 //! | `account`        | signing in to the service and owning the account |
 //! | `friends`        | friends, presence and invites on top of `online` |
 //! | `jkhub`          | browsing jkhub.org and installing its files     |
+//! | `bundles`        | bundles on JKNet Online: catalogue, publish, install |
+//! | `archive`        | one bounded walk over the entries of a pk3, for the modules that list one |
+//! | `pk3_editor`     | one pk3 archive open for editing, and the rewrite that saves it |
 
 mod account;
+// --- slice: bundles ---
+// The one walk over the entries of a zip archive that `library`, the listing
+// of a bundle and the file preview share, with the one limit on how many
+// entries any of them keeps.
+mod archive;
+// --- slice: bundles ---
+// Published recipes of clients on JKNet Online: the catalogue, the publish
+// plan, the upload and the install. Its own module rather than a part of
+// `clients`: a bundle lives on the service, and a client only keeps a link.
+mod bundles;
 mod community;
 // --- slice: player profiles ---
 // The skins and saber hilts a client can offer a profile, read out of the
@@ -40,6 +53,10 @@ mod model_preview;
 mod file_preview;
 mod base_game;
 mod file_preview_products;
+// The files of a previewed archive beyond its finished objects — map
+// pictures, translations, fonts, shaders, text — by the taxonomy of
+// `docs/jknet/pk3-anatomy.md`, and the commands that read one of them.
+mod file_preview_contents;
 mod media;
 mod user_files;
 mod configs;
@@ -79,6 +96,12 @@ mod library_preview;
 // one connection pool serves both.
 mod online;
 mod paths;
+// --- slice: pk3 editor ---
+// One pk3 archive open for editing: the entries of a file of a draft or of the
+// library of a client, the edits waiting beside it, and the rewrite that puts
+// them into the archive. Kept apart from `library` and from `bundles` because
+// it serves both and owns neither.
+mod pk3_editor;
 // --- slice: player profiles ---
 // The fourth entity: who the player is inside the game. Kept apart from
 // `clients` for the same reason `client_window` is — one module, one document
@@ -91,6 +114,7 @@ mod timestamp;
 
 use std::path::PathBuf;
 
+use bundles::BundlesState;
 use engine_install::InstallState;
 use friends::FriendsState;
 use launch::LaunchState;
@@ -234,6 +258,9 @@ pub fn run() {
             // `tauri.conf.json` scopes it to the folder under `$APPLOCALDATA`;
             // this adds the resolved one, which differs when the player moved
             // the data folder with `dataDirOverride`.
+            // The pictures of the description of a bundle draft are not
+            // added here: `bundles::images` opens the `images\` folder of
+            // one draft when a picture of it is added or asked for.
             if let Ok(paths) = app_state.paths() {
                 levelshots::allow_cache_folder(app.handle(), &paths);
             }
@@ -333,6 +360,17 @@ pub fn run() {
         // once, one tab may not scan twice: the guard lives here rather than in
         // a disabled button, because a reloaded window would press it again.
         .manage(RefreshState::default())
+        // --- slice: bundles ---
+        // The clients a plan, a publish or an install of a bundle is running
+        // for, and the versions an install has started for. Separate from
+        // `InstallState`, because an install of a bundle holds this claim
+        // while it takes that one for the engine step; `install_engine` and
+        // `delete_client` claim it too, so neither runs under a bundle.
+        .manage(BundlesState::default())
+        // --- slice: pk3 editor ---
+        // The archives open in the editor. One session per archive, and the
+        // folder each one keeps its unsaved bytes in goes with the session.
+        .manage(pk3_editor::Pk3EditorState::default())
         .invoke_handler(tauri::generate_handler![
             video::list_video_jobs,
             video::export_demo_video,
@@ -363,6 +401,8 @@ pub fn run() {
             base_game::preview_base_game,
             file_preview::get_file_preview_assets,
             file_preview::release_file_preview,
+            file_preview_contents::get_file_preview_image,
+            file_preview_contents::get_file_preview_text,
             jkhub::jkhub_preview,
             settings::get_settings,
             settings::update_settings,
@@ -456,6 +496,68 @@ pub fn run() {
             jkhub::jkhub_refresh_index,
             // --- slice: jkhub index startup ---
             jkhub::jkhub_cancel_index,
+            // --- slice: bundles ---
+            bundles::list_bundles,
+            bundles::get_bundle,
+            bundles::get_bundle_version,
+            bundles::install_bundle,
+            bundles::install_bundle_draft,
+            bundles::publish_bundle_draft,
+            bundles::like_bundle,
+            bundles::my_bundles,
+            bundles::delete_bundle,
+            bundles::list_pending_bundle_versions,
+            bundles::review_bundle_version,
+            bundles::set_bundle_flags,
+            // The drafts of bundles, edited one command at a time.
+            bundles::draft::list_bundle_drafts,
+            bundles::draft::create_bundle_draft,
+            bundles::draft::create_bundle_draft_from_bundle,
+            bundles::draft::get_bundle_draft,
+            bundles::draft::update_bundle_draft,
+            bundles::draft::delete_bundle_draft,
+            bundles::draft::draft_add_component,
+            bundles::draft::draft_update_component,
+            bundles::draft::draft_remove_component,
+            bundles::draft::draft_add_files_from_disk,
+            bundles::draft::draft_add_file_from_jkhub,
+            bundles::draft::draft_add_files_from_client,
+            bundles::draft::draft_remove_file,
+            bundles::draft::draft_set_configs,
+            bundles::draft::draft_engine_files,
+            bundles::draft::draft_replace_engine_file,
+            bundles::draft::draft_add_engine_files,
+            bundles::draft::draft_exclude_engine_file,
+            bundles::draft::draft_restore_engine_file,
+            bundles::draft::validate_bundle_draft,
+            // The pictures of the description of a draft.
+            bundles::images::draft_add_image,
+            bundles::images::draft_remove_image,
+            bundles::images::draft_image_path,
+            // What is inside a file: the listing of a pk3, the text of a cfg.
+            bundles::listing::draft_file_listing,
+            bundles::listing::bundle_file_listing,
+            bundles::listing::draft_file_text,
+            bundles::listing::bundle_file_text,
+            // The Library preview on a pk3 of a draft or of the catalogue.
+            bundles::preview::preview_draft_file,
+            bundles::preview::preview_bundle_file,
+            // --- slice: pk3 editor ---
+            // One open archive: the session, the reads of its entries and the
+            // edits, ending in the rewrite that also updates the owner.
+            pk3_editor::pk3_editor_open,
+            pk3_editor::pk3_editor_state,
+            pk3_editor::pk3_editor_read_text,
+            pk3_editor::pk3_editor_read_image,
+            pk3_editor::pk3_editor_write_text,
+            pk3_editor::pk3_editor_replace,
+            pk3_editor::pk3_editor_add_files,
+            pk3_editor::pk3_editor_remove,
+            pk3_editor::pk3_editor_rename,
+            pk3_editor::pk3_editor_extract,
+            pk3_editor::pk3_editor_save,
+            pk3_editor::pk3_editor_discard,
+            pk3_editor::pk3_editor_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -31,7 +31,8 @@ mod types;
 
 pub use client::{
     default_online_url, is_http_url, is_local_online, normalize_display_name,
-    normalize_online_url, online_configured, OnlineClient, OnlineContext, PROVIDERS,
+    normalize_online_url, online_configured, path_segment, Auth, OnlineClient, OnlineContext,
+    PROVIDERS,
 };
 /// The development service by name, for the tests of `account`, `settings` and
 /// `friends`: they are about the account and not about which service a build
@@ -43,9 +44,14 @@ pub use client::{
 /// `online_configured()`.
 #[cfg(test)]
 pub use client::DEV_ONLINE_URL;
+/// The answer of `GET /v1/me`, for the test of `account` that pins how the
+/// `admin` flag reads out of an older service and a newer one.
+#[cfg(test)]
+pub use types::Me;
 // Only what another module names. `LoginSession`, `Me` and `FriendsList` are
 // answers of `client.rs` that the callers destructure rather than name, so
 // re-exporting them would be a public surface nothing asks for.
+// `Auth` and `path_segment` are the two the bundles module names.
 pub use types::{
     Friend, FriendRemoved, FriendRequest, Invite, LiveFrame, NewInvite, OnlineUser, Presence,
     PresenceUpdate, PresenceUpdated, SendRequestResult, SignInPoll,

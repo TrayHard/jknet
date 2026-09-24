@@ -23,6 +23,7 @@
     "online": "W sieci",
     "offline": "Poza siecią",
     "lastSeenJustNow": "Ostatnia aktywność przed chwilą",
+    "lastSeenOn": "Ostatnia aktywność: {{date}}",
     "lastSeenMinutes_one": "Ostatnia aktywność {{count}} minutę temu",
     "lastSeenMinutes_few": "Ostatnia aktywność {{count}} minuty temu",
     "lastSeenMinutes_many": "Ostatnia aktywność {{count}} minut temu",
@@ -34,8 +35,7 @@
     "lastSeenDays_one": "Ostatnia aktywność {{count}} dzień temu",
     "lastSeenDays_few": "Ostatnia aktywność {{count}} dni temu",
     "lastSeenDays_many": "Ostatnia aktywność {{count}} dni temu",
-    "lastSeenDays_other": "Ostatnia aktywność {{count}} dnia temu",
-    "lastSeenOn": "Ostatnia aktywność: {{date}}"
+    "lastSeenDays_other": "Ostatnia aktywność {{count}} dnia temu"
   },
   "empty": {
     "offTitle": "Znajomi nie są jeszcze włączeni",

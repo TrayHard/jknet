@@ -4,18 +4,26 @@ import {
   Check,
   Download,
   FolderOpen,
+  Gamepad2,
+  Package,
+  PackagePlus,
   Play,
   Plus,
   RefreshCw,
   Settings as SettingsIcon,
   Square,
   Trash2,
+  Wrench,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { engineUnavailableReason } from "../lib/engines";
 
+// --- slice: bundles ---
+import { BundlesTab } from "../components/bundles/BundlesTab";
+import { BundleInstallBar } from "../components/bundles/bundleFiles";
+import { Tabs } from "../components/servers/Tabs";
 // --- slice: client window ---
 import { InstallProgressBar } from "../components/client/InstallProgressBar";
 // --- slice: clients page ---
@@ -43,12 +51,17 @@ import { useErrorText } from "../i18n/errors";
 import { useEngineNote } from "../i18n/useEngineNote";
 import { useFormat } from "../i18n/useFormat";
 import {
+  clientModes,
   type Client,
   type Engine,
   type EngineInstallProgress,
   type Game,
+  type LaunchMode,
   type RunningGame,
 } from "../lib/ipc";
+// --- slice: bundles ---
+import { useBundleInstallOfClient } from "../lib/bundleJobs";
+import { CLIENTS_TAB_PARAM, draftRoute } from "../lib/bundleRoutes";
 // --- slice: client window ---
 import { useOpenClientWindow } from "../lib/clientWindow";
 // --- slice: clients page ---
@@ -67,10 +80,14 @@ import {
 import {
   useClientDir,
   useClients,
+  // --- slice: bundles ---
+  useCreateBundleDraft,
   useDeleteClient,
   useEngineReleases,
   useEnginesOfGame,
   useEngineUpdate,
+  useInstallBundle,
+  useInstallBundleDraft,
   useInstallEngine,
   useLaunchClient,
   usePendingInstalls,
@@ -81,6 +98,59 @@ import {
   useUpdateSettings,
 } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
+
+// --- slice: bundles ---
+type ClientsTab = "clients" | "bundles";
+
+/**
+ * One row of the list: a client on its own, or the clients of one bundle
+ * under a heading.
+ *
+ * A group stands where its first client stood, so installing a bundle of
+ * three components does not shuffle the rest of the list.
+ */
+type ClientRow =
+  | { kind: "client"; client: Client }
+  | { kind: "group"; key: string; name: string; clients: Client[] };
+
+/**
+ * Groups the clients that came out of one bundle or one draft.
+ *
+ * Two or more clients with the same link make a group; a client that is the
+ * only one of its bundle stays on its own with its badge, because a heading
+ * over one card would say what the badge already says.
+ */
+export function groupClients(clients: Client[]): ClientRow[] {
+  const keyOf = (client: Client): string | null => {
+    const link = client.bundle;
+    if (!link || link.role !== "installed") return null;
+    if (link.bundleId) return `bundle:${link.bundleId}`;
+    if (link.draftId) return `draft:${link.draftId}`;
+    return null;
+  };
+  const counts = new Map<string, number>();
+  for (const client of clients) {
+    const key = keyOf(client);
+    if (key !== null) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const rows: ClientRow[] = [];
+  const placed = new Map<string, ClientRow & { kind: "group" }>();
+  for (const client of clients) {
+    const key = keyOf(client);
+    if (key === null || (counts.get(key) ?? 0) < 2) {
+      rows.push({ kind: "client", client });
+      continue;
+    }
+    let group = placed.get(key);
+    if (group === undefined) {
+      group = { kind: "group", key, name: client.bundle?.bundleName ?? "", clients: [] };
+      placed.set(key, group);
+      rows.push(group);
+    }
+    group.clients.push(client);
+  }
+  return rows;
+}
 
 /**
  * Clients: the clients of the active game, and nothing else.
@@ -97,6 +167,9 @@ import { isTauri } from "../lib/runtime";
 export function ClientsPage() {
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
+  // --- slice: bundles ---
+  const { t: tBundles } = useTranslation("bundles");
+  const navigate = useNavigate();
   const errorText = useErrorText();
   const settings = useSettings();
   const clients = useClients();
@@ -122,6 +195,25 @@ export function ClientsPage() {
   // event knows about the download and the unpacking after that.
   const pendingInstalls = usePendingInstalls();
   const { installs, clearInstall } = useGameEventsContext();
+  // --- slice: bundles ---
+  // **Create bundle from client** makes a draft with one component read off
+  // the client and opens the editor on it.
+  const createDraft = useCreateBundleDraft();
+  // **Resume install** carries an unfinished bundle install on in the client
+  // of the card: the same two calls the bundle dialog and the editor make,
+  // told which client to write. Their refusal goes to the bar at the top of
+  // the screen, as every other refusal of a card does; the store only keeps
+  // the record for the dialog of the bundle.
+  const resumeInstall = useInstallBundle();
+  const resumeDraftInstall = useInstallBundleDraft();
+  // The two mutations serve the whole list, so the card whose press is in
+  // flight is the one whose client the call named.
+  const isResuming = (client: Client) =>
+    [resumeInstall, resumeDraftInstall].some(
+      (mutation) =>
+        mutation.isPending &&
+        Object.values(mutation.variables?.existingClientIds ?? {}).includes(client.id),
+    );
 
   // --- slice: client window ---
   // The gear opens a window of its own now. The dialog it replaced could hold
@@ -146,6 +238,20 @@ export function ClientsPage() {
   const [search, setSearch] = useSearchParams();
   const askedForNew = search.get(NEW_CLIENT_PARAM) !== null;
   const askedForGame = search.get(NEW_CLIENT_GAME_PARAM);
+  // --- slice: bundles ---
+  // The tab lives in the route, so `#/clients?tab=bundles` opens on the
+  // catalogue and a reload keeps it. Anything but `bundles` is the list.
+  const tab: ClientsTab = search.get(CLIENTS_TAB_PARAM) === "bundles" ? "bundles" : "clients";
+  const setTab = (next: ClientsTab) =>
+    setSearch(
+      (current) => {
+        const params = new URLSearchParams(current);
+        if (next === "bundles") params.set(CLIENTS_TAB_PARAM, next);
+        else params.delete(CLIENTS_TAB_PARAM);
+        return params;
+      },
+      { replace: true },
+    );
   useEffect(() => {
     if (!askedForNew) return;
     setNewClientGame(isGame(askedForGame) ? askedForGame : undefined);
@@ -173,6 +279,99 @@ export function ClientsPage() {
   const gameClients = clientsOfGame(clients.data, activeGame);
   const otherCount = clientsOfGame(clients.data, otherGame(activeGame)).length;
   const defaultClientId = resolveDefaultClientId(settings.data, activeGame);
+  // --- slice: bundles ---
+  const rows = groupClients(gameClients);
+
+  const card = (client: Client) => (
+    <ClientCard
+      key={client.id}
+      client={client}
+      engine={engines.find((engine) => engine.id === client.engineId)}
+      isDefault={client.id === defaultClientId}
+      install={installs[client.id]}
+      installPending={pendingInstalls.includes(client.id)}
+      running={runningGame.data ?? null}
+      onEdit={() => {
+        setError(null);
+        openClientWindow(client.id).catch((e: unknown) =>
+          setError(errorText(e)),
+        );
+      }}
+      onDelete={() => {
+        setError(null);
+        setPendingDelete(client);
+      }}
+      onInstall={() => {
+        setError(null);
+        clearInstall(client.id);
+        installEngine.mutate(
+          { clientId: client.id },
+          { onError: (e) => setError(errorText(e)) },
+        );
+      }}
+      onLaunch={(mode) => {
+        setError(null);
+        launchClient.mutate(
+          { clientId: client.id, mode },
+          { onError: (e) => setError(errorText(e)) },
+        );
+      }}
+      onNewClient={() => setDialogOpen(true)}
+      // --- slice: selection context menu ---
+      onMakeDefault={() => {
+        setError(null);
+        updateSettings.mutate(defaultClientPatch(client), {
+          onError: (e) => setError(errorText(e)),
+        });
+      }}
+      onStop={() =>
+        stopGame.mutate(undefined, {
+          onError: (e) => setError(errorText(e)),
+        })
+      }
+      // --- slice: bundles ---
+      onCreateBundle={() => {
+        setError(null);
+        createDraft.mutate(
+          { game: client.game, name: client.name, fromClientId: client.id },
+          {
+            onSuccess: (draft) => void navigate(draftRoute(draft.id)),
+            onError: (e) => setError(errorText(e)),
+          },
+        );
+      }}
+      creatingBundle={createDraft.isPending && createDraft.variables?.fromClientId === client.id}
+      onResumeInstall={() => {
+        const link = client.bundle;
+        if (!link) return;
+        setError(null);
+        const existingClientIds = { [link.componentId]: client.id };
+        if (link.bundleId && link.versionId) {
+          resumeInstall.mutate(
+            {
+              bundleId: link.bundleId,
+              versionId: link.versionId,
+              baseName: client.name,
+              componentIds: [link.componentId],
+              existingClientIds,
+            },
+            { onError: (e) => setError(errorText(e)) },
+          );
+        } else if (link.draftId) {
+          resumeDraftInstall.mutate(
+            {
+              draftId: link.draftId,
+              baseName: client.name,
+              componentIds: [link.componentId],
+              existingClientIds,
+            },
+            { onError: (e) => setError(errorText(e)) },
+          );
+        }
+      }}
+      resuming={isResuming(client)}
+    />
+  );
 
   return (
     <Page>
@@ -180,13 +379,17 @@ export function ClientsPage() {
         title={t("title")}
         subtitle={t("subtitle")}
         actions={
-          <Button
-            variant="primary"
-            icon={<Plus size={16} />}
-            onClick={() => setDialogOpen(true)}
-          >
-            {t("newClient")}
-          </Button>
+          // --- slice: bundles --- **New client** belongs to the list of
+          // clients; the catalogue tab has its own buttons in its bar.
+          tab === "clients" ? (
+            <Button
+              variant="primary"
+              icon={<Plus size={16} />}
+              onClick={() => setDialogOpen(true)}
+            >
+              {t("newClient")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -206,92 +409,89 @@ export function ClientsPage() {
           nowhere to look. The same notice, the same button, as on Home. */}
       <GameFilesNotice className="mb-24" />
 
-      {/* Clients --------------------------------------------------------- */}
-      <section className="flex flex-col gap-12">
-        <h2 className="text-label-xs text-fg-muted">{t("list.heading")}</h2>
+      {/* --- slice: bundles ---
+          Two tabs: the clients of this machine, and the drafts and the
+          catalogue of bundles. The strip is the one the Servers screen uses,
+          with the count of clients after the first label. */}
+      <Tabs<ClientsTab>
+        className="mb-16"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { id: "clients", label: tBundles("tabs.clients"), count: gameClients.length },
+          { id: "bundles", label: tBundles("tabs.bundles"), title: tBundles("tabs.bundlesHint") },
+        ]}
+      />
 
-        {clients.isLoading ? (
-          <p className="text-body-sm text-fg-muted">{tCommon("states.loading")}</p>
-        ) : gameClients.length > 0 ? (
-          // One card per row, the full width of the list. A second column
-          // halves the card, and the row of small buttons no longer fits on
-          // one line — which is the whole shape of the card.
-          <ul className="flex flex-col gap-12">
-            {gameClients.map((client) => (
-              <ClientCard
-                key={client.id}
-                client={client}
-                engine={engines.find((engine) => engine.id === client.engineId)}
-                isDefault={client.id === defaultClientId}
-                install={installs[client.id]}
-                installPending={pendingInstalls.includes(client.id)}
-                running={runningGame.data ?? null}
-                onEdit={() => {
-                  setError(null);
-                  openClientWindow(client.id).catch((e: unknown) =>
-                    setError(errorText(e)),
-                  );
-                }}
-                onDelete={() => {
-                  setError(null);
-                  setPendingDelete(client);
-                }}
-                onInstall={() => {
-                  setError(null);
-                  clearInstall(client.id);
-                  installEngine.mutate(
-                    { clientId: client.id },
-                    { onError: (e) => setError(errorText(e)) },
-                  );
-                }}
-                onLaunch={() => {
-                  setError(null);
-                  launchClient.mutate(
-                    { clientId: client.id },
-                    { onError: (e) => setError(errorText(e)) },
-                  );
-                }}
-                onNewClient={() => setDialogOpen(true)}
-                // --- slice: selection context menu ---
-                onMakeDefault={() => {
-                  setError(null);
-                  updateSettings.mutate(defaultClientPatch(client), {
-                    onError: (e) => setError(errorText(e)),
-                  });
-                }}
-                onStop={() =>
-                  stopGame.mutate(undefined, {
-                    onError: (e) => setError(errorText(e)),
-                  })
-                }
-              />
-            ))}
-          </ul>
-        ) : (
-          <EmptyState
-            icon={<Plus size={24} />}
-            title={t("list.emptyTitle", { game: gameName(activeGame) })}
-            text={t("list.emptyText")}
-            action={
-              <Button variant="primary" onClick={() => setDialogOpen(true)}>
-                {t("newClient")}
-              </Button>
-            }
-          />
-        )}
+      {tab === "bundles" ? (
+        <BundlesTab />
+      ) : (
+        /* Clients --------------------------------------------------------- */
+        <section className="flex flex-col gap-12">
+          <h2 className="text-label-xs text-fg-muted">{t("list.heading")}</h2>
 
-        {/* --- slice: game switch --- the other game is not empty, it is just
-            not on screen. Saying so is what stops a player from thinking the
-            launcher lost their clients. */}
-        {otherCount > 0 ? (
-          <p className="text-body-sm text-fg-muted">
-            {t("list.otherGame", {
-              count: otherCount,
-              game: gameName(otherGame(activeGame)),
-            })}
-          </p>
-        ) : null}
-      </section>
+          {clients.isLoading ? (
+            <p className="text-body-sm text-fg-muted">{tCommon("states.loading")}</p>
+          ) : gameClients.length > 0 ? (
+            // One card per row, the full width of the list. A second column
+            // halves the card, and the row of small buttons no longer fits on
+            // one line — which is the whole shape of the card.
+            //
+            // --- slice: bundles ---
+            // The clients of one bundle stand together under its name, with
+            // the labels of their components: three cards that say «From
+            // bundle» on their own do not say they are one thing.
+            <ul className="flex flex-col gap-12">
+              {rows.map((row) =>
+                row.kind === "client" ? (
+                  card(row.client)
+                ) : (
+                  <li key={row.key} className="flex flex-col gap-8">
+                    <div className="flex items-center gap-8 pt-4 min-w-0">
+                      <Package size={14} className="text-fg-muted shrink-0" aria-hidden />
+                      <span className="text-body-sm-medium text-fg-secondary truncate">
+                        {tBundles("clientCard.groupHeading", { bundle: row.name })}
+                      </span>
+                      <span className="text-body-sm text-fg-muted truncate">
+                        {row.clients
+                          .map((client) => client.bundle?.componentLabel ?? "")
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                    <ul className="flex flex-col gap-12 border-l-2 border-line-subtle pl-12">
+                      {row.clients.map(card)}
+                    </ul>
+                  </li>
+                ),
+              )}
+            </ul>
+          ) : (
+            <EmptyState
+              icon={<Plus size={24} />}
+              title={t("list.emptyTitle", { game: gameName(activeGame) })}
+              text={t("list.emptyText")}
+              action={
+                <Button variant="primary" onClick={() => setDialogOpen(true)}>
+                  {t("newClient")}
+                </Button>
+              }
+            />
+          )}
+
+          {/* --- slice: game switch --- the other game is not empty, it is just
+              not on screen. Saying so is what stops a player from thinking the
+              launcher lost their clients. */}
+          {otherCount > 0 ? (
+            <p className="text-body-sm text-fg-muted">
+              {t("list.otherGame", {
+                count: otherCount,
+                game: gameName(otherGame(activeGame)),
+              })}
+            </p>
+          ) : null}
+        </section>
+      )}
 
       {dialogOpen ? (
         <NewClientDialog
@@ -357,13 +557,23 @@ interface ClientCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onInstall: () => void;
-  onLaunch: () => void;
+  /** Starts the client in one of its modes. */
+  onLaunch: (mode: LaunchMode) => void;
   onStop: () => void;
   /** Opens the New client dialog, for the way out of a legacy engine. */
   onNewClient: () => void;
   // --- slice: selection context menu ---
   /** Makes this client the one **Play** and **Connect** start. */
   onMakeDefault: () => void;
+  // --- slice: bundles ---
+  /** Makes a bundle draft out of this client and opens the editor on it. */
+  onCreateBundle: () => void;
+  /** True while the draft of this client is being made. */
+  creatingBundle: boolean;
+  /** Carries the unfinished bundle install of this client on, in this client. */
+  onResumeInstall: () => void;
+  /** True between the press of **Resume install** and the first event of the core. */
+  resuming: boolean;
 }
 
 /**
@@ -375,6 +585,11 @@ interface ClientCardProps {
  * Everything else — the update check, the settings window, **Delete**, the
  * folder — is one of those small buttons, so the card has exactly one thing
  * that looks like the thing a player came to press.
+ *
+ * --- slice: bundles ---
+ * A client that also plays single player has a second large button beside
+ * **Launch**; a client that plays single player alone has that button in its
+ * place. Which of the two a client has comes from its modes.
  *
  * The row of buttons never wraps, and the list never puts two cards side by
  * side. Both rules hold the shape: a half-width card breaks the row of buttons
@@ -398,9 +613,15 @@ function ClientCard({
   onStop,
   onNewClient,
   onMakeDefault,
+  onCreateBundle,
+  creatingBundle,
+  onResumeInstall,
+  resuming,
 }: ClientCardProps) {
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
+  // --- slice: bundles ---
+  const { t: tBundles } = useTranslation("bundles");
   const errorText = useErrorText();
   const format = useFormat();
   const engineNote = useEngineNote();
@@ -416,12 +637,35 @@ function ClientCard({
   const engineName = engine?.name ?? client.engineId;
   const showProgress =
     install !== undefined && (install.phase === "download" || install.phase === "extract");
+  // --- slice: bundles ---
+  // The bundle install that holds this client, if one is running: it writes
+  // files and the record after the engine phase, and the core holds every
+  // client of the install until the last component is done. The engine event
+  // above knows nothing of it — the install carries on after the engine is
+  // unpacked, and a delete would pull the folder from under the files being
+  // written.
+  const bundleInstall = useBundleInstallOfClient(client.id);
+  const bundleBusy = bundleInstall !== undefined;
+  const busyHint = bundleBusy ? tBundles("clientCard.busyInstall") : null;
   // What the buttons go by: the command may be in flight before the first
-  // progress event, and both states mean the engine folder is being rewritten.
-  const installing = showProgress || installPending;
+  // progress event, and both states mean the engine folder is being
+  // rewritten. A bundle job holds the client the same way, for longer.
+  const installing = showProgress || installPending || bundleBusy;
   const installed = client.engineVersion !== null;
   const isRunning = running?.clientId === client.id;
   const otherIsRunning = running !== null && !isRunning;
+  // --- slice: bundles ---
+  // The bundle or the draft the client came out of.
+  const bundle = client.bundle ?? null;
+  // An install the core did not finish: the link is written first with
+  // `pending` and rewritten without it last, so after a failure or a
+  // restart the card is the one place left to carry on from.
+  const pendingInstall = bundle?.role === "installed" && bundle.pending === true;
+  // The modes the client starts in: both large buttons, or the single-player
+  // one in place of **Launch**.
+  const modes = clientModes(client, engine);
+  const single = modes.includes("single");
+  const multiplayer = modes.includes("multiplayer");
 
   // `revealItemInDir` and not `openPath`: the permission of the latter is
   // scoped to `$APPLOCALDATA`, and `dataDirOverride` can put the client folder
@@ -433,10 +677,10 @@ function ClientCard({
   };
 
   // --- slice: selection context menu ---
-  // A right click on the card, with the five things the card itself offers —
-  // its one large button, its three small ones and the badge that says which
-  // client is the default. Every line runs the handler of the control it
-  // stands for, and a line the card would draw dead is dead here too.
+  // A right click on the card, with the things the card itself offers —
+  // its large buttons, its small ones and the badge that says which client
+  // is the default. Every line runs the handler of the control it stands
+  // for, and a line the card would draw dead is dead here too.
   const menu = useContextMenu<Client>({
     ariaLabel: t("card.actions"),
     items: (): MenuItem[] => [
@@ -445,19 +689,56 @@ function ClientCard({
       // Without the swap the line stood dead over a client the player came to
       // stop. The line is not marked `danger`: stopping takes nothing away,
       // and red in this menu belongs to **Delete** alone.
-      isRunning
-        ? {
-            id: "stop",
-            label: t("engine.stop"),
-            icon: <Square size={14} />,
-          }
-        : {
-            id: "launch",
-            label: t("engine.launch"),
-            icon: <Play size={14} />,
-            disabled: !installed || installing || otherIsRunning,
-          },
-      { id: "edit", label: t("card.settings"), icon: <SettingsIcon size={14} /> },
+      ...(isRunning
+        ? [
+            {
+              id: "stop",
+              label: t("engine.stop"),
+              icon: <Square size={14} />,
+            },
+          ]
+        : [
+            ...(multiplayer
+              ? [
+                  {
+                    id: "launch",
+                    label: t("engine.launch"),
+                    icon: <Play size={14} />,
+                    disabled: !installed || installing || otherIsRunning,
+                  },
+                ]
+              : []),
+            // --- slice: bundles ---
+            ...(single
+              ? [
+                  {
+                    id: "single",
+                    label: tBundles("clientCard.playSingle"),
+                    icon: <Gamepad2 size={14} />,
+                    disabled: !installed || installing || otherIsRunning,
+                  },
+                ]
+              : []),
+          ]),
+      // --- slice: bundles ---
+      // The window edits the record a bundle install is writing, so the way
+      // to it is dead while one runs. An engine install alone does not close
+      // it: the window draws that bar itself and touches no engine file.
+      {
+        id: "edit",
+        label: t("card.settings"),
+        icon: <SettingsIcon size={14} />,
+        disabled: bundleBusy,
+      },
+      // The same line as the **Create bundle from client** button of the row.
+      // Dead while the engine is being rewritten, because the draft reads
+      // that folder, and while a bundle job holds the client.
+      {
+        id: "bundle",
+        label: tBundles("clientCard.createBundleMenu"),
+        icon: <PackagePlus size={14} />,
+        disabled: !installed || installing || creatingBundle,
+      },
       {
         id: "folder",
         label: t("card.openFolder"),
@@ -479,14 +760,25 @@ function ClientCard({
       },
     ],
     onSelect: (id) => {
-      if (id === "launch") onLaunch();
+      if (id === "launch") onLaunch("multiplayer");
+      else if (id === "single") onLaunch("single");
       else if (id === "stop") onStop();
       else if (id === "edit") onEdit();
+      else if (id === "bundle") onCreateBundle();
       else if (id === "folder") openFolder();
       else if (id === "default") onMakeDefault();
       else onDelete();
     },
   });
+
+  const launchDisabled = !installed || installing || otherIsRunning;
+  const launchTitle = otherIsRunning
+    ? t("engine.otherRunning")
+    : busyHint !== null
+      ? busyHint
+      : installed
+        ? undefined
+        : t("engine.installFirst");
 
   return (
     // One row of three parts: the mark, everything the card says, and the one
@@ -510,6 +802,41 @@ function ClientCard({
           {isRunning ? (
             <Badge tone="success" className="shrink-0">
               {t("card.running")}
+            </Badge>
+          ) : null}
+          {/* --- slice: bundles --- where the client came from. The name of
+              the bundle, the component and the version are in the tooltip:
+              the first line of the card is one line, and a bundle name is as
+              long as its author made it. */}
+          {bundle ? (
+            <Badge
+              tone="neutral"
+              icon={<Package size={12} />}
+              className="shrink-0"
+              title={
+                bundle.versionLabel
+                  ? tBundles("clientCard.linkHint", {
+                      bundle: bundle.bundleName,
+                      component: bundle.componentLabel,
+                      version: bundle.versionLabel,
+                    })
+                  : tBundles("clientCard.linkHintDraft", {
+                      bundle: bundle.bundleName,
+                      component: bundle.componentLabel,
+                    })
+              }
+            >
+              {bundle.bundleId ? tBundles("clientCard.fromBundle") : tBundles("clientCard.fromDraft")}
+            </Badge>
+          ) : null}
+          {pendingInstall ? (
+            <Badge
+              tone="warm"
+              icon={<AlertTriangle size={12} />}
+              className="shrink-0"
+              title={tBundles("clientCard.incompleteHint")}
+            >
+              {tBundles("clientCard.incomplete")}
             </Badge>
           ) : null}
         </div>
@@ -588,15 +915,47 @@ function ClientCard({
               onInstall={onInstall}
             />
           )}
+          {/* --- slice: bundles --- dead while a bundle job holds the
+              client, for the reason the menu line gives. */}
           <Button
             size="sm"
             variant="ghost"
             className="shrink-0"
             icon={<SettingsIcon size={14} />}
             onClick={onEdit}
+            disabled={bundleBusy}
             aria-label={t("card.settingsOf", { client: client.name })}
-            title={t("card.settingsHint")}
+            title={busyHint ?? t("card.settingsHint")}
           />
+          {/* --- slice: bundles --- carries an unfinished install on in this
+              same client: the core skips the files already in place. */}
+          {pendingInstall ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="shrink-0"
+              icon={<RefreshCw size={14} />}
+              onClick={onResumeInstall}
+              disabled={isRunning || installing || resuming}
+              title={busyHint ?? tBundles("clientCard.resumeHint")}
+            >
+              {tBundles("clientCard.resume")}
+            </Button>
+          ) : null}
+          {/* --- slice: bundles --- the way to the editor: a draft with this
+              client as its one component. Dead until the engine is on disk:
+              the draft reads the engine folder for the overlay. */}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="shrink-0"
+            icon={<PackagePlus size={14} />}
+            onClick={onCreateBundle}
+            disabled={!installed || installing || creatingBundle}
+            title={busyHint ?? tBundles("clientCard.createBundleHint")}
+          >
+            {creatingBundle ? tCommon("states.creating") : tBundles("clientCard.createBundle")}
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -604,6 +963,7 @@ function ClientCard({
             icon={<Trash2 size={14} />}
             onClick={onDelete}
             disabled={isRunning || installing}
+            title={busyHint ?? undefined}
           >
             {t("card.delete")}
           </Button>
@@ -624,9 +984,19 @@ function ClientCard({
         </div>
 
         {/* Engine state: the progress of an install, or why it stopped. Under
-            the row of buttons, where the button that started it is. */}
+            the row of buttons, where the button that started it is.
+            --- slice: bundles ---
+            A bundle install draws the engine bar through its engine phase,
+            then its own for the files and the configs, with the component
+            the bar is about. It is the bar of the dialog, so the card and the
+            dialog say the same file. */}
         {showProgress && install ? (
           <InstallProgressBar progress={install} />
+        ) : bundleInstall !== undefined ? (
+          <BundleInstallBar
+            progress={bundleInstall.progress}
+            componentLabel={bundleInstall.componentIds.length > 1 ? bundle?.componentLabel ?? null : null}
+          />
         ) : install?.phase === "error" ? (
           <p className="text-body-sm text-fg-danger break-words">{install.message}</p>
         ) : null}
@@ -645,25 +1015,72 @@ function ClientCard({
           {t("engine.stop")}
         </Button>
       ) : (
+        <LaunchButtons
+          multiplayer={multiplayer}
+          single={single}
+          disabled={launchDisabled}
+          title={launchTitle}
+          onLaunch={onLaunch}
+        />
+      )}
+    </li>
+  );
+}
+
+/**
+ * The large button of the card, or two of them.
+ *
+ * --- slice: bundles ---
+ * **Launch** for a multiplayer client, **Play single player** beside it when
+ * the client also plays single player, and in its place when the client
+ * plays nothing else. The multiplayer button is the primary one; a client
+ * with the single-player mode alone gives that mode the primary colour, since
+ * it is the one thing the card starts.
+ */
+function LaunchButtons({
+  multiplayer,
+  single,
+  disabled,
+  title,
+  onLaunch,
+}: {
+  multiplayer: boolean;
+  single: boolean;
+  disabled: boolean;
+  title: string | undefined;
+  onLaunch: (mode: LaunchMode) => void;
+}): ReactNode {
+  const { t } = useTranslation("clients");
+  const { t: tBundles } = useTranslation("bundles");
+  return (
+    <div className="flex items-center gap-8 shrink-0">
+      {multiplayer ? (
         <Button
           size="lg"
           variant="primary"
           icon={<Play size={16} />}
           className="shrink-0"
-          onClick={onLaunch}
-          disabled={!installed || installing || otherIsRunning}
-          title={
-            otherIsRunning
-              ? t("engine.otherRunning")
-              : installed
-                ? undefined
-                : t("engine.installFirst")
-          }
+          onClick={() => onLaunch("multiplayer")}
+          disabled={disabled}
+          title={title}
         >
           {t("engine.launch")}
         </Button>
-      )}
-    </li>
+      ) : null}
+      {single ? (
+        <Button
+          size="lg"
+          variant={multiplayer ? "secondary" : "primary"}
+          icon={<Gamepad2 size={16} />}
+          className="shrink-0"
+          onClick={() => onLaunch("single")}
+          disabled={disabled}
+          title={title ?? tBundles("clientCard.playSingleHint")}
+        >
+          {tBundles("clientCard.playSingle")}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -700,10 +1117,17 @@ function EngineControls({
 }: EngineControlsProps) {
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
+  // --- slice: bundles ---
+  const { t: tBundles } = useTranslation("bundles");
   const errorText = useErrorText();
   const releases = useEngineReleases(installed ? null : client.engineId);
   const [checkRequested, setCheckRequested] = useState(false);
-  const update = useEngineUpdate(checkRequested ? client.id : null);
+  // --- slice: bundles ---
+  // A bundle that laid files over the engine folder made the build its own:
+  // a release update would write over those files, so the card says so and
+  // offers no check.
+  const customBuild = client.bundle?.engineOverlay === true;
+  const update = useEngineUpdate(checkRequested && !customBuild ? client.id : null);
 
   const check = () => {
     if (checkRequested) void update.refetch();
@@ -715,7 +1139,16 @@ function EngineControls({
 
   return (
     <>
-      {installed ? (
+      {installed && customBuild ? (
+        <Badge
+          tone="purple"
+          icon={<Wrench size={12} />}
+          className="shrink-0"
+          title={tBundles("clientCard.customBuildHint")}
+        >
+          {tBundles("clientCard.customBuild")}
+        </Badge>
+      ) : installed ? (
         <>
           <Button
             size="sm"

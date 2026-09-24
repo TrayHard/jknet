@@ -129,7 +129,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::clients;
 use crate::engine_install;
-use crate::engines;
+use crate::engines::{self, LaunchMode};
 use crate::error::{AppError, Result};
 use crate::game::{Game, LaunchLayout};
 use crate::game_files;
@@ -149,6 +149,10 @@ const WATCH_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500
 pub struct GameStarted {
     pub client_id: String,
     pub pid: u32,
+    // --- slice: bundles ---
+    /// Whether the multiplayer client or the single-player game started.
+    #[serde(default)]
+    pub mode: LaunchMode,
     // --- slice: friends ---
     /// The `+connect` address, when the game was started to join a server.
     /// `None` means the Play button: the game opens on its main menu, and
@@ -188,6 +192,10 @@ pub struct RunningGame {
     pub pid: u32,
     /// Start time in RFC 3339, so the interface can count the session.
     pub started_at: String,
+    // --- slice: bundles ---
+    /// Whether the multiplayer client or the single-player game is running.
+    #[serde(default)]
+    pub mode: LaunchMode,
 }
 
 /// The one game JKNet started, if any.
@@ -910,6 +918,7 @@ fn same_folder(a: &Path, b: &Path) -> bool {
 /// it, and [`preview_launch_args`], which prints it into the client window. A
 /// preview assembled by a second copy of this code would be a preview that
 /// slowly stops describing the launch.
+#[derive(Debug)]
 struct LaunchInputs {
     client: clients::Client,
     engine: &'static engines::Engine,
@@ -972,6 +981,7 @@ fn resolve_launch(
     state: &AppState,
     client_id: &str,
     profile: profiles::ProfileChoice,
+    mode: LaunchMode,
 ) -> Result<LaunchInputs> {
     let settings = state.settings()?;
     let paths = state.paths()?;
@@ -980,13 +990,21 @@ fn resolve_launch(
     // The engine of a record whose game was edited by hand is refused here
     // rather than started against the wrong archives.
     let engine = engines::require_for_game(&client.engine_id, client.game)?;
+    // --- slice: bundles ---
+    check_mode(&client, engine, mode)?;
     let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
     let fs_game = client
         .fs_game
         .clone()
         .or_else(|| engine.default_fs_game.map(str::to_string));
     // --- slice: player profiles ---
-    let profile_args = profile.tokens(&paths, &client.id, client.game)?;
+    // The single-player game has no nickname and no skin to set: the
+    // profile tokens are the multiplayer client's, and a `+set name` sent to
+    // the other executable would only clutter its command line.
+    let profile_args = match mode {
+        LaunchMode::Multiplayer => profile.tokens(&paths, &client.id, client.game)?,
+        LaunchMode::Single => Vec::new(),
+    };
 
     Ok(LaunchInputs {
         client_dir: paths.client_dir(&client.id),
@@ -1005,6 +1023,80 @@ fn resolve_launch(
         engine,
         client,
     })
+}
+
+// --- slice: bundles ---
+/// Refuses a mode the client does not start in.
+///
+/// `AppError::InvalidInput` rather than `Launch`: the button that asked for
+/// the mode should not have been there, and the sentence names the cure.
+fn check_mode(client: &clients::Client, engine: &engines::Engine, mode: LaunchMode) -> Result<()> {
+    if client.launch_modes(engine).contains(&mode) {
+        return Ok(());
+    }
+    Err(AppError::InvalidInput(match mode {
+        LaunchMode::Single if engine.single_player.is_none() => format!(
+            "{} ships no single-player game, so {} cannot start one",
+            engine.name, client.name
+        ),
+        LaunchMode::Single => format!(
+            "{} was made without the single-player mode. Create a client of {} on the Clients screen to play it.",
+            client.name, engine.name
+        ),
+        LaunchMode::Multiplayer => format!(
+            "{} was made without the multiplayer mode. Create a client of {} on the Clients screen to play it.",
+            client.name, engine.name
+        ),
+    }))
+}
+
+/// The executable of a mode inside `engine\`, checked to be there.
+///
+/// The multiplayer one missing is the engine not being installed, which is
+/// a launch failure; the single-player one missing from a build that does
+/// not carry it, or from an engine not installed yet, is an input to refuse.
+fn executable_for(
+    engine: &engines::Engine,
+    engine_dir: &Path,
+    mode: LaunchMode,
+    client_name: &str,
+) -> Result<PathBuf> {
+    let executable = match mode {
+        LaunchMode::Multiplayer => engine.installed_executable(engine_dir),
+        LaunchMode::Single => engine.single_player_executable(engine_dir).ok_or_else(|| {
+            AppError::InvalidInput(format!("{} ships no single-player game", engine.name))
+        })?,
+    };
+    if executable.is_file() {
+        return Ok(executable);
+    }
+    Err(match mode {
+        LaunchMode::Multiplayer => AppError::Launch(format!(
+            "{} is not installed for {client_name}. Install the engine on the Clients screen.",
+            engine.name
+        )),
+        LaunchMode::Single => AppError::InvalidInput(format!(
+            "{} is not in the engine folder of {client_name}. Install {} on the Clients screen first.",
+            executable
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            engine.name
+        )),
+    })
+}
+
+/// Refuses a `+connect` for the single-player game, which has no server to
+/// join. The Servers screen, the invites of friends and **Connect…** are
+/// multiplayer, and a launcher that dropped the address quietly would start
+/// the wrong game on a click that named a server.
+fn check_connect(mode: LaunchMode, connect: Option<&str>) -> Result<()> {
+    if mode == LaunchMode::Single && connect.map(str::trim).is_some_and(|address| !address.is_empty()) {
+        return Err(AppError::InvalidInput(
+            "the single-player game cannot join a server: start it without an address".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// The command line of a client, and what the core makes of it.
@@ -1034,6 +1126,13 @@ pub struct LaunchPreview {
 /// `inline_profile` is a profile of this launch alone, the one the
 /// **Connect…** dialog fills in by hand. It wins over `profile_id`, which the
 /// dialog stops sending the moment the player switches to the manual fields.
+///
+/// --- slice: bundles ---
+/// `mode` picks the executable: `multiplayer` when left out, `single` for the
+/// single-player game of a build that ships one. The single-player game takes
+/// no profile tokens and no `+connect`; a mode the client was not made for is
+/// refused with `AppError::InvalidInput`, and so is a single-player
+/// executable that is not in `engine`.
 // The parameter list of a command *is* its payload: grouping two of these into
 // a struct would rename the fields the frontend sends, so the lint gives way to
 // the wire shape rather than the other way round.
@@ -1048,6 +1147,7 @@ pub fn launch_client(
     extra_args: Option<Vec<String>>,
     profile_id: Option<String>,
     inline_profile: Option<profiles::InlineProfile>,
+    mode: Option<LaunchMode>,
 ) -> Result<RunningGame> {
     start_client(
         &app,
@@ -1060,6 +1160,7 @@ pub fn launch_client(
             id: profile_id,
             inline: inline_profile,
         },
+        mode.unwrap_or_default(),
     )
 }
 
@@ -1069,6 +1170,7 @@ pub fn launch_client(
 /// `join_friend` starts a game the same way the Play button does, and the
 /// argument order in [`build_launch_args`] is the kind of thing that only
 /// stays right while there is one copy of it.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn start_client(
     app: &AppHandle,
     state: &AppState,
@@ -1077,6 +1179,7 @@ pub(crate) fn start_client(
     connect: Option<&str>,
     extra_args: &[String],
     profile: profiles::ProfileChoice,
+    mode: LaunchMode,
 ) -> Result<RunningGame> {
     if let Some(running) = launch.current()? {
         return Err(AppError::Launch(format!(
@@ -1084,22 +1187,19 @@ pub(crate) fn start_client(
             running.client_id, running.pid
         )));
     }
+    // --- slice: bundles ---
+    check_connect(mode, connect)?;
 
     // --- slice: client window ---
     // Read once, here and in the preview command, so the command line the
     // window shows and the one the process gets cannot drift apart.
-    let inputs = resolve_launch(state, client_id, profile)?;
+    let inputs = resolve_launch(state, client_id, profile, mode)?;
     let client = &inputs.client;
     let engine = inputs.engine;
     game_files::validate(client.game, &inputs.game_data)?;
 
-    let executable = engine.installed_executable(&inputs.engine_dir);
-    if !executable.is_file() {
-        return Err(AppError::Launch(format!(
-            "{} is not installed for {}. Install the engine on the Clients screen.",
-            engine.name, client.name
-        )));
-    }
+    // --- slice: bundles ---
+    let executable = executable_for(engine, &inputs.engine_dir, mode, &client.name)?;
     // The engine creates the rest itself, but it will not create its root.
     crate::paths::create_dir(&inputs.home_dir)?;
 
@@ -1129,9 +1229,10 @@ pub(crate) fn start_client(
     let args = build_launch_args(&inputs.plan(&layered_args, connect));
 
     log::info!(
-        "launching {} ({}): {} {}",
+        "launching {} ({}, {}): {} {}",
         client.id,
         client.game.display_name(),
+        mode.as_str(),
         executable.display(),
         args.join(" ")
     );
@@ -1164,6 +1265,7 @@ pub(crate) fn start_client(
         client_id: client.id.clone(),
         pid: child.id(),
         started_at: timestamp::now_rfc3339(),
+        mode,
     };
     *launch.lock()? = Some(Running {
         view: view.clone(),
@@ -1175,6 +1277,7 @@ pub(crate) fn start_client(
         GameStarted {
             client_id: view.client_id.clone(),
             pid: view.pid,
+            mode,
             // --- slice: friends ---
             // The presence reporter reads the address from here: it is the
             // only place in the launcher that knows the game went to a server
@@ -1215,6 +1318,11 @@ pub fn get_running_game(launch: tauri::State<'_, LaunchState>) -> Result<Option<
 /// that left them out would print a line the **Connect** button next to it does
 /// not run. The card of the client window passes none of them and still reads
 /// as the line behind **Play**.
+///
+/// --- slice: bundles ---
+/// `mode` is the executable the line is for, `multiplayer` when left out. The
+/// single-player line carries no profile tokens and takes no address, the
+/// way the launch of that mode does.
 #[tauri::command]
 pub fn preview_launch_args(
     state: tauri::State<'_, AppState>,
@@ -1223,7 +1331,11 @@ pub fn preview_launch_args(
     inline_profile: Option<profiles::InlineProfile>,
     extra_args: Option<Vec<String>>,
     connect: Option<String>,
+    mode: Option<LaunchMode>,
 ) -> Result<LaunchPreview> {
+    let mode = mode.unwrap_or_default();
+    // --- slice: bundles ---
+    check_connect(mode, connect.as_deref())?;
     let inputs = resolve_launch(
         &state,
         &client_id,
@@ -1231,6 +1343,7 @@ pub fn preview_launch_args(
             id: profile_id,
             inline: inline_profile,
         },
+        mode,
     )?;
     // Refused here the way a launch refuses it, so the dialog never prints a
     // line the button beside it would answer with an error.
@@ -1601,6 +1714,138 @@ mod tests {
         without.client_args = &client_args;
         let args = build_launch_args(&without);
         assert_eq!(&args[9..], ["+exec", "duel.cfg"]);
+    }
+
+    // --- slice: bundles ---
+
+    /// A data root with a game folder in the settings, an OpenJK client of
+    /// both modes and an EternalJK client of one, neither engine installed.
+    fn modes_fixture() -> (tempfile::TempDir, AppState) {
+        let temp = tempfile::tempdir().expect("a data root");
+        let state = AppState::bootstrap(temp.path().to_path_buf());
+        let mut settings = state.settings().unwrap();
+        settings
+            .game_data_paths
+            .insert(Game::JediAcademy, temp.path().join("GameData").display().to_string());
+        settings.extra_launch_args = "+set r_mode -1".into();
+        state.set_settings(settings).unwrap();
+        let paths = state.paths().unwrap();
+        let both = clients::create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None).unwrap();
+        clients::edit_record(state.client_records(), &paths, &both.id, |record| {
+            record.launch_args = "+exec duel.cfg".into();
+        })
+        .unwrap();
+        clients::create_record(&paths, "Eternal", "eternaljk", Game::JediAcademy, None).unwrap();
+        (temp, state)
+    }
+
+    fn inline_kyle() -> profiles::ProfileChoice {
+        profiles::ProfileChoice {
+            id: None,
+            inline: Some(profiles::InlineProfile {
+                nickname: Some("Kyle Katarn".into()),
+                model: Some("kyle/red".into()),
+                saber1: None,
+                saber2: None,
+                color1: None,
+                color2: None,
+                char_color: None,
+            }),
+        }
+    }
+
+    #[test]
+    fn the_single_player_line_carries_the_roots_and_no_profile_or_address() {
+        let (_temp, state) = modes_fixture();
+        let single = resolve_launch(&state, "everyday", inline_kyle(), LaunchMode::Single).unwrap();
+        assert!(single.profile_args.is_empty(), "no nickname for the single-player game");
+        let layered = split_args("+exec jknet-active.cfg");
+        let args = build_launch_args(&single.plan(&layered, None));
+        assert_eq!(args[1], "fs_cdpath");
+        assert_eq!(args[4], "fs_basepath");
+        assert_eq!(args[7], "fs_homepath");
+        assert_eq!(
+            &args[9..],
+            ["+set", "r_mode", "-1", "+exec", "duel.cfg", "+exec", "jknet-active.cfg"]
+        );
+        assert!(!args.iter().any(|arg| arg == "+connect" || arg == "name"));
+
+        // The same client in multiplayer carries the profile the way it always did.
+        let multi = resolve_launch(&state, "everyday", inline_kyle(), LaunchMode::Multiplayer).unwrap();
+        let args = build_launch_args(&multi.plan(&[], Some("203.0.113.7:29070")));
+        assert!(args.windows(3).any(|w| w == ["+set", "name", "Kyle Katarn"]));
+        assert_eq!(&args[args.len() - 2..], ["+connect", "203.0.113.7:29070"]);
+    }
+
+    #[test]
+    fn a_mode_the_client_does_not_start_in_is_refused_and_so_is_an_address_for_single() {
+        let (temp, state) = modes_fixture();
+        let paths = state.paths().unwrap();
+        // EternalJK ships no single-player game.
+        let error = resolve_launch(&state, "eternal", profiles::ProfileChoice::default(), LaunchMode::Single)
+            .expect_err("no single-player game");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        assert!(error.to_string().contains("EternalJK"), "{error}");
+        // An OpenJK client made for multiplayer alone, out of a component.
+        clients::edit_record(state.client_records(), &paths, "everyday", |record| {
+            record.modes = vec![LaunchMode::Multiplayer];
+        })
+        .unwrap();
+        let error = resolve_launch(&state, "everyday", profiles::ProfileChoice::default(), LaunchMode::Single)
+            .expect_err("made without the mode");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        assert!(error.to_string().contains("Everyday"), "{error}");
+        // And one made for the single-player game alone refuses multiplayer.
+        clients::edit_record(state.client_records(), &paths, "everyday", |record| {
+            record.modes = vec![LaunchMode::Single];
+        })
+        .unwrap();
+        let error = resolve_launch(&state, "everyday", profiles::ProfileChoice::default(), LaunchMode::Multiplayer)
+            .expect_err("made without the mode");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        resolve_launch(&state, "everyday", profiles::ProfileChoice::default(), LaunchMode::Single)
+            .expect("the mode it was made for");
+
+        // A server address makes no sense for the single-player game.
+        let error = check_connect(LaunchMode::Single, Some("203.0.113.7:29070")).expect_err("refused");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        check_connect(LaunchMode::Single, Some("  ")).expect("a blank address is no address");
+        check_connect(LaunchMode::Single, None).expect("no address");
+        check_connect(LaunchMode::Multiplayer, Some("203.0.113.7:29070")).expect("multiplayer joins");
+
+        // The executable of each mode, and what its absence means.
+        let openjk = engines::require("openjk").unwrap();
+        let engine_dir = temp.path().join("engine");
+        std::fs::create_dir_all(&engine_dir).unwrap();
+        let error = executable_for(openjk, &engine_dir, LaunchMode::Multiplayer, "Everyday").expect_err("not installed");
+        assert!(matches!(error, AppError::Launch(_)), "{error}");
+        let error = executable_for(openjk, &engine_dir, LaunchMode::Single, "Everyday").expect_err("not installed");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        assert!(error.to_string().contains("openjk_sp.x86.exe"), "{error}");
+        std::fs::write(engine_dir.join("openjk.x86_64.exe"), b"MZ").unwrap();
+        std::fs::write(engine_dir.join("openjk_sp.x86_64.exe"), b"MZ").unwrap();
+        assert_eq!(
+            executable_for(openjk, &engine_dir, LaunchMode::Multiplayer, "Everyday").unwrap(),
+            engine_dir.join("openjk.x86_64.exe")
+        );
+        assert_eq!(
+            executable_for(openjk, &engine_dir, LaunchMode::Single, "Everyday").unwrap(),
+            engine_dir.join("openjk_sp.x86_64.exe")
+        );
+        let eternaljk = engines::require("eternaljk").unwrap();
+        let error = executable_for(eternaljk, &engine_dir, LaunchMode::Single, "Eternal").expect_err("no such game");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+
+        // The mode rides on the events, `multiplayer` when a record lacks it.
+        let started: GameStarted = serde_json::from_str(r#"{"clientId":"x","pid":1}"#).unwrap();
+        assert_eq!(started.mode, LaunchMode::Multiplayer);
+        let running = RunningGame {
+            client_id: "x".into(),
+            pid: 1,
+            started_at: String::new(),
+            mode: LaunchMode::Single,
+        };
+        assert_eq!(serde_json::to_value(&running).unwrap()["mode"], "single");
     }
 
     #[test]

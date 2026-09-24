@@ -68,10 +68,10 @@
     "theClient": "el cliente"
   },
   "skipped": {
+    "rename": "Cámbiele el nombre a {{name}}.",
     "title_one": "No se agregó {{count}} archivo",
     "title_many": "No se agregaron {{count}} archivos",
-    "title_other": "No se agregaron {{count}} archivos",
-    "rename": "Cámbiele el nombre a {{name}}."
+    "title_other": "No se agregaron {{count}} archivos"
   },
   "drop": {
     "title": "Suelte archivos pk3 para instalarlos en {{client}}"
@@ -81,15 +81,14 @@
     "see": "Ver cuál gana",
     "title": "Archivos que cambian el mismo contenido",
     "body": "{{files}} archivos de {{client}} contienen {{paths}} rutas compartidas. El motor lee el último que carga y omite el resto.",
-    "wins": "Gana",
-    "hidden": "Oculto",
-    "truncated": "Solo se listan las primeras {{shown}} rutas de {{total}}. Desactive uno de los archivos para ver el resto.",
     "ruleTitle": "How the game picks the winner",
     "ruleOrder": "Inside one folder the game loads pk3 files by name, ignoring upper and lower case, and loads names that start with dl_ after every other name. Each file it loads goes in front of the ones before it, so the file loaded last is the one the game reads.",
     "ruleDisable": "Disabling a file renames it on disk and takes it out of that order. The file stays in the client, and the switch on its card brings it back.",
     "ruleToggle": "Info",
     "folderHint": "Only files in the same folder can override each other.",
     "order": "Load order · the last file wins",
+    "wins": "Gana",
+    "hidden": "Oculto",
     "disableWinner": "Disable {{file}} and {{next}} takes over this path.",
     "disableHidden": "Disable {{file}}. The game already skips it here.",
     "kind": {
@@ -110,6 +109,7 @@
       "ui": "A menu screen or the text inside it.",
       "other": "Another file the game reads."
     },
+    "truncated": "Solo se listan las primeras {{shown}} rutas de {{total}}. Desactive uno de los archivos para ver el resto.",
     "showNotice": "Mostrar aviso de conflictos",
     "dismissNotice": "Cerrar aviso de conflictos"
   },
@@ -128,8 +128,29 @@
     "previous": "Objeto anterior",
     "next": "Objeto siguiente",
     "audioFailed": "No se pudo reproducir este archivo de audio.",
+    "rootFolder": "Root folder",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "mode": {
+      "label": "Preview mode",
+      "simple": "Simple",
+      "advanced": "Advanced",
+      "simpleHint": "What a player sees in the game: maps, characters, hilts, weapons, music",
+      "advancedHint": "Every file of the archive by folder: textures, shaders, strings, menus",
+      "onlyFiles": "This archive holds only files the game reads: textures, shaders, strings or menus. Advanced shows them.",
+      "switchAdvanced": "Switch to Advanced"
+    },
     "kind": {
       "all": "Todos los objetos",
+      "map": "Mapas",
+      "levelshot": "Level shots",
+      "splash": "Splash & titles",
+      "menuImage": "Menu images",
+      "hudImage": "HUD",
+      "texture": "Textures",
+      "icon": "Icons",
+      "image": "Other images",
+      "font": "Fonts",
       "skin": "Personajes y skins",
       "hilt": "Empuñaduras",
       "weapon": "Armas",
@@ -137,11 +158,96 @@
       "vehicle": "Vehículos",
       "music": "Música",
       "sound": "Efectos de sonido",
-      "map": "Mapas"
+      "strings": "Strings",
+      "shader": "Shaders",
+      "effect": "Effects",
+      "menu": "Menus",
+      "config": "Configs",
+      "data": "Data",
+      "script": "Scripts",
+      "video": "Videos",
+      "other": "Other"
+    },
+    "gallery": {
+      "map": "Map: {{map}}",
+      "mapInArchive": "Map in this archive",
+      "mapNotInArchive": "Map not in this archive",
+      "splashStretched": "Stretched to 640×480 at startup",
+      "splashWide": "Widescreen variant of the client",
+      "titles": "Title crawl: {{language}}",
+      "consoleFont": "Console font: a 16×16 grid of characters",
+      "notPowerOfTwo": "Not a power of two: the vanilla renderer refuses it",
+      "count_one": "{{count}} picture",
+      "count_many": "{{count}} pictures",
+      "count_other": "{{count}} pictures"
+    },
+    "text": {
+      "truncated": "Only the beginning of the file is shown.",
+      "lines_one": "{{count}} line",
+      "lines_many": "{{count}} lines",
+      "lines_other": "{{count}} lines",
+      "items_one": "{{count}} item",
+      "items_many": "{{count}} items",
+      "items_other": "{{count}} items",
+      "primitives_one": "{{count}} primitive",
+      "primitives_many": "{{count}} primitives",
+      "primitives_other": "{{count}} primitives",
+      "shaders_one": "{{count}} shader",
+      "shaders_many": "{{count}} shaders",
+      "shaders_other": "{{count}} shaders"
+    },
+    "strings": {
+      "package": "{{language}} · {{name}}",
+      "asTable": "Table",
+      "asText": "Text",
+      "key": "Key",
+      "empty": "This file has no strings.",
+      "languageMismatch": "The file names {{found}}, but its folder is {{folder}}: the game refuses it.",
+      "languageMissing": "No LANG_{{language}} line for the {{folder}} folder: the game shows the English text instead.",
+      "noEndMarker": "No ENDMARKER at the end: the game treats the file as truncated.",
+      "keys_one": "{{count}} key",
+      "keys_many": "{{count}} keys",
+      "keys_other": "{{count}} keys"
+    },
+    "font": {
+      "pointSize": "Point size {{value}}",
+      "height": "Line height {{value}}",
+      "atlasPath": "Atlas:",
+      "atlas": "Glyph atlas of {{name}}",
+      "noAtlas": "The archive has no picture of the glyphs.",
+      "overridesFallback": "Replaces the {{name}} font the renderer substitutes for Cyrillic and Polish text."
+    },
+    "video": {
+      "noPlayback": "RoQ video: the launcher cannot play it."
     },
     "weaponOnly": "Solo arma",
     "withCharacter": "Con personaje",
     "selectClient": "Selecciona un cliente para elegir un personaje instalado"
+  },
+  "features": {
+    "label": "Contents",
+    "levelshots": "Level shots",
+    "splash": "Splash",
+    "menu": "Menu",
+    "hud": "HUD",
+    "textures": "Textures",
+    "fonts": "Fonts",
+    "strings": "{{language}} strings",
+    "shaders": "Shaders",
+    "effects": "Effects",
+    "scripts": "Scripts",
+    "videos": "Videos",
+    "configs": "Configs",
+    "modules": "Modules",
+    "characters": "Characters",
+    "hilts": "Hilts",
+    "weapons": "Weapons",
+    "npcs": "NPCs",
+    "vehicles": "Vehicles",
+    "maps": "Maps",
+    "music": "Music",
+    "sounds": "Sounds",
+    "more": "+{{count}}"
   },
   "mapPreview": {
     "title": "Vista previa del mapa",

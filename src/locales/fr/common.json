@@ -1,6 +1,7 @@
 {
   "actions": {
     "add": "Ajouter",
+    "apply": "Apply",
     "back": "Retour",
     "cancel": "Annuler",
     "close": "Fermer",

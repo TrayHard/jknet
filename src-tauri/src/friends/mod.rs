@@ -416,6 +416,7 @@ pub async fn join_friend(
         Some(&address),
         &[],
         crate::profiles::ProfileChoice::default(),
+        crate::engines::LaunchMode::Multiplayer,
     )
 }
 

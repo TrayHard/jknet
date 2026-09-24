@@ -23,6 +23,7 @@
     "online": "En línea",
     "offline": "Desconectado",
     "lastSeenJustNow": "Visto por última vez ahora mismo",
+    "lastSeenOn": "Visto por última vez el {{date}}",
     "lastSeenMinutes_one": "Visto por última vez hace {{count}} minuto",
     "lastSeenMinutes_many": "Visto por última vez hace {{count}} minutos",
     "lastSeenMinutes_other": "Visto por última vez hace {{count}} minutos",
@@ -31,8 +32,7 @@
     "lastSeenHours_other": "Visto por última vez hace {{count}} horas",
     "lastSeenDays_one": "Visto por última vez hace {{count}} día",
     "lastSeenDays_many": "Visto por última vez hace {{count}} días",
-    "lastSeenDays_other": "Visto por última vez hace {{count}} días",
-    "lastSeenOn": "Visto por última vez el {{date}}"
+    "lastSeenDays_other": "Visto por última vez hace {{count}} días"
   },
   "empty": {
     "offTitle": "Los amigos aún no están activados",

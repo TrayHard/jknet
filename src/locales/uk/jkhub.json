@@ -10,10 +10,6 @@
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "results_one": "{{count}} result in {{game}}",
-    "results_few": "{{count}} results in {{game}}",
-    "results_many": "{{count}} results in {{game}}",
-    "results_other": "{{count}} results in {{game}}",
     "helpTitle": "Довідка з пошуку",
     "helpScope": "Ці можливості діють на вкладці JKHub для вибраної гри й категорії.",
     "helpCombine": "Поєднуйте слова й оператори в будь-якому порядку. Запис має відповідати всім умовам. Повторні фільтри дат звужують період.",
@@ -40,7 +36,11 @@
         "example": "before:2026-01-01",
         "text": "Оновлено до вказаної дати. Граничний день виключено (UTC)."
       }
-    }
+    },
+    "results_one": "{{count}} result in {{game}}",
+    "results_few": "{{count}} results in {{game}}",
+    "results_many": "{{count}} results in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Оновити",
   "sections": {

@@ -1,6 +1,6 @@
 [package]
 name = "jknet"
-version = "0.4.0"
+version = "0.5.0"
 description = "Launcher for Star Wars Jedi Knight: Jedi Academy and Jedi Outcast"
 authors = ["JKNet"]
 edition = "2021"
@@ -46,6 +46,11 @@ percent-encoding = "2.3.2"
 sevenz-rust2 = { version = "0.22.2", default-features = false }
 tauri-plugin-os = "2.3.2"
 tauri-plugin-clipboard-manager = "2"
+# The single-byte code pages of the `strings/<language>/*.str` files of the
+# game, see `file_preview_contents::encoding_of`.
+encoding_rs = "0.8"
+# Pictures of a previewed archive travel to the webview as data URLs.
+base64 = "0.22"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

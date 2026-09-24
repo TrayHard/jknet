@@ -88,6 +88,24 @@ pub fn is_language_setting(value: &str) -> bool {
     value == SYSTEM_LANGUAGE || LANGUAGES.contains(&value)
 }
 
+// --- slice: pk3 editor ---
+/// The two modes of the Library preview: `simple` shows the finished objects
+/// of an archive, `advanced` adds every other file of it by kind.
+pub const PREVIEW_MODES: &[&str] = &["simple", "advanced"];
+
+/// The mode a fresh launcher, and a `settings.json` written before the
+/// modes existed, opens the preview in.
+pub const DEFAULT_PREVIEW_MODE: &str = "simple";
+
+/// Whether a string may be stored in `preview_mode`.
+pub fn is_preview_mode(value: &str) -> bool {
+    PREVIEW_MODES.contains(&value)
+}
+
+fn default_preview_mode() -> String {
+    DEFAULT_PREVIEW_MODE.to_string()
+}
+
 /// Everything the launcher remembers between runs, except window geometry
 /// (that belongs to `tauri-plugin-window-state`).
 ///
@@ -150,6 +168,13 @@ pub struct Settings {
     pub close_on_launch: bool,
     /// Once dismissed, the library conflict notice only opens on explicit request.
     pub library_conflict_notice_dismissed: bool,
+    // --- slice: pk3 editor ---
+    /// The mode the Library preview opens in: one of [`PREVIEW_MODES`]. A
+    /// plain string for the same reason `language` is one, validated where
+    /// it is written by [`SettingsPatch::validate`]. The field-level default
+    /// reads a document from before the modes existed as `simple`.
+    #[serde(default = "default_preview_mode")]
+    pub preview_mode: String,
     /// Absolute path that replaces the config root for `clients`, `library`,
     /// `cache` and `logs`. Ignored when it is relative or blank.
     pub data_dir_override: Option<String>,
@@ -245,6 +270,8 @@ impl Default for Settings {
             default_client_ids: BTreeMap::new(),
             close_on_launch: false,
             library_conflict_notice_dismissed: false,
+            // --- slice: pk3 editor ---
+            preview_mode: default_preview_mode(),
             data_dir_override: None,
             extra_launch_args: String::new(),
             favorite_servers: Vec::new(),
@@ -493,6 +520,10 @@ pub struct SettingsPatch {
     pub default_client_ids: Option<BTreeMap<Game, Option<String>>>,
     pub close_on_launch: Option<bool>,
     pub library_conflict_notice_dismissed: Option<bool>,
+    // --- slice: pk3 editor ---
+    /// The mode of the Library preview: `simple` or `advanced`.
+    /// [`SettingsPatch::validate`] refuses anything else.
+    pub preview_mode: Option<String>,
     #[serde(deserialize_with = "sent")]
     pub data_dir_override: Option<Option<String>>,
     pub extra_launch_args: Option<String>,
@@ -591,6 +622,10 @@ impl SettingsPatch {
         if let Some(value) = self.library_conflict_notice_dismissed {
             settings.library_conflict_notice_dismissed = value;
         }
+        // --- slice: pk3 editor ---
+        if let Some(value) = self.preview_mode {
+            settings.preview_mode = value;
+        }
         if let Some(value) = self.data_dir_override {
             settings.data_dir_override = non_empty(value);
         }
@@ -642,6 +677,14 @@ impl SettingsPatch {
             if !is_language_setting(language) {
                 return Err(AppError::InvalidInput(format!(
                     "{language:?} is not a language JKNet speaks"
+                )));
+            }
+        }
+        // --- slice: pk3 editor ---
+        if let Some(mode) = self.preview_mode.as_deref() {
+            if !is_preview_mode(mode) {
+                return Err(AppError::InvalidInput(format!(
+                    "{mode:?} is not a preview mode; the modes are {PREVIEW_MODES:?}"
                 )));
             }
         }
@@ -805,6 +848,8 @@ mod tests {
             close_on_launch: false,
             data_dir_override: Some("D:\\JKNet".into()),
             library_conflict_notice_dismissed: false,
+            // --- slice: pk3 editor ---
+            preview_mode: "advanced".into(),
             extra_launch_args: "+set r_fullscreen 0 +set r_mode 4".into(),
             favorite_servers: vec!["203.0.113.10:29070".into()],
             server_history: vec![ServerHistoryEntry {
@@ -836,6 +881,7 @@ mod tests {
                 provider: "jkhub".into(),
                 provider_name: "kyle_k".into(),
                 created_at: "2026-09-10T10:00:00Z".into(),
+                admin: false,
             }),
         }
     }
@@ -1382,6 +1428,38 @@ mod tests {
             let patch = patch(&format!(r#"{{"language":{value:?}}}"#));
             assert!(patch.validate().is_err(), "{value:?} should be refused");
         }
+    }
+
+    // --- slice: pk3 editor ---
+    #[test]
+    fn the_preview_mode_starts_simple_and_takes_only_the_two_modes() {
+        assert_eq!(Settings::default().preview_mode, DEFAULT_PREVIEW_MODE);
+        // A `settings.json` written before the modes existed opens the
+        // preview the way it always did.
+        let older: Settings = serde_json::from_str("{}").expect("an empty document reads");
+        assert_eq!(older.preview_mode, "simple");
+
+        for value in ["simple", "advanced"] {
+            let patch = patch(&format!(r#"{{"previewMode":{value:?}}}"#));
+            patch.validate().expect("a known mode is accepted");
+            let mut settings = filled();
+            let before = settings.clone();
+            patch.apply(&mut settings);
+            assert_eq!(settings.preview_mode, value);
+            assert_eq!(settings.language, before.language);
+            assert_eq!(settings.favorite_servers, before.favorite_servers);
+        }
+        for value in ["Simple", "expert", ""] {
+            let patch = patch(&format!(r#"{{"previewMode":{value:?}}}"#));
+            assert!(patch.validate().is_err(), "{value:?} should be refused");
+        }
+
+        // The mode reaches the frontend: only the token is redacted.
+        let redacted = filled().redacted();
+        assert_eq!(redacted.preview_mode, "advanced");
+        assert!(redacted.online_token.is_none());
+        let json = serde_json::to_value(&redacted).expect("settings serialize");
+        assert_eq!(json["previewMode"], "advanced");
     }
 
     // --- slice: i18n ---

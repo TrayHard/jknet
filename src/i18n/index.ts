@@ -71,6 +71,10 @@ export const NAMESPACES = [
   "errors",
   "games",
   "update",
+  // --- slice: bundles ---
+  "bundles",
+  // --- slice: pk3 editor ---
+  "pk3",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

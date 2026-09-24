@@ -388,3 +388,484 @@
     letter-spacing: 4px;
   }
 }
+
+/*
+ * --- slice: bundles ---
+ *
+ * The description of a bundle: Markdown, as `MarkdownView` draws it in the
+ * catalogue and as the editor of the description shows it while it is
+ * typed. One class, `prose-jknet`, dresses both, so the author reads the
+ * same text the player will. The elements come out of a Markdown tree on
+ * one side and out of ProseMirror on the other, and neither takes a class
+ * attribute from the screen, which is why this is a component layer rather
+ * than a set of utilities. The few classes below it belong to the view: the
+ * picture, the block of a video, the card of a video, and the marks the
+ * editor puts on a picture and a video link.
+ */
+@layer components {
+  .prose-jknet {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  .prose-jknet > :first-child {
+    margin-top: 0;
+  }
+
+  .prose-jknet > :last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-jknet p,
+  .prose-jknet ul,
+  .prose-jknet ol,
+  .prose-jknet blockquote,
+  .prose-jknet pre,
+  .prose-jknet table,
+  .prose-jknet hr {
+    margin: 0 0 8px;
+  }
+
+  .prose-jknet h1,
+  .prose-jknet h2,
+  .prose-jknet h3,
+  .prose-jknet h4,
+  .prose-jknet h5,
+  .prose-jknet h6 {
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--color-text-primary);
+    margin: 12px 0 4px;
+  }
+
+  .prose-jknet h1,
+  .prose-jknet h2 {
+    font-size: 17px;
+    line-height: 22px;
+  }
+
+  .prose-jknet strong {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .prose-jknet em {
+    font-style: italic;
+  }
+
+  .prose-jknet del,
+  .prose-jknet s {
+    text-decoration: line-through;
+    color: var(--color-text-muted);
+  }
+
+  .prose-jknet ul,
+  .prose-jknet ol {
+    padding-left: 20px;
+  }
+
+  .prose-jknet ul {
+    list-style: disc;
+  }
+
+  .prose-jknet ol {
+    list-style: decimal;
+  }
+
+  .prose-jknet li {
+    margin: 2px 0;
+  }
+
+  .prose-jknet li > p {
+    margin: 0;
+  }
+
+  /* A task list of GFM: the boxes stand where the bullets would. */
+  .prose-jknet ul.contains-task-list {
+    list-style: none;
+    padding-left: 4px;
+  }
+
+  .prose-jknet li.task-list-item input {
+    margin: 0 6px 0 0;
+    accent-color: var(--color-bg-accent);
+    vertical-align: -1px;
+  }
+
+  .prose-jknet a {
+    color: var(--color-text-accent);
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .prose-jknet blockquote {
+    border-left: 2px solid var(--color-border-default);
+    padding-left: 12px;
+    color: var(--color-text-muted);
+  }
+
+  .prose-jknet code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background-color: var(--color-bg-elevated);
+    border-radius: 4px;
+    padding: 1px 4px;
+  }
+
+  .prose-jknet pre {
+    background-color: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-default);
+    border-radius: 6px;
+    padding: 8px;
+    overflow-x: auto;
+  }
+
+  .prose-jknet pre code {
+    background: none;
+    padding: 0;
+  }
+
+  .prose-jknet table {
+    border-collapse: collapse;
+    display: block;
+    overflow-x: auto;
+  }
+
+  .prose-jknet th,
+  .prose-jknet td {
+    border: 1px solid var(--color-border-default);
+    padding: 4px 8px;
+    text-align: left;
+  }
+
+  .prose-jknet th {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  /* Inside the editor a cell holds a paragraph, which the view never has. */
+  .prose-jknet th > p,
+  .prose-jknet td > p {
+    margin: 0;
+  }
+
+  .prose-jknet hr {
+    border: 0;
+    border-top: 1px solid var(--color-border-default);
+    margin: 12px 0;
+  }
+
+  /* A picture is never wider than the text; a click enlarges it. The button
+     is the picture itself, with no frame of its own. */
+  .prose-jknet-picture {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin: 8px 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: none;
+    overflow: hidden;
+    cursor: zoom-in;
+  }
+
+  .prose-jknet-picture img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* The frame a picture of a draft holds while its path is read. */
+  .prose-jknet-picture-pending {
+    display: block;
+    width: 240px;
+    max-width: 100%;
+    height: 120px;
+    margin: 8px 0;
+    border-radius: 6px;
+    background-color: var(--color-bg-elevated);
+  }
+
+  /* A picture that could not be loaded: its caption in a dashed frame. */
+  .prose-jknet-picture-missing {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border: 1px dashed var(--color-border-default);
+    border-radius: 6px;
+    color: var(--color-text-muted);
+  }
+
+  /* The block of a YouTube video: 16:9, the still first, the player after the click. */
+  .prose-jknet-video {
+    position: relative;
+    width: 100%;
+    max-width: 640px;
+    aspect-ratio: 16 / 9;
+    margin: 8px 0;
+    border-radius: 6px;
+    overflow: hidden;
+    background-color: var(--color-bg-sidebar);
+  }
+
+  .prose-jknet-video iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  .prose-jknet-video-still {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+
+  .prose-jknet-video-still img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .prose-jknet-video-play {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    background-color: var(--color-bg-overlay);
+    color: var(--color-text-primary);
+    transition:
+      background-color 150ms,
+      color 150ms;
+  }
+
+  .prose-jknet-video-still:hover .prose-jknet-video-play,
+  .prose-jknet-video-still:focus-visible .prose-jknet-video-play {
+    background-color: var(--color-bg-accent);
+    color: var(--color-text-on-accent);
+  }
+
+  /* The card of a Twitch or VK Video link: the host and the address; the click opens the browser. */
+  .prose-jknet-video-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 640px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-default);
+    border-radius: 8px;
+    background-color: var(--color-bg-elevated);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      border-color 150ms,
+      color 150ms;
+  }
+
+  .prose-jknet-video-card:hover {
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+    text-decoration: none;
+  }
+
+  .prose-jknet-video-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background-color: var(--color-bg-accent-subtle);
+    color: var(--color-text-accent);
+  }
+
+  .prose-jknet-video-card-text {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .prose-jknet-video-card-host {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .prose-jknet-video-card-address {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /*
+   * The editor of the description: the same text inside a field of the
+   * form. The frame is the one `Input` draws; the toolbar sits inside it,
+   * above the text, so the two read as one control.
+   */
+  .prose-jknet-editor {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--color-border-default);
+    border-radius: 8px;
+    background-color: var(--color-bg-input);
+    transition: border-color 150ms;
+  }
+
+  .prose-jknet-editor:focus-within {
+    border-color: var(--color-border-focus);
+  }
+
+  .prose-jknet-editor[data-invalid="true"] {
+    border-color: var(--color-border-danger);
+  }
+
+  .prose-jknet-editor .ProseMirror {
+    min-height: 200px;
+    max-height: 60vh;
+    padding: 8px 12px;
+    overflow-y: auto;
+    outline: none;
+    user-select: text;
+    white-space: pre-wrap;
+  }
+
+  /* The placeholder of an empty editor, written by the Placeholder extension onto the first paragraph. */
+  .prose-jknet-editor .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  /* A picture inside the editor: the node view of `DescriptionEditor`. */
+  .prose-jknet-image {
+    display: block;
+    width: fit-content;
+    max-width: 100%;
+    margin: 8px 0;
+    border-radius: 6px;
+  }
+
+  .prose-jknet-image img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+  }
+
+  .prose-jknet-image.ProseMirror-selectednode img {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+
+  /* A task list inside the editor: the box is a node view of TipTap, a
+     label with the checkbox in front of the text, so the elements are not
+     the ones GFM gives the view. The box stands where the bullet would. */
+  .prose-jknet ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 4px;
+  }
+
+  .prose-jknet li[data-type="taskItem"] {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .prose-jknet li[data-type="taskItem"] > label {
+    flex: 0 0 auto;
+    padding-top: 1px;
+    user-select: none;
+  }
+
+  .prose-jknet li[data-type="taskItem"] > label input {
+    margin: 0;
+    accent-color: var(--color-bg-accent);
+    vertical-align: -1px;
+  }
+
+  .prose-jknet li[data-type="taskItem"] > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .prose-jknet li[data-type="taskItem"][data-checked="true"] > div > p {
+    color: var(--color-text-muted);
+  }
+
+  /* A table inside the editor: the wrapper TipTap draws scrolls sideways,
+     and a cell the author has selected by dragging is tinted. */
+  .prose-jknet-editor .tableWrapper {
+    overflow-x: auto;
+    margin: 0 0 8px;
+  }
+
+  .prose-jknet-editor .tableWrapper table {
+    display: table;
+    margin: 0;
+  }
+
+  .prose-jknet-editor th,
+  .prose-jknet-editor td {
+    position: relative;
+    min-width: 48px;
+    vertical-align: top;
+  }
+
+  .prose-jknet-editor .selectedCell::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-bg-selected-overlay);
+    pointer-events: none;
+  }
+
+  /* A paragraph that is one link to a video page, marked by the editor: the
+     address in a frame, with the host in front of it, the way the catalogue
+     will draw the block. */
+  .prose-jknet-editor .prose-jknet-video-link {
+    display: block;
+    padding: 8px 12px;
+    border: 1px dashed var(--color-border-default);
+    border-radius: 8px;
+    background-color: var(--color-bg-elevated);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .prose-jknet-editor .prose-jknet-video-link::before {
+    content: "▶ " attr(data-host) " · ";
+    font-family: var(--font-sans);
+    font-weight: 600;
+    color: var(--color-text-accent);
+  }
+}

@@ -23,6 +23,7 @@
     "online": "В сети",
     "offline": "Не в сети",
     "lastSeenJustNow": "Был в сети только что",
+    "lastSeenOn": "Был в сети {{date}}",
     "lastSeenMinutes_one": "Был в сети {{count}} минуту назад",
     "lastSeenMinutes_few": "Был в сети {{count}} минуты назад",
     "lastSeenMinutes_many": "Был в сети {{count}} минут назад",
@@ -34,8 +35,7 @@
     "lastSeenDays_one": "Был в сети {{count}} день назад",
     "lastSeenDays_few": "Был в сети {{count}} дня назад",
     "lastSeenDays_many": "Был в сети {{count}} дней назад",
-    "lastSeenDays_other": "Был в сети {{count}} дней назад",
-    "lastSeenOn": "Был в сети {{date}}"
+    "lastSeenDays_other": "Был в сети {{count}} дней назад"
   },
   "empty": {
     "offTitle": "Друзья ещё не включены",

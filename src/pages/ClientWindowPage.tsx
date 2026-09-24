@@ -24,7 +24,7 @@ import { useErrorText } from "../i18n/errors";
 import { cn } from "../lib/format";
 // --- slice: clients page ---
 import { defaultClientPatch, resolveDefaultClientId, useGameNames } from "../lib/game";
-import type { Client } from "../lib/ipc";
+import { clientModes, type Client } from "../lib/ipc";
 import {
   useClient,
   useEngines,
@@ -430,7 +430,8 @@ function ClientCards({ client }: { client: Client }) {
       </Card>
 
       <Card heading={t("clientWindow.preview.heading")}>
-        <CommandPreview clientId={client.id} />
+        {/* --- slice: bundles --- one line per mode of the client. */}
+        <CommandPreview clientId={client.id} modes={clientModes(client, engine)} />
       </Card>
     </>
   );

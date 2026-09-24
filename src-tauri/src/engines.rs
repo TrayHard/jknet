@@ -16,11 +16,13 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::bundles::{BundlesGuard, BundlesState};
 use crate::clients::Client;
 use crate::engine_install;
 use crate::error::{AppError, Result};
 use crate::game::Game;
 use crate::host_system::HostSystem;
+use crate::paths::DataPaths;
 use crate::state::AppState;
 
 /// One attempt at recognising a Windows archive of a release.
@@ -68,6 +70,47 @@ pub enum EngineStatus {
         #[serde(rename = "noteKey")]
         note_key: &'static str,
     },
+}
+
+// --- slice: bundles ---
+/// How a client is started: the multiplayer executable, or the single-player
+/// one of a release that ships both.
+///
+/// A mode of the engine first: OpenJK for Jedi Academy carries
+/// `openjk_sp.x86.exe` next to `openjk.x86.exe` in one archive, the other
+/// builds carry one executable. A client keeps the modes it may start in
+/// (see [`crate::clients::Client::modes`]), and a component of a bundle names
+/// a subset of the modes of its engine.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LaunchMode {
+    /// The multiplayer client: the Servers screen, `+connect`, the profile
+    /// tokens. What every engine has.
+    #[default]
+    Multiplayer,
+    /// The single-player game of a release that ships one. No server, no
+    /// player profile: the game opens on its own menu.
+    Single,
+}
+
+impl LaunchMode {
+    /// The wire spelling, which is what `client.json` and a manifest carry.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            LaunchMode::Multiplayer => "multiplayer",
+            LaunchMode::Single => "single",
+        }
+    }
+}
+
+/// The single-player executable of a release that ships one, in both widths.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SinglePlayer {
+    /// Executable of the Windows x86 archive.
+    pub executable: &'static str,
+    /// Executable of the Windows x64 archive.
+    pub executable_x64: &'static str,
 }
 
 /// One engine JKNet can install.
@@ -121,6 +164,12 @@ pub struct Engine {
     /// `fs_game` the build needs to run at all. jaMME lives in `mme\` and
     /// starts into the main menu without it; the other three run from `base`.
     pub default_fs_game: Option<&'static str>,
+    // --- slice: bundles ---
+    /// The single-player executable the same archive ships, when it ships
+    /// one. `None` for a build that is a multiplayer client and nothing else.
+    /// The frontend reads [`EngineAvailability::modes`] instead of this.
+    #[serde(skip)]
+    pub single_player: Option<SinglePlayer>,
     /// Whether a release flagged as a pre-release may be installed. Only the
     /// projects that publish rolling builds need it.
     #[serde(skip)]
@@ -181,6 +230,39 @@ impl Engine {
         let x64 = dir.join(self.executable_for_asset("x86_64"));
         if x64.is_file() { x64 } else { original }
     }
+
+    // --- slice: bundles ---
+    /// The modes this build can start in: every build plays multiplayer, and
+    /// the one whose archive ships a single-player executable plays that too.
+    pub fn modes(&self) -> Vec<LaunchMode> {
+        match self.single_player {
+            Some(_) => vec![LaunchMode::Multiplayer, LaunchMode::Single],
+            None => vec![LaunchMode::Multiplayer],
+        }
+    }
+
+    /// Whether the build can start in `mode` at all.
+    pub fn supports(&self, mode: LaunchMode) -> bool {
+        match mode {
+            LaunchMode::Multiplayer => true,
+            LaunchMode::Single => self.single_player.is_some(),
+        }
+    }
+
+    /// The single-player executable inside `engine\`, chosen the way
+    /// [`Engine::installed_executable`] chooses the multiplayer one: the x86
+    /// name when that file is there, the x64 name when that one is, the x86
+    /// name otherwise so the caller can say which file is missing. `None` for
+    /// a build without a single-player game.
+    pub fn single_player_executable(&self, dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let single = self.single_player?;
+        let original = dir.join(single.executable);
+        if original.is_file() {
+            return Some(original);
+        }
+        let x64 = dir.join(single.executable_x64);
+        Some(if x64.is_file() { x64 } else { original })
+    }
 }
 
 /// Every engine, in the order the Clients screen shows them.
@@ -222,6 +304,14 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
+        // The same archive carries the single-player game next to the
+        // multiplayer client: `openjk_sp.x86.exe` listed from
+        // `OpenJK-windows-x86.zip` on 2026-09-16, the x64 name spelled the
+        // way `openjk.x86_64.exe` is and not read from an archive yet.
+        single_player: Some(SinglePlayer {
+            executable: "openjk_sp.x86.exe",
+            executable_x64: "openjk_sp.x86_64.exe",
+        }),
         // OpenJK ships one rolling `latest` release and keeps an old tagged
         // one flagged as a pre-release; taking both leaves a fallback.
         allow_prerelease: true,
@@ -263,6 +353,7 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
+        single_player: None,
         allow_prerelease: false,
         asset_rules: &[
             AssetRule {
@@ -292,6 +383,7 @@ const ENGINES: &[Engine] = &[
         installable: true,
         not_installable_reason: None,
         default_fs_game: None,
+        single_player: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -326,6 +418,7 @@ const ENGINES: &[Engine] = &[
         // `start_jaMME.cmd` inside the archive runs
         // `jamme +set fs_game mme +set fs_extraGames "japlus japp"`.
         default_fs_game: Some("mme"),
+        single_player: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -361,6 +454,7 @@ const ENGINES: &[Engine] = &[
         // `assetsmv2.pk3` ride in the archive into `engine\base\`, which
         // `fs_basepath` already covers.
         default_fs_game: None,
+        single_player: None,
         // 1.4.1 of 2018-02-15 is the only tagged release; the project builds
         // every push but tags nothing, so there is no pre-release to fall back
         // on and nothing to allow.
@@ -433,9 +527,15 @@ pub struct EngineAvailability {
     pub engine: Engine,
     pub system: String,
     pub compatibility_error: Option<&'static str>,
+    // --- slice: bundles ---
+    /// The modes the build starts in: `multiplayer`, and `single` when the
+    /// archive ships a single-player executable. A client made on the
+    /// Clients screen gets all of them.
+    pub modes: Vec<LaunchMode>,
 }
 
 fn availability(engine: &Engine, host: HostSystem) -> EngineAvailability {
+    let modes = engine.modes();
     let mut engine = engine.clone();
     let compatibility_error = if host.supports_engines() {
         None
@@ -443,7 +543,7 @@ fn availability(engine: &Engine, host: HostSystem) -> EngineAvailability {
         engine.installable = false;
         Some("unsupportedEngineSystem")
     };
-    EngineAvailability { engine, system: host.label(), compatibility_error }
+    EngineAvailability { engine, system: host.label(), compatibility_error, modes }
 }
 
 // ---------------------------------------------------------------------------
@@ -534,16 +634,71 @@ pub async fn list_engine_releases(
 /// Returns the updated client record. Progress arrives through
 /// `launch:engine-install-progress` while the command runs. A second call for
 /// a client whose install has not finished is refused with `AppError::Busy`.
+///
+/// --- slice: bundles ---
+/// A client installed from a bundle that laid files over `engine\` keeps a
+/// custom build: [`engine_install::install`] empties that folder before
+/// unpacking, so an update would take the overlay with it. Such a client is
+/// refused here once its engine is in place; the card shows **Custom build**
+/// instead of **Check updates** for the same reason.
+///
+/// A client a bundle operation is running for is refused with
+/// `AppError::Busy` as well: the install of a bundle lays files into
+/// `engine\` after its own engine step has released `InstallState`, and an
+/// engine install in that window would wipe them. The claim on
+/// [`BundlesState`] is held for the whole install, so a bundle operation
+/// cannot start under this one either.
 #[tauri::command]
 pub async fn install_engine(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     installs: tauri::State<'_, engine_install::InstallState>,
+    bundles: tauri::State<'_, BundlesState>,
     client_id: String,
     tag: Option<String>,
 ) -> Result<Client> {
     let paths = state.paths()?;
+    let _claim = admit_engine_install(&bundles, &paths, &client_id)?;
     engine_install::install(&app, &installs, &paths, &client_id, tag.as_deref()).await
+}
+
+// --- slice: bundles ---
+/// The two refusals of [`install_engine`] before it touches the disk: a
+/// client a bundle operation holds, then a client whose bundle laid files
+/// over its engine. The claim comes first, so the record is read only when
+/// nothing is writing it, and it is handed back to be held for the install.
+fn admit_engine_install<'a>(
+    bundles: &'a BundlesState,
+    paths: &DataPaths,
+    client_id: &str,
+) -> Result<BundlesGuard<'a>> {
+    let claim = bundles.claim(client_id, BundlesState::ENGINE_INSTALL)?;
+    refuse_overlay_update(&crate::clients::read_record(paths, client_id)?)?;
+    Ok(claim)
+}
+
+/// Refuses to replace the engine of a client whose bundle laid files over it.
+///
+/// Only an installed engine is protected: a client whose bundle install
+/// stopped before the engine arrived has nothing to lose yet, and the retry
+/// of that install goes through the same unpacking.
+fn refuse_overlay_update(client: &Client) -> Result<()> {
+    let overlaid = client
+        .bundle
+        .as_ref()
+        .is_some_and(|link| link.engine_overlay);
+    if overlaid && client.engine_version.is_some() {
+        let name = client
+            .bundle
+            .as_ref()
+            .map(|link| link.bundle_name.as_str())
+            .unwrap_or_default();
+        return Err(AppError::State(format!(
+            "the engine of {} is a custom build from the bundle {name}: reinstalling the release would overwrite the files the bundle laid over it. Install the bundle again instead.",
+            client.name
+        )));
+    }
+    Ok(())
 }
 
 /// Compares the installed tag with the newest published one.
@@ -1009,6 +1164,69 @@ mod tests {
         }
     }
 
+    // --- slice: bundles ---
+
+    #[test]
+    fn only_openjk_plays_single_player_and_every_build_plays_multiplayer() {
+        for engine in ENGINES {
+            let modes = engine.modes();
+            assert_eq!(modes[0], LaunchMode::Multiplayer, "{}", engine.id);
+            assert!(engine.supports(LaunchMode::Multiplayer));
+            assert_eq!(
+                modes.contains(&LaunchMode::Single),
+                engine.id == "openjk",
+                "{}: {modes:?}",
+                engine.id
+            );
+            assert_eq!(engine.supports(LaunchMode::Single), engine.single_player.is_some());
+        }
+        let openjk = find("openjk").expect("openjk");
+        let single = openjk.single_player.expect("the single-player executable");
+        assert_eq!(single.executable, "openjk_sp.x86.exe");
+        assert_eq!(single.executable_x64, "openjk_sp.x86_64.exe");
+        assert_eq!(openjk.modes(), [LaunchMode::Multiplayer, LaunchMode::Single]);
+
+        // On the wire: lowercase, the way `client.json` and a manifest spell it.
+        assert_eq!(serde_json::to_value(LaunchMode::Single).unwrap(), "single");
+        assert_eq!(
+            serde_json::from_value::<LaunchMode>(serde_json::json!("multiplayer")).unwrap(),
+            LaunchMode::Multiplayer
+        );
+        assert!(serde_json::from_value::<LaunchMode>(serde_json::json!("sp")).is_err());
+        assert_eq!(LaunchMode::default(), LaunchMode::Multiplayer);
+        assert_eq!(LaunchMode::Single.as_str(), "single");
+
+        // And in the answer of `list_engines`, next to the flattened entry.
+        let listed = list_engines(Some(Game::JediAcademy)).expect("the registry answers");
+        let entry = serde_json::to_value(listed.iter().find(|e| e.engine.id == "openjk").unwrap())
+            .expect("serializes");
+        assert_eq!(entry["modes"], serde_json::json!(["multiplayer", "single"]));
+        assert!(entry.get("singlePlayer").is_none(), "the executable names stay in the core");
+        let eternal = serde_json::to_value(listed.iter().find(|e| e.engine.id == "eternaljk").unwrap())
+            .expect("serializes");
+        assert_eq!(eternal["modes"], serde_json::json!(["multiplayer"]));
+    }
+
+    #[test]
+    fn the_single_player_executable_is_found_in_either_width_or_named_when_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let openjk = require("openjk").unwrap();
+        let dir = temp.path().join("openjk");
+        std::fs::create_dir(&dir).unwrap();
+        // Nothing installed: the x86 name, so a refusal can name the file.
+        let missing = openjk.single_player_executable(&dir).expect("openjk has one");
+        assert_eq!(missing, dir.join("openjk_sp.x86.exe"));
+        assert!(!missing.is_file());
+        // The x64 archive unpacked.
+        std::fs::write(dir.join("openjk_sp.x86_64.exe"), b"MZ").unwrap();
+        assert_eq!(openjk.single_player_executable(&dir).unwrap(), dir.join("openjk_sp.x86_64.exe"));
+        // The x86 one, which keeps winning the way `installed_executable` does.
+        std::fs::write(dir.join("openjk_sp.x86.exe"), b"MZ").unwrap();
+        assert_eq!(openjk.single_player_executable(&dir).unwrap(), dir.join("openjk_sp.x86.exe"));
+        // A build without a single-player game has no file to name.
+        assert!(require("eternaljk").unwrap().single_player_executable(&dir).is_none());
+    }
+
     #[test]
     fn the_fallback_rule_catches_an_older_naming_scheme() {
         assert_eq!(
@@ -1067,6 +1285,8 @@ mod tests {
             fs_game: None,
             launch_args: String::new(),
             created_at: "2026-09-10T00:00:00Z".into(),
+            modes: Vec::new(),
+            bundle: None,
         }
     }
 
@@ -1080,5 +1300,91 @@ mod tests {
             asset_size: 6_070_386,
             asset_url: "https://example.invalid/OpenJK-windows-x86.zip".into(),
         }
+    }
+
+    // --- slice: bundles ---
+
+    #[test]
+    fn a_custom_build_from_a_bundle_is_not_replaced_by_a_release() {
+        use crate::clients::ClientBundleLink;
+
+        let link = ClientBundleLink {
+            bundle_id: Some("01J".into()),
+            bundle_slug: "taystjka-voip".into(),
+            bundle_name: "Taystjka VoIP".into(),
+            version_id: Some("01K".into()),
+            version_label: "2026.1".into(),
+            component_id: "mp".into(),
+            component_label: "Multiplayer".into(),
+            role: ClientBundleLink::INSTALLED.into(),
+            engine_overlay: true,
+            linked_at: "2026-09-15T00:00:00Z".into(),
+            ..ClientBundleLink::default()
+        };
+
+        // Installed and overlaid: the update would wipe the overlay.
+        let mut client = client_with(Some("v1.6.3"), Some("2026-09-01T00:00:00Z"));
+        client.bundle = Some(link.clone());
+        let error = refuse_overlay_update(&client).expect_err("refused");
+        assert!(matches!(error, AppError::State(_)), "{error}");
+        assert!(error.to_string().contains("Taystjka VoIP"), "{error}");
+
+        // Not installed yet: a retry of the bundle install still has to
+        // unpack the release, so nothing stands in its way.
+        let mut fresh = client_with(None, None);
+        fresh.bundle = Some(link.clone());
+        refuse_overlay_update(&fresh).expect("nothing to protect yet");
+
+        // A bundle without an overlay changes nothing about updates.
+        let mut plain = client_with(Some("latest"), None);
+        plain.bundle = Some(ClientBundleLink {
+            engine_overlay: false,
+            ..link
+        });
+        refuse_overlay_update(&plain).expect("a plain release updates as before");
+        refuse_overlay_update(&client_with(Some("latest"), None)).expect("no bundle at all");
+    }
+
+    #[test]
+    fn an_engine_install_waits_for_the_bundle_operation_that_holds_the_client() {
+        use crate::clients;
+        use crate::paths::DataPaths;
+
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        paths.ensure().expect("the layout");
+        let client = clients::create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None)
+            .expect("a client");
+        let bundles = BundlesState::default();
+
+        // A bundle install holds the client: the window between its engine
+        // step and its last step, where `engine\` holds the overlay and the
+        // record does not say so yet.
+        let install = bundles
+            .claim(&client.id, BundlesState::INSTALL)
+            .expect("the bundle install claims it");
+        let error = admit_engine_install(&bundles, &paths, &client.id).expect_err("refused");
+        assert!(matches!(error, AppError::Busy(_)), "{error}");
+        assert!(error.to_string().contains("a bundle install"), "{error}");
+        drop(install);
+
+        // Free: admitted, and the claim it returns keeps a bundle operation
+        // out for as long as the engine install runs.
+        let claim = admit_engine_install(&bundles, &paths, &client.id).expect("admitted");
+        let error = bundles
+            .claim(&client.id, BundlesState::PUBLISH)
+            .expect_err("the publish is refused while the engine installs");
+        assert!(error.to_string().contains("an engine installation"), "{error}");
+        drop(claim);
+        bundles
+            .claim(&client.id, BundlesState::PUBLISH)
+            .expect("free once the engine install is over");
+
+        // An unknown client is refused for what it is, and holds nothing.
+        let error = admit_engine_install(&bundles, &paths, "ghost").expect_err("unknown");
+        assert!(matches!(error, AppError::NotFound(_)), "{error}");
+        bundles
+            .claim("ghost", BundlesState::PUBLISH)
+            .expect("a refused admission holds no claim");
     }
 }

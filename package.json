@@ -1,7 +1,7 @@
 {
   "name": "jknet",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -36,12 +36,24 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.11.0",
     "@tauri-apps/plugin-window-state": "^2.4.1",
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/extension-list": "^3.31.3",
+    "@tiptap/extension-table": "^3.31.3",
+    "@tiptap/extensions": "^3.31.3",
+    "@tiptap/markdown": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "i18next": "^25.10.10",
     "lucide-react": "^1.43.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-i18next": "^16.6.6",
+    "react-markdown": "^10.1.0",
     "react-router": "^8.3.1",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
     "three": "^0.186.0"
   },
   "devDependencies": {

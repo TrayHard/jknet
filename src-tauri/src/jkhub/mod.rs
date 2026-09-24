@@ -218,7 +218,10 @@ impl Default for JkhubState {
 }
 
 impl JkhubState {
-    fn client(&self) -> Result<&JkhubClient> {
+    /// The client, or the refusal of a launcher whose TLS backend never
+    /// started. `pub(crate)` for the bundle installer, which fetches the
+    /// JKHub files of a manifest through the same jar and limiter.
+    pub(crate) fn client(&self) -> Result<&JkhubClient> {
         self.client.as_ref().ok_or_else(|| {
             AppError::JkhubUnavailable("the JKHub client could not be built at startup".into())
         })
@@ -294,7 +297,11 @@ impl JkhubState {
     }
 
     /// Claims a file for the caller, or refuses because someone holds it.
-    fn claim(&self, file_id: u32) -> Result<InstallGuard<'_>> {
+    ///
+    /// --- slice: bundles ---
+    /// `pub(crate)` for the draft of a bundle, which downloads a record the
+    /// same way and must not do so under an install of the same record.
+    pub(crate) fn claim(&self, file_id: u32) -> Result<InstallGuard<'_>> {
         let mut busy = self
             .busy
             .lock()
@@ -312,7 +319,7 @@ impl JkhubState {
 }
 
 /// Releases the claim when the install ends, however it ends.
-struct InstallGuard<'a> {
+pub(crate) struct InstallGuard<'a> {
     state: &'a JkhubState,
     file_id: u32,
 }
@@ -1160,7 +1167,11 @@ fn with_archive_path(
 ///
 /// The record is what lets a card say **Installed**, what puts a JKHub badge
 /// on the Library screen, and what a later update check compares against.
-fn record(
+///
+/// --- slice: bundles ---
+/// `pub(crate)`: a pk3 a bundle fetched from JKHub is a JKHub file like any
+/// other, and the installer writes the same note.
+pub(crate) fn record(
     client_dir: &std::path::Path,
     folder: &str,
     files: &[String],
@@ -1252,6 +1263,8 @@ mod tests {
             engine_published_at: None,
             fs_game: fs_game.map(str::to_string),
             launch_args: String::new(),
+            modes: Vec::new(),
+            bundle: None,
         }
     }
 

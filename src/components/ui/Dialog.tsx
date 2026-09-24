@@ -41,6 +41,13 @@ function focusableIn(card: HTMLElement): HTMLElement[] {
 
 interface DialogProps {
   title: string;
+  // --- slice: preview modes ---
+  /**
+   * Controls on the title row, after the title: the **Simple** / **Advanced**
+   * segment of a preview. Keep it to one group of small buttons; anything the
+   * player fills in belongs to the content below.
+   */
+  titleActions?: ReactNode;
   /** One or two sentences saying what the choice means. */
   body?: string;
   /** Buttons of the footer, right aligned. Keep it to one or two. */
@@ -69,6 +76,7 @@ interface DialogProps {
  */
 export function Dialog({
   title,
+  titleActions,
   body,
   actions,
   onClose,
@@ -180,9 +188,12 @@ export function Dialog({
           wide === "preview" ? "max-w-[1600px] max-h-[calc(100dvh-48px)] overflow-y-auto" : wide ? "max-w-[720px]" : "max-w-[480px]",
         )}
       >
-        <h2 className={cn("text-display-md", danger ? "text-fg-danger" : "text-fg")}>
-          {title}
-        </h2>
+        <div className="flex items-start gap-16">
+          <h2 className={cn("flex-1 min-w-0 text-display-md", danger ? "text-fg-danger" : "text-fg")}>
+            {title}
+          </h2>
+          {titleActions ? <div className="flex items-center gap-8 shrink-0">{titleActions}</div> : null}
+        </div>
         {body ? <p className="text-body-sm text-fg-secondary pt-4">{body}</p> : null}
         {children}
         <div className="flex items-center justify-end gap-8 pt-24">{actions}</div>

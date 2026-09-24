@@ -88,6 +88,32 @@ export function searchScope(scope: Scope | null, query: string): number | null {
   return scope.category.id;
 }
 
+// --- slice: bundles ---
+/**
+ * Pick mode, for the bundle editor.
+ *
+ * The button of a card and of the record hands the file id back instead of
+ * installing the file into a client, and the **Installed** badge marks the
+ * files already picked. The download bar still works: the draft command
+ * reports through the same `jkhub:download-progress` event.
+ */
+export interface JkhubPick {
+  /** What the button says in place of **Install**. */
+  label: string;
+  /**
+   * What it says in place of **Reinstall**, on a file already picked. A
+   * second press downloads the archive again and puts the same file at the
+   * same path, so the label says the press is a repeat, as **Reinstall**
+   * does on the Library screen.
+   */
+  pickedLabel: string;
+  /** Files already picked, for the badge. */
+  pickedIds: ReadonlySet<number>;
+  /** True while a pick is being copied: the buttons wait. */
+  busy: boolean;
+  onPick: (fileId: number) => void;
+}
+
 interface JkhubBrowserProps {
   /** Client Install writes into. Null while none is selected. */
   clientId: string | null;
@@ -111,6 +137,9 @@ interface JkhubBrowserProps {
    * can see and edit it.
    */
   onSearch: (query: string) => void;
+  // --- slice: bundles ---
+  /** Given by the bundle editor: a click adds the file to a draft. */
+  pick?: JkhubPick;
 }
 
 /**
@@ -136,6 +165,7 @@ export function JkhubBrowser({
   installed,
   search: typed,
   onSearch,
+  pick,
 }: JkhubBrowserProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
@@ -288,12 +318,22 @@ export function JkhubBrowser({
   };
 
   const installedIds = useMemo(() => {
+    // --- slice: bundles --- in pick mode the badge marks what the draft holds.
+    if (pick) return pick.pickedIds;
     const ids = new Set<number>();
     for (const item of installed) {
       if (item.provenance) ids.add(item.provenance.fileId);
     }
     return ids;
-  }, [installed]);
+  }, [installed, pick]);
+  // --- slice: bundles --- what the buttons wait on: the pick being copied
+  // into the draft, or the install into the client.
+  const busy = pick ? pick.busy : install.isPending;
+  // What the button of a card or of the record says in pick mode, by
+  // whether the draft holds the file already; `undefined` leaves the card
+  // its own **Install** and **Reinstall**.
+  const pickLabel = (id: number) =>
+    pick ? (installedIds.has(id) ? pick.pickedLabel : pick.label) : undefined;
 
   // A crawl of the other game must not put a progress line on this one.
   const building = status.data?.building === true;
@@ -317,6 +357,12 @@ export function JkhubBrowser({
   // then took away again in the next commit — one install, two popups and a
   // flicker between them.
   const runInstall = (id: number, replace: boolean) => {
+    // --- slice: bundles --- the editor takes the id and does the rest.
+    if (pick) {
+      setFailure(null);
+      pick.onPick(id);
+      return;
+    }
     if (!clientId) {
       setFailure(t("install.pickClient"));
       return;
@@ -606,7 +652,8 @@ export function JkhubBrowser({
                     installed={installedIds.has(card.id)}
                     openOnly={openOnly.has(card.id)}
                     progress={progress.get(card.id) ?? null}
-                    busy={install.isPending}
+                    busy={busy}
+                    installLabel={pickLabel(card.id)}
                     onOpen={() => {
                       setResult(null);
                       setOpenFile(card.id);
@@ -643,7 +690,8 @@ export function JkhubBrowser({
           error={details.error ? errorText(details.error) : null}
           clientName={clientName}
           installed={installedIds.has(openFile)}
-          busy={install.isPending}
+          busy={busy}
+          installLabel={pickLabel(openFile)}
           progress={progress.get(openFile) ?? null}
           result={result?.fileId === openFile ? result : null}
           onClose={() => {

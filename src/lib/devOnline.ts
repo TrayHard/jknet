@@ -23,7 +23,18 @@
  * Start the mock first: `node scripts/mock-online.mjs`.
  */
 
-import type { FriendsView, Invite, Presence, RequestSent } from "./ipc";
+import type {
+  BundleDetails,
+  BundleDetailsWithLocal,
+  BundleList,
+  BundleQuery,
+  BundleVersion,
+  FriendsView,
+  Listing,
+  Invite,
+  Presence,
+  RequestSent,
+} from "./ipc";
 
 /**
  * Where the stand-in listens.
@@ -47,7 +58,12 @@ let issued: Promise<string> | null = null;
 function token(): Promise<string> {
   issued ??= fetch(`${ONLINE}/v1/dev/token`, { method: "POST" })
     .then((response) => response.json() as Promise<{ token: string }>)
-    .then((answer) => answer.token)
+    .then((answer) => {
+      if (typeof answer.token !== "string" || answer.token === "") {
+        throw new Error("the service has no dev token endpoint");
+      }
+      return answer.token;
+    })
     .catch((e: unknown) => {
       // A failed fetch must not be remembered, or every later call would
       // reject with the same stale error after the mock is started.
@@ -72,15 +88,29 @@ const PRESENCE: Presence = {
   since: new Date().toISOString(),
 };
 
+/**
+ * A public read goes out without a token when none can be had: the catalogue
+ * of a real service answers a guest, and only the mock hands out dev tokens.
+ */
+async function bearer(auth: "required" | "optional"): Promise<Record<string, string>> {
+  try {
+    return { authorization: `Bearer ${await token()}` };
+  } catch (e) {
+    if (auth === "required") throw e;
+    return {};
+  }
+}
+
 async function call<T>(
   method: string,
   path: string,
   body?: unknown,
+  auth: "required" | "optional" = "required",
 ): Promise<T> {
   const response = await fetch(`${ONLINE}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${await token()}`,
+      ...(await bearer(auth)),
       ...(body === undefined ? {} : { "content-type": "application/json" }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -162,6 +192,138 @@ export async function devFriends<T>(
     default:
       // `join_friend` lands here, and so does anything added later without a
       // stand-in. Starting a game is the one thing a browser cannot fake.
+      throw new Error(`${command} needs the launcher; a browser cannot run it`);
+  }
+}
+
+// --- slice: bundles ---
+
+/** The commands of the draft editor: they read and write the data folder of the launcher. */
+const DRAFT_COMMANDS = new Set([
+  "list_bundle_drafts",
+  "create_bundle_draft",
+  "create_bundle_draft_from_bundle",
+  "get_bundle_draft",
+  "update_bundle_draft",
+  "delete_bundle_draft",
+  "draft_add_component",
+  "draft_update_component",
+  "draft_remove_component",
+  "draft_add_files_from_disk",
+  "draft_add_file_from_jkhub",
+  "draft_add_files_from_client",
+  "draft_remove_file",
+  "draft_set_configs",
+  "draft_engine_files",
+  "draft_replace_engine_file",
+  "draft_add_engine_files",
+  "draft_exclude_engine_file",
+  "draft_restore_engine_file",
+  "validate_bundle_draft",
+  "install_bundle_draft",
+  "publish_bundle_draft",
+  "draft_add_image",
+  "draft_remove_image",
+  "draft_image_path",
+  "draft_file_listing",
+  "draft_file_text",
+  "preview_draft_file",
+  // A preview of a catalogue file needs the core too: it fetches the
+  // archive into the cache and opens a preview session on it.
+  "preview_bundle_file",
+]);
+
+/** The shape of a listing file in the store: what the core writes when a pk3 is added. */
+interface ListingFile {
+  schema: number;
+  entries: { path: string; size: number }[];
+}
+
+/** One file of the store, as text. The store is public: no token goes with the request. */
+async function blobText(sha256: string): Promise<string> {
+  const response = await fetch(`${ONLINE}/v1/blobs/${encodeURIComponent(sha256)}`);
+  if (!response.ok) throw new Error(`the mock service answered ${response.status} for the file ${sha256}`);
+  return response.text();
+}
+
+/**
+ * Runs one bundles command against the mock service.
+ *
+ * Three commands read the catalogue and two read a file of the store, and
+ * those five have a stand-in: the routes are public, so the tab has cards to
+ * draw in a browser and the **Contents** dialog has a listing. Everything
+ * else — the drafts, installing, publishing, liking, reviewing, previewing —
+ * needs the disk or the token of the launcher, and refuses the way
+ * `join_friend` does.
+ */
+export async function devBundles<T>(
+  command: string,
+  args: Record<string, unknown> = {},
+): Promise<T> {
+  if (DRAFT_COMMANDS.has(command)) {
+    // A draft is a folder in the data directory of the launcher, and the
+    // editor copies files into it: nothing of that exists in a browser.
+    throw new Error(
+      `${command} needs the launcher: bundle drafts live in its data folder, which a browser cannot read or write`,
+    );
+  }
+  switch (command) {
+    case "list_bundles": {
+      const query = (args.query ?? {}) as Partial<BundleQuery>;
+      const search = new URLSearchParams();
+      search.set("game", String(query.game ?? "ja"));
+      search.set("sort", String(query.sort ?? "popular"));
+      if (query.q) search.set("q", query.q);
+      if (query.engineId) search.set("engine", query.engineId);
+      if (query.tag) search.set("tag", query.tag);
+      search.set("limit", String(query.limit ?? 50));
+      search.set("offset", String(query.offset ?? 0));
+      return (await call<BundleList>("GET", `/v1/bundles?${search.toString()}`, undefined, "optional")) as T;
+    }
+    case "get_bundle": {
+      const details = await call<BundleDetails>(
+        "GET",
+        `/v1/bundles/${encodeURIComponent(String(args.bundleId ?? ""))}`,
+        undefined,
+        "optional",
+      );
+      // The `local` half is the core's: which clients of this machine came
+      // out of the bundle, and whether the engine of each component is in
+      // the registry. A browser has no clients, and every engine of the mock
+      // is assumed known: a component missing from the map reads as known.
+      const answer: BundleDetailsWithLocal = {
+        ...details,
+        local: { installedClients: [], engineKnown: {} },
+      };
+      return answer as T;
+    }
+    case "get_bundle_version":
+      return (await call<BundleVersion>(
+        "GET",
+        `/v1/bundles/${encodeURIComponent(String(args.bundleId ?? ""))}/versions/${encodeURIComponent(String(args.versionId ?? ""))}`,
+        undefined,
+        "optional",
+      )) as T;
+    case "bundle_file_listing": {
+      // The listing of a pk3 is a small JSON file of the store, and the
+      // store is public: the same read the core does, without its cache.
+      const parsed = JSON.parse(await blobText(String(args.sha256 ?? ""))) as ListingFile;
+      const entries = Array.isArray(parsed.entries) ? parsed.entries : [];
+      const answer: Listing = {
+        entries,
+        total: entries.length,
+        bytes: entries.reduce((sum, entry) => sum + entry.size, 0),
+      };
+      return answer as T;
+    }
+    case "bundle_file_text": {
+      // The core refuses an archive or an executable by the path the
+      // manifest gives it, before it reads a byte; the stand-in does the same.
+      const path = String(args.path ?? "");
+      if (/\.(?:pk3|dll|exe)$/i.test(path)) throw new Error(`${path} is not a text file`);
+      return (await blobText(String(args.sha256 ?? ""))) as T;
+    }
+    default:
       throw new Error(`${command} needs the launcher; a browser cannot run it`);
   }
 }

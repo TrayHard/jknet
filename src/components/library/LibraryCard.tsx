@@ -11,6 +11,7 @@ import { isTauri } from "../../lib/runtime";
 // --- slice: selection context menu ---
 import { Badge, Toggle, useContextMenu, type MenuItem } from "../ui";
 import { categoryInfo } from "./categories";
+import { FeatureBadges } from "./FeatureBadges";
 
 interface LibraryCardProps {
   item: LibraryItem;
@@ -141,6 +142,8 @@ export function LibraryCard({
             {item.mapNames.map((name) => <li key={name} className="break-all">{name}</li>)}
           </ul>
         ) : null}
+        {/* --- slice: pk3 contents --- what else the archive holds: level shots, a splash, strings of a language. */}
+        <FeatureBadges features={item.features} />
         <div className="flex items-center gap-8">
           {/* The row wraps instead of squeezing: a size that breaks across
               two lines is unreadable, a badge on the next line is not. */}

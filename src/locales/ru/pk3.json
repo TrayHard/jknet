@@ -1,0 +1,126 @@
+{
+  "action": {
+    "edit": "Edit {{file}}",
+    "editHint": "Open in the pk3 editor",
+    "needsLauncher": "Editing an archive needs the launcher"
+  },
+  "dialog": {
+    "title": "Edit {{file}}",
+    "opening": "Opening the archive…",
+    "readOnly": "Read only",
+    "readOnlyText": "This archive can be read here but not changed.",
+    "unsaved": "Unsaved changes",
+    "saved": "Saved: {{size}}.",
+    "closeTitle": "Discard the changes?",
+    "closeBody": "The archive has changes that are not saved. Closing the editor throws them away.",
+    "closeConfirm": "Discard and close",
+    "discardTitle": "Discard the changes?",
+    "discardBody": "Every change since the last save goes back to what the archive holds.",
+    "discardConfirm": "Discard changes",
+    "changes_one": "{{count}} change",
+    "changes_few": "{{count}} changes",
+    "changes_many": "{{count}} changes",
+    "changes_other": "{{count}} changes",
+    "entries_one": "{{count}} entry",
+    "entries_few": "{{count}} entries",
+    "entries_many": "{{count}} entries",
+    "entries_other": "{{count}} entries",
+    "extracted_one": "Extracted {{count}} file into {{folder}}.",
+    "extracted_few": "Extracted {{count}} files into {{folder}}.",
+    "extracted_many": "Extracted {{count}} files into {{folder}}.",
+    "extracted_other": "Extracted {{count}} files into {{folder}}."
+  },
+  "toolbar": {
+    "addFiles": "Add files…",
+    "addFilesTitle": "Add files to {{folder}}",
+    "addFilesRootTitle": "Add files to the root of the archive",
+    "newFolder": "New folder",
+    "extract": "Extract…",
+    "extractAllHint": "Extract the whole archive into a folder on the disk",
+    "extractOneHint": "Extract {{name}} into a folder on the disk",
+    "extractTitle": "Choose the folder to extract into",
+    "discard": "Discard",
+    "collapseAll": "Collapse all",
+    "expandAll": "Expand all",
+    "search": "Search by path"
+  },
+  "tree": {
+    "label": "Entries of the archive",
+    "actions": "Entry actions",
+    "expand": "Open the folder {{folder}}",
+    "collapse": "Close the folder {{folder}}",
+    "empty": "The archive holds no files.",
+    "noMatches": "No path contains that.",
+    "moreMatches": "The first {{shown}} of {{count}} matches are listed. Narrow the search to see the rest.",
+    "emptyFolder": "empty",
+    "state": {
+      "modified": "modified",
+      "added": "added",
+      "renamed": "renamed",
+      "removed": "removed",
+      "pending": "not applied"
+    },
+    "renamedFrom": "Was {{path}}",
+    "matches_one": "{{count}} match",
+    "matches_few": "{{count}} matches",
+    "matches_many": "{{count}} matches",
+    "matches_other": "{{count}} matches",
+    "showMore_one": "Show {{count}} more file",
+    "showMore_few": "Show {{count}} more files",
+    "showMore_many": "Show {{count}} more files",
+    "showMore_other": "Show {{count}} more files",
+    "folderCount_one": "{{count}} file",
+    "folderCount_few": "{{count}} files",
+    "folderCount_many": "{{count}} files",
+    "folderCount_other": "{{count}} files"
+  },
+  "menu": {
+    "rename": "Rename…",
+    "extract": "Extract…"
+  },
+  "rename": {
+    "title": "Rename {{name}}",
+    "body": "The path inside the archive, with forward slashes. A folder moves with everything under it.",
+    "label": "New path",
+    "folderLabel": "New folder path",
+    "invalid": "The path has to be relative, without a leading slash, without “..”, and at most 260 characters.",
+    "unchanged": "The path is the same as before."
+  },
+  "newFolder": {
+    "title": "New folder",
+    "body": "The folder appears in the tree at once and is written into the archive when a file is added to it: an archive holds files, not empty folders.",
+    "label": "Folder name",
+    "in": "Inside {{folder}}",
+    "inRoot": "At the root of the archive",
+    "invalid": "A folder name cannot be empty, contain a slash or “..”, or be longer than 260 characters.",
+    "exists": "A folder with this name is already there."
+  },
+  "entry": {
+    "pick": "Pick an entry or a folder to see it here.",
+    "kind": {
+      "image": "Picture",
+      "text": "Text file",
+      "model": "Model",
+      "sound": "Sound",
+      "map": "Map",
+      "other": "File"
+    },
+    "removed": "This entry is marked for removal. Discard the changes to bring it back.",
+    "editor": "Text of {{name}}",
+    "pendingText": "The text differs from the archive. Apply writes it into the session; Save writes the archive.",
+    "truncated": "Only the beginning of the file is shown: it is too large to edit here. Replace it with a file from the disk instead.",
+    "replace": "Replace…",
+    "replaceTitle": "Pick the file that replaces {{name}}",
+    "replaceImageFilter": "Pictures",
+    "replaceAnyFilter": "All files",
+    "replaceImageHint": "The picture is converted to the format of the entry, so the path the game looks up stays the same.",
+    "replaceHint": "A file from the disk takes the place of this entry.",
+    "imageAlt": "Picture {{name}}",
+    "imageFailed": "The picture could not be decoded.",
+    "folder": {
+      "root": "Archive root",
+      "pending": "Empty folder. It is written into the archive when a file is added to it.",
+      "addHere": "Add files here…"
+    }
+  }
+}

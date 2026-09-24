@@ -23,13 +23,13 @@
     "online": "Online",
     "offline": "Offline",
     "lastSeenJustNow": "Az imént volt aktív",
+    "lastSeenOn": "Utoljára ekkor volt aktív: {{date}}",
     "lastSeenMinutes_one": "{{count}} perce volt aktív",
     "lastSeenMinutes_other": "{{count}} perce volt aktív",
     "lastSeenHours_one": "{{count}} órája volt aktív",
     "lastSeenHours_other": "{{count}} órája volt aktív",
     "lastSeenDays_one": "{{count}} napja volt aktív",
-    "lastSeenDays_other": "{{count}} napja volt aktív",
-    "lastSeenOn": "Utoljára ekkor volt aktív: {{date}}"
+    "lastSeenDays_other": "{{count}} napja volt aktív"
   },
   "empty": {
     "offTitle": "A barátok még nincsenek bekapcsolva",

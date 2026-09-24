@@ -1,6 +1,7 @@
 {
   "actions": {
     "add": "Додати",
+    "apply": "Apply",
     "back": "Назад",
     "cancel": "Скасувати",
     "close": "Закрити",

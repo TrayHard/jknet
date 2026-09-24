@@ -115,7 +115,74 @@ impl DataPaths {
     pub fn client_basepath_dir(&self, slug: &str) -> PathBuf {
         self.client_dir(slug).join(CLIENT_BASEPATH_DIR)
     }
+
+    // --- slice: bundles ---
+    /// `bundles\drafts\`: one folder per draft of a bundle, see
+    /// [`crate::bundles::draft`].
+    pub fn bundle_drafts_dir(&self) -> PathBuf {
+        self.root.join(BUNDLES_DIR).join(BUNDLE_DRAFTS_DIR)
+    }
+
+    /// `bundles\drafts\<draftId>\`: the `draft.json` of one draft and its
+    /// `files\` folder.
+    pub fn bundle_draft_dir(&self, draft_id: &str) -> PathBuf {
+        self.bundle_drafts_dir().join(draft_id)
+    }
+
+    /// `bundles\drafts\<draftId>\files\<scope>\<root>\`: where the files of
+    /// one component (`scope` is its id) or of `shared` lie, under the root
+    /// they land in at install time, `engine` or `home`.
+    pub fn bundle_draft_files_dir(&self, draft_id: &str, scope: &str, root: &str) -> PathBuf {
+        self.bundle_draft_dir(draft_id)
+            .join(BUNDLE_DRAFT_FILES_DIR)
+            .join(scope)
+            .join(root)
+    }
+
+    /// `bundles\drafts\<draftId>\images\`: the pictures of the description
+    /// of one draft, one file per hash, see [`crate::bundles::images`].
+    pub fn bundle_draft_images_dir(&self, draft_id: &str) -> PathBuf {
+        self.bundle_draft_dir(draft_id).join(BUNDLE_DRAFT_IMAGES_DIR)
+    }
+
+    /// `bundles\drafts\<draftId>\listings\`: the listings of the pk3 files
+    /// of one draft, one file per pk3 hash, see [`crate::bundles::listing`].
+    pub fn bundle_draft_listings_dir(&self, draft_id: &str) -> PathBuf {
+        self.bundle_draft_dir(draft_id).join(BUNDLE_DRAFT_LISTINGS_DIR)
+    }
+
+    /// `cache\bundles\listings\`: the listings downloaded from the store of
+    /// the service, one file per listing hash.
+    pub fn bundle_listings_cache_dir(&self) -> PathBuf {
+        self.cache.join(BUNDLES_DIR).join(BUNDLE_DRAFT_LISTINGS_DIR)
+    }
+
+    /// `cache\bundles\preview\`: the files of the catalogue a preview opened,
+    /// one file per hash, kept for the next preview of the same file.
+    pub fn bundle_preview_cache_dir(&self) -> PathBuf {
+        self.cache.join(BUNDLES_DIR).join(BUNDLE_PREVIEW_CACHE_DIR)
+    }
 }
+
+// --- slice: bundles ---
+/// Name of the folder of everything about bundles inside the data root.
+pub const BUNDLES_DIR: &str = "bundles";
+
+/// Name of the folder of drafts inside [`BUNDLES_DIR`].
+pub const BUNDLE_DRAFTS_DIR: &str = "drafts";
+
+/// Name of the folder of files inside one draft.
+pub const BUNDLE_DRAFT_FILES_DIR: &str = "files";
+
+/// Name of the folder of the pictures of the description inside one draft.
+pub const BUNDLE_DRAFT_IMAGES_DIR: &str = "images";
+
+/// Name of the folder of pk3 listings inside one draft, and inside
+/// `cache\bundles\`.
+pub const BUNDLE_DRAFT_LISTINGS_DIR: &str = "listings";
+
+/// Name of the folder of previewed files inside `cache\bundles\`.
+pub const BUNDLE_PREVIEW_CACHE_DIR: &str = "preview";
 
 /// Name of the folder every file system root of a Quake 3 engine keeps its
 /// archives in: `<GameData>\base`, `engine\base`, `home\base`, `basepath\base`.

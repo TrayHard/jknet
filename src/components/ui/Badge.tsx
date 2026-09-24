@@ -30,6 +30,14 @@ interface BadgeProps {
    * this off.
    */
   centered?: boolean;
+  // --- slice: bundles ---
+  /**
+   * What hovering the badge says: the name behind a short label.
+   *
+   * For a badge that stands for a record the card has no room to name — the
+   * bundle a client came out of. A badge whose label says it all leaves it off.
+   */
+  title?: string;
   className?: string;
   children: ReactNode;
 }
@@ -47,11 +55,13 @@ export function Badge({
   tone = "neutral",
   icon,
   centered = false,
+  title,
   className,
   children,
 }: BadgeProps) {
   return (
     <span
+      title={title}
       className={cn(
         // --- slice: selection context menu ---
         // A badge is a mark on a row, not a word to copy out of it.

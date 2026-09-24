@@ -29,7 +29,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
-use crate::engines;
+use crate::bundles::BundlesState;
+use crate::engine_install::InstallState;
+use crate::engines::{self, Engine, LaunchMode};
 use crate::error::{AppError, Result};
 use crate::game::Game;
 use crate::paths::{self, DataPaths};
@@ -93,6 +95,106 @@ pub struct Client {
     /// launcher's own default.
     #[serde(default)]
     pub launch_args: String,
+
+    // --- slice: bundles ---
+    /// The modes this client starts in: `multiplayer`, and `single` when its
+    /// engine ships a single-player game and the client is meant to play it.
+    ///
+    /// A client made on the Clients screen gets every mode of its engine; a
+    /// client made out of a component of a bundle gets the modes of that
+    /// component. Empty on a record written before the field existed, which
+    /// reads as every mode of the engine: see [`Client::launch_modes`].
+    #[serde(default)]
+    pub modes: Vec<LaunchMode>,
+
+    /// The bundle, or the draft of one, this client came out of. `None` for
+    /// a client the player assembled by hand, and for every record written
+    /// before bundles existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundle: Option<ClientBundleLink>,
+}
+
+impl Client {
+    // --- slice: bundles ---
+    /// The modes the client may start in, read against its engine.
+    ///
+    /// The record wins when it names modes the engine has; a record that
+    /// names none, or only modes its engine cannot start, reads as every mode
+    /// of the engine, so a client written by an older build, or edited by
+    /// hand into nonsense, still has a **Play** button.
+    pub fn launch_modes(&self, engine: &Engine) -> Vec<LaunchMode> {
+        let own: Vec<LaunchMode> = engine
+            .modes()
+            .into_iter()
+            .filter(|mode| self.modes.contains(mode))
+            .collect();
+        if own.is_empty() {
+            engine.modes()
+        } else {
+            own
+        }
+    }
+}
+
+// --- slice: bundles ---
+/// What a client remembers about the bundle, or the draft, it came out of.
+///
+/// The bundle itself lives on JKNet Online and the draft in the data folder;
+/// this is the note that lets a card say **From bundle**, group the clients
+/// of one bundle, and lets the catalogue mark a bundle as installed. The
+/// names and the labels are copies for the badge, taken at the moment of the
+/// link: a bundle renamed on the service keeps its id, and the ids are what
+/// every comparison uses.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientBundleLink {
+    /// The bundle on the service. `None` for a client installed from a draft
+    /// that has not been published yet; filled in when the draft is.
+    #[serde(default)]
+    pub bundle_id: Option<String>,
+    #[serde(default)]
+    pub bundle_slug: String,
+    #[serde(default)]
+    pub bundle_name: String,
+    /// The draft the client was installed from with `install_bundle_draft`.
+    /// `None` for a client installed from the catalogue.
+    #[serde(default)]
+    pub draft_id: Option<String>,
+    /// The version of the bundle. `None` until a draft the client came from
+    /// is published.
+    #[serde(default)]
+    pub version_id: Option<String>,
+    #[serde(default)]
+    pub version_label: String,
+    /// The component of the bundle this client is. Empty on a link written
+    /// by the first edition, which knew one component per bundle.
+    #[serde(default)]
+    pub component_id: String,
+    #[serde(default)]
+    pub component_label: String,
+    /// `installed`: the client was created out of the bundle or its draft.
+    /// The only role since the second edition; `published` of the first is
+    /// read but never written.
+    pub role: String,
+    /// Whether the component laid files over `engine\` or took files out of
+    /// it. An engine update would undo that, so
+    /// [`crate::engines::install_engine`] refuses one.
+    #[serde(default)]
+    pub engine_overlay: bool,
+    /// When the link was written, RFC 3339.
+    #[serde(default)]
+    pub linked_at: String,
+    /// `true` while an install of the bundle is running or stopped before
+    /// its last step: the link is written first, so a retry can tell the
+    /// client it is allowed to continue in, and cleared last. A record
+    /// written before the field existed reads as a finished link.
+    #[serde(default)]
+    pub pending: bool,
+}
+
+impl ClientBundleLink {
+    /// The client was created by installing the bundle or its draft.
+    pub const INSTALLED: &'static str = "installed";
 }
 
 /// Lists every client, sorted by name.
@@ -118,12 +220,54 @@ pub fn create_client(
     engine_id: String,
     game: Game,
 ) -> Result<Client> {
-    let name = validate_name(&name)?;
-    engines::require_for_game(&engine_id, game)?.require_host(crate::host_system::HostSystem::current())?;
+    let client = create_record(&state.paths()?, &name, &engine_id, game, None)?;
+    emit_changed(&app, &client.id);
+    Ok(client)
+}
 
-    let paths = state.paths()?;
+// --- slice: bundles ---
+/// The body of [`create_client`]: the folder layout and the record, without
+/// the event.
+///
+/// Split out for the bundle installer, which creates a client the same way
+/// and announces it once the install is through, and for the tests, which
+/// have no `AppHandle` to announce anything with.
+///
+/// `modes` is what the client may start in: `None` takes every mode of the
+/// engine, which is what the Clients screen makes; a component of a bundle
+/// hands its own list, which is cut down to the modes the engine has and
+/// refused when nothing is left.
+pub(crate) fn create_record(
+    paths: &DataPaths,
+    name: &str,
+    engine_id: &str,
+    game: Game,
+    modes: Option<&[LaunchMode]>,
+) -> Result<Client> {
+    let name = validate_name(name)?;
+    let engine = engines::require_for_game(engine_id, game)?;
+    engine.require_host(crate::host_system::HostSystem::current())?;
+    let modes = match modes {
+        None => engine.modes(),
+        Some(wanted) => {
+            let modes: Vec<LaunchMode> = engine
+                .modes()
+                .into_iter()
+                .filter(|mode| wanted.contains(mode))
+                .collect();
+            if modes.is_empty() {
+                return Err(AppError::InvalidInput(format!(
+                    "{} starts in none of the modes {:?}",
+                    engine.name,
+                    wanted.iter().map(|mode| mode.as_str()).collect::<Vec<_>>()
+                )));
+            }
+            modes
+        }
+    };
+
     paths.ensure()?;
-    let taken = read_all(&paths)?
+    let taken = read_all(paths)?
         .into_iter()
         .map(|client| client.id)
         .collect::<Vec<_>>();
@@ -139,7 +283,7 @@ pub fn create_client(
     let client = Client {
         id,
         name,
-        engine_id,
+        engine_id: engine_id.to_string(),
         game,
         engine_version: None,
         created_at: timestamp::now_rfc3339(),
@@ -147,15 +291,22 @@ pub fn create_client(
         engine_published_at: None,
         fs_game: None,
         launch_args: String::new(),
+        modes,
+        bundle: None,
     };
-    write_record(&paths, &client)?;
+    write_record(paths, &client)?;
     log::info!(
-        "created client {} on engine {} for {}",
+        "created client {} on engine {} for {} ({})",
         client.id,
         client.engine_id,
-        client.game.display_name()
+        client.game.display_name(),
+        client
+            .modes
+            .iter()
+            .map(|mode| mode.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     );
-    emit_changed(&app, &client.id);
     Ok(client)
 }
 
@@ -300,26 +451,20 @@ pub(crate) fn emit_changed(app: &AppHandle, client_id: &str) {
 ///
 /// The folder is removed, not moved to the recycle bin: an engine install is
 /// tens of megabytes of files the launcher can download again.
+///
+/// --- slice: bundles ---
+/// A client an engine install or a bundle operation is running for is
+/// refused with `AppError::Busy`: a folder deleted under a download would
+/// turn that download into an I/O error halfway through, not into a refusal.
 #[tauri::command]
 pub fn delete_client(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
+    installs: tauri::State<'_, InstallState>,
+    bundles: tauri::State<'_, BundlesState>,
     id: String,
 ) -> Result<()> {
-    let paths = state.paths()?;
-    let dir = paths.client_dir(&id);
-    {
-        // --- slice: client window ---
-        // Under the lock of [`edit_record`]: a save that started a moment ago
-        // finishes before the folder goes, and one that starts after it finds
-        // no record to read instead of writing the folder back into existence.
-        let _step = state.client_records().enter();
-        if !dir.is_dir() {
-            return Err(AppError::NotFound(format!("client {id}")));
-        }
-        remove_client_dir(&dir)?;
-    }
-    log::info!("deleted client {id}");
+    remove_client(state.client_records(), &installs, &bundles, &state.paths()?, &id)?;
     // --- slice: client window ---
     // A window editing a client that no longer exists has nothing to show and
     // every field in it would fail on save.
@@ -347,6 +492,37 @@ pub fn delete_client(
         // this, and neither went through `update_settings` to learn about it.
         crate::settings::emit_default_clients(&app, &settings);
     }
+    Ok(())
+}
+
+// --- slice: bundles ---
+/// The body of [`delete_client`] up to the point the folder is gone, with
+/// the two busy sets handed in so a test can hold a claim against it.
+///
+/// Both sets are claimed for the deletion rather than looked at: a claim is
+/// the one check that cannot be overtaken by an install that starts between
+/// the look and the removal. The claims go with the returned guard, that is,
+/// at the end of this function.
+pub(crate) fn remove_client(
+    lock: &StepLock,
+    installs: &InstallState,
+    bundles: &BundlesState,
+    paths: &DataPaths,
+    id: &str,
+) -> Result<()> {
+    let _engine = installs.claim(id)?;
+    let _bundle = bundles.claim(id, BundlesState::DELETE)?;
+    let dir = paths.client_dir(id);
+    // --- slice: client window ---
+    // Under the lock of [`edit_record`]: a save that started a moment ago
+    // finishes before the folder goes, and one that starts after it finds
+    // no record to read instead of writing the folder back into existence.
+    let _step = lock.enter();
+    if !dir.is_dir() {
+        return Err(AppError::NotFound(format!("client {id}")));
+    }
+    remove_client_dir(&dir)?;
+    log::info!("deleted client {id}");
     Ok(())
 }
 
@@ -487,7 +663,10 @@ fn validate_name(name: &str) -> Result<String> {
 /// `..` would send the engine, and the Library screen with it, outside the
 /// client. Letters, digits, `_`, `-` and `+` cover every mod folder in use,
 /// `+` because of names like `ja+`.
-fn validate_fs_game(value: &str) -> Result<Option<String>> {
+///
+/// `pub(crate)` for the bundle installer, which writes the `fsGame` of a
+/// manifest through [`edit_record`] and owes the field the same check.
+pub(crate) fn validate_fs_game(value: &str) -> Result<Option<String>> {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return Ok(None);
@@ -621,6 +800,153 @@ mod tests {
         assert!(json.contains("\"launchArgs\":\"+set r_mode 4\""), "{json}");
     }
 
+    // --- slice: bundles ---
+
+    #[test]
+    fn a_client_json_without_a_bundle_link_reads_as_a_hand_made_client() {
+        let older: Client = serde_json::from_str(
+            r#"{"id":"everyday","name":"Everyday","engineId":"openjk","game":"ja",
+                "engineVersion":"latest","createdAt":"2026-09-10T00:00:00Z"}"#,
+        )
+        .expect("an older record parses");
+        assert_eq!(older.bundle, None);
+        // And the field is not written back as `null`: a record of a client
+        // nobody linked stays the record it was.
+        let json = serde_json::to_string(&older).expect("it serializes");
+        assert!(!json.contains("\"bundle\""), "{json}");
+
+        let linked: Client = serde_json::from_str(
+            r#"{"id":"duel","name":"Duel","engineId":"taystjk","game":"ja",
+                "engineVersion":"v1.6.3","createdAt":"2026-09-10T00:00:00Z",
+                "bundle":{"bundleId":"01J","bundleSlug":"taystjka-voip","bundleName":"Taystjka VoIP",
+                          "versionId":"01K","versionLabel":"2026.1","role":"installed",
+                          "engineOverlay":true,"linkedAt":"2026-09-15T00:00:00Z"}}"#,
+        )
+        .expect("a linked record parses");
+        let link = linked.bundle.clone().expect("the link is read");
+        assert_eq!(link.bundle_id.as_deref(), Some("01J"));
+        assert_eq!(link.version_id.as_deref(), Some("01K"));
+        assert_eq!(link.role, ClientBundleLink::INSTALLED);
+        assert!(link.engine_overlay);
+        // A link written before `pending`, `draftId` and the component
+        // existed is a finished one of an unnamed component.
+        assert!(!link.pending);
+        assert_eq!(link.draft_id, None);
+        assert_eq!(link.component_id, "");
+        let json = serde_json::to_string(&linked).expect("it serializes");
+        assert!(json.contains("\"engineOverlay\":true"), "{json}");
+        assert!(json.contains("\"bundleSlug\":\"taystjka-voip\""), "{json}");
+        assert!(json.contains("\"pending\":false"), "{json}");
+        assert!(json.contains("\"componentId\":\"\""), "{json}");
+
+        let mut unfinished = linked.clone();
+        unfinished.bundle.as_mut().expect("the link").pending = true;
+        let json = serde_json::to_string(&unfinished).expect("it serializes");
+        let back: Client = serde_json::from_str(&json).expect("it reads back");
+        assert!(back.bundle.expect("the link").pending);
+
+        // A client installed from a draft that is not published: no bundle,
+        // no version, the draft and the component named.
+        let from_draft: Client = serde_json::from_str(
+            r#"{"id":"rujka-sp","name":"RUJKA · Single player","engineId":"openjk","game":"ja",
+                "engineVersion":"latest","createdAt":"2026-09-16T00:00:00Z","modes":["single"],
+                "bundle":{"bundleId":null,"bundleSlug":"","bundleName":"RUJKA","draftId":"d1",
+                          "versionId":null,"versionLabel":"3","componentId":"sp",
+                          "componentLabel":"Single player","role":"installed",
+                          "engineOverlay":false,"linkedAt":"2026-09-16T00:00:00Z","pending":false}}"#,
+        )
+        .expect("a draft-linked record parses");
+        let link = from_draft.bundle.expect("the link");
+        assert_eq!(link.bundle_id, None);
+        assert_eq!(link.draft_id.as_deref(), Some("d1"));
+        assert_eq!(link.component_id, "sp");
+        assert_eq!(from_draft.modes, vec![LaunchMode::Single]);
+    }
+
+    #[test]
+    fn the_modes_of_a_client_come_from_the_record_or_from_the_engine() {
+        let openjk = engines::require("openjk").expect("openjk");
+        let eternaljk = engines::require("eternaljk").expect("eternaljk");
+        // A record written before modes existed: every mode of the engine.
+        let older: Client = serde_json::from_str(
+            r#"{"id":"everyday","name":"Everyday","engineId":"openjk","game":"ja",
+                "engineVersion":"latest","createdAt":"2026-09-10T00:00:00Z"}"#,
+        )
+        .expect("an older record parses");
+        assert!(older.modes.is_empty());
+        assert_eq!(older.launch_modes(openjk), [LaunchMode::Multiplayer, LaunchMode::Single]);
+        assert_eq!(older.launch_modes(eternaljk), [LaunchMode::Multiplayer]);
+
+        // A component of a bundle that plays the single-player game alone.
+        let mut single = older.clone();
+        single.modes = vec![LaunchMode::Single];
+        assert_eq!(single.launch_modes(openjk), [LaunchMode::Single]);
+        // The same record on an engine without that mode reads as the engine.
+        assert_eq!(single.launch_modes(eternaljk), [LaunchMode::Multiplayer]);
+
+        // The Clients screen writes every mode of the engine into the record.
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        paths.ensure().expect("the data layout");
+        let made = create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None).expect("a client");
+        assert_eq!(made.modes, [LaunchMode::Multiplayer, LaunchMode::Single]);
+        let text = fs::read_to_string(paths.client_dir(&made.id).join("client.json")).unwrap();
+        assert!(text.contains("\"modes\": [
+    \"multiplayer\",
+    \"single\"
+  ]"), "{text}");
+        // A component hands its own list, cut down to what the engine has.
+        let sp = create_record(&paths, "SP", "openjk", Game::JediAcademy, Some(&[LaunchMode::Single]))
+            .expect("a single-player client");
+        assert_eq!(sp.modes, [LaunchMode::Single]);
+        let error = create_record(&paths, "Odd", "eternaljk", Game::JediAcademy, Some(&[LaunchMode::Single]))
+            .expect_err("EternalJK has no single-player game");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        assert!(!paths.client_dir("odd").exists(), "nothing was made for a refused client");
+    }
+
+    #[test]
+    fn a_client_under_an_install_or_a_bundle_operation_is_not_deleted() {
+        let temp = tempfile::tempdir().expect("a data root");
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        paths.ensure().expect("the data layout");
+        let client = create_record(&paths, "Voip", "openjk", Game::JediAcademy, None).expect("a client");
+        let dir = paths.client_dir(&client.id);
+        let lock = StepLock::default();
+        let installs = InstallState::default();
+        let bundles = BundlesState::default();
+
+        // An engine install holds the client.
+        let engine = installs.claim(&client.id).expect("the install claims it");
+        let error = remove_client(&lock, &installs, &bundles, &paths, &client.id)
+            .expect_err("refused while the engine installs");
+        assert!(matches!(error, AppError::Busy(_)), "{error}");
+        assert!(dir.is_dir(), "the folder survives the refusal");
+        drop(engine);
+
+        // A bundle install holds the client.
+        let bundle = bundles
+            .claim(&client.id, BundlesState::INSTALL)
+            .expect("the bundle install claims it");
+        let error = remove_client(&lock, &installs, &bundles, &paths, &client.id)
+            .expect_err("refused while the bundle installs");
+        assert!(matches!(error, AppError::Busy(_)), "{error}");
+        assert!(error.to_string().contains("bundle"), "{error}");
+        assert!(dir.is_dir());
+        drop(bundle);
+
+        // Nobody holds it: the folder goes, and both sets are free again.
+        remove_client(&lock, &installs, &bundles, &paths, &client.id).expect("deleted");
+        assert!(!dir.exists());
+        installs.claim(&client.id).expect("the deletion released its claim");
+        bundles
+            .claim(&client.id, BundlesState::INSTALL)
+            .expect("the deletion released its claim");
+        let error = remove_client(&lock, &installs, &bundles, &paths, "ghost")
+            .expect_err("an unknown client");
+        assert!(matches!(error, AppError::NotFound(_)), "{error}");
+    }
+
     #[test]
     fn a_game_written_into_the_record_reads_back() {
         let record: Client = serde_json::from_str(
@@ -740,6 +1066,8 @@ mod tests {
             engine_published_at: None,
             fs_game: None,
             launch_args: String::new(),
+            modes: Vec::new(),
+            bundle: None,
         };
         write_record(&paths, &client).expect("the record");
 
@@ -830,6 +1158,8 @@ mod tests {
             engine_published_at: None,
             fs_game: None,
             launch_args: String::new(),
+            modes: Vec::new(),
+            bundle: None,
         };
         write_record(&paths, &client).expect("the record");
 

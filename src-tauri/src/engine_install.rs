@@ -364,7 +364,10 @@ pub struct InstallState {
 
 impl InstallState {
     /// Claims a client for the caller, or refuses because someone holds it.
-    fn claim<'a>(&'a self, client_id: &str) -> Result<InstallGuard<'a>> {
+    ///
+    /// `pub(crate)` for [`crate::clients::delete_client`], which claims a
+    /// client for its deletion so no install can start under it.
+    pub(crate) fn claim<'a>(&'a self, client_id: &str) -> Result<InstallGuard<'a>> {
         let mut busy = self
             .busy
             .lock()
@@ -383,7 +386,7 @@ impl InstallState {
 
 /// Releases the claim when the install ends, however it ends.
 #[derive(Debug)]
-struct InstallGuard<'a> {
+pub(crate) struct InstallGuard<'a> {
     state: &'a InstallState,
     client_id: String,
 }
@@ -548,6 +551,52 @@ async fn download(
     engine: &Engine,
     release: &EngineRelease,
 ) -> Result<PathBuf> {
+    fetch_archive(paths, engine, release, |progress| {
+        let message = match progress {
+            ArchiveProgress::Reused => format!("{} is already downloaded", release.asset_name),
+            ArchiveProgress::Downloading { .. } => format!("Downloading {}", release.asset_name),
+        };
+        let (downloaded, total) = match progress {
+            ArchiveProgress::Reused => (release.asset_size, release.asset_size),
+            ArchiveProgress::Downloading { downloaded, total } => (downloaded, total),
+        };
+        emit(
+            app,
+            InstallProgress {
+                client_id: client_id.to_string(),
+                phase: "download",
+                downloaded,
+                total,
+                message,
+            },
+        );
+    })
+    .await
+}
+
+// --- slice: bundles ---
+/// One step of [`fetch_archive`], for the caller that turns it into an event.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ArchiveProgress {
+    /// The archive was already in the cache with the right size.
+    Reused,
+    /// Bytes written so far and the size the server announced, zero when it
+    /// sent none.
+    Downloading { downloaded: u64, total: u64 },
+}
+
+/// The download half of [`download`], with the progress handed to a closure
+/// rather than to the event of one client.
+///
+/// The publish plan of a bundle reads the release archive too, to tell the
+/// files of the build from the files laid over it, and it must not put a
+/// download bar on the card of a client whose engine is already installed.
+pub(crate) async fn fetch_archive(
+    paths: &DataPaths,
+    engine: &Engine,
+    release: &EngineRelease,
+    mut report: impl FnMut(ArchiveProgress),
+) -> Result<PathBuf> {
     engine.require_host(HostSystem::current())?;
     if engines::match_asset(engine.rules_for_host(), [release.asset_name.as_str()]).is_none() {
         return Err(AppError::UnsupportedEngineSystem { system: HostSystem::current().label() });
@@ -559,16 +608,7 @@ async fn download(
     if let Ok(metadata) = fs::metadata(&file) {
         if metadata.len() == release.asset_size && release.asset_size > 0 {
             log::info!("reusing {}", file.display());
-            emit(
-                app,
-                InstallProgress {
-                    client_id: client_id.to_string(),
-                    phase: "download",
-                    downloaded: release.asset_size,
-                    total: release.asset_size,
-                    message: format!("{} is already downloaded", release.asset_name),
-                },
-            );
+            report(ArchiveProgress::Reused);
             return Ok(file);
         }
     }
@@ -604,16 +644,10 @@ async fn download(
     let mut downloaded: u64 = 0;
     let mut last_emit = std::time::Instant::now();
 
-    emit(
-        app,
-        InstallProgress {
-            client_id: client_id.to_string(),
-            phase: "download",
-            downloaded: 0,
-            total,
-            message: format!("Downloading {}", release.asset_name),
-        },
-    );
+    report(ArchiveProgress::Downloading {
+        downloaded: 0,
+        total,
+    });
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
@@ -623,16 +657,7 @@ async fn download(
         downloaded += chunk.len() as u64;
         if last_emit.elapsed().as_millis() >= PROGRESS_INTERVAL_MS {
             last_emit = std::time::Instant::now();
-            emit(
-                app,
-                InstallProgress {
-                    client_id: client_id.to_string(),
-                    phase: "download",
-                    downloaded,
-                    total,
-                    message: format!("Downloading {}", release.asset_name),
-                },
-            );
+            report(ArchiveProgress::Downloading { downloaded, total });
         }
     }
     // `flush` alone empties the buffer of the writer; `sync_all` is what makes
@@ -886,6 +911,73 @@ pub fn extract_archive(archive: &Path, target: &Path) -> Result<()> {
     Ok(())
 }
 
+// --- slice: bundles ---
+/// One file of a release archive, as [`archive_entries`] lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ArchiveEntry {
+    /// The path the file unpacks to, forward slashes, in the case the
+    /// archive spells it.
+    pub path: String,
+    pub size: u64,
+    /// Lowercase hex.
+    pub sha256: String,
+}
+
+/// Every file of a release archive with its size and SHA-256, keyed by the
+/// path it unpacks to: forward slashes, the single top folder stripped the
+/// way [`extract_archive`] strips it, and lowercase, because the disk the
+/// files land on does not tell `Base` from `base` either. The spelling of
+/// the archive rides along for the list of engine files the editor of a
+/// bundle shows.
+///
+/// What a draft of a bundle compares `engine\` against: a file whose hash
+/// is here belongs to the release and stays out of the bundle, and the rest
+/// is what the author laid over it.
+pub(crate) fn archive_entries(archive: &Path) -> Result<HashMap<String, ArchiveEntry>> {
+    use sha2::{Digest, Sha256};
+
+    let reader =
+        File::open(archive).map_err(|e| AppError::io_path("cannot open", archive, e))?;
+    let mut zip = zip::ZipArchive::new(reader)?;
+    let names: Vec<String> = zip.file_names().map(str::to_string).collect();
+    let root = single_root(&names);
+
+    let mut entries = HashMap::with_capacity(names.len());
+    let mut buffer = vec![0u8; 64 * 1024];
+    for index in 0..zip.len() {
+        let mut entry = zip.by_index(index)?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry.name().to_string();
+        let Some(relative) = strip_root(&name, root.as_deref()) else {
+            continue;
+        };
+        let path = relative.replace('\\', "/");
+        let key = path.to_ascii_lowercase();
+        let mut hasher = Sha256::new();
+        let mut size = 0u64;
+        loop {
+            let read = std::io::Read::read(&mut entry, &mut buffer)
+                .map_err(|e| AppError::io_path("cannot read", archive, e))?;
+            if read == 0 {
+                break;
+            }
+            size += read as u64;
+            hasher.update(&buffer[..read]);
+        }
+        entries.insert(
+            key,
+            ArchiveEntry {
+                path,
+                size,
+                sha256: format!("{:x}", hasher.finalize()),
+            },
+        );
+    }
+    Ok(entries)
+}
+
 /// Name of the single top-level folder of an archive, when there is one.
 ///
 /// Some projects wrap everything in `<Name>/`, others put the executable at
@@ -934,7 +1026,11 @@ fn strip_root<'a>(name: &'a str, root: Option<&str>) -> Option<&'a str> {
 /// Rejected: absolute paths, Windows drive and share prefixes, and any `..`.
 /// This is the zip-slip guard; an archive that trips it is treated as broken
 /// rather than silently skipped, because a good build never contains one.
-fn safe_entry_path(root: &Path, entry: &str) -> Result<PathBuf> {
+///
+/// --- slice: bundles ---
+/// `pub(crate)` because a bundle manifest is data from the internet too, and
+/// its file paths land on disk through this same function.
+pub(crate) fn safe_entry_path(root: &Path, entry: &str) -> Result<PathBuf> {
     let normalized = entry.replace('\\', "/");
     let relative = Path::new(&normalized);
     let mut path = root.to_path_buf();
@@ -975,6 +1071,55 @@ fn sanitize_file_stem(tag: &str) -> String {
         "release".to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+// --- slice: bundles ---
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    /// Puts one release of `engine_id` into both halves of the release cache
+    /// and files a copy of `archive` under the name [`fetch_archive`] looks
+    /// for, so a test that needs the release reaches it without GitHub.
+    ///
+    /// The memory half is shared by every test of the process, so two tests
+    /// that prime the same engine and tag must prime it with the same
+    /// archive: the second one would otherwise look for a file of the size
+    /// the first one announced.
+    pub(crate) fn prime_release_cache(paths: &DataPaths, engine_id: &str, tag: &str, archive: &Path) -> PathBuf {
+        let engine = engines::require(engine_id).expect("an engine of the registry");
+        let host = HostSystem::current();
+        let asset_name = match engine_id {
+            "openjk" => "OpenJK-windows-x86.zip",
+            "eternaljk" => "eternaljk-win32-portable.zip",
+            "taystjk" => "TaystJK-windows-x86.zip",
+            "jamme" => "jamme-windows-x86.zip",
+            "jk2mv" => "jk2mv-v1.4.1-win32-x86-portable.zip",
+            other => panic!("no asset name for {other}"),
+        };
+        let release = EngineRelease {
+            tag: tag.to_string(),
+            name: tag.to_string(),
+            published_at: "2026-09-01T00:00:00Z".to_string(),
+            prerelease: false,
+            asset_name: asset_name.to_string(),
+            asset_size: fs::metadata(archive).expect("the archive").len(),
+            asset_url: format!("https://example.invalid/{asset_name}"),
+        };
+        let cached = CachedReleases {
+            fetched_at: timestamp::now_rfc3339(),
+            fetched_at_unix: timestamp::now_unix(),
+            releases: vec![release.clone()],
+        };
+        let key = host.cache_key(engine.id);
+        write_disk(&release_cache_file(&paths.cache, &key), &cached);
+        write_memory(&key, cached);
+        let dir = paths.cache.join("downloads");
+        paths::create_dir(&dir).expect("the downloads folder");
+        let filed = download_cache_file(&dir, engine, &release);
+        fs::copy(archive, &filed).expect("the archive is filed");
+        filed
     }
 }
 
@@ -1368,6 +1513,41 @@ mod tests {
             "unexpected error: {error}"
         );
         assert!(!temp.path().join("evil.exe").exists());
+    }
+
+    // --- slice: bundles ---
+
+    #[test]
+    fn the_hashes_of_an_archive_are_keyed_the_way_the_files_land() {
+        use sha2::{Digest, Sha256};
+
+        let temp = tempfile::tempdir().expect("temp dir");
+        let archive = temp.path().join("engine.zip");
+        write_zip(
+            &archive,
+            &[
+                ("TaystJK/taystjk.x86.exe", b"MZ" as &[u8]),
+                ("TaystJK/Base/cgamex86.dll", b"dll"),
+                ("TaystJK/base/", b""),
+            ],
+        );
+
+        let entries = archive_entries(&archive).expect("the archive reads");
+        assert_eq!(entries.len(), 2, "{entries:?}");
+        // The top folder is gone and the key is lowercase, which is how the
+        // walk of `engine\` spells the same file.
+        assert_eq!(
+            entries.get("taystjk.x86.exe").map(|entry| entry.sha256.as_str()),
+            Some(format!("{:x}", Sha256::digest(b"MZ")).as_str())
+        );
+        assert!(entries.contains_key("base/cgamex86.dll"));
+        assert!(!entries.contains_key("TaystJK/taystjk.x86.exe"));
+        // The listing keeps the spelling of the archive and the size, which
+        // is what the list of engine files of a draft shows.
+        let module = entries.get("base/cgamex86.dll").expect("keyed lowercase");
+        assert_eq!(module.path, "Base/cgamex86.dll");
+        assert_eq!(module.size, 3);
+        assert_eq!(module.sha256, format!("{:x}", Sha256::digest(b"dll")));
     }
 
     #[test]

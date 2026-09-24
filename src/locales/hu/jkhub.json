@@ -10,8 +10,6 @@
   "search": {
     "unavailable": "Search needs the JKHub catalog, which is not ready yet.",
     "loaded": "{{shown}} of {{total}} files shown. Narrow the search or change the order to see the rest.",
-    "results_one": "{{count}} result in {{game}}",
-    "results_other": "{{count}} results in {{game}}",
     "helpTitle": "Keresési súgó",
     "helpScope": "Ezek a lehetőségek a JKHub lapon, a kiválasztott játékban és kategóriában működnek.",
     "helpCombine": "A szavak és operátorok bármilyen sorrendben kombinálhatók. Minden feltételnek teljesülnie kell. Az ismételt dátumszűrők szűkítik az időszakot.",
@@ -38,7 +36,9 @@
         "example": "before:2026-01-01",
         "text": "E dátum előtt frissítve. A megadott nap nem tartozik bele (UTC)."
       }
-    }
+    },
+    "results_one": "{{count}} result in {{game}}",
+    "results_other": "{{count}} results in {{game}}"
   },
   "refresh": "Frissítés",
   "sections": {

@@ -215,6 +215,29 @@ pub enum AppError {
     /// question the player asks next is "then what is inside".
     #[error("the archive holds no pk3 file: {entries}")]
     NoPk3Files { entries: String },
+
+    // --- slice: bundles ---
+    /// A bundle, or one version of it, cannot be installed or published as it
+    /// is: a manifest of another schema, a game that does not match the
+    /// engine, a version the service will not hand out. Its own variant
+    /// because the cure is on the service side or in the bundle itself, not
+    /// in a retry.
+    #[error("the bundle cannot be used: {0}")]
+    BundleUnavailable(String),
+
+    /// One file of a bundle could not be fetched, checked or written. The
+    /// path is the manifest path, which is what the install card names so
+    /// the player knows which file to report.
+    #[error("bundle file {path}: {reason}")]
+    BundleFile { path: String, reason: String },
+
+    /// A bundle names an engine that is not in the registry of this build.
+    /// The registry is static, so the cure is a newer launcher.
+    #[error(
+        "the engine {engine_id} is not known to this version of JKNet. \
+         Update the launcher and try again."
+    )]
+    EngineUnknown { engine_id: String },
 }
 
 // --- slice: online gate ---
@@ -297,6 +320,10 @@ impl AppError {
             AppError::JkhubDownload(_) => "jkhubDownload",
             AppError::ArchiveUnsupported { .. } => "archiveUnsupported",
             AppError::NoPk3Files { .. } => "noPk3Files",
+            // --- slice: bundles ---
+            AppError::BundleUnavailable(_) => "bundleUnavailable",
+            AppError::BundleFile { .. } => "bundleFile",
+            AppError::EngineUnknown { .. } => "engineUnknown",
         }
     }
 
@@ -346,6 +373,10 @@ impl AppError {
             AppError::JkhubDownload(reason) => json!({ "reason": reason }),
             AppError::ArchiveUnsupported { format } => json!({ "format": format }),
             AppError::NoPk3Files { entries } => json!({ "entries": entries }),
+            // --- slice: bundles ---
+            AppError::BundleUnavailable(reason) => json!({ "reason": reason }),
+            AppError::BundleFile { path, reason } => json!({ "path": path, "reason": reason }),
+            AppError::EngineUnknown { engine_id } => json!({ "engineId": engine_id }),
         }
     }
 }
@@ -458,6 +489,10 @@ mod tests {
             AppError::JkhubDownload("x".into()),
             AppError::ArchiveUnsupported { format: "rar".into() },
             AppError::NoPk3Files { entries: "x".into() },
+            // --- slice: bundles ---
+            AppError::BundleUnavailable("x".into()),
+            AppError::BundleFile { path: "home/base/x.pk3".into(), reason: "x".into() },
+            AppError::EngineUnknown { engine_id: "x".into() },
         ];
 
         for error in samples {

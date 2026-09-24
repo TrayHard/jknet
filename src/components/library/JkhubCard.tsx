@@ -26,6 +26,13 @@ interface JkhubCardProps {
   /** Bytes of the archive received so far, while this card is installing. */
   progress?: { received: number; total: number } | null;
   busy: boolean;
+  // --- slice: bundles ---
+  /**
+   * What the button says instead of **Install** or **Reinstall**: the bundle
+   * editor picks files with it, and hands a label for a file already picked
+   * the way this card swaps its own two by `installed`.
+   */
+  installLabel?: string;
   onOpen: () => void;
   onInstall: () => void;
   /** Opens the file page of jkhub.org in the system browser. */
@@ -69,6 +76,7 @@ export function JkhubCard({
   openOnly,
   progress,
   busy,
+  installLabel,
   onOpen,
   onInstall,
   onOpenSite,
@@ -204,9 +212,8 @@ export function JkhubCard({
           >
             {downloading
               ? received(progress, format)
-              : installed
-                ? t("card.reinstall")
-                : t("card.install")}
+              : (installLabel ??
+                (installed ? t("card.reinstall") : t("card.install")))}
           </Button>
         )}
       </div>

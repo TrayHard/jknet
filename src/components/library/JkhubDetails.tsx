@@ -29,6 +29,9 @@ interface JkhubDetailsProps {
   clientName: string;
   installed: boolean;
   busy: boolean;
+  // --- slice: bundles ---
+  /** What the install button says instead of «Install into …»: the bundle editor picks files with it. */
+  installLabel?: string;
   /** Bytes received while this file's archive comes down. */
   progress?: { received: number; total: number } | null;
   /** What the last install attempt answered, when it was not "installed". */
@@ -75,6 +78,7 @@ export function JkhubDetails({
   clientName,
   installed,
   busy,
+  installLabel,
   progress,
   result,
   onClose,
@@ -130,7 +134,7 @@ export function JkhubDetails({
             >
               {conflicts != null
                 ? t("details.replaceAndInstall")
-                : t("details.installTo", { client: clientName })}
+                : (installLabel ?? t("details.installTo", { client: clientName }))}
             </Button>
           </>
         }

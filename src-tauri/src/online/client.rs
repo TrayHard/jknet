@@ -76,6 +76,20 @@ pub fn default_online_url_for(debug: bool) -> &'static str {
 /// The whole budget of one request, connection included.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
+// --- slice: bundles ---
+/// How long the transfer client waits for a connection to open.
+///
+/// The transfer client carries the files of a bundle, which run to hundreds
+/// of megabytes, so it cannot live under [`TIMEOUT`]: a whole-request budget
+/// would cut every upload that a home connection takes more than ten seconds
+/// over. It has two narrower limits instead, this one and
+/// [`TRANSFER_STALL_TIMEOUT`].
+const TRANSFER_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// How long a transfer may go without a byte arriving before it is called
+/// dead. Applies to every read of a response, and resets after each one.
+const TRANSFER_STALL_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Providers the service knows. `dev` only answers on a service started with
 /// `JKNET_ONLINE_DEV_PROVIDER=1`, which in practice means a service on this machine.
 pub const PROVIDERS: [&str; 3] = ["jkhub", "discord", "dev"];
@@ -295,12 +309,44 @@ const AUTH_PREFIX: &str = "/v1/auth/";
 /// runs, which is how this was found.
 type RefusalHook = Box<dyn Fn(&str) + Send + Sync + 'static>;
 
+// --- slice: bundles ---
+/// Whether a call carries the bearer token.
+///
+/// The public routes of the bundle catalogue answer without a token and answer
+/// more with one: `likedByMe` on every card, and the owner's own hidden bundle.
+/// That third case is what the boolean of [`OnlineClient::call`] could not say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Auth {
+    /// Never send the token, whether or not there is one.
+    None,
+    /// Send the token when the player is signed in; go without it otherwise.
+    Optional,
+    /// Refuse before the request when there is no token to send.
+    Required,
+}
+
+impl From<bool> for Auth {
+    fn from(required: bool) -> Self {
+        if required {
+            Auth::Required
+        } else {
+            Auth::None
+        }
+    }
+}
+
 /// The connection pool shared by every call to the service.
 pub struct OnlineClient {
     /// `None` when `reqwest` could not start, which on Windows means the TLS
     /// backend failed. Every call then refuses instead of panicking: a broken
     /// service client must not take the launcher's window with it.
     http: Option<reqwest::Client>,
+    // --- slice: bundles ---
+    /// The second pool, for the files of bundles. Built without the
+    /// whole-request budget of `http` and with the two narrower limits of
+    /// [`TRANSFER_CONNECT_TIMEOUT`] and [`TRANSFER_STALL_TIMEOUT`] instead.
+    /// `None` for the same reason `http` can be.
+    transfer: Option<reqwest::Client>,
     /// Where a refused token is reported. Set once from `setup`; empty in the
     /// tests, which have no launcher to sign out of.
     on_refusal: OnceLock<RefusalHook>,
@@ -333,8 +379,24 @@ impl OnlineClient {
                 None
             }
         };
+        // --- slice: bundles ---
+        // No gzip: the bodies are pk3 and exe files, and the service sends them
+        // as they are.
+        let transfer = match reqwest::Client::builder()
+            .user_agent(concat!("JKNet/", env!("CARGO_PKG_VERSION")))
+            .connect_timeout(TRANSFER_CONNECT_TIMEOUT)
+            .read_timeout(TRANSFER_STALL_TIMEOUT)
+            .build()
+        {
+            Ok(transfer) => Some(transfer),
+            Err(e) => {
+                log::error!("the transfer client could not start: {e}");
+                None
+            }
+        };
         OnlineClient {
             http,
+            transfer,
             on_refusal: OnceLock::new(),
             expiry: Mutex::new(()),
         }
@@ -367,6 +429,13 @@ impl OnlineClient {
             .ok_or_else(|| AppError::Network("the HTTP client failed to start".into()))
     }
 
+    // --- slice: bundles ---
+    fn transfer(&self) -> Result<&reqwest::Client> {
+        self.transfer
+            .as_ref()
+            .ok_or_else(|| AppError::Network("the transfer client failed to start".into()))
+    }
+
     // -- Auth ---------------------------------------------------------------
 
     /// Opens a sign-in session. The answer carries the URL for the browser.
@@ -380,7 +449,7 @@ impl OnlineClient {
             "provider": provider,
             "deviceName": device_name,
         });
-        self.call(ctx, Method::POST, "/v1/auth/login-sessions", Some(body), false)
+        self.call(ctx, Method::POST, "/v1/auth/login-sessions", Some(body), Auth::None)
             .await?
             .json()
     }
@@ -389,12 +458,12 @@ impl OnlineClient {
     /// read that finds it `done`.
     pub async fn poll_login_session(&self, ctx: &OnlineContext, id: &str) -> Result<LoginSession> {
         let path = format!("/v1/auth/login-sessions/{}", path_segment(id)?);
-        self.call(ctx, Method::GET, &path, None, false).await?.json()
+        self.call(ctx, Method::GET, &path, None, Auth::None).await?.json()
     }
 
     /// Invalidates the token on the service. The launcher forgets it either way.
     pub async fn logout(&self, ctx: &OnlineContext) -> Result<()> {
-        self.call(ctx, Method::POST, "/v1/auth/logout", None, true)
+        self.call(ctx, Method::POST, "/v1/auth/logout", None, Auth::Required)
             .await
             .map(|_| ())
     }
@@ -403,13 +472,13 @@ impl OnlineClient {
 
     /// Reads the account and its presence from the service.
     ///
-    /// No command calls it: the sidebar and the Account card answer from the
-    /// copy in `settings.json`, which every write keeps current. It stays
-    /// because it is the one call that would notice a token invalidated
-    /// somewhere else, and because the mock tests walk the whole contract.
-    #[allow(dead_code)]
+    /// The sidebar and the Account card answer from the copy in
+    /// `settings.json`, which every write keeps current; the one command that
+    /// calls this is the end of a sign-in, which reads the `admin` flag the
+    /// login session does not carry. It is also the one call that would notice
+    /// a token invalidated somewhere else, and the mock tests walk it.
     pub async fn get_me(&self, ctx: &OnlineContext) -> Result<Me> {
-        self.call(ctx, Method::GET, "/v1/me", None, true)
+        self.call(ctx, Method::GET, "/v1/me", None, Auth::Required)
             .await?
             .json()
     }
@@ -418,7 +487,7 @@ impl OnlineClient {
     /// taken, which reaches the screen as such.
     pub async fn patch_me(&self, ctx: &OnlineContext, display_name: &str) -> Result<OnlineUser> {
         let body = serde_json::json!({ "displayName": display_name });
-        self.call(ctx, Method::PATCH, "/v1/me", Some(body), true)
+        self.call(ctx, Method::PATCH, "/v1/me", Some(body), Auth::Required)
             .await?
             .json()
     }
@@ -426,7 +495,7 @@ impl OnlineClient {
     /// Deletes the account together with its friendships, requests and
     /// invites. Nothing on this machine is touched.
     pub async fn delete_me(&self, ctx: &OnlineContext) -> Result<()> {
-        self.call(ctx, Method::DELETE, "/v1/me", None, true)
+        self.call(ctx, Method::DELETE, "/v1/me", None, Auth::Required)
             .await
             .map(|_| ())
     }
@@ -434,7 +503,7 @@ impl OnlineClient {
     // -- Friends ------------------------------------------------------------
 
     pub async fn get_friends(&self, ctx: &OnlineContext) -> Result<FriendsList> {
-        self.call(ctx, Method::GET, "/v1/friends", None, true)
+        self.call(ctx, Method::GET, "/v1/friends", None, Auth::Required)
             .await?
             .json()
     }
@@ -452,7 +521,7 @@ impl OnlineClient {
     ) -> Result<SendRequestResult> {
         let body = serde_json::json!({ "query": query });
         let response = self
-            .call(ctx, Method::POST, "/v1/friends/requests", Some(body), true)
+            .call(ctx, Method::POST, "/v1/friends/requests", Some(body), Auth::Required)
             .await?;
 
         if response.status == StatusCode::CREATED {
@@ -475,7 +544,7 @@ impl OnlineClient {
 
     pub async fn accept_request(&self, ctx: &OnlineContext, id: &str) -> Result<Friend> {
         let path = format!("/v1/friends/requests/{}/accept", path_segment(id)?);
-        self.call(ctx, Method::POST, &path, None, true)
+        self.call(ctx, Method::POST, &path, None, Auth::Required)
             .await?
             .json()
     }
@@ -484,14 +553,14 @@ impl OnlineClient {
     /// gives both sides the same endpoint.
     pub async fn decline_request(&self, ctx: &OnlineContext, id: &str) -> Result<()> {
         let path = format!("/v1/friends/requests/{}", path_segment(id)?);
-        self.call(ctx, Method::DELETE, &path, None, true)
+        self.call(ctx, Method::DELETE, &path, None, Auth::Required)
             .await
             .map(|_| ())
     }
 
     pub async fn remove_friend(&self, ctx: &OnlineContext, user_id: &str) -> Result<()> {
         let path = format!("/v1/friends/{}", path_segment(user_id)?);
-        self.call(ctx, Method::DELETE, &path, None, true)
+        self.call(ctx, Method::DELETE, &path, None, Auth::Required)
             .await
             .map(|_| ())
     }
@@ -507,28 +576,28 @@ impl OnlineClient {
         update: &PresenceUpdate,
     ) -> Result<Presence> {
         let body = to_value(update)?;
-        self.call(ctx, Method::PUT, "/v1/presence", Some(body), true)
+        self.call(ctx, Method::PUT, "/v1/presence", Some(body), Auth::Required)
             .await?
             .json()
     }
 
     pub async fn create_invite(&self, ctx: &OnlineContext, invite: &NewInvite) -> Result<Invite> {
         let body = to_value(invite)?;
-        self.call(ctx, Method::POST, "/v1/invites", Some(body), true)
+        self.call(ctx, Method::POST, "/v1/invites", Some(body), Auth::Required)
             .await?
             .json()
     }
 
     /// Invites addressed to me and still open.
     pub async fn list_invites(&self, ctx: &OnlineContext) -> Result<Vec<Invite>> {
-        self.call(ctx, Method::GET, "/v1/invites", None, true)
+        self.call(ctx, Method::GET, "/v1/invites", None, Auth::Required)
             .await?
             .json()
     }
 
     pub async fn dismiss_invite(&self, ctx: &OnlineContext, id: &str) -> Result<()> {
         let path = format!("/v1/invites/{}", path_segment(id)?);
-        self.call(ctx, Method::DELETE, &path, None, true)
+        self.call(ctx, Method::DELETE, &path, None, Auth::Required)
             .await
             .map(|_| ())
     }
@@ -536,22 +605,145 @@ impl OnlineClient {
     // -- Transport ----------------------------------------------------------
 
     pub async fn community(&self, ctx: &OnlineContext, method: Method, path: &str, body: Option<Value>, auth: bool) -> Result<Value> {
-        self.call(ctx, method, path, body, auth).await?.json()
+        self.call(ctx, method, path, body, auth.into()).await?.json()
     }
 
-    /// Sends one request and turns anything but a 2xx into an [`AppError`].
+    // --- slice: bundles ---
+
+    /// One JSON call of the bundles contract, parsed into the caller's type.
     ///
-    /// The retry is deliberately narrow. A service that answered with an error has
-    /// made up its mind, and a POST that reached it must not be sent twice —
-    /// so only a connection that never carried a byte is tried again.
-    async fn call(
+    /// The bundle routes are many and small, and `crate::bundles` names each
+    /// of them next to the command that uses it; a method per route here
+    /// would be a second copy of that list.
+    pub async fn request<T: DeserializeOwned>(
         &self,
         ctx: &OnlineContext,
         method: Method,
         path: &str,
         body: Option<Value>,
-        auth: bool,
-    ) -> Result<OnlineResponse> {
+        auth: Auth,
+    ) -> Result<T> {
+        self.call(ctx, method, path, body, auth).await?.json()
+    }
+
+    /// `PUT /v1/blobs/{sha256}`: uploads one file of a bundle.
+    ///
+    /// The body is a stream the caller builds from the file on disk, so a
+    /// 500 MB pk3 never sits in memory; `size` becomes the `Content-Length`
+    /// the service insists on. A `200` for a hash the service already holds
+    /// is the same answer as a `201`, and the caller need not know which.
+    ///
+    /// No retry here: the stream is spent by the first attempt, and only the
+    /// caller can build another one. The transport failure comes back as
+    /// [`AppError::Network`] so it can decide to.
+    pub async fn put_blob(
+        &self,
+        ctx: &OnlineContext,
+        sha256: &str,
+        size: u64,
+        body: reqwest::Body,
+    ) -> Result<BlobReceipt> {
+        self.check_context(ctx)?;
+        let token = ctx.token()?;
+        let path = format!("/v1/blobs/{}", path_segment(sha256)?);
+        let response = self
+            .transfer()?
+            .put(ctx.url(&path))
+            .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .header(reqwest::header::CONTENT_LENGTH, size)
+            .body(body)
+            .send()
+            .await
+            .map_err(|e| transport_error(&Method::PUT, &path, &e))?;
+        let status = response.status();
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| transport_error(&Method::PUT, &path, &e))?;
+        log::info!("online PUT {path} -> {}", status.as_u16());
+        if !status.is_success() {
+            if refuses_the_token(status, &path) {
+                self.note_refused_token(token);
+            }
+            return Err(online_error(status, &bytes));
+        }
+        OnlineResponse {
+            status,
+            body: bytes.to_vec(),
+        }
+        .json()
+    }
+
+    /// `GET /v1/blobs/{sha256}`: opens the stream of one file of a bundle.
+    ///
+    /// `from` asks for the tail of the file after that many bytes, which is
+    /// how an interrupted download resumes; the caller checks whether the
+    /// answer is a `206` before appending. The route is public, and a token
+    /// on file is not sent: nothing about a file depends on who asks.
+    ///
+    /// The response is handed back whole rather than as bytes, because the
+    /// caller streams it to disk with its own progress events.
+    pub async fn get_blob(
+        &self,
+        ctx: &OnlineContext,
+        sha256: &str,
+        from: u64,
+    ) -> Result<reqwest::Response> {
+        self.check_context(ctx)?;
+        let path = format!("/v1/blobs/{}", path_segment(sha256)?);
+        let mut request = self.transfer()?.get(ctx.url(&path));
+        if from > 0 {
+            request = request.header(reqwest::header::RANGE, format!("bytes={from}-"));
+        }
+        let response = request
+            .send()
+            .await
+            .map_err(|e| transport_error(&Method::GET, &path, &e))?;
+        let status = response.status();
+        log::info!("online GET {path} -> {}", status.as_u16());
+        if !status.is_success() {
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|e| transport_error(&Method::GET, &path, &e))?;
+            return Err(online_error(status, &bytes));
+        }
+        Ok(response)
+    }
+
+    /// `HEAD /v1/blobs/{sha256}`: whether the store holds a file, without
+    /// fetching it. `false` for a `404`; any other refusal is an error.
+    ///
+    /// A publish asks this before it uploads a picture of the description or
+    /// a listing the version did not list as missing: the answer costs one
+    /// round trip, the upload it saves costs the file.
+    pub async fn head_blob(&self, ctx: &OnlineContext, sha256: &str) -> Result<bool> {
+        self.check_context(ctx)?;
+        let path = format!("/v1/blobs/{}", path_segment(sha256)?);
+        let response = self
+            .transfer()?
+            .head(ctx.url(&path))
+            .send()
+            .await
+            .map_err(|e| transport_error(&Method::HEAD, &path, &e))?;
+        let status = response.status();
+        log::info!("online HEAD {path} -> {}", status.as_u16());
+        if status == StatusCode::NOT_FOUND {
+            return Ok(false);
+        }
+        if !status.is_success() {
+            let bytes = response
+                .bytes()
+                .await
+                .map_err(|e| transport_error(&Method::HEAD, &path, &e))?;
+            return Err(online_error(status, &bytes));
+        }
+        Ok(true)
+    }
+
+    /// The two refusals every call makes before opening a socket.
+    fn check_context(&self, ctx: &OnlineContext) -> Result<()> {
         // No service in this build, and no address the player typed either. The
         // refusal comes before the log line on purpose: a launcher with the
         // feature switched off must not fill `jknet.log` with a failure a
@@ -565,8 +757,29 @@ impl OnlineClient {
                 ctx.base_url
             )));
         }
+        Ok(())
+    }
+
+    /// Sends one request and turns anything but a 2xx into an [`AppError`].
+    ///
+    /// The retry is deliberately narrow. A service that answered with an error has
+    /// made up its mind, and a POST that reached it must not be sent twice —
+    /// so only a connection that never carried a byte is tried again.
+    async fn call(
+        &self,
+        ctx: &OnlineContext,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+        auth: Auth,
+    ) -> Result<OnlineResponse> {
+        self.check_context(ctx)?;
         let url = ctx.url(path);
-        let token = if auth { Some(ctx.token()?) } else { None };
+        let token = match auth {
+            Auth::None => None,
+            Auth::Optional => ctx.token.as_deref(),
+            Auth::Required => Some(ctx.token()?),
+        };
         let payload = match body {
             Some(value) => Some(
                 serde_json::to_vec(&value)
@@ -624,6 +837,18 @@ fn to_value<T: serde::Serialize>(value: &T) -> Result<Value> {
     serde_json::to_value(value).map_err(|e| AppError::json("cannot serialize a service request", e))
 }
 
+// --- slice: bundles ---
+/// The answer of `PUT /v1/blobs/{sha256}`: the hash and size the service
+/// stored, which are the two things the caller sent.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlobReceipt {
+    #[serde(default)]
+    pub sha256: String,
+    #[serde(default)]
+    pub size: u64,
+}
+
 /// A 2xx answer, kept as bytes so the caller can decide what to parse.
 pub struct OnlineResponse {
     pub status: StatusCode,
@@ -667,7 +892,13 @@ fn online_error(status: StatusCode, body: &[u8]) -> AppError {
             return AppError::Online {
                 code: envelope.error.code,
                 message: if envelope.error.message.trim().is_empty() {
-                    format!("the service answered {}", status.as_u16())
+                    message_for_status(status)
+                } else if status == StatusCode::PAYLOAD_TOO_LARGE {
+                    // --- slice: bundles ---
+                    // The service spells its body limit as `invalid` in the
+                    // words of its framework; the size is what the player
+                    // needs to hear about.
+                    format!("{}: {}", message_for_status(status), envelope.error.message)
                 } else {
                     envelope.error.message
                 },
@@ -677,8 +908,24 @@ fn online_error(status: StatusCode, body: &[u8]) -> AppError {
 
     AppError::Online {
         code: code_for_status(status).to_string(),
-        message: format!("the service answered {}", status.as_u16()),
+        message: message_for_status(status),
     }
+}
+
+/// The sentence for an answer that carried none, or none worth printing.
+///
+/// --- slice: bundles ---
+/// A `413` is the one status the bundle routes name on their own: a file
+/// over the limit of `PUT /v1/blobs/{sha256}`, a manifest over the limit of
+/// a version. "Answered 413" says nothing to a player. The frontend prints
+/// the message through `onlineErrorMessage`, without the `online <code>:`
+/// prefix, and has no catalog key for `too_large`, so this sentence is what
+/// the player reads.
+fn message_for_status(status: StatusCode) -> String {
+    if status == StatusCode::PAYLOAD_TOO_LARGE {
+        return "the service refused the size of the request".to_string();
+    }
+    format!("the service answered {}", status.as_u16())
 }
 
 /// Whether this answer means the service will not take the token again.
@@ -697,6 +944,11 @@ fn code_for_status(status: StatusCode) -> &'static str {
         403 => "forbidden",
         404 => "not_found",
         409 => "conflict",
+        // --- slice: bundles ---
+        // Not a code of the contract's error documents: the service answers
+        // its body limits as `invalid`. This is for a `413` that arrives
+        // without a document, from a proxy or a service that stopped early.
+        413 => "too_large",
         429 => "rate_limited",
         502..=504 => "provider_error",
         _ => "internal",
@@ -964,6 +1216,35 @@ mod tests {
             AppError::Online { code, .. } => assert_eq!(code, "internal"),
             other => panic!("expected a service error, got {other:?}"),
         }
+    }
+
+    // --- slice: bundles ---
+    #[test]
+    fn a_413_says_the_size_was_refused_with_or_without_a_document() {
+        // A proxy answered on its own, without the contract's document.
+        match online_error(StatusCode::PAYLOAD_TOO_LARGE, b"<html>Request Entity Too Large</html>") {
+            AppError::Online { code, message } => {
+                assert_eq!(code, "too_large");
+                assert_eq!(message, "the service refused the size of the request");
+            }
+            other => panic!("expected a service error, got {other:?}"),
+        }
+        // The service itself: its body limit answers `invalid` in the words
+        // of its framework, and the sentence about the size goes in front.
+        let body = br#"{"error":{"code":"invalid","message":"length limit exceeded"}}"#;
+        match online_error(StatusCode::PAYLOAD_TOO_LARGE, body) {
+            AppError::Online { code, message } => {
+                assert_eq!(code, "invalid");
+                assert_eq!(
+                    message,
+                    "the service refused the size of the request: length limit exceeded"
+                );
+            }
+            other => panic!("expected a service error, got {other:?}"),
+        }
+        // The rendered form keeps the prefix the frontend strips.
+        let rendered = online_error(StatusCode::PAYLOAD_TOO_LARGE, b"").to_string();
+        assert_eq!(rendered, "online too_large: the service refused the size of the request");
     }
 
     #[test]

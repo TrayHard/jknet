@@ -23,6 +23,7 @@
     "online": "У мережі",
     "offline": "Не в мережі",
     "lastSeenJustNow": "Востаннє в мережі щойно",
+    "lastSeenOn": "Востаннє в мережі {{date}}",
     "lastSeenMinutes_one": "Востаннє в мережі {{count}} хвилину тому",
     "lastSeenMinutes_few": "Востаннє в мережі {{count}} хвилини тому",
     "lastSeenMinutes_many": "Востаннє в мережі {{count}} хвилин тому",
@@ -34,8 +35,7 @@
     "lastSeenDays_one": "Востаннє в мережі {{count}} день тому",
     "lastSeenDays_few": "Востаннє в мережі {{count}} дні тому",
     "lastSeenDays_many": "Востаннє в мережі {{count}} днів тому",
-    "lastSeenDays_other": "Востаннє в мережі {{count}} дня тому",
-    "lastSeenOn": "Востаннє в мережі {{date}}"
+    "lastSeenDays_other": "Востаннє в мережі {{count}} дня тому"
   },
   "empty": {
     "offTitle": "Друзі ще не увімкнені",

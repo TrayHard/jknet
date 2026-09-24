@@ -98,6 +98,11 @@ pub struct AccountState {
     /// Whether that service runs on this machine, which is what makes the
     /// Developer sign-in button appear.
     pub local_online: bool,
+    // --- slice: bundles ---
+    /// Whether the account reviews bundle versions, as the service said at
+    /// the last sign-in. False while signed out. The **Review queue** button
+    /// of the Bundles tab hangs off it.
+    pub is_admin: bool,
 }
 
 /// What `begin_sign_in` hands back: the session to poll and the URL that was
@@ -194,7 +199,20 @@ pub async fn poll_sign_in(
     }
 
     match (session.token, session.user) {
-        (Some(token), Some(user)) => {
+        (Some(token), Some(mut user)) => {
+            // --- slice: bundles ---
+            // The login session carries the user and not the `admin` flag of
+            // `GET /v1/me`. One more call with the fresh token reads it; a
+            // service that cannot answer leaves the flag off, which costs an
+            // administrator one sign-in and a player nothing.
+            let signed = OnlineContext {
+                base_url: ctx.base_url.clone(),
+                token: Some(token.clone()),
+            };
+            match online.get_me(&signed).await {
+                Ok(me) => user.admin = me.admin,
+                Err(e) => log::warn!("cannot read the account after sign-in: {e}"),
+            }
             store_account(&state, Some(token), Some(user.clone()))?;
             announce(&app, true, AccountChangeReason::SignedIn);
             log::info!("signed in as {} via {}", user.display_name, user.provider);
@@ -268,7 +286,11 @@ pub async fn update_display_name(
     let settings = state.settings()?;
     let ctx = OnlineContext::from_settings(&settings);
 
-    let user = online.patch_me(&ctx, &name).await?;
+    let mut user = online.patch_me(&ctx, &name).await?;
+    // --- slice: bundles ---
+    // `PATCH /v1/me` answers with the contract's `User`, which has no `admin`
+    // flag; the one read at sign-in survives the rename.
+    user.admin = settings.online_user.as_ref().is_some_and(|known| known.admin);
     store_account(&state, ctx.token.clone(), Some(user.clone()))?;
     // Signed in either way; the payload exists so a listener knows to reread
     // the account rather than to work out what changed.
@@ -331,6 +353,7 @@ fn account_state_of(ctx: OnlineContext, user: Option<OnlineUser>) -> AccountStat
         // be signed in to, no account to name, and the Developer button would
         // open a sign-in that cannot start.
         online_signed_in: ctx.signed_in(),
+        is_admin: configured && ctx.signed_in() && user.as_ref().is_some_and(|user| user.admin),
         online_user: if configured { user } else { None },
         local_online: configured && is_local_online(&ctx.base_url),
         online_url: ctx.base_url,
@@ -477,6 +500,7 @@ mod tests {
                 provider: "jkhub".into(),
                 provider_name: "kyle_k".into(),
                 created_at: "2026-09-10T10:00:00Z".into(),
+                admin: false,
             }),
             ..Settings::default()
         }
@@ -487,10 +511,39 @@ mod tests {
         let state = account_state(&signed_in_settings());
         assert!(state.online_configured);
         assert!(state.online_signed_in);
+        assert!(!state.is_admin);
         assert_eq!(state.online_user.expect("a user").display_name, "Kyle Katarn");
         // The development service runs here, so the Developer button shows.
         assert!(state.local_online);
         assert_eq!(state.online_url, crate::online::DEV_ONLINE_URL);
+    }
+
+    // --- slice: bundles ---
+
+    #[test]
+    fn the_admin_flag_follows_the_cached_account_and_the_sign_in() {
+        let mut settings = signed_in_settings();
+        if let Some(user) = settings.online_user.as_mut() {
+            user.admin = true;
+        }
+        assert!(account_state(&settings).is_admin);
+
+        // The flag is a property of a session, so a token that is gone takes
+        // it with it, whatever the cached copy of the user still says.
+        settings.online_token = None;
+        assert!(!account_state(&settings).is_admin);
+
+        // A `GET /v1/me` of a service older than bundles carries no flag, and
+        // so does a `User` inside a friend: both read as a plain account.
+        let me: crate::online::Me =
+            serde_json::from_str(r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"}}"#)
+                .expect("an older answer parses");
+        assert!(!me.admin);
+        let me: crate::online::Me =
+            serde_json::from_str(r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"},"presence":{"status":"online"},"admin":true}"#)
+                .expect("the answer parses");
+        assert!(me.admin);
+        assert!(!me.user.admin, "the flag lives on the answer, not on the user");
     }
 
     // --- slice: online gate ---

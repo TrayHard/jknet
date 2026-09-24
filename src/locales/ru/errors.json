@@ -16,19 +16,23 @@
   "signedOut": "Войдите в JKNet, чтобы увидеть друзей",
   "gameMismatch": "{{reason}}",
   "gameDataMissing": "Файлы игры {{game}}: {{reason}}",
-  "engineFile": "Файл {{file}} входит в сборку движка, а не в библиотеку, поэтому JKNet не выключает и не удаляет его.",
+  "engineFile": "Файл {{file}} входит в релиз движка, а не в библиотеку, поэтому JKNet не выключает и не удаляет его.",
   "basepathOccupied": "По пути {{path}} лежит настоящая папка, а не ссылка, которую держит там JKNet. Перенесите или удалите её и запустите игру заново.",
   "jkhubUnavailable": "JKHub недоступен: {{reason}}",
   "jkhubParse": "Страницу JKHub не удалось разобрать: {{what}}. Скорее всего, сайт изменился.",
   "jkhubDownload": "Загрузка с JKHub не удалась: {{reason}}",
   "archiveUnsupported": "JKNet пока не открывает архивы .{{format}}.",
   "noPk3Files": "В архиве нет ни одного файла pk3: {{entries}}",
+  "bundleUnavailable": "Сборка недоступна: {{reason}}",
+  "bundleFile": "Файл сборки {{path}}: {{reason}}",
+  "engineUnknown": "Сборке нужен движок {{engineId}}, который эта версия JKNet не знает. Обновите JKNet и повторите попытку.",
   "online": {
     "notFound": "JKNet Online не знает такой учётной записи.",
     "unauthorized": "JKNet Online отклонил сеанс. Войдите заново.",
     "forbidden": "JKNet Online это не разрешает.",
     "invalid": "JKNet Online отклонил запрос: {{message}}",
-    "conflict": "Это имя занято. Введите другое.",
+    "conflict": "JKNet Online не смог применить запрос: {{message}}",
+    "tooLarge": "JKNet Online отверг запрос из-за его размера: {{message}}",
     "rateLimited": "Слишком много запросов к JKNet Online. Подождите немного и повторите.",
     "providerError": "Провайдер входа пока недоступен: {{message}}",
     "internal": "У JKNet Online собственная неполадка. Повторите позже.",
@@ -38,5 +42,5 @@
     "noRuntime": "Среда Tauri недоступна",
     "unexpected": "Непредвиденная ошибка"
   },
-  "unsupportedEngineSystem": "Автоматическая установка движков недоступна для {{system}}. JKNet поддерживает сборки для Windows x86 и x64."
+  "unsupportedEngineSystem": "Автоматическая установка движков недоступна для {{system}}. JKNet поддерживает релизы для Windows x86 и x64."
 }
