@@ -130,10 +130,11 @@ If the terminal was opened before Rust was installed, `npm run tauri dev` fails 
 | Compile the core | `cargo check --all-targets` in `src-tauri` |
 | Rust linter | `cargo clippy --all-targets -- -D warnings` in `src-tauri` |
 | Rust unit tests | `cargo test` in `src-tauri` |
+| Release manifest tests | `node --test scripts/release-manifest.test.mjs` |
 
 Some tests are marked `#[ignore]`: they reach the internet or need an installed game. Add `-- --ignored` to run them.
 
-The same five checks run in `.github/workflows/ci.yml` on a `windows-latest` runner on every push and in every pull request.
+The same six checks run in `.github/workflows/ci.yml` on a `windows-latest` runner on every push and in every pull request.
 
 ## Releasing a version
 
@@ -163,8 +164,8 @@ Check the update endpoint: `plugins.updater.endpoints` in `src-tauri/tauri.conf.
    git tag v0.4.0
    git push origin main --tags
    ```
-5. Wait for the **Release** workflow on the **Actions** tab to finish. It builds the installer, signs it and creates a draft release.
-6. Check the draft's assets: `JKNet_0.4.0_x64-setup.exe`, `JKNet_0.4.0_x64-setup.exe.sig` and `latest.json`.
+5. Wait for the **Release** workflow on the **Actions** tab to finish. It builds the installer, signs it and creates a draft release. Then `scripts/release-manifest.mjs` points `latest.json` at the public download address, adds `SHA256SUMS` and checks the installer signature against the key in `tauri.conf.json`. If the run fails, do not publish the draft.
+6. Check the draft's assets: `JKNet_0.4.0_x64-setup.exe`, `JKNet_0.4.0_x64-setup.exe.sig`, `latest.json` and `SHA256SUMS`.
 7. Publish the draft with **Publish release**.
 
 Installed launchers see the version once it is published: `releases/latest/download/latest.json` does not serve drafts.

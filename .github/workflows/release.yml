@@ -58,3 +58,38 @@ jobs:
           # in the installed launcher asks for. It defaults to true; the line
           # stays because the release is worthless without that file.
           uploadUpdaterJson: true
+
+      # tauri-action points every `url` in latest.json at the API address of
+      # the asset, which the updater can follow only because it asks for
+      # `application/octet-stream`. This step puts back the public download
+      # address earlier releases carried, adds SHA256SUMS and checks the
+      # installer signature against the key in tauri.conf.json, all before
+      # anybody can press Publish. A failed check stops the job before the
+      # upload: the draft keeps what tauri-action made, and the red run says
+      # not to publish it.
+      - name: Finalize the update manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The tag tauri-action made from v__VERSION__.
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          tag="v$version"
+          installer="JKNet_${version}_x64-setup.exe"
+          # With a published release of the same tag, gh may pick that one
+          # instead of the draft, and the files players already download must
+          # not be rewritten. This endpoint answers for published releases only.
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --silent 2>/dev/null; then
+            echo "::error::$tag is already published; this step only finalizes a draft"
+            exit 1
+          fi
+          dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$dir"
+          # A draft has no public download address yet: gh finds it by the
+          # pending tag and downloads through the API with the workflow token.
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$dir" \
+            --pattern latest.json --pattern "$installer" --pattern "$installer.sig"
+          node scripts/release-manifest.mjs finalize --dir "$dir" \
+            --repo "$GITHUB_REPOSITORY" --tag "$tag"
+          gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
+            "$dir/latest.json" "$dir/SHA256SUMS"

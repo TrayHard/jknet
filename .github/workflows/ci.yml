@@ -55,6 +55,11 @@ jobs:
       - name: Frontend typecheck
         run: npm run typecheck
 
+      # Not one of the six gates: it covers scripts/release-manifest.mjs, which
+      # otherwise runs only in the release job, on a tag, after the whole build.
+      - name: Release manifest tests
+        run: node --test scripts/release-manifest.test.mjs
+
       - name: Core compiles
         run: cargo check --all-targets
         working-directory: src-tauri
