@@ -30,7 +30,9 @@
  *     DELETE /v1/friends/:userId
  *     PUT    /v1/presence
  *     GET    /v1/invites  POST /v1/invites  DELETE /v1/invites/:id
- *     GET    /v1/ws?token=                the live socket
+ *     GET    /v1/ws                       the live socket; the token in
+ *                                         Authorization or, as older
+ *                                         launchers send it, in ?token=
  *     GET    /v1/bundles?game=&sort=&q=&engine=&tag=&limit=&offset=
  *                                         three sample bundles for ja, one of
  *                                         them of three components and in
@@ -1956,7 +1958,10 @@ const sockets = new Set();
 server.on("upgrade", (request, socket) => {
   const url = new URL(request.url ?? "/", `http://${HOST}:${PORT}`);
   const key = request.headers["sec-websocket-key"];
-  if (url.pathname !== "/v1/ws" || !url.searchParams.get("token") || !key) {
+  // The launcher sends the token in the header; launchers up to 0.5.0 sent
+  // it as ?token=, which the service still accepts, so the mock does too.
+  const bearer = /^Bearer\s+(\S+)$/i.exec(request.headers.authorization ?? "")?.[1];
+  if (url.pathname !== "/v1/ws" || !(bearer || url.searchParams.get("token")) || !key) {
     socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
     return;
   }

@@ -163,19 +163,20 @@ impl OnlineContext {
         format!("{}{path}", self.base_url)
     }
 
-    /// The full address of the live socket, or `None` while signed out or
-    /// while this build has no service.
+    /// The address of the live socket, or `None` while signed out or while
+    /// this build has no service: a socket without a token is a `401` the
+    /// moment it opens.
     ///
-    /// `GET /v1/ws` authenticates with a query parameter rather than a header,
-    /// because a browser-style WebSocket handshake carries no `Authorization`.
-    /// The token is not escaped: the contract makes it 64 hex characters, and
-    /// [`OnlineContext::from_settings`] keeps whatever the sign-in stored.
+    /// The address carries no token. `crate::friends::live` sends it in the
+    /// `Authorization` header of the upgrade request, as every other call
+    /// does, because an address is what log lines, proxies and error messages
+    /// copy. Launchers up to 0.5.0 put it in `?token=`, which the service
+    /// still accepts from them.
     pub fn ws_url(&self) -> Option<String> {
-        if !self.configured() {
+        if !self.signed_in() {
             return None;
         }
-        let token = self.token.as_deref()?;
-        Some(format!("{}/v1/ws?token={token}", ws_base(&self.base_url)))
+        Some(format!("{}/v1/ws", ws_base(&self.base_url)))
     }
 }
 
@@ -1117,18 +1118,19 @@ mod tests {
             base_url: normalize_online_url(base),
             token: Some("dead".into()),
         };
+        // The token travels in a header, never in the address.
         assert_eq!(
             signed_in("http://127.0.0.1:8787").ws_url().expect("a socket"),
-            "ws://127.0.0.1:8787/v1/ws?token=dead"
+            "ws://127.0.0.1:8787/v1/ws"
         );
         assert_eq!(
             signed_in("https://online.jknet.gg/").ws_url().expect("a socket"),
-            "wss://online.jknet.gg/v1/ws?token=dead"
+            "wss://online.jknet.gg/v1/ws"
         );
         // A path prefix belongs to the service, so it stays in front of `/v1`.
         assert_eq!(
             signed_in("https://example.test/online/").ws_url().expect("a socket"),
-            "wss://example.test/online/v1/ws?token=dead"
+            "wss://example.test/online/v1/ws"
         );
 
         // Signed out there is nothing to authenticate the socket with, and a

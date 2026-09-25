@@ -787,8 +787,8 @@ mod tests {
     fn a_build_without_a_service_keeps_both_background_tasks_quiet() {
         // The two gates are one question asked in two places: the heartbeat
         // stops at `OnlineContext::signed_in` in `presence::push`, and the live
-        // socket at `OnlineContext::ws_url` in `live::socket_url`. A stale token
-        // in `settings.json` must not get past either.
+        // socket at `OnlineContext::ws_url` in `live::socket_context`. A stale
+        // token in `settings.json` must not get past either.
         let ctx = OnlineContext {
             base_url: String::new(),
             token: Some("0123456789abcdef".into()),

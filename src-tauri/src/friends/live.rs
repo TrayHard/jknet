@@ -1,8 +1,10 @@
 //! The live socket: what the service pushes, turned into Tauri events.
 //!
-//! One task holds one WebSocket to `/v1/ws?token=…` and forwards every frame
-//! to the window. When the socket is unreachable the same task keeps the
-//! screen honest by asking it to refetch on a timer, so the Friends screen
+//! One task holds one WebSocket to `/v1/ws` and forwards every frame to the
+//! window. The upgrade request carries the token in its `Authorization`
+//! header, like every other call to the service, so the address holds nothing
+//! worth hiding from a log. When the socket is unreachable the same task keeps
+//! the screen honest by asking it to refetch on a timer, so the Friends screen
 //! behaves the same either way — slower, and without an invite arriving
 //! within the second.
 //!
@@ -55,6 +57,10 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::watch;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::handshake::client::Request;
+use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::online::{FriendRemoved, Invite, LiveFrame, OnlineContext, PresenceUpdated};
@@ -87,7 +93,7 @@ pub fn start(app: &AppHandle) {
         let mut account = handle.state::<FriendsState>().account_changes();
         let mut backoff = MIN_BACKOFF;
         loop {
-            let Some(url) = socket_url(&handle) else {
+            let Some(ctx) = socket_context(&handle) else {
                 // Signed out. Nothing to listen to and nothing to refresh, so
                 // the loop sleeps until somebody signs in.
                 set_connected(&handle, false);
@@ -95,7 +101,7 @@ pub fn start(app: &AppHandle) {
                 continue;
             };
 
-            match pump(&handle, &url, &mut account).await {
+            match pump(&handle, &ctx, &mut account).await {
                 Ok(true) => {
                     // The socket carried at least one frame, so the address
                     // and the token are good and the next drop is not the
@@ -124,11 +130,32 @@ fn next_backoff(current: Duration) -> Duration {
     (current * 2).min(MAX_BACKOFF)
 }
 
-/// The socket address for the token in the settings right now, or `None` when
-/// nobody is signed in.
-fn socket_url(app: &AppHandle) -> Option<String> {
+/// The service and the token in the settings right now, or `None` when nobody
+/// is signed in or this build has no service.
+fn socket_context(app: &AppHandle) -> Option<OnlineContext> {
     let settings = app.state::<AppState>().settings().ok()?;
-    OnlineContext::from_settings(&settings).ws_url()
+    let ctx = OnlineContext::from_settings(&settings);
+    ctx.ws_url().is_some().then_some(ctx)
+}
+
+/// The upgrade request of the live socket: the address of
+/// [`OnlineContext::ws_url`] and the token in `Authorization: Bearer`.
+///
+/// The token stays out of the address, which a log line or an error message
+/// may print. The header value is marked sensitive, so a `{:?}` of the
+/// request does not print it either.
+pub(crate) fn upgrade_request(ctx: &OnlineContext) -> Result<Request, String> {
+    let url = ctx.ws_url().ok_or("nobody is signed in")?;
+    let token = ctx.token.as_deref().ok_or("nobody is signed in")?;
+    let mut request = url
+        .as_str()
+        .into_client_request()
+        .map_err(|e| format!("cannot open {url}: {e}"))?;
+    let mut value = HeaderValue::from_str(&format!("Bearer {token}"))
+        .map_err(|_| "the stored token cannot travel in a header".to_string())?;
+    value.set_sensitive(true);
+    request.headers_mut().insert(AUTHORIZATION, value);
+    Ok(request)
 }
 
 /// Holds one connection open and forwards its frames.
@@ -137,12 +164,15 @@ fn socket_url(app: &AppHandle) -> Option<String> {
 /// separates "the service dropped us" from "the address never worked".
 async fn pump(
     app: &AppHandle,
-    url: &str,
+    ctx: &OnlineContext,
     account: &mut watch::Receiver<u64>,
 ) -> Result<bool, String> {
-    let (mut socket, _) = tokio_tungstenite::connect_async(url)
+    let request = upgrade_request(ctx)?;
+    // The address alone: the token is in a header this line never prints.
+    let url = request.uri().to_string();
+    let (mut socket, _) = tokio_tungstenite::connect_async(request)
         .await
-        .map_err(|e| format!("cannot open {}: {e}", hide_token(url)))?;
+        .map_err(|e| format!("cannot open {url}: {e}"))?;
     log::info!("live socket open");
     set_connected(app, true);
     // A fresh socket may have missed anything, so the screen refetches once.
@@ -264,17 +294,6 @@ fn emit<T: serde::Serialize + Clone>(app: &AppHandle, event: &str, payload: T) {
     }
 }
 
-/// Cuts the token out of an address before it reaches a log file.
-///
-/// The token is the whole credential and a log file is the first thing a
-/// player attaches to a bug report.
-pub fn hide_token(url: &str) -> String {
-    match url.split_once("token=") {
-        Some((head, _)) => format!("{head}token=…"),
-        None => url.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,12 +318,36 @@ mod tests {
     }
 
     #[test]
-    fn a_log_line_never_carries_the_token() {
-        assert_eq!(
-            hide_token("ws://127.0.0.1:8787/v1/ws?token=deadbeef"),
-            "ws://127.0.0.1:8787/v1/ws?token=…"
-        );
-        assert_eq!(hide_token("ws://host/v1/ws"), "ws://host/v1/ws");
+    fn the_token_rides_in_a_header_and_never_in_the_address() {
+        let ctx = OnlineContext {
+            base_url: "https://online.example.com".into(),
+            token: Some("deadbeef".into()),
+        };
+        let request = upgrade_request(&ctx).expect("a signed-in context has a socket");
+        assert_eq!(request.uri().to_string(), "wss://online.example.com/v1/ws");
+        let value = &request.headers()[AUTHORIZATION];
+        assert_eq!(value, "Bearer deadbeef");
+        assert!(value.is_sensitive());
+        // The handshake itself is tungstenite's.
+        assert_eq!(request.headers()["upgrade"], "websocket");
+        assert!(request.headers().contains_key("sec-websocket-key"));
+        // Neither the address nor a `{:?}` of the request prints the token.
+        assert!(!format!("{request:?}").contains("deadbeef"));
+    }
+
+    #[test]
+    fn nobody_signed_in_means_no_socket_to_open() {
+        let signed_out = OnlineContext {
+            base_url: "https://online.example.com".into(),
+            token: None,
+        };
+        assert!(upgrade_request(&signed_out).is_err());
+        // A token that a header cannot hold is refused rather than sent.
+        let broken = OnlineContext {
+            base_url: "https://online.example.com".into(),
+            token: Some("dead\nbeef".into()),
+        };
+        assert!(upgrade_request(&broken).is_err());
     }
 }
 
@@ -336,11 +379,11 @@ mod live_tests {
         let ctx = OnlineContext {
             base_url: mock.base_url(),
             // The mock believes the token it handed out, and the socket only
-            // checks that the parameter is there at all.
+            // checks that a token is there at all.
             token: Some("a".repeat(64)),
         };
-        let url = ctx.ws_url().expect("a signed-in context has a socket");
-        let (mut socket, _) = tokio_tungstenite::connect_async(&url)
+        let request = upgrade_request(&ctx).expect("a signed-in context has a socket");
+        let (mut socket, _) = tokio_tungstenite::connect_async(request)
             .await
             .expect("the mock service is running");
 

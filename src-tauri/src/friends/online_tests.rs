@@ -113,18 +113,14 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
     );
 
     // -- A listens ---------------------------------------------------------
-    let url = alpha
-        .ctx
-        .ws_url()
-        .ok_or("a signed-in context has a socket address")?;
-    let (mut socket, response) = tokio_tungstenite::connect_async(&url)
+    // The token goes in the `Authorization` header, as the launcher sends it,
+    // so the address printed here carries none.
+    let request = super::live::upgrade_request(&alpha.ctx)?;
+    let url = request.uri().to_string();
+    let (mut socket, response) = tokio_tungstenite::connect_async(request)
         .await
         .map_err(|e| format!("GET /v1/ws as A: {e}"))?;
-    println!(
-        "GET /v1/ws as A -> {} {}",
-        response.status().as_u16(),
-        super::live::hide_token(&url)
-    );
+    println!("GET /v1/ws as A -> {} {url}", response.status().as_u16());
 
     // -- B starts a game ---------------------------------------------------
     let update = PresenceUpdate {
