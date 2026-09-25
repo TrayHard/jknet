@@ -25,6 +25,11 @@ export interface MenuItem {
   disabled?: boolean;
   /** Draws the line in the danger colour, for an action that takes away. */
   danger?: boolean;
+  /**
+   * The tooltip of the line: what the action does, or why it is off. The
+   * same text the button the line stands for carries in its `title`.
+   */
+  title?: string;
 }
 
 /** The square trigger, at the three heights of `Button`: 28, 36 and 44 px. */
@@ -561,6 +566,7 @@ function useMenuLayer({
                 data-index={index}
                 tabIndex={-1}
                 disabled={item.disabled}
+                title={item.title}
                 onMouseEnter={() => {
                   if (!item.disabled) setActiveIndex(index);
                 }}

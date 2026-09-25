@@ -1,5 +1,5 @@
 import { AlertTriangle, FilePlus, FolderOpen, ImageOff, Replace } from "lucide-react";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
@@ -8,7 +8,7 @@ import type { Pk3EditorEntry } from "../../lib/ipc";
 import { usePk3EditorImage, usePk3EditorText } from "../../lib/queries";
 import { Badge, Button } from "../ui";
 import { EntryIcon, StateBadge } from "./Pk3EntryTree";
-import { Pk3TextEditor } from "./Pk3TextEditor";
+import { Pk3TextEditor, lineBreakOf, sameText, withLineBreak } from "./Pk3TextEditor";
 import { fileName, type Pk3Folder } from "./pk3Tree";
 
 /**
@@ -137,7 +137,9 @@ export function Pk3EntryPanel({ sessionId, entry, draft, onDraft, onApply, onRep
  * player who looks at another entry and comes back finds it; the editor
  * shows the draft when there is one and the text of the session otherwise.
  * A file the core cut short is shown but not edited: applying the beginning
- * of a file would write the beginning of a file.
+ * of a file would write the beginning of a file. The editor keeps its lines
+ * joined with `\n`; the draft goes back to the line breaks of the file, and
+ * a text that differs from the file only in them is no draft at all.
  */
 function TextPanel({
   sessionId,
@@ -161,6 +163,8 @@ function TextPanel({
   const format = useFormat();
   const query = usePk3EditorText(sessionId, entry.path);
   const loaded = query.data?.text;
+  // Once per read, not per keystroke: a text runs up to 512 KiB.
+  const lineBreak = useMemo(() => lineBreakOf(loaded ?? ""), [loaded]);
   const truncated = query.data?.truncated === true;
   const value = draft ?? loaded ?? "";
   const canApply = draft !== undefined && !truncated && !locked;
@@ -183,7 +187,10 @@ function TextPanel({
         <Pk3TextEditor
           value={value}
           readOnly={truncated || locked}
-          onChange={(text) => onDraft(text === loaded ? undefined : text)}
+          onChange={(text) => {
+            const kept = withLineBreak(text, lineBreak);
+            onDraft(sameText(kept, loaded) ? undefined : kept);
+          }}
           ariaLabel={t("entry.editor", { name: fileName(entry.path) })}
           className="flex-1 min-h-0"
         />

@@ -38,8 +38,10 @@ function folderOf(path: string): string {
  * the disk, **Exclude** it so the install deletes it, **Include** it again,
  * **Restore** a replacement or an addition. **Add files…** puts files from
  * the disk into the chosen folder of `engine\`. A pk3 or a cfg the overlay
- * adds or lays over the release offers **Contents** and **Preview** too:
- * the file is the draft's own, so the core can read it.
+ * adds or lays over the release offers **Contents** and **Preview** too, and
+ * a pk3 **Edit**: the file is the draft's own, so the core can read it and
+ * rewrite it. A file of the release itself offers none of the three: it
+ * lives in the cache of releases, not in the draft.
  */
 export function EngineFilesTab({
   draft,
@@ -258,7 +260,7 @@ function ReleaseFileRow({
         </Badge>
       ) : null}
       <span className="text-mono-xs text-fg-muted shrink-0 w-72 text-right">{format.bytes(file.size)}</span>
-      {overlay ? <FileActions file={overlay} origin={{ kind: "draft", draftId, scope: componentId }} /> : null}
+      {overlay ? <FileActions file={overlay} origin={{ kind: "draft", draftId, scope: componentId }} editable /> : null}
       <span className="flex items-center gap-4 shrink-0">
         {state === "release" || state === "replaced" ? (
           <Button size="sm" variant="ghost" disabled={busy} onClick={onReplace}>

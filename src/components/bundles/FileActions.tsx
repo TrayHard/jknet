@@ -1,11 +1,12 @@
-import { Eye, ListTree } from "lucide-react";
+import { Eye, ListTree, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { BundleFileSource } from "../../lib/ipc";
+import type { BundleFileSource, Pk3EditorTarget } from "../../lib/ipc";
 import { useBundlePreviewProgress, useJkhubDownloadProgress } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 import { FilePreviewDialog, type PreviewTarget } from "../library/FilePreviewDialog";
+import { Pk3EditorDialog } from "../pk3/Pk3EditorDialog";
 import { Button } from "../ui";
 import { FileListingDialog, fileName, hasContents, type ContentsFile } from "./FileListingDialog";
 
@@ -32,16 +33,39 @@ export interface ActionFile extends ContentsFile {
  * an exe and any other file offer neither. One component for the rows of
  * the editor and of the catalogue, so the two look inside a file the same
  * way.
+ *
+ * --- slice: pk3 editor ---
+ * A row that passes `editable` adds a third button to a pk3 of a draft:
+ * **Edit** opens it in the pk3 editor. Every file of a draft is a copy in
+ * the folder of the draft, a JKHub one included, so the core may rewrite
+ * it. The tabs of the editor pass the flag; the record of the catalogue and
+ * the **Preview** section of the editor do not, because what they show is
+ * what a player reads.
  */
-export function FileActions({ file, origin }: { file: ActionFile; origin: FileActionsOrigin }) {
+export function FileActions({
+  file,
+  origin,
+  editable = false,
+}: {
+  file: ActionFile;
+  origin: FileActionsOrigin;
+  /** Offers **Edit** on a pk3 of a draft. */
+  editable?: boolean;
+}) {
   const { t } = useTranslation("bundles");
+  const { t: tPk3 } = useTranslation("pk3");
   const [contentsOpen, setContentsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const name = fileName(file.path);
   const contentsOrigin = origin.kind === "draft" ? origin : { kind: "bundle" as const };
   const contents = hasContents(file, contentsOrigin);
   const preview = file.kind === "pk3";
-  if (!contents && !preview) return null;
+  const editTarget: Pk3EditorTarget | null =
+    editable && origin.kind === "draft" && file.kind === "pk3"
+      ? { kind: "draft", draftId: origin.draftId, scope: origin.scope, root: file.root, path: file.path }
+      : null;
+  if (!contents && !preview && editTarget === null) return null;
 
   return (
     <>
@@ -69,12 +93,30 @@ export function FileActions({ file, origin }: { file: ActionFile; origin: FileAc
             onClick={() => setPreviewOpen(true)}
           />
         ) : null}
+        {editTarget !== null ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Pencil size={14} />}
+            aria-label={tPk3("action.edit", { file: name })}
+            title={isTauri() ? tPk3("action.editHint") : tPk3("action.needsLauncher")}
+            disabled={!isTauri()}
+            className="px-6"
+            onClick={() => setEditOpen(true)}
+          />
+        ) : null}
       </span>
       {contentsOpen ? (
         <FileListingDialog file={file} origin={contentsOrigin} onClose={() => setContentsOpen(false)} />
       ) : null}
       {previewOpen ? (
         <ObjectsPreview file={file} origin={origin} title={name} onClose={() => setPreviewOpen(false)} />
+      ) : null}
+      {/* **Save** re-reads the draft, its checks, its engine files and the
+          listing of this file through the hooks of the editor, so the row
+          shows the new size and badges; closing without it changes nothing. */}
+      {editOpen && editTarget !== null ? (
+        <Pk3EditorDialog target={editTarget} title={name} onClose={() => setEditOpen(false)} />
       ) : null}
     </>
   );

@@ -99,6 +99,36 @@ const theme = EditorView.theme(
   { dark: true },
 );
 
+/**
+ * Whether two texts are the same once their line breaks are.
+ *
+ * CodeMirror splits a document on `\n`, `\r\n` and `\r` alike and gives it
+ * back joined with `\n`, so a file written on Windows comes out of the
+ * editor with every line break changed before a key is pressed. The editor
+ * and the panel around it compare through this, or such a file would count
+ * as edited the moment it is shown.
+ */
+export function sameText(a: string, b: string): boolean {
+  return a === b || a.replace(/\r\n?/g, "\n") === b.replace(/\r\n?/g, "\n");
+}
+
+/**
+ * The line break a file keeps through an edit: the one most of its lines end
+ * with, `\r\n` or `\n`. The editor holds one line break for the whole text,
+ * so a file that mixes them comes back with the majority one throughout and
+ * only its few odd lines change, which the game reads the same way.
+ */
+export function lineBreakOf(text: string): "\r\n" | "\n" {
+  const pairs = text.split("\r\n").length - 1;
+  const lone = text.split("\n").length - 1 - pairs;
+  return pairs > 0 && pairs >= lone ? "\r\n" : "\n";
+}
+
+/** A text out of the editor, which joins its lines with `\n`, with its lines joined by `lineBreak`. */
+export function withLineBreak(text: string, lineBreak: "\r\n" | "\n"): string {
+  return lineBreak === "\n" ? text : text.replace(/\r\n?|\n/g, lineBreak);
+}
+
 export function Pk3TextEditor({
   value,
   onChange,
@@ -154,7 +184,9 @@ export function Pk3TextEditor({
 
   useEffect(() => {
     const editor = view.current;
-    if (editor && editor.state.doc.toString() !== value) {
+    // A value that differs from the document only in its line breaks is the
+    // document already: writing it again would report it as an edit.
+    if (editor && !sameText(editor.state.doc.toString(), value)) {
       editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: value } });
     }
   }, [value]);

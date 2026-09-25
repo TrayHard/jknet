@@ -27,8 +27,8 @@ import { destinationFolders } from "./draftModel";
  * a card adds the file, and the core downloads it with the same bar the
  * Library screen shows. **Add from disk…** takes any files; **Add from
  * client…** copies files of the library of one client with their origins, so
- * a JKHub file stays a JKHub link. Every pk3 offers **Contents** and
- * **Preview**, every cfg **Contents**, through `FileActions`.
+ * a JKHub file stays a JKHub link. Every pk3 offers **Contents**,
+ * **Preview** and **Edit**, every cfg **Contents**, through `FileActions`.
  */
 export function FilesTab({
   draft,
@@ -149,7 +149,7 @@ export function FilesTab({
                       <FileKindBadge file={file} />
                       <FileOriginBadge file={file} />
                       <span className="text-mono-xs text-fg-muted shrink-0 w-72 text-right">{format.bytes(file.size)}</span>
-                      <FileActions file={file} origin={{ kind: "draft", draftId: draft.id, scope }} />
+                      <FileActions file={file} origin={{ kind: "draft", draftId: draft.id, scope }} editable />
                       <button
                         type="button"
                         aria-label={t("editor.files.remove", { file: name })}

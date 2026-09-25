@@ -27,6 +27,8 @@ import { BaseGameBrowser } from "../components/library/BaseGameBrowser";
 import { RemoveItemDialog } from "../components/library/RemoveItemDialog";
 import { CATEGORIES } from "../components/library/categories";
 import { Page, PageHeader } from "../components/PageHeader";
+// --- slice: pk3 editor ---
+import { Pk3EditorDialog } from "../components/pk3/Pk3EditorDialog";
 import {
   Badge,
   Button,
@@ -107,6 +109,10 @@ export function LibraryPage() {
   const [skipped, setSkipped] = useState<SkippedFile[]>([]);
   const [removing, setRemoving] = useState<LibraryItem | null>(null);
   const [previewing, setPreviewing] = useState<LibraryItem | null>(null);
+  // --- slice: pk3 editor ---
+  // The client travels with the file: the editor holds a session on that
+  // archive until it closes, whatever the picker says meanwhile.
+  const [editing, setEditing] = useState<{ clientId: string; item: LibraryItem } | null>(null);
   const [conflictsOpen, setConflictsOpen] = useState(false);
   const [showConflictNotice, setShowConflictNotice] = useState<boolean | null>(null);
   const noticeRef = useRef<HTMLDivElement>(null);
@@ -125,6 +131,13 @@ export function LibraryPage() {
   const client = clientList.find((entry) => entry.id === clientId) ?? null;
 
   useEffect(() => { setPreviewing(null); }, [clientId, activeGame]);
+
+  // The editor outlives a switch of the picker, but not its client: once the
+  // client is deleted, the archive it opened is gone too.
+  useEffect(() => {
+    if (!editing || !clients.data) return;
+    if (!clients.data.some((entry) => entry.id === editing.clientId)) setEditing(null);
+  }, [clients.data, editing]);
 
   // Follows the default client until the player picks another one, and
   // recovers when the selected client is deleted on the Clients screen.
@@ -390,6 +403,9 @@ export function LibraryPage() {
           }
           onRemove={setRemoving}
           onPreview={setPreviewing}
+          onEdit={(item) => {
+            if (clientId) setEditing({ clientId, item });
+          }}
         />
       ) : tab === "baseGame" ? <BaseGameBrowser key={activeGame} game={activeGame} clientId={clientId} /> : (
         // --- slice: jkhub ---
@@ -468,6 +484,17 @@ export function LibraryPage() {
         onClose={() => setPreviewing(null)}
       /> : null}
 
+      {/* --- slice: pk3 editor --- a file of the client, opened from its
+          card. **Save** re-reads the list and the conflicts through the
+          hooks of the editor; closing without it leaves the file as it was. */}
+      {editing ? (
+        <Pk3EditorDialog
+          target={{ kind: "library", clientId: editing.clientId, itemId: editing.item.id }}
+          title={editing.item.displayName}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+
       {removing ? (
         <RemoveItemDialog
           item={removing}
@@ -524,6 +551,8 @@ interface InstalledTabProps {
   onToggle: (item: LibraryItem, enabled: boolean) => void;
   onRemove: (item: LibraryItem) => void;
   onPreview: (item: LibraryItem) => void;
+  // --- slice: pk3 editor ---
+  onEdit: (item: LibraryItem) => void;
 }
 
 /** The Installed tab: categories on the left, cards on the right. */
@@ -559,6 +588,7 @@ function InstalledTab({
   onToggle,
   onRemove,
   onPreview,
+  onEdit,
 }: InstalledTabProps) {
   const { t } = useTranslation("library");
   const { t: tCommon } = useTranslation("common");
@@ -681,6 +711,9 @@ function InstalledTab({
                   onToggle={(enabled) => onToggle(item, enabled)}
                   onRemove={() => onRemove(item)}
                   onPreview={() => onPreview(item)}
+                  // Every card here is a file of the player: the engine's
+                  // own archives never reach this list.
+                  onEdit={() => onEdit(item)}
                 />
               ))}
             </ul>

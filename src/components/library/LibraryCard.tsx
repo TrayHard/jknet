@@ -1,4 +1,4 @@
-import { AlertTriangle, Power, PowerOff, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
@@ -21,6 +21,9 @@ interface LibraryCardProps {
   onRemove: () => void;
   onConflict?: () => void;
   onPreview?: () => void;
+  // --- slice: pk3 editor ---
+  /** Opens the archive in the pk3 editor. Without it the card offers no **Edit**. */
+  onEdit?: () => void;
   busy?: boolean;
 }
 
@@ -36,10 +39,12 @@ export function LibraryCard({
   onRemove,
   onConflict,
   onPreview,
+  onEdit,
   busy = false,
 }: LibraryCardProps) {
   const { t } = useTranslation("library");
   const { t: tCommon } = useTranslation("common");
+  const { t: tPk3 } = useTranslation("pk3");
   const format = useFormat();
   const info = categoryInfo(item.category);
   const localImage = isTauri() && item.previewPath ? convertFileSrc(item.previewPath) : null;
@@ -50,12 +55,18 @@ export function LibraryCard({
     (url): url is string => Boolean(url) && !failedImages.includes(url as string),
   );
 
+  // --- slice: pk3 editor ---
+  // The editor reads and rewrites the archive through the core, so outside
+  // the launcher window the action stays in place, off, with the reason.
+  const canEdit = isTauri();
+  const editHint = canEdit ? tPk3("action.editHint") : tPk3("action.needsLauncher");
+
   // --- slice: selection context menu ---
-  // The two controls the card already carries: the switch that loads the
-  // archive into the client and the bin that takes it out. There is no third
-  // line, because the launcher has no command that opens the folder of one
-  // file — the folder it could show is the client's, which the card does not
-  // know about.
+  // The controls the card already carries: the switch that loads the archive
+  // into the client, the pencil that opens it in the pk3 editor and the bin
+  // that takes it out. There is no line for the folder of the file, because
+  // the launcher has no command that opens the folder of one file — the
+  // folder it could show is the client's, which the card does not know about.
   const menu = useContextMenu<LibraryItem>({
     ariaLabel: t("card.actions"),
     items: (): MenuItem[] => [
@@ -72,6 +83,17 @@ export function LibraryCard({
             icon: <Power size={14} />,
             disabled: busy,
           },
+      ...(onEdit
+        ? [
+            {
+              id: "edit",
+              label: tCommon("actions.edit"),
+              icon: <Pencil size={14} />,
+              disabled: busy || !canEdit,
+              title: editHint,
+            },
+          ]
+        : []),
       {
         id: "remove",
         label: tCommon("actions.remove"),
@@ -82,6 +104,7 @@ export function LibraryCard({
     ],
     onSelect: (id) => {
       if (id === "remove") onRemove();
+      else if (id === "edit") onEdit?.();
       else onToggle(id === "enable");
     },
   });
@@ -165,20 +188,41 @@ export function LibraryCard({
               </button>
             ) : null}
           </div>
-          <button
-            type="button"
-            aria-label={t("card.remove", { file: item.displayName })}
-            title={t("card.removeHint")}
-            disabled={busy}
-            onClick={onRemove}
-            className={cn(
-              "inline-flex items-center justify-center size-28 rounded-sm shrink-0",
-              "cursor-pointer text-fg-muted hover:bg-hover-overlay hover:text-fg-danger",
-              "transition-colors duration-150 disabled:cursor-not-allowed",
-            )}
-          >
-            <Trash2 size={16} />
-          </button>
+          {/* --- slice: pk3 editor --- the pencil and the bin stand together:
+              the two things done to the file itself. */}
+          <div className="flex items-center gap-2 shrink-0">
+            {onEdit ? (
+              <button
+                type="button"
+                aria-label={tPk3("action.edit", { file: item.displayName })}
+                title={editHint}
+                disabled={busy || !canEdit}
+                onClick={onEdit}
+                className={cn(
+                  "inline-flex items-center justify-center size-28 rounded-sm shrink-0",
+                  "cursor-pointer text-fg-muted hover:bg-hover-overlay hover:text-fg",
+                  "transition-colors duration-150",
+                  "disabled:cursor-not-allowed disabled:text-fg-disabled disabled:hover:bg-transparent",
+                )}
+              >
+                <Pencil size={16} />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label={t("card.remove", { file: item.displayName })}
+              title={t("card.removeHint")}
+              disabled={busy}
+              onClick={onRemove}
+              className={cn(
+                "inline-flex items-center justify-center size-28 rounded-sm shrink-0",
+                "cursor-pointer text-fg-muted hover:bg-hover-overlay hover:text-fg-danger",
+                "transition-colors duration-150 disabled:cursor-not-allowed",
+              )}
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </li>
