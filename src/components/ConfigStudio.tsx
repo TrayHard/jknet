@@ -219,7 +219,7 @@ export function ConfigStudio({
                 <Button
                   size="sm"
                   icon={<Plus size={14} />}
-                  onClick={() => onChange(`${value.trimEnd()}\n\n${text}`)}
+                  onClick={() => onChange(value.trim() ? `${value.trimEnd()}\n\n${text}` : text)}
                 >
                   {t("configStudio.insertTemplate")}
                 </Button>

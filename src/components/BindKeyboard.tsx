@@ -5,19 +5,23 @@ import type { EffectiveBind } from "../lib/quakeConfig";
 import { Button, Badge } from "./ui";
 import "./BindKeyboard.css";
 
-export function BindKeyboard({ value, bindings, onChange }: {
+export function BindKeyboard({ value, bindings, onChange, outlined = [] }: {
   value: string;
   bindings: EffectiveBind[];
   onChange: (key: string) => void;
+  /** Keys to ring without touching their source colours: the keys a step of a vstr chain rebinds. */
+  outlined?: readonly string[];
 }) {
   const { t } = useTranslation("common");
   const [recording, setRecording] = useState(false);
   const bound = new Map(bindings.map(b => [b.key, b]));
+  const ringed = new Set(outlined);
   const draw = (key: GameKey, index: number, style?: CSSProperties) => {
     const binding = bound.get(key.token);
     const description = key.reserved ? t("configStudio.reserved") : binding ? `${binding.command} · ${binding.source}` : t("configStudio.free");
     return <button key={`${key.token}-${index}`} type="button" disabled={key.reserved}
       data-game-key={key.token} data-binding={binding?.kind ?? "free"}
+      data-outlined={ringed.has(key.token) ? "true" : undefined}
       aria-pressed={value === key.token} aria-label={`${key.label}: ${description}`} title={description}
       style={{ "--key-width": key.width ?? 1, ...style } as CSSProperties}
       className="bind-key" onClick={() => onChange(key.token)}>

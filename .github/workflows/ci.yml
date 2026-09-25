@@ -55,6 +55,10 @@ jobs:
       - name: Frontend typecheck
         run: npm run typecheck
 
+      # Not one of the six gates: pure modules of src/lib, run by Node itself.
+      - name: Frontend unit tests
+        run: npm run test:unit
+
       # Not one of the six gates: it covers scripts/release-manifest.mjs, which
       # otherwise runs only in the release job, on a tag, after the whole build.
       - name: Release manifest tests

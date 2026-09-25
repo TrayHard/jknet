@@ -5,8 +5,10 @@ import { appendBind, configBinds, effectiveBinds, type BindSource } from "../lib
 import type { ConfigDocument } from "../lib/ipc";
 import { Badge, Button, Input, Select } from "./ui";
 import { BindKeyboard } from "./BindKeyboard";
+import { VstrChainPanel } from "./VstrChainPanel";
 import { ColoredNickname } from "./client/ColoredNickname";
 import { useErrorText } from "../i18n/errors";
+import { runsVstr } from "../lib/vstrChain";
 
 export function BindEditor({
   text,
@@ -41,10 +43,14 @@ export function BindEditor({
     [profileId, setProfileId] = useState(""),
     [configId, setConfigId] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [outlined, setOutlined] = useState<string[]>([]);
   const bindings = effectiveBinds(sources);
   const existing = bindings.find(binding => binding.key === key);
   const inherited = effectiveBinds(sources.filter(source => source.kind !== "edited")).find(binding => binding.key === key);
   const existingCommand = existing?.command ?? "";
+  // The typed command wins over the key's binding, so the tree previews it before Set binding.
+  const chainCommand = mode === "command" ? command.trim() || existingCommand : "";
+  const showChain = runsVstr(chainCommand);
   useEffect(() => {
     setPhrase(""); setCommand(""); setProfileId(""); setConfigId(""); setError(null);
     if (/^say(?:_team)? /.test(existingCommand)) {
@@ -77,7 +83,7 @@ export function BindEditor({
       {loading || unavailable ? <p role="status" className="text-body-sm text-fg-warm">{t(loading ? "configs.loadingDefaults" : "configs.defaultsUnavailable")}</p> : null}
       {unresolved.length > 0 ? <p className="text-body-xs text-fg-warm">{t("configs.unresolvedDefaults", { sources: [...new Set(unresolved)].join(", ") })}</p> : null}
       {previewOnly ? <p className="text-body-xs text-fg-muted">{t("configs.bindPreviewHint")}</p> : null}
-      <BindKeyboard value={key} bindings={bindings} onChange={pick} />
+      <BindKeyboard value={key} bindings={bindings} onChange={pick} outlined={showChain ? outlined : []} />
       <div className="rounded-lg border border-line p-16 flex flex-col gap-12">
         <div className="flex flex-col gap-4 text-body-sm">
           <span className="text-fg-secondary">{key}: <code className="text-fg">{existing?.command || t("configStudio.free")}</code></span>
@@ -141,13 +147,27 @@ export function BindEditor({
             </div>
           </>
         ) : mode === "command" ? (
-          <label className="text-body-sm text-fg-secondary">
-            {t("configs.command")}
-            <Input
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-            />
-          </label>
+          <>
+            <label className="text-body-sm text-fg-secondary">
+              {t("configs.command")}
+              <Input
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+              />
+            </label>
+            {showChain ? (
+              <VstrChainPanel
+                key={key}
+                sources={sources}
+                keyName={key}
+                command={chainCommand}
+                readOnly={false}
+                onChange={onChange}
+                onKeyChange={setKey}
+                onOutline={setOutlined}
+              />
+            ) : null}
+          </>
         ) : (
           <>
             <Select

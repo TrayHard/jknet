@@ -32,3 +32,5 @@
 .bind-keyboard-scroll { container-type: inline-size; }
 .bind-keyboard { --unit: clamp(26px, calc((100cqw - 173px) / 22), 42px); }
 .bind-keyboard-navigation .bind-key, .bind-numpad .bind-key, .bind-function-row .bind-key { font-size: clamp(8px, calc(var(--unit) / 4), 10px); padding-inline: 3px; text-align: center; }
+/* Keys a step of a vstr chain rebinds: a ring, so the source colours stay readable. */
+.bind-key[data-outlined="true"] { box-shadow: 0 0 0 2px var(--color-bg-accent), 0 0 10px var(--color-bg-accent-glow), inset 0 1px 0 var(--alpha-white-8); }

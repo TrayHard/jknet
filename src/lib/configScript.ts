@@ -1,6 +1,7 @@
 import catalog from "./configCatalog.json";
 import { configCommands } from "./quakeConfig";
 import { GAME_KEYS } from "./gameKeys";
+import { CHAIN_TEMPLATES } from "./chainTemplates";
 
 export const SCRIPT_COMMANDS = [
   "set",
@@ -100,7 +101,6 @@ export const CONFIG_TEMPLATES: Record<string, string> = {
   capture:
     '// Clean screenshots\nseta cg_draw2D "0"\nseta cg_drawGun "0"\nbind F12 "screenshot"\n',
   chat: '// Colored chat shortcuts\nbind F5 "say ^2Good fight!"\nbind F6 "say_team ^3Ready"\n',
-  cycle:
-    '// Two-state toggle with vstr\nset view_on "set cg_drawGun 1; set view_toggle vstr view_off"\nset view_off "set cg_drawGun 0; set view_toggle vstr view_on"\nset view_toggle "vstr view_off"\nbind F7 "vstr view_toggle"\n',
+  ...CHAIN_TEMPLATES,
 };
 export { catalog };
