@@ -1,6 +1,6 @@
 {
   "game": "ja",
-  "generatedAt": "2026-09-13T07:01:56Z",
+  "generatedAt": "2026-09-25T18:10:59Z",
   "categories": [
     {
       "id": 38,
@@ -58,7 +58,7 @@
       "name": "Duel",
       "parentId": 71,
       "game": "ja",
-      "fileCount": 122,
+      "fileCount": 123,
       "hasFiles": true,
       "url": "https://jkhub.org/files/category/28-duel/"
     },
@@ -88,7 +88,7 @@
       "name": "Mixed Gametypes",
       "parentId": 71,
       "game": "ja",
-      "fileCount": 148,
+      "fileCount": 149,
       "hasFiles": true,
       "url": "https://jkhub.org/files/category/15-mixed-gametypes/"
     },
