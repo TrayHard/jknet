@@ -66,9 +66,7 @@
     "join": "Csatlakozás a játékához",
     "joining": "A játék indítása…",
     "invite": "Meghívás a saját játékba",
-    "inviteHintNoServer": "Előbb csatlakozzon egy szerverhez, majd hívja meg oda a barátait",
     "inviteHint": "Meghívás ide: {{server}}",
-    "noServer": "Csatlakozzon egy szerverhez a Szerverek képernyőn, hogy oda bárkit meghívhasson.",
     "removeConfirm": "Eltávolítja őt: {{name}}? Ahhoz, hogy újra barátok legyenek, mindkettőjüknek új kérelmet kell küldenie.",
     "remove": "Barát eltávolítása"
   },

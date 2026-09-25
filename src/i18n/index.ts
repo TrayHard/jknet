@@ -75,6 +75,8 @@ export const NAMESPACES = [
   "bundles",
   // --- slice: pk3 editor ---
   "pk3",
+  // --- slice: play with friends ---
+  "host",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

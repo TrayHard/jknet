@@ -1,0 +1,231 @@
+{
+  "about": [
+    "Shared test vectors of the JKNet relay protocol, version 1: the relay node of JKNet Online and the host tunnel of the JKNet launcher check themselves against this file.",
+    "Byte strings are lowercase hex unless the key says base64 or base64url. Integers are JSON numbers; every one here is below 2^53. A session id is 16 lowercase hex characters, the big-endian u64 of the wire, as the API writes it.",
+    "nodeSecret is the 32-byte node secret. keyId is its generation: the first byte of HMAC-SHA256(secret, ASCII 'JKNet relay key id v1').",
+    "account.userRef is the first 16 bytes of SHA-256 of the account id as UTF-8.",
+    "hostKey.input is the ASCII label, the 8-byte session id and the 16-byte user ref, concatenated; hostKey.hex is the first 16 bytes of HMAC-SHA256(node secret, input).",
+    "ticket.hex is the whole ticket: the signed part (ticket.signedPart) followed by the 16-byte MAC, the first 16 bytes of HMAC-SHA256(node secret, signed part). The API hands it to the launcher as ticket.base64url, unpadded.",
+    "messages[].hex is a whole UDP datagram: the 14-byte header (magic 4a4b52, version 01, type, flags 00, session id), the body and, when signed is true, the first 8 bytes of HMAC-SHA256(hostKey.hex, everything before them). PING and PONG carry session id 0 and no signature; a PING is padded with zeros to 64 bytes.",
+    "messages[].fields names the body fields of the protocol table in camelCase. ticket, payload and nodeId are hex; publicIpv4 is dotted.",
+    "Fixed-size bodies have exactly their listed length: a receiver drops a message with extra bytes. rejected[] lists datagrams a receiver must drop, with the reason."
+  ],
+  "account": {
+    "id": "01HZX0000000000000000000AA",
+    "userRef": "a8eefd29ddaebeec00a4040b6d265145"
+  },
+  "hostKey": {
+    "base64url": "CYsghzd6H8bVDiXdN6UTEQ",
+    "hex": "098b2087377a1fc6d50e25dd37a51311",
+    "input": "4a4b4e65742072656c617920686f7374206b65792076319f3c0a1d2b4e5f60a8eefd29ddaebeec00a4040b6d265145",
+    "label": "JKNet relay host key v1",
+    "sessionId": "9f3c0a1d2b4e5f60"
+  },
+  "messages": [
+    {
+      "direction": "host to node",
+      "fields": {
+        "nonce": 1790359200000,
+        "prevPort": 0,
+        "ticket": "01829f3c0a1d2b4e5f60000000006ab6b6a0000000006ab6eee0001000a8eefd29ddaebeec00a4040b6d2651450465752d315016ec112e4bf3f809940ce49b7b7a34",
+        "ticketLen": 66
+      },
+      "hex": "4a4b520101009f3c0a1d2b4e5f60000001a0d9b961000000004201829f3c0a1d2b4e5f60000000006ab6b6a0000000006ab6eee0001000a8eefd29ddaebeec00a4040b6d2651450465752d315016ec112e4bf3f809940ce49b7b7a345eae8ff1d1a45129",
+      "name": "HELLO",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 1
+    },
+    {
+      "direction": "host to node",
+      "fields": {
+        "nonce": 1790359200003,
+        "prevPort": 29210,
+        "ticket": "01829f3c0a1d2b4e5f60000000006ab6b6a0000000006ab6eee0001000a8eefd29ddaebeec00a4040b6d2651450465752d315016ec112e4bf3f809940ce49b7b7a34",
+        "ticketLen": 66
+      },
+      "hex": "4a4b520101009f3c0a1d2b4e5f60000001a0d9b96103721a004201829f3c0a1d2b4e5f60000000006ab6b6a0000000006ab6eee0001000a8eefd29ddaebeec00a4040b6d2651450465752d315016ec112e4bf3f809940ce49b7b7a346f41f3378eb3da50",
+      "name": "HELLO",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 1
+    },
+    {
+      "direction": "node to host",
+      "fields": {
+        "expiresAt": 1790373600,
+        "keepaliveSecs": 15,
+        "maxGuests": 16,
+        "nonce": 1790359200000,
+        "publicIpv4": "203.0.113.5",
+        "publicPort": 29210
+      },
+      "hex": "4a4b520102009f3c0a1d2b4e5f60000001a0d9b96100cb007105721a000000006ab6eee0000f0010390556d25cb77d26",
+      "name": "HELLO_ACK",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 2
+    },
+    {
+      "direction": "host to node",
+      "fields": {
+        "nonce": 1790359200001
+      },
+      "hex": "4a4b520103009f3c0a1d2b4e5f60000001a0d9b961019780e60328bdc3c0",
+      "name": "KEEPALIVE",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 3
+    },
+    {
+      "direction": "node to host",
+      "fields": {
+        "expiresAt": 1790373600,
+        "guests": 3,
+        "nonce": 1790359200001
+      },
+      "hex": "4a4b520104009f3c0a1d2b4e5f60000001a0d9b961010003000000006ab6eee0fb85fd177e15633a",
+      "name": "KEEPALIVE_ACK",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 4
+    },
+    {
+      "direction": "node to host",
+      "fields": {},
+      "hex": "4a4b520105009f3c0a1d2b4e5f604d3bda65aa016a85",
+      "name": "REHELLO",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 5
+    },
+    {
+      "direction": "node to host",
+      "fields": {
+        "guestId": 1,
+        "payload": "ffffffff676574696e666f20787878"
+      },
+      "hex": "4a4b520110009f3c0a1d2b4e5f600001ffffffff676574696e666f20787878bd99bf1458e42fab",
+      "name": "DATA",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 16
+    },
+    {
+      "direction": "host to node",
+      "fields": {
+        "guestId": 1,
+        "payload": "ffffffff696e666f526573706f6e73650a5c686f73746e616d655c6a6b6e65742d72656c61792d73656c66746573745c6368616c6c656e67655c787878"
+      },
+      "hex": "4a4b520110009f3c0a1d2b4e5f600001ffffffff696e666f526573706f6e73650a5c686f73746e616d655c6a6b6e65742d72656c61792d73656c66746573745c6368616c6c656e67655c78787853ca1f604c7198cc",
+      "name": "DATA",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 16
+    },
+    {
+      "direction": "either",
+      "fields": {
+        "guestId": 1,
+        "reason": 1
+      },
+      "hex": "4a4b520111009f3c0a1d2b4e5f6000010162484954d64a0872",
+      "name": "GUEST_CLOSE",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 17
+    },
+    {
+      "direction": "either",
+      "fields": {
+        "reason": 1
+      },
+      "hex": "4a4b520120009f3c0a1d2b4e5f6001864377e8cea77835",
+      "name": "CLOSE",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 32
+    },
+    {
+      "direction": "anyone to node",
+      "fields": {
+        "nonce": 283686952306183
+      },
+      "hex": "4a4b5201300000000000000000000001020304050607000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "name": "PING",
+      "sessionId": "0000000000000000",
+      "signed": false,
+      "type": 48
+    },
+    {
+      "direction": "node to anyone",
+      "fields": {
+        "load": 12,
+        "nodeId": "65752d31",
+        "nodeIdLen": 4,
+        "nonce": 283686952306183
+      },
+      "hex": "4a4b52013100000000000000000000010203040506070c0465752d31",
+      "name": "PONG",
+      "sessionId": "0000000000000000",
+      "signed": false,
+      "type": 49
+    },
+    {
+      "direction": "node to host",
+      "fields": {
+        "code": 1
+      },
+      "hex": "4a4b52013f009f3c0a1d2b4e5f600110cc6b24248ea3f2",
+      "name": "ERROR",
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "signed": true,
+      "type": 63
+    }
+  ],
+  "nodeSecret": {
+    "base64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "keyId": 130
+  },
+  "rejected": [
+    {
+      "hex": "4a4b520103009f3c0a1d2b4e5f60000001a0d9b961019780e60328bdc3c1",
+      "why": "the signature does not match: its last bit is flipped"
+    },
+    {
+      "hex": "4a4b520103009f3c0a1d2b4e5f60000001a0d9b961014e32f8703aae3d35",
+      "why": "signed with another key"
+    },
+    {
+      "hex": "4a4b520103009f3c0a1d2b4e5f60000001a0d9b9610100981e03c491e146c6",
+      "why": "a KEEPALIVE body of 9 bytes, correctly signed: fixed bodies take no extra bytes"
+    },
+    {
+      "hex": "4a4b52013000000000000000000000010203040506070000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "why": "a PING of 63 bytes: shorter than 64"
+    },
+    {
+      "hex": "4a4b520203009f3c0a1d2b4e5f60000001a0d9b961019780e60328bdc3c0",
+      "why": "protocol version 2"
+    }
+  ],
+  "ticket": {
+    "base64url": "AYKfPAodK05fYAAAAABqtragAAAAAGq27uAAEACo7v0p3a6-7ACkBAttJlFFBGV1LTFQFuwRLkvz-AmUDOSbe3o0",
+    "fields": {
+      "expiresAt": 1790373600,
+      "issuedAt": 1790359200,
+      "keyId": 130,
+      "maxGuests": 16,
+      "nodeId": "eu-1",
+      "nodeIdLen": 4,
+      "sessionId": "9f3c0a1d2b4e5f60",
+      "ticketVersion": 1,
+      "tier": 0,
+      "userRef": "a8eefd29ddaebeec00a4040b6d265145"
+    },
+    "hex": "01829f3c0a1d2b4e5f60000000006ab6b6a0000000006ab6eee0001000a8eefd29ddaebeec00a4040b6d2651450465752d315016ec112e4bf3f809940ce49b7b7a34",
+    "mac": "5016ec112e4bf3f809940ce49b7b7a34",
+    "signedPart": "01829f3c0a1d2b4e5f60000000006ab6b6a0000000006ab6eee0001000a8eefd29ddaebeec00a4040b6d2651450465752d31"
+  }
+}

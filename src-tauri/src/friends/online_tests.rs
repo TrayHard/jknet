@@ -128,6 +128,7 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
         server_address: Some("127.0.0.1:29070".into()),
         server_name: Some("^1JKNet ^7Test FFA".into()),
         client_name: Some("Everyday".into()),
+        hosting: None,
     };
     let stored = client
         .put_presence(&beta.ctx, &update)

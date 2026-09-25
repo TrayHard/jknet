@@ -248,6 +248,16 @@ export interface Settings {
    * never reaches this cache. Ask `getAccountState` whether one exists.
    */
   onlineToken?: null;
+  // --- slice: play with friends ---
+  /**
+   * The last settings of the **Play with friends** screen, one entry per game,
+   * without the password. `host_start` writes the entry of its game; a patch
+   * may write one too. `hostGetOptions` already folds this into its
+   * `defaults`, so the screen rarely needs to read it here.
+   */
+  hostDefaults: Partial<Record<Game, HostDefaults>>;
+  /** True once a server was started in a mode with the local network. */
+  hostFirewallNoteSeen: boolean;
 }
 
 /**
@@ -302,6 +312,10 @@ export interface SettingsPatch {
   // --- slice: account ---
   /** An `http://` or `https://` address; blank returns to the default service. */
   onlineUrl?: string;
+  // --- slice: play with friends ---
+  /** Merged one game at a time; `null` for a game forgets its entry. */
+  hostDefaults?: Partial<Record<Game, HostDefaults | null>>;
+  hostFirewallNoteSeen?: boolean;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
@@ -448,6 +462,9 @@ export interface Engine {
    * does; the other builds play multiplayer alone.
    */
   modes: LaunchMode[];
+  // --- slice: play with friends ---
+  /** Whether the release ships a dedicated server, so a client of it can host (jaMME cannot). */
+  canHost: boolean;
 }
 
 // --- slice: bundles ---
@@ -1755,6 +1772,14 @@ export interface Presence {
   clientName: string | null;
   /** RFC 3339 time the status last changed. */
   since: string;
+  // --- slice: play with friends ---
+  /**
+   * The private server this player hosts, or `null`/absent when there is none.
+   * On a friend's presence it is the service's view for me: `canJoin` is set
+   * and `password` is there only when I may join without an invite. On my own
+   * presence it is the whole object the launcher sends.
+   */
+  hosting?: HostingInfo | null;
 }
 
 export interface Friend {
@@ -1780,6 +1805,13 @@ export interface Invite {
   createdAt: string;
   /** The service drops an invite ten minutes after it was made. */
   expiresAt: string;
+  // --- slice: play with friends ---
+  /**
+   * The private server the invite leads to, `null`/absent for an invite to an
+   * ordinary server. It carries the password whatever the join policy: the
+   * invite is addressed to me alone. Answer it with `acceptInvite`.
+   */
+  hosting?: HostingInfo | null;
 }
 
 /** `src-tauri/src/friends/mod.rs`: everything the Friends screen renders. */
@@ -1845,8 +1877,382 @@ export const friendsIpc = {
       message: message ?? null,
     }),
   dismissInvite: (id: string) => callFriends<FriendsView>("dismiss_invite", { id }),
-  /** Starts the default client on the server that friend is playing on. */
-  joinFriend: (userId: string) => callFriends<RunningGame>("join_friend", { userId }),
+  /**
+   * Starts the default client on the server that friend is playing on.
+   *
+   * --- slice: play with friends ---
+   * A friend who hosts a private server is joined the way an invite is: the
+   * client of `hosting.game`, the local network first, then the relay, with
+   * the password. Refused with `hostInviteOnly` when the host has not opened
+   * the server to me.
+   */
+  joinFriend: (userId: string) => callFriends<JoinResult>("join_friend", { userId }),
+  // --- slice: play with friends ---
+  /**
+   * Answers an invite: joins its private server (`hosting`) or, for an invite
+   * to an ordinary server, starts the default client of the game its port
+   * names. The invite stays on the service; dismiss it as before.
+   */
+  acceptInvite: (inviteId: string) => callFriends<JoinResult>("accept_invite", { inviteId }),
+};
+
+// ---------------------------------------------------------------------------
+// --- slice: play with friends ---
+//
+// A private server on this PC, `src-tauri/src/hosting/`. The types mirror the
+// structures there one to one; the plan is `docs/play-with-friend.md` of the
+// workspace, section «Команды IPC и события».
+// ---------------------------------------------------------------------------
+
+/** Who can connect: through the relay, on the local network, or both. */
+export type HostNetwork = "internet_lan" | "lan" | "internet";
+
+/** Which friends join without an invite and see the password. */
+export type HostJoinPolicy = "friends" | "selected" | "invite";
+
+/** What `host_start` is given. */
+export interface HostSettings {
+  clientId: string;
+  /** `mp/ffa3`, the name `host_list_maps` answered with. */
+  map: string;
+  /** `g_gametype`, one of `HostOptions.gametypes[].index`. */
+  gametype: number;
+  /** `sv_maxclients`, 2–16. */
+  maxPlayers: number;
+  /** Minutes, 0 = no limit. */
+  timeLimit: number;
+  /** The score limit of the mode (frags, captures), 0 = no limit. Ignored by Siege. */
+  scoreLimit: number;
+  /** `bot_minplayers`, 0 = off. */
+  bots: number;
+  /** Up to 32 characters of `[A-Za-z0-9 _.'!^-]`; the core cleans the rest out. */
+  serverName: string;
+  /** 1–24 characters of `[A-Za-z0-9_-]`, or `null` for a server without a password. */
+  password: string | null;
+  network: HostNetwork;
+  joinPolicy: HostJoinPolicy;
+  /** Friends who join without an invite when `joinPolicy` is `selected`. */
+  joinUserIds: string[];
+  /** Invited once the server is ready. */
+  inviteUserIds: string[];
+  /** **Start and play**: start my own game on the server once it is ready. */
+  joinAfterStart: boolean;
+}
+
+/**
+ * `settings.json`: the last settings of the screen for one game. No password
+ * and nothing that belongs to one start (`inviteUserIds`, `joinAfterStart`).
+ */
+export interface HostDefaults {
+  clientId: string | null;
+  map: string | null;
+  gametype: number;
+  maxPlayers: number;
+  timeLimit: number;
+  scoreLimit: number;
+  bots: number;
+  serverName: string | null;
+  /** Whether the last server asked for a password. */
+  usePassword: boolean;
+  network: HostNetwork;
+  joinPolicy: HostJoinPolicy;
+  joinUserIds: string[];
+}
+
+/** Why a client of the game cannot host. */
+export type HostClientBlock = "no_dedicated_server" | "engine_missing";
+
+/** One client of the game, as the **Client** list of the screen shows it. */
+export interface HostClientOption {
+  id: string;
+  name: string;
+  engineId: string;
+  canHost: boolean;
+  /** `no_dedicated_server`: the engine ships none (jaMME). `engine_missing`: the file is not in `engine\`. */
+  reason: HostClientBlock | null;
+}
+
+/** One game type the screen offers, out of `HostingSpec` of the game. */
+export interface HostGametypeOption {
+  /** `g_gametype`. */
+  index: number;
+  /** The token of the mode in the `type` key of an `.arena` file: `ffa`, `duel`, `ctf`… */
+  id: string;
+  /** The label of the server browser: `FFA`, `Duel`, `CTF`… */
+  label: string;
+  /** `fraglimit`, `duel_fraglimit` or `capturelimit`; `null` for Siege, which has no score limit. */
+  scoreCvar: string | null;
+  defaultScore: number;
+}
+
+/** What the relay can do for this launcher right now. */
+export interface HostRelayAvailability {
+  available: boolean;
+  /** `signed_out`: nobody is signed in. `not_configured`: this build has no service. */
+  reason: "signed_out" | "not_configured" | null;
+}
+
+/** The answer of `host_get_options`. */
+export interface HostOptions {
+  game: Game;
+  clients: HostClientOption[];
+  gametypes: HostGametypeOption[];
+  /**
+   * The form as it should open: the last settings of this game where they
+   * still make sense, a fresh password, **{displayName}'s game** or
+   * **JKNet game**, and the network mode that fits the account.
+   */
+  defaults: HostSettings;
+  relay: HostRelayAvailability;
+  /** The Windows firewall note stands above the buttons until the first start in a mode with the local network. */
+  showFirewallNote: boolean;
+  /** The ten ports the engine may take, for the «No free port between…» sentence. */
+  portFrom: number;
+  portTo: number;
+}
+
+/** One map of `host_list_maps`. */
+export interface HostMap {
+  /** `mp/ffa3`, what `+map` takes. */
+  name: string;
+  /** `longname` of the `.arena` entry. */
+  title: string | null;
+  /** The arena tokens of the modes the map supports: `ffa`, `team`, `duel`… */
+  gametypes: string[];
+  /** `game`: a retail archive. `client`: a pk3 of the client, which friends need too. */
+  source: "game" | "client";
+  /** A path for `levelshotUrl`, or `null` when no picture is cached. */
+  levelshot: string | null;
+}
+
+export type HostSessionStatus = "starting" | "running" | "stopping" | "stopped" | "failed";
+
+export type HostStepId = "server" | "map" | "relay";
+
+export type HostStepState = "pending" | "active" | "done" | "failed" | "skipped";
+
+export interface HostStep {
+  step: HostStepId;
+  state: HostStepState;
+}
+
+export type HostRelayStatus = "off" | "connecting" | "active" | "unavailable" | "lost";
+
+/**
+ * Why the relay is not carrying the server, for the sentence of the screen.
+ *
+ * - `unavailable`: the service answered `503`, the relay is switched off or full;
+ * - `node_silent`: the relay node did not answer the tunnel in 10 s;
+ * - `quota_active`: this account already holds a relay session;
+ * - `quota_daily`: the relay time of the day is used up (it resets at 00:00 UTC);
+ * - `rate_limited`: too many relay requests in a minute;
+ * - `signed_out`: nobody is signed in;
+ * - `network`: the service could not be reached;
+ * - `expired`: the ticket ran out and could not be renewed.
+ */
+export type HostRelayErrorCode =
+  | "unavailable"
+  | "node_silent"
+  | "quota_active"
+  | "quota_daily"
+  | "rate_limited"
+  | "signed_out"
+  | "network"
+  | "expired";
+
+export interface HostRelay {
+  status: HostRelayStatus;
+  /** `203.0.113.5:29210`: the address friends outside the network connect to. */
+  address: string | null;
+  region: string | null;
+  /** RFC 3339: when the ticket runs out unless it is renewed. */
+  expiresAt: string | null;
+  /** An English sentence for the log and the fallback text. */
+  error: string | null;
+  errorCode: HostRelayErrorCode | null;
+}
+
+/** One line of the **Players** block. */
+export interface HostPlayer {
+  /** With colour codes; the screen draws them. */
+  name: string;
+  score: number;
+  ping: number;
+  bot: boolean;
+}
+
+/** One invite `host_invite` (or `inviteUserIds`) sent in this session. */
+export interface HostInvited {
+  userId: string;
+  /** RFC 3339. */
+  at: string;
+  ok: boolean;
+}
+
+export type HostStopReason =
+  | "user"
+  | "empty"
+  | "relay_expired"
+  | "crashed"
+  | "start_failed"
+  | "launcher_exit";
+
+/**
+ * What went wrong, for the **Failed** state.
+ *
+ * - `spawn`: the process did not start (`message` says why);
+ * - `exited`: it ended during startup, `HostSession.exitCode` says how;
+ * - `timeout`: no answer with the session label within 30 s: «The server did not load {map} in 30 seconds.»;
+ * - `ports_busy`: every port from `portFrom` to `portTo` is taken;
+ * - `map_missing`: the engine did not find the map;
+ * - `crashed`: it ended while running.
+ */
+export type HostFailureCode = "spawn" | "exited" | "timeout" | "ports_busy" | "map_missing" | "crashed";
+
+export interface HostFailure {
+  code: HostFailureCode;
+  /** An English sentence for the log and the fallback text. */
+  message: string;
+  portFrom: number | null;
+  portTo: number | null;
+}
+
+/** The one private server of this launcher: `host:session` carries it whole on every change. */
+export interface HostSession {
+  /** 16 hex characters, also `jknet_session` in the serverinfo. */
+  id: string;
+  status: HostSessionStatus;
+  /** Always the three steps, in order. */
+  steps: HostStep[];
+  settings: HostSettings;
+  game: Game;
+  pid: number | null;
+  /** The port the engine took, once it answered. */
+  port: number | null;
+  /** `127.0.0.1:29070`, for the host's own game only. Never sent to friends. */
+  localAddress: string | null;
+  /** `192.168.1.23:29070`, at most four, empty in the `internet` mode. */
+  lanAddresses: string[];
+  relay: HostRelay;
+  players: HostPlayer[];
+  invited: HostInvited[];
+  /** How many different players joined, bots aside: «{count} players joined». */
+  joinedCount: number;
+  startedAt: string;
+  readyAt: string | null;
+  /** Since when nobody is on the server; `null` while somebody is. */
+  emptySince: string | null;
+  /** When the auto-stop fires; `null` while somebody is on the server. */
+  autoStopAt: string | null;
+  stoppedAt: string | null;
+  stopReason: HostStopReason | null;
+  exitCode: number | null;
+  failure: HostFailure | null;
+  /** The last 30 lines of the server console, filled when the session failed. */
+  logTail: string[];
+}
+
+/**
+ * The `hosting` object of a presence or an invite.
+ *
+ * The launcher of the host sends it whole. Each friend gets their own view from
+ * the service: no `joinUserIds`, `canJoin` set, and `password` only where
+ * `canJoin` is true. An invite carries the password to its one recipient.
+ */
+export interface HostingInfo {
+  /** The `jknet_session` of the server, not the id of a relay session. */
+  sessionId: string;
+  game: Game;
+  mod: string | null;
+  map: string | null;
+  gametype: number;
+  players: number;
+  maxPlayers: number;
+  lanAddresses: string[];
+  relayAddress: string | null;
+  password?: string | null;
+  joinPolicy: HostJoinPolicy;
+  /** On my own presence only. */
+  joinUserIds?: string[];
+  /** On a friend's presence only: whether I may join without an invite. */
+  canJoin?: boolean;
+}
+
+/** How a join reached its server. */
+export type JoinPath = "lan" | "relay" | "direct";
+
+/** The answer of `accept_invite` and `join_friend`. */
+export interface JoinResult {
+  game: RunningGame;
+  /** `lan`: an address of the host's network answered. `relay`: through the relay. `direct`: an ordinary server. */
+  path: JoinPath;
+  /** A server open to the host's network only did not answer here: the toast warns, the game keeps trying. */
+  probeFailed: boolean;
+}
+
+/** Event names of the hosting slice. */
+export const hostEvents = {
+  /** The whole `HostSession` on every change. */
+  session: "host:session",
+  /** No payload: the player closed the main window while the server runs. Ask **Stop your server and quit?** */
+  closeRequested: "host:close-requested",
+} as const;
+
+/** Characters of a generated password: no `0`, `o`, `1`, `l` or `i`, which are misread aloud. */
+export const HOST_PASSWORD_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+
+/** What `host_start` accepts as a password of the player's own. */
+export const HOST_PASSWORD_PATTERN = /^[A-Za-z0-9_-]{1,24}$/;
+
+/** A fresh eight-character password, for **New password**. The core makes the first one. */
+export function newHostPassword(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => HOST_PASSWORD_ALPHABET[byte % HOST_PASSWORD_ALPHABET.length]).join("");
+}
+
+/**
+ * Calls a host command, or the stand-ins of `devHost.ts` in a browser.
+ *
+ * The same arrangement as `callFriends`: `import.meta.env.DEV` is a
+ * compile-time constant, so the branch and the module leave the production
+ * bundle, and inside Tauri nothing changes.
+ */
+function callHost<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (import.meta.env.DEV && !isTauri()) {
+    return import("./devHost").then((module) => module.devHost<T>(command, args));
+  }
+  return call<T>(command, args);
+}
+
+export const hostIpc = {
+  /** The clients, modes and defaults of the form. `game` defaults to the active game. */
+  getOptions: (game?: Game) => callHost<HostOptions>("host_get_options", { game: game ?? null }),
+  /** The maps of one client; with `gametype` only the maps that offer that mode. */
+  listMaps: (clientId: string, gametype?: number) =>
+    callHost<HostMap[]>("host_list_maps", { clientId, gametype: gametype ?? null }),
+  /**
+   * Starts the server. Answers at once with the session in `starting`; the
+   * rest arrives as `host:session`. Refused with `hostBusy` while one runs.
+   */
+  start: (settings: HostSettings) => callHost<HostSession>("host_start", { settings }),
+  /** Stops the server; a second call is not an error. Resolves once it is down. */
+  stop: () => callHost<void>("host_stop"),
+  getSession: () => callHost<HostSession | null>("host_get_session"),
+  /** **Play**: my own game on my own server, with its password. */
+  joinOwn: (profileId?: string) => callHost<RunningGame>("host_join_own", { profileId: profileId ?? null }),
+  /** **Change map**: players stay connected. */
+  changeMap: (map: string, gametype: number) => callHost<HostSession>("host_change_map", { map, gametype }),
+  /** Who joins without an invite, while the server runs; presence follows at once. */
+  setJoinPolicy: (joinPolicy: HostJoinPolicy, joinUserIds: string[]) =>
+    callHost<HostSession>("host_set_join_policy", { joinPolicy, joinUserIds }),
+  /** **Retry** of the relay line. */
+  retryRelay: () => callHost<HostSession>("host_retry_relay"),
+  /** **Invite**: an invite to this server, with its addresses and password. */
+  invite: (toUserId: string, message?: string | null) =>
+    callHost<Invite>("host_invite", { toUserId, message: message ?? null }),
+  /** **Show log**: `logs\host-server.log` in the system viewer. */
+  openLog: () => callHost<void>("host_open_log"),
 };
 
 // --- slice: jkhub -----------------------------------------------------------

@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -45,6 +46,15 @@ interface ComboboxProps {
   size?: SelectSize;
   disabled?: boolean;
   className?: string;
+  // --- slice: play with friends ---
+  /**
+   * Draws an option instead of its label and hint, in the list and in the
+   * trigger: a map of the **Play with friends** screen is its picture and its
+   * name. The trigger then grows to what it draws instead of keeping 36 px.
+   * The label and the hint are still what the search matches and what the
+   * trigger reads out.
+   */
+  renderOption?: (option: ComboboxOption, place: "trigger" | "list") => ReactNode;
 }
 
 /** Distance between the trigger and the popover, in pixels. */
@@ -102,6 +112,7 @@ export function Combobox({
   size = "md",
   disabled = false,
   className,
+  renderOption,
 }: ComboboxProps) {
   const id = useId();
   const listId = `${id}-list`;
@@ -324,22 +335,33 @@ export function Combobox({
           "bg-input border transition-colors duration-150",
           "disabled:cursor-not-allowed disabled:text-fg-disabled",
           open ? "border-line-focus" : "border-line hover:border-line-strong",
-          size === "sm" ? "h-28 gap-6 pl-10 pr-28" : "h-36 gap-8 pl-12 pr-32",
+          // --- slice: play with friends --- a drawn option sets the height.
+          renderOption
+            ? "min-h-36 gap-8 py-8 pl-8 pr-32 text-left"
+            : size === "sm"
+              ? "h-28 gap-6 pl-10 pr-28"
+              : "h-36 gap-8 pl-12 pr-32",
           className,
         )}
       >
         {label ? (
           <span className="text-label-xs text-fg-muted shrink-0">{label}</span>
         ) : null}
-        <span
-          className={cn(
-            "truncate",
-            locked ? "text-fg-disabled" : selected ? "text-fg" : "text-fg-muted",
-            label ? "text-body-sm-medium" : "text-body-md-medium",
-          )}
-        >
-          {text}
-        </span>
+        {renderOption && selected ? (
+          <span className={cn("flex-1 min-w-0", locked && "opacity-60")}>
+            {renderOption(selected, "trigger")}
+          </span>
+        ) : (
+          <span
+            className={cn(
+              "truncate",
+              locked ? "text-fg-disabled" : selected ? "text-fg" : "text-fg-muted",
+              label ? "text-body-sm-medium" : "text-body-md-medium",
+            )}
+          >
+            {text}
+          </span>
+        )}
         <ChevronDown
           size={14}
           aria-hidden
@@ -446,14 +468,20 @@ export function Combobox({
                               : "text-fg",
                         )}
                       >
-                        <span className="flex-1 min-w-0 flex flex-col">
-                          <span className="truncate">{option.label}</span>
-                          {option.hint ? (
-                            <span className="truncate text-label-xs text-fg-muted">
-                              {option.hint}
-                            </span>
-                          ) : null}
-                        </span>
+                        {renderOption ? (
+                          <span className="flex-1 min-w-0">
+                            {renderOption(option, "list")}
+                          </span>
+                        ) : (
+                          <span className="flex-1 min-w-0 flex flex-col">
+                            <span className="truncate">{option.label}</span>
+                            {option.hint ? (
+                              <span className="truncate text-label-xs text-fg-muted">
+                                {option.hint}
+                              </span>
+                            ) : null}
+                          </span>
+                        )}
                         {isSelected ? (
                           <Check size={14} aria-hidden className="shrink-0" />
                         ) : null}

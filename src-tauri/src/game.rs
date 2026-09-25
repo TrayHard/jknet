@@ -343,7 +343,95 @@ pub struct GameSpec {
     /// [`crate::launch::prepare_basepath`] copies `<prefix>*.dll` out of the
     /// unpacked build into the base root.
     pub basepath_module_prefix: Option<&'static str>,
+
+    // --- slice: play with friends ---
+    /// What a private server of this game offers: modes, the map the form
+    /// starts on, the lines of `jknet-host.cfg` that differ. See
+    /// [`crate::hosting`].
+    pub hosting: HostingSpec,
 }
+
+// --- slice: play with friends ---
+/// Everything a private server needs to know about one game.
+#[derive(Debug, Clone, Copy)]
+pub struct HostingSpec {
+    /// Game types the host screen offers, in the order it lists them.
+    pub gametypes: &'static [HostGametype],
+    /// Map the setup form preselects.
+    pub default_map: &'static str,
+    /// The `sv_master*` cvars `jknet-host.cfg` blanks.
+    ///
+    /// A safety net on top of `dedicated 1`, which is what actually keeps a
+    /// private server off the master lists. Jedi Outcast has none: JK2MV makes
+    /// `sv_master1`–`sv_master3` read only and prints `sv_master1 is read
+    /// only.` for every line that touches them (stage 0 of TASK-41,
+    /// `notes/host-spike-2026-09-25.md` of the workspace).
+    pub master_cvars: &'static [&'static str],
+}
+
+/// One game type of a private server.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HostGametype {
+    /// `g_gametype`, the index into [`GameSpec::gametypes`].
+    pub index: u8,
+    /// The token of this mode in the `type` key of an `.arena` entry.
+    pub arena_type: &'static str,
+    /// `fraglimit`, `duel_fraglimit` or `capturelimit`; `None` for Siege.
+    pub score_cvar: Option<&'static str>,
+    /// What the score limit starts at on the form.
+    pub default_score: u16,
+}
+
+impl HostingSpec {
+    /// The game type with this `g_gametype`, if the screen offers it.
+    pub fn gametype(&self, index: u8) -> Option<&'static HostGametype> {
+        self.gametypes.iter().find(|gametype| gametype.index == index)
+    }
+}
+
+/// The three score limits both games know, with the default each engine
+/// registers them with: `capturelimit` 8, `duel_fraglimit` 10, `fraglimit`
+/// 20 (`codemp/game/g_xcvar.h:38`, `:66`, `:67` of OpenJK `1a6a6434`). The
+/// strings `duel_fraglimit`, `fraglimit` and `capturelimit` are in the
+/// `vm/jk2mpgame.qvm` of every Jedi Outcast archive that carries one, read on
+/// 2026-09-25.
+///
+/// `jknet-host.cfg` writes all three on every start: they are archived cvars,
+/// and a value a previous session left in the server's own config would
+/// otherwise decide a mode it was never set for.
+pub const SCORE_CVARS: [(&str, u16); 3] = [
+    ("fraglimit", 20),
+    ("duel_fraglimit", 10),
+    ("capturelimit", 8),
+];
+
+/// Jedi Academy: the modes of `gametype_t` a host can pick. Single Player (5)
+/// is not a multiplayer mode.
+static JA_HOST_GAMETYPES: [HostGametype; 9] = [
+    HostGametype { index: 0, arena_type: "ffa", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 1, arena_type: "holocron", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 2, arena_type: "jedimaster", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 3, arena_type: "duel", score_cvar: Some("duel_fraglimit"), default_score: 10 },
+    HostGametype { index: 4, arena_type: "powerduel", score_cvar: Some("duel_fraglimit"), default_score: 10 },
+    HostGametype { index: 6, arena_type: "team", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 7, arena_type: "siege", score_cvar: None, default_score: 0 },
+    HostGametype { index: 8, arena_type: "ctf", score_cvar: Some("capturelimit"), default_score: 8 },
+    HostGametype { index: 9, arena_type: "cty", score_cvar: Some("capturelimit"), default_score: 8 },
+];
+
+/// Jedi Outcast: no Power Duel and no Siege, Single Player (4) and Saga (6)
+/// are not offered. The arena tokens are the ones `scripts/arenas.txt` of
+/// `assets0.pk3` uses: `type "ffa holocron jedimaster team"`, `"ctf cty team
+/// ffa holocron jedimaster"`, `"duel"` (read on 2026-09-25).
+static JO_HOST_GAMETYPES: [HostGametype; 7] = [
+    HostGametype { index: 0, arena_type: "ffa", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 1, arena_type: "holocron", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 2, arena_type: "jedimaster", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 3, arena_type: "duel", score_cvar: Some("duel_fraglimit"), default_score: 10 },
+    HostGametype { index: 5, arena_type: "team", score_cvar: Some("fraglimit"), default_score: 20 },
+    HostGametype { index: 7, arena_type: "ctf", score_cvar: Some("capturelimit"), default_score: 8 },
+    HostGametype { index: 8, arena_type: "cty", score_cvar: Some("capturelimit"), default_score: 8 },
+];
 
 /// Jedi Academy: the game JKNet was built for.
 static JEDI_ACADEMY: GameSpec = GameSpec {
@@ -389,6 +477,12 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
     // --- slice: player profiles ---
     has_saber_hilts: true,
     basepath_module_prefix: None,
+    // --- slice: play with friends ---
+    hosting: HostingSpec {
+        gametypes: &JA_HOST_GAMETYPES,
+        default_map: "mp/ffa3",
+        master_cvars: &["sv_master1", "sv_master2", "sv_master3", "sv_master4", "sv_master5"],
+    },
 };
 
 /// Jedi Outcast, played through JK2MV.
@@ -456,6 +550,14 @@ static JEDI_OUTCAST: GameSpec = GameSpec {
     // to name. A profile of this game writes neither `saber1` nor `saber2`.
     has_saber_hilts: false,
     basepath_module_prefix: Some("jk2mvmenu"),
+    // --- slice: play with friends ---
+    // `ffa_bespin` is the first FFA map of `scripts/arenas.txt` in
+    // `assets0.pk3`, the list JK2MV reads beside the `*.arena` files.
+    hosting: HostingSpec {
+        gametypes: &JO_HOST_GAMETYPES,
+        default_map: "ffa_bespin",
+        master_cvars: &[],
+    },
 };
 
 impl GameSpec {
@@ -814,6 +916,56 @@ mod tests {
         assert!(games[1].gametypes.contains(&"Holocron"));
         assert!(games[1].gametypes.contains(&"Jedi Master"));
         assert!(games[1].gametypes.contains(&"CTY"));
+    }
+
+    // --- slice: play with friends ---
+
+    #[test]
+    fn a_host_gametype_points_at_the_label_of_its_own_game() {
+        // The index is `g_gametype`, and the two games number their modes
+        // differently from 4 up: a table shared between them would start a
+        // Jedi Outcast CTF server as Siege.
+        let expect = [
+            (Game::JediAcademy, "ffa", "FFA"),
+            (Game::JediAcademy, "duel", "Duel"),
+            (Game::JediAcademy, "powerduel", "Power Duel"),
+            (Game::JediAcademy, "team", "Team FFA"),
+            (Game::JediAcademy, "siege", "Siege"),
+            (Game::JediAcademy, "ctf", "CTF"),
+            (Game::JediAcademy, "cty", "CTY"),
+            (Game::JediOutcast, "ffa", "FFA"),
+            (Game::JediOutcast, "duel", "Duel"),
+            (Game::JediOutcast, "team", "Team FFA"),
+            (Game::JediOutcast, "ctf", "CTF"),
+            (Game::JediOutcast, "cty", "CTY"),
+        ];
+        for (game, token, label) in expect {
+            let spec = game.spec();
+            let gametype = spec
+                .hosting
+                .gametypes
+                .iter()
+                .find(|gametype| gametype.arena_type == token)
+                .unwrap_or_else(|| panic!("{} offers no {token}", spec.display_name));
+            assert_eq!(spec.gametype_label(gametype.index), label, "{} {token}", spec.display_name);
+        }
+    }
+
+    #[test]
+    fn a_private_server_never_offers_single_player_or_saga() {
+        for game in Game::ALL {
+            let spec = game.spec();
+            for gametype in spec.hosting.gametypes {
+                let label = spec.gametype_label(gametype.index);
+                assert!(label != "Single Player" && label != "Saga", "{label}");
+                // Siege is the one mode without a score limit.
+                assert_eq!(gametype.score_cvar.is_none(), label == "Siege", "{label}");
+            }
+        }
+        assert_eq!(Game::JediAcademy.spec().hosting.default_map, "mp/ffa3");
+        assert_eq!(Game::JediOutcast.spec().hosting.default_map, "ffa_bespin");
+        // JK2MV makes the first three master cvars read only.
+        assert!(Game::JediOutcast.spec().hosting.master_cvars.is_empty());
     }
 
     #[test]

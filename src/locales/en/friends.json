@@ -66,9 +66,7 @@
     "join": "Join game",
     "joining": "Starting the game…",
     "invite": "Invite to my game",
-    "inviteHintNoServer": "Join a server first, then invite your friends to it",
     "inviteHint": "Invite to {{server}}",
-    "noServer": "Join a server from the Servers screen to invite anyone to it.",
     "removeConfirm": "Remove {{name}}? You will both have to send a new request to be friends again.",
     "remove": "Remove friend"
   },

@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { useEngines } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
-import { useAppUpdateContext } from "./AppUpdateProvider";
+// --- slice: play with friends ---
+import { useAppUpdateContext, useUpdateBlockedByHost } from "./AppUpdateProvider";
 import { Button } from "./ui";
 
 /** The license the launcher is released under, as GitHub renders it. */
@@ -27,6 +28,9 @@ function openExternal(url: string) {
  */
 export function AboutCard() {
   const { t } = useTranslation("settings");
+  // --- slice: play with friends ---
+  const { t: tHost } = useTranslation("host");
+  const hosting = useUpdateBlockedByHost();
   const update = useAppUpdateContext();
 
   const version = update?.currentVersion ?? null;
@@ -47,6 +51,10 @@ export function AboutCard() {
                 : t("about.versionUnknown")}
           </p>
           <UpdateLine />
+          {/* --- slice: play with friends --- */}
+          {hosting && newVersion !== null ? (
+            <p className="text-body-sm text-fg-warm pt-8">{tHost("update.blocked")}</p>
+          ) : null}
           <p className="text-body-sm text-fg-muted pt-8">
             <button
               type="button"
@@ -65,7 +73,9 @@ export function AboutCard() {
           <Button
             variant="primary"
             icon={<Download size={16} />}
-            disabled={update?.busy ?? true}
+            // --- slice: play with friends ---
+            disabled={(update?.busy ?? true) || hosting}
+            title={hosting ? tHost("update.blocked") : undefined}
             onClick={update?.install}
           >
             {t("about.install")}

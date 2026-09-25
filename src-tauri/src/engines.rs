@@ -113,6 +113,21 @@ pub struct SinglePlayer {
     pub executable_x64: &'static str,
 }
 
+// --- slice: play with friends ---
+/// The dedicated server a release ships next to the client, in both widths.
+///
+/// The names were checked on 2026-09-25 against the `engine\` folders of the
+/// installed clients of the user and by starting each server (stage 0 of
+/// TASK-41). A build whose project ships one width names the same file twice.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DedicatedServer {
+    /// Executable of the Windows x86 archive.
+    pub executable: &'static str,
+    /// Executable of the Windows x64 archive.
+    pub executable_x64: &'static str,
+}
+
 /// One engine JKNet can install.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -170,6 +185,11 @@ pub struct Engine {
     /// The frontend reads [`EngineAvailability::modes`] instead of this.
     #[serde(skip)]
     pub single_player: Option<SinglePlayer>,
+    // --- slice: play with friends ---
+    /// The dedicated server of the release, `None` for a build that ships
+    /// none (jaMME). The frontend reads [`EngineAvailability::can_host`].
+    #[serde(skip)]
+    pub dedicated: Option<DedicatedServer>,
     /// Whether a release flagged as a pre-release may be installed. Only the
     /// projects that publish rolling builds need it.
     #[serde(skip)]
@@ -263,6 +283,29 @@ impl Engine {
         let x64 = dir.join(single.executable_x64);
         Some(if x64.is_file() { x64 } else { original })
     }
+
+    // --- slice: play with friends ---
+    /// The dedicated server inside `engine\`, or `None` when the build ships
+    /// none or the file is not there.
+    ///
+    /// The width of the installed client goes first, the way
+    /// [`Engine::installed_executable`] picks the client: an x64 install
+    /// starts the x64 server when it has one, and falls back to the other
+    /// width rather than to nothing.
+    pub fn dedicated_executable(&self, dir: &std::path::Path) -> Option<std::path::PathBuf> {
+        let server = self.dedicated?;
+        let client_is_x64 = !dir.join(self.executable).is_file()
+            && dir.join(self.executable_for_asset("x86_64")).is_file();
+        let order = if client_is_x64 {
+            [server.executable_x64, server.executable]
+        } else {
+            [server.executable, server.executable_x64]
+        };
+        order
+            .into_iter()
+            .map(|name| dir.join(name))
+            .find(|path| path.is_file())
+    }
 }
 
 /// Every engine, in the order the Clients screen shows them.
@@ -312,6 +355,11 @@ const ENGINES: &[Engine] = &[
             executable: "openjk_sp.x86.exe",
             executable_x64: "openjk_sp.x86_64.exe",
         }),
+        // --- slice: play with friends --- both widths started on 2026-09-25.
+        dedicated: Some(DedicatedServer {
+            executable: "openjkded.x86.exe",
+            executable_x64: "openjkded.x86_64.exe",
+        }),
         // OpenJK ships one rolling `latest` release and keeps an old tagged
         // one flagged as a pre-release; taking both leaves a fallback.
         allow_prerelease: true,
@@ -354,6 +402,12 @@ const ENGINES: &[Engine] = &[
         not_installable_reason: None,
         default_fs_game: None,
         single_player: None,
+        // --- slice: play with friends --- the project ships no x64 archive,
+        // so the one width is named twice. Started on 2026-09-25.
+        dedicated: Some(DedicatedServer {
+            executable: "eternaljkded.x86.exe",
+            executable_x64: "eternaljkded.x86.exe",
+        }),
         allow_prerelease: false,
         asset_rules: &[
             AssetRule {
@@ -384,6 +438,12 @@ const ENGINES: &[Engine] = &[
         not_installable_reason: None,
         default_fs_game: None,
         single_player: None,
+        // --- slice: play with friends --- x86 started on 2026-09-25; the x64
+        // name follows the client's and was not seen in an archive yet.
+        dedicated: Some(DedicatedServer {
+            executable: "taystjkded.x86.exe",
+            executable_x64: "taystjkded.x86_64.exe",
+        }),
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -419,6 +479,9 @@ const ENGINES: &[Engine] = &[
         // `jamme +set fs_game mme +set fs_extraGames "japlus japp"`.
         default_fs_game: Some("mme"),
         single_player: None,
+        // --- slice: play with friends --- the archive holds `jamme.exe` and
+        // no server, so a jaMME client cannot host.
+        dedicated: None,
         allow_prerelease: true,
         asset_rules: &[
             AssetRule {
@@ -455,6 +518,12 @@ const ENGINES: &[Engine] = &[
         // `fs_basepath` already covers.
         default_fs_game: None,
         single_player: None,
+        // --- slice: play with friends --- the same name in both archives;
+        // the x64 one was started on 2026-09-25.
+        dedicated: Some(DedicatedServer {
+            executable: "jk2mvded.exe",
+            executable_x64: "jk2mvded.exe",
+        }),
         // 1.4.1 of 2018-02-15 is the only tagged release; the project builds
         // every push but tags nothing, so there is no pre-release to fall back
         // on and nothing to allow.
@@ -532,10 +601,16 @@ pub struct EngineAvailability {
     /// archive ships a single-player executable. A client made on the
     /// Clients screen gets all of them.
     pub modes: Vec<LaunchMode>,
+    // --- slice: play with friends ---
+    /// Whether the release ships a dedicated server, so a client of it can
+    /// host a private server. Whether the file is on disk is a question about
+    /// one client, which `host_get_options` answers.
+    pub can_host: bool,
 }
 
 fn availability(engine: &Engine, host: HostSystem) -> EngineAvailability {
     let modes = engine.modes();
+    let can_host = engine.dedicated.is_some();
     let mut engine = engine.clone();
     let compatibility_error = if host.supports_engines() {
         None
@@ -543,7 +618,7 @@ fn availability(engine: &Engine, host: HostSystem) -> EngineAvailability {
         engine.installable = false;
         Some("unsupportedEngineSystem")
     };
-    EngineAvailability { engine, system: host.label(), compatibility_error, modes }
+    EngineAvailability { engine, system: host.label(), compatibility_error, modes, can_host }
 }
 
 // ---------------------------------------------------------------------------
@@ -654,9 +729,13 @@ pub async fn install_engine(
     state: tauri::State<'_, AppState>,
     installs: tauri::State<'_, engine_install::InstallState>,
     bundles: tauri::State<'_, BundlesState>,
+    // --- slice: play with friends ---
+    host: tauri::State<'_, crate::hosting::HostState>,
     client_id: String,
     tag: Option<String>,
 ) -> Result<Client> {
+    // Unpacking empties `engine\`, which a running private server holds open.
+    host.refuse_if_hosting(&client_id)?;
     let paths = state.paths()?;
     let _claim = admit_engine_install(&bundles, &paths, &client_id)?;
     engine_install::install(&app, &installs, &paths, &client_id, tag.as_deref()).await
@@ -1225,6 +1304,49 @@ mod tests {
         assert_eq!(openjk.single_player_executable(&dir).unwrap(), dir.join("openjk_sp.x86.exe"));
         // A build without a single-player game has no file to name.
         assert!(require("eternaljk").unwrap().single_player_executable(&dir).is_none());
+    }
+
+    // --- slice: play with friends ---
+
+    #[test]
+    fn every_engine_but_jamme_ships_a_dedicated_server() {
+        for engine in ENGINES {
+            assert_eq!(engine.dedicated.is_some(), engine.id != "jamme", "{}", engine.id);
+            let listed = availability(engine, HostSystem::current());
+            assert_eq!(listed.can_host, engine.id != "jamme", "{}", engine.id);
+        }
+        let json = serde_json::to_value(availability(require("jamme").unwrap(), HostSystem::current()))
+            .expect("serializes");
+        assert_eq!(json["canHost"], false);
+        // The file names stay in the core, like the single-player ones.
+        assert!(json.get("dedicated").is_none(), "{json}");
+    }
+
+    #[test]
+    fn the_dedicated_server_follows_the_width_of_the_installed_client() {
+        let temp = tempfile::tempdir().unwrap();
+        let openjk = require("openjk").unwrap();
+        let dir = temp.path().join("openjk");
+        std::fs::create_dir(&dir).unwrap();
+        // Nothing unpacked: no server to start.
+        assert_eq!(openjk.dedicated_executable(&dir), None);
+
+        // An x64 install with both servers in it starts the x64 one.
+        std::fs::write(dir.join("openjk.x86_64.exe"), b"MZ").unwrap();
+        std::fs::write(dir.join("openjkded.x86_64.exe"), b"MZ").unwrap();
+        std::fs::write(dir.join("openjkded.x86.exe"), b"MZ").unwrap();
+        assert_eq!(openjk.dedicated_executable(&dir), Some(dir.join("openjkded.x86_64.exe")));
+
+        // An x86 install starts the x86 one.
+        std::fs::write(dir.join("openjk.x86.exe"), b"MZ").unwrap();
+        assert_eq!(openjk.dedicated_executable(&dir), Some(dir.join("openjkded.x86.exe")));
+
+        // The other width stands in when the first one is gone.
+        std::fs::remove_file(dir.join("openjkded.x86.exe")).unwrap();
+        assert_eq!(openjk.dedicated_executable(&dir), Some(dir.join("openjkded.x86_64.exe")));
+
+        // jaMME has nothing to find.
+        assert_eq!(require("jamme").unwrap().dedicated_executable(&dir), None);
     }
 
     #[test]

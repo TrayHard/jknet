@@ -15,6 +15,8 @@ import { AppUpdateProvider } from "./components/AppUpdateProvider";
 // --- slice: friends ---
 import { FriendsProvider } from "./components/FriendsProvider";
 import { GameEventsProvider } from "./components/GameEventsProvider";
+// --- slice: play with friends ---
+import { HostProvider } from "./components/HostProvider";
 // --- slice: jkhub details ---
 import { JkhubDownloadToasts } from "./components/library/JkhubDownloadToasts";
 import { ToastsProvider } from "./components/ToastsProvider";
@@ -33,6 +35,8 @@ import { ClientWindowPage } from "./pages/ClientWindowPage";
 import { EnginePage } from "./pages/EnginePage";
 import { FriendsPage } from "./pages/FriendsPage";
 import { HomePage } from "./pages/HomePage";
+// --- slice: play with friends ---
+import { HostPage } from "./pages/HostPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { OnboardingGate } from "./pages/onboarding/OnboardingGate";
 import { OnboardingPage } from "./pages/onboarding/OnboardingPage";
@@ -103,7 +107,13 @@ export default function App() {
               {/* An invitation arrives on any screen, and answering it
                   navigates away from the one it arrived on. */}
               <FriendsProvider>
-                <RouterProvider router={getMainRouter()} />
+                {/* --- slice: play with friends --- */}
+                {/* The private server outlives every screen: the sidebar
+                    counter and the Home card follow it, and closing the
+                    window over it asks first. */}
+                <HostProvider>
+                  <RouterProvider router={getMainRouter()} />
+                </HostProvider>
               </FriendsProvider>
             </AccountProvider>
           </AppUpdateProvider>
@@ -152,6 +162,8 @@ function getMainRouter() {
         <Route element={<AppShell />}>
           <Route path="/" element={<HomePage />} />
           <Route path="/servers" element={<ServersPage />} />
+          {/* --- slice: play with friends --- */}
+          <Route path="/host" element={<HostPage />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/community/:id" element={<CommunityPage />} />
           <Route path="/library" element={<LibraryPage />} />

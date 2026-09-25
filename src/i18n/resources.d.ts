@@ -20,6 +20,8 @@ import type errors from "../locales/en/errors.json";
 import type friends from "../locales/en/friends.json";
 import type games from "../locales/en/games.json";
 import type home from "../locales/en/home.json";
+// --- slice: play with friends ---
+import type host from "../locales/en/host.json";
 import type jkhub from "../locales/en/jkhub.json";
 import type library from "../locales/en/library.json";
 import type nav from "../locales/en/nav.json";
@@ -53,6 +55,8 @@ declare module "i18next" {
       bundles: typeof bundles;
       // --- slice: pk3 editor ---
       pk3: typeof pk3;
+      // --- slice: play with friends ---
+      host: typeof host;
     };
   }
 }

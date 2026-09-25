@@ -61,6 +61,12 @@ pub struct Presence {
     /// RFC 3339 in UTC.
     #[serde(default)]
     pub since: String,
+    // --- slice: play with friends ---
+    /// The private server this player hosts. A friend's presence carries the
+    /// service's view for this player (`canJoin`, the password only where it
+    /// is true); the launcher's own carries the whole object.
+    #[serde(default)]
+    pub hosting: Option<HostingInfo>,
 }
 
 /// A presence nobody has said anything about is an offline one, which is also
@@ -73,7 +79,96 @@ impl Default for Presence {
             server_name: None,
             client_name: None,
             since: String::new(),
+            hosting: None,
         }
+    }
+}
+
+// --- slice: play with friends ---
+/// The `hosting` object of a presence and of an invite: a private server one
+/// player runs for friends.
+///
+/// The host's launcher sends it whole — the password, `joinPolicy` and
+/// `joinUserIds` included. The service forwards each friend a view of their
+/// own: no `joinUserIds`, `canJoin` set, and the password only where
+/// `canJoin` is true. An invite carries the password to its one recipient.
+///
+/// `game` and `joinPolicy` are strings, like every enumeration of the
+/// contract here: a value a newer launcher sends must not turn a friend list
+/// into a parse error. `Debug` leaves the password out.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HostingInfo {
+    /// `jknet_session` of the server: 16 hex characters the launcher made.
+    /// Not the id of a relay session.
+    pub session_id: String,
+    /// `ja` or `jo`.
+    pub game: String,
+    /// `fs_game`, `None` for `base`.
+    #[serde(default, rename = "mod")]
+    pub mod_name: Option<String>,
+    #[serde(default)]
+    pub map: Option<String>,
+    #[serde(default)]
+    pub gametype: u32,
+    #[serde(default)]
+    pub players: u32,
+    #[serde(default)]
+    pub max_players: u32,
+    /// `a.b.c.d:port` of the host's network, at most four.
+    #[serde(default)]
+    pub lan_addresses: Vec<String>,
+    /// `a.b.c.d:port` of the relay session, when the relay carries the server.
+    #[serde(default)]
+    pub relay_address: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    /// `friends`, `selected` or `invite`.
+    #[serde(default)]
+    pub join_policy: String,
+    /// The friends who join without an invite under `selected`. Only on the
+    /// host's own copy: the service drops it from what friends see.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join_user_ids: Option<Vec<String>>,
+    /// Whether the friend reading this may join without an invite. Set by the
+    /// service on the copy it forwards; the host never sends it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub can_join: Option<bool>,
+}
+
+impl std::fmt::Debug for HostingInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Every field named: a new one fails to build until it is listed here.
+        let HostingInfo {
+            session_id,
+            game,
+            mod_name,
+            map,
+            gametype,
+            players,
+            max_players,
+            lan_addresses,
+            relay_address,
+            password,
+            join_policy,
+            join_user_ids,
+            can_join,
+        } = self;
+        f.debug_struct("HostingInfo")
+            .field("session_id", session_id)
+            .field("game", game)
+            .field("mod_name", mod_name)
+            .field("map", map)
+            .field("gametype", gametype)
+            .field("players", players)
+            .field("max_players", max_players)
+            .field("lan_addresses", lan_addresses)
+            .field("relay_address", relay_address)
+            .field("password", &password.as_ref().map(|_| "<redacted>"))
+            .field("join_policy", join_policy)
+            .field("join_user_ids", join_user_ids)
+            .field("can_join", can_join)
+            .finish()
     }
 }
 
@@ -112,6 +207,10 @@ pub struct PresenceUpdate {
     pub server_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_name: Option<String>,
+    // --- slice: play with friends ---
+    /// The private server this launcher runs, whole.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hosting: Option<HostingInfo>,
 }
 
 /// What the launcher would report to say it is where this presence says.
@@ -126,6 +225,7 @@ impl From<&Presence> for PresenceUpdate {
             server_address: presence.server_address.clone(),
             server_name: presence.server_name.clone(),
             client_name: presence.client_name.clone(),
+            hosting: presence.hosting.clone(),
         }
     }
 }
@@ -208,6 +308,10 @@ pub struct Invite {
     /// RFC 3339 in UTC; the service drops an invite ten minutes after it is made.
     #[serde(default)]
     pub expires_at: String,
+    // --- slice: play with friends ---
+    /// The private server the invite leads to, `None` for an ordinary one.
+    #[serde(default)]
+    pub hosting: Option<HostingInfo>,
 }
 
 /// What `POST /v1/invites` carries.
@@ -220,6 +324,78 @@ pub struct NewInvite {
     pub server_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+    // --- slice: play with friends ---
+    /// The private server, with its password, for an invite of `host_invite`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hosting: Option<HostingInfo>,
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: play with friends ---
+// The relay API, `/v1/relay/*`
+// ---------------------------------------------------------------------------
+
+/// One relay node as the service describes it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayNode {
+    pub id: String,
+    #[serde(default)]
+    pub region: String,
+    /// `a.b.c.d:port` of the control port the tunnel talks to.
+    pub control_address: String,
+}
+
+/// The limits the service set for one relay session.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct RelayLimits {
+    pub max_guests: u32,
+    pub guest_bytes_per_sec: u64,
+    pub session_bytes_per_sec: u64,
+}
+
+/// What is left of the account's relay time today.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct RelayQuota {
+    pub daily_seconds_left: u64,
+}
+
+/// The answer of `POST /v1/relay/sessions` and of its `/renew`.
+///
+/// `ticket` and `hostKey` are base64url without padding. The ticket is opaque
+/// here: the tunnel hands it to the node as it is. The host key signs every
+/// message between the two and never leaves memory.
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayGrant {
+    /// The relay session: 16 hex characters, the `session_id` of every message.
+    pub session_id: String,
+    pub node: RelayNode,
+    pub ticket: String,
+    pub host_key: String,
+    /// RFC 3339: when the ticket runs out.
+    pub expires_at: String,
+    #[serde(default)]
+    pub keepalive_secs: Option<u16>,
+    #[serde(default)]
+    pub limits: RelayLimits,
+    #[serde(default)]
+    pub quota: RelayQuota,
+}
+
+/// The ticket and the key must not reach a log line through `{:?}`.
+impl std::fmt::Debug for RelayGrant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RelayGrant")
+            .field("session_id", &self.session_id)
+            .field("node", &self.node)
+            .field("ticket", &"<redacted>")
+            .field("host_key", &"<redacted>")
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 /// One browser round trip of the sign-in.

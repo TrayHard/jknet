@@ -297,6 +297,34 @@ pub struct LaunchPlan<'a> {
 /// three roots go out, and the tail of the command line is identical. The
 /// module docs quote the JK2MV source that forces the split.
 pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
+    // --- slice: play with friends ---
+    // The roots are a function of their own because the dedicated server of a
+    // private server needs exactly the same ones: the files the client plays
+    // with are the files the server hosts with.
+    let mut args = root_args(plan);
+
+    args.extend(plan.settings_args.iter().cloned());
+    args.extend(plan.client_args.iter().cloned());
+    // --- slice: player profiles ---
+    args.extend(plan.profile_args.iter().cloned());
+    args.extend(plan.extra_args.iter().cloned());
+
+    if let Some(address) = plan.connect.map(str::trim).filter(|v| !v.is_empty()) {
+        args.push("+connect".to_string());
+        args.push(address.to_string());
+    }
+    args
+}
+
+// --- slice: play with friends ---
+/// The file system roots of a client and its `fs_game`: the head of every
+/// command line the launcher builds for it.
+///
+/// Shared by the client ([`build_launch_args`]) and the dedicated server of a
+/// private server ([`crate::hosting`]), so the rule that lays the roots out
+/// lives in one place. Nothing of the player — no settings tokens, no profile,
+/// no layers of cfg — is part of it.
+pub fn root_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     let spec = plan.game.spec();
     let mut args = Vec::new();
     let mut set = |name: &str, value: String| {
@@ -319,17 +347,6 @@ pub fn build_launch_args(plan: &LaunchPlan<'_>) -> Vec<String> {
     set("fs_homepath", plan.home_dir.display().to_string());
     if let Some(fs_game) = plan.fs_game.map(str::trim).filter(|v| !v.is_empty()) {
         set("fs_game", fs_game.to_string());
-    }
-
-    args.extend(plan.settings_args.iter().cloned());
-    args.extend(plan.client_args.iter().cloned());
-    // --- slice: player profiles ---
-    args.extend(plan.profile_args.iter().cloned());
-    args.extend(plan.extra_args.iter().cloned());
-
-    if let Some(address) = plan.connect.map(str::trim).filter(|v| !v.is_empty()) {
-        args.push("+connect".to_string());
-        args.push(address.to_string());
     }
     args
 }
@@ -1099,6 +1116,93 @@ fn check_connect(mode: LaunchMode, connect: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+// --- slice: play with friends ---
+/// What the dedicated server of a client starts with: the executable, the
+/// working directory and the same roots the client gets.
+#[derive(Debug, Clone)]
+pub(crate) struct ServerLaunch {
+    pub client: clients::Client,
+    pub engine: &'static engines::Engine,
+    /// `clients\<slug>\engine\openjkded.x86.exe` or its sibling.
+    pub executable: PathBuf,
+    /// `clients\<slug>\engine`: the working directory, as for the client.
+    pub engine_dir: PathBuf,
+    /// `clients\<slug>\home\<fs_game or base>`: where `jknet-host.cfg` goes,
+    /// the folder `+exec` looks in first.
+    pub config_dir: PathBuf,
+    /// The mod folder the server runs, `None` for `base`.
+    pub fs_game: Option<String>,
+    /// [`root_args`] of the client.
+    pub roots: Vec<String>,
+}
+
+/// Prepares a client for its dedicated server the way [`start_client`]
+/// prepares it for the game: the game files are checked, and a Jedi Outcast
+/// client gets its archives mirrored into `home\base\` and its base root
+/// built. Nothing of the player's own arguments is read.
+pub(crate) fn prepare_server(state: &AppState, client_id: &str) -> Result<ServerLaunch> {
+    let settings = state.settings()?;
+    let paths = state.paths()?;
+    let client = clients::read_record(&paths, client_id)?;
+    let engine = engines::require_for_game(&client.engine_id, client.game)?;
+    if engine.dedicated.is_none() {
+        return Err(AppError::HostNoDedicatedServer {
+            engine: engine.name.to_string(),
+        });
+    }
+    let engine_dir = paths.client_engine_dir(&client.id);
+    let executable = engine
+        .dedicated_executable(&engine_dir)
+        .ok_or_else(|| AppError::HostEngineMissing {
+            engine: engine.name.to_string(),
+        })?;
+    let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
+    game_files::validate(client.game, &game_data)?;
+
+    let client_dir = paths.client_dir(&client.id);
+    let home_dir = paths.client_home_dir(&client.id);
+    let base_dir = paths.client_basepath_dir(&client.id);
+    crate::paths::create_dir(&home_dir)?;
+    let layout = client.game.spec().launch_layout;
+    if !layout.engine_dir_on_search_path() {
+        engine_install::sync_engine_archives(&engine_dir, &home_dir)?;
+    }
+    if layout.needs_own_basepath() {
+        prepare_basepath(client.game, &client_dir, &game_data)?;
+    }
+
+    let fs_game = client
+        .fs_game
+        .clone()
+        .or_else(|| engine.default_fs_game.map(str::to_string))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let config_dir = home_dir.join(fs_game.as_deref().unwrap_or(crate::paths::BASE_FOLDER));
+    crate::paths::create_dir(&config_dir)?;
+    let roots = root_args(&LaunchPlan {
+        game: client.game,
+        game_data: &game_data,
+        engine_dir: &engine_dir,
+        base_dir: &base_dir,
+        home_dir: &home_dir,
+        fs_game: fs_game.as_deref(),
+        settings_args: &[],
+        client_args: &[],
+        profile_args: &[],
+        extra_args: &[],
+        connect: None,
+    });
+    Ok(ServerLaunch {
+        client,
+        engine,
+        executable,
+        engine_dir,
+        config_dir,
+        fs_game,
+        roots,
+    })
+}
+
 /// The command line of a client, and what the core makes of it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1521,6 +1625,41 @@ mod tests {
                 "C:\\JKNet\\clients\\everyday\\home",
             ]
         );
+    }
+
+    // --- slice: play with friends ---
+    #[test]
+    fn the_client_and_its_dedicated_server_get_the_same_roots() {
+        let game_data = Path::new("D:\\SteamLibrary\\steamapps\\common\\Jedi Academy\\GameData");
+        let engine = Path::new("C:\\JKNet\\clients\\everyday\\engine");
+        let base = Path::new("C:\\JKNet\\clients\\everyday\\basepath");
+        let home = Path::new("C:\\JKNet\\clients\\everyday\\home");
+        let settings = vec!["+set".to_string(), "r_mode".to_string(), "-1".to_string()];
+        for plan in [
+            LaunchPlan {
+                fs_game: Some("japlus"),
+                settings_args: &settings,
+                connect: Some("203.0.113.10:29070"),
+                ..plan(game_data, engine, base, home)
+            },
+            LaunchPlan {
+                settings_args: &settings,
+                ..jo_plan(game_data, engine, base, home)
+            },
+        ] {
+            let roots = root_args(&plan);
+            let client = build_launch_args(&plan);
+            // The server gets the head of the client's line and nothing of
+            // the player: no settings tokens, no profile, no `+connect`.
+            assert_eq!(client[..roots.len()], roots[..], "{client:?}");
+            assert!(!roots.iter().any(|token| token == "r_mode" || token == "+connect"));
+        }
+        // `fs_game` is part of the roots: the server runs the client's mod.
+        let roots = root_args(&LaunchPlan {
+            fs_game: Some("japlus"),
+            ..plan(game_data, engine, base, home)
+        });
+        assert_eq!(roots[roots.len() - 3..], ["+set", "fs_game", "japlus"]);
     }
 
     #[test]

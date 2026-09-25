@@ -7,7 +7,8 @@ import type { Friend } from "../../lib/ipc";
 // --- slice: selection context menu ---
 import { hasTextSelection } from "../../lib/selection";
 import { Avatar, Button } from "../ui";
-import { canJoin } from "./presence";
+// --- slice: play with friends ---
+import { canJoin, inviteOnly } from "./presence";
 import { useStatusLine } from "./useStatusLine";
 
 interface FriendRowProps {
@@ -45,9 +46,14 @@ export function FriendRow({
   onContextMenu,
 }: FriendRowProps) {
   const { t } = useTranslation("friends");
+  const { t: tHost } = useTranslation("host");
   const statusLine = useStatusLine();
   const offline = friend.presence.status === "offline";
-  const joinable = onJoin !== undefined && canJoin(friend);
+  // --- slice: play with friends ---
+  // A private server the host keeps to invites still shows its **Join**, off,
+  // so the row says why the game is out of reach instead of looking idle.
+  const locked = onJoin !== undefined && inviteOnly(friend);
+  const joinable = onJoin !== undefined && (canJoin(friend) || locked);
 
   return (
     <div
@@ -99,10 +105,11 @@ export function FriendRow({
           size="sm"
           variant="primary"
           icon={<Gamepad2 size={14} />}
-          disabled={joining}
+          disabled={joining || locked}
+          title={locked ? tHost("friends.inviteOnly", { name: friend.user.displayName }) : undefined}
           onClick={(event) => {
             event.stopPropagation();
-            onJoin();
+            if (!locked) onJoin();
           }}
           // One branch, not `opacity-0` plus an override: two utilities of the
           // same property in one class list are settled by the order Tailwind

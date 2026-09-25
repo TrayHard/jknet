@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 
-export type ToastVariant = "info" | "success" | "error";
+// --- slice: play with friends --- `warning`: the game starts anyway, but the
+// player should know why it may not reach the server at once.
+export type ToastVariant = "info" | "success" | "warning" | "error";
 
 interface ToastProps {
   variant?: ToastVariant;
@@ -21,12 +23,14 @@ interface ToastProps {
 const ICONS: Record<ToastVariant, ReactNode> = {
   info: <Info size={16} />,
   success: <CheckCircle2 size={16} />,
+  warning: <AlertTriangle size={16} />,
   error: <AlertTriangle size={16} />,
 };
 
 const TONES: Record<ToastVariant, string> = {
   info: "border-line-accent text-fg-accent",
   success: "border-line text-fg-success",
+  warning: "border-line-warm text-fg-warm",
   error: "border-line-danger text-fg-danger",
 };
 

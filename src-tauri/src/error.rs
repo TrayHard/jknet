@@ -238,6 +238,53 @@ pub enum AppError {
          Update the launcher and try again."
     )]
     EngineUnknown { engine_id: String },
+
+    // --- slice: play with friends ---
+    /// A private server is already starting, running or stopping. One at a
+    /// time, and the guard lives in the core rather than in a button.
+    #[error("a server is already running")]
+    HostBusy,
+
+    /// The command needs a private server that runs, and there is none.
+    #[error("no server is running")]
+    HostNotRunning,
+
+    /// The engine of the client ships no dedicated server (jaMME).
+    #[error("{engine} has no dedicated server. Pick another client.")]
+    HostNoDedicatedServer { engine: String },
+
+    /// The engine ships one, but the file is not in `engine\` of the client.
+    #[error("the dedicated server of {engine} is missing. Reinstall the engine on the Clients screen.")]
+    HostEngineMissing { engine: String },
+
+    /// The server process could not start or ended before it answered.
+    #[error("the server did not start: {reason}")]
+    HostStartFailed {
+        reason: String,
+        exit_code: Option<u32>,
+    },
+
+    /// A friend's private server lets in invited players only, and this
+    /// player has no invite.
+    #[error("{name}'s server is invite only")]
+    HostInviteOnly { name: String },
+
+    /// The service answered `503` for the relay, or the relay node did not
+    /// answer the tunnel.
+    #[error("the JKNet relay is not available: {0}")]
+    RelayUnavailable(String),
+
+    /// The account holds a relay session already or used up its time of the
+    /// day. The message is the service's; `quota` names which of the two
+    /// (`active_session` or `daily_time`) and `resets_at` (RFC 3339) when the
+    /// time of the day comes back, both as `error.details` of the service
+    /// carried them.
+    #[error("relay quota: {message}")]
+    RelayQuota {
+        message: String,
+        quota: Option<String>,
+        resets_at: Option<String>,
+    },
 }
 
 // --- slice: online gate ---
@@ -324,6 +371,15 @@ impl AppError {
             AppError::BundleUnavailable(_) => "bundleUnavailable",
             AppError::BundleFile { .. } => "bundleFile",
             AppError::EngineUnknown { .. } => "engineUnknown",
+            // --- slice: play with friends ---
+            AppError::HostBusy => "hostBusy",
+            AppError::HostNotRunning => "hostNotRunning",
+            AppError::HostNoDedicatedServer { .. } => "hostNoDedicatedServer",
+            AppError::HostEngineMissing { .. } => "hostEngineMissing",
+            AppError::HostStartFailed { .. } => "hostStartFailed",
+            AppError::HostInviteOnly { .. } => "hostInviteOnly",
+            AppError::RelayUnavailable(_) => "relayUnavailable",
+            AppError::RelayQuota { .. } => "relayQuota",
         }
     }
 
@@ -377,6 +433,18 @@ impl AppError {
             AppError::BundleUnavailable(reason) => json!({ "reason": reason }),
             AppError::BundleFile { path, reason } => json!({ "path": path, "reason": reason }),
             AppError::EngineUnknown { engine_id } => json!({ "engineId": engine_id }),
+            // --- slice: play with friends ---
+            AppError::HostBusy | AppError::HostNotRunning => json!({}),
+            AppError::HostNoDedicatedServer { engine } => json!({ "engine": engine }),
+            AppError::HostEngineMissing { engine } => json!({ "engine": engine }),
+            AppError::HostStartFailed { reason, exit_code } => {
+                json!({ "reason": reason, "exitCode": exit_code })
+            }
+            AppError::HostInviteOnly { name } => json!({ "name": name }),
+            AppError::RelayUnavailable(reason) => json!({ "reason": reason }),
+            AppError::RelayQuota { message, quota, resets_at } => {
+                json!({ "reason": message, "quota": quota, "resetsAt": resets_at })
+            }
         }
     }
 }
@@ -493,6 +561,15 @@ mod tests {
             AppError::BundleUnavailable("x".into()),
             AppError::BundleFile { path: "home/base/x.pk3".into(), reason: "x".into() },
             AppError::EngineUnknown { engine_id: "x".into() },
+            // --- slice: play with friends ---
+            AppError::HostBusy,
+            AppError::HostNotRunning,
+            AppError::HostNoDedicatedServer { engine: "jaMME".into() },
+            AppError::HostEngineMissing { engine: "OpenJK".into() },
+            AppError::HostStartFailed { reason: "x".into(), exit_code: Some(1) },
+            AppError::HostInviteOnly { name: "Kyle".into() },
+            AppError::RelayUnavailable("x".into()),
+            AppError::RelayQuota { message: "x".into(), quota: None, resets_at: None },
         ];
 
         for error in samples {

@@ -256,6 +256,43 @@ pub struct Settings {
     /// so the sidebar can print a name before any request answers.
     #[serde(alias = "hubUser")]
     pub online_user: Option<OnlineUser>,
+
+    // --- slice: play with friends ---
+    /// The last settings of the **Play with friends** screen, one entry per
+    /// game, without the password. `host_start` writes the entry of its
+    /// game; a patch may write one too.
+    pub host_defaults: BTreeMap<Game, HostDefaults>,
+    /// True once a private server was started in a mode with the local
+    /// network: the note about the Windows firewall has been seen by then.
+    pub host_firewall_note_seen: bool,
+}
+
+// --- slice: play with friends ---
+/// The settings of the **Play with friends** screen for one game.
+///
+/// The two modes are strings, like `language`: a value a newer launcher wrote
+/// must not make the whole document unreadable to an older one. The hosting
+/// module reads them back and falls back to its defaults for anything it does
+/// not know.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct HostDefaults {
+    pub client_id: Option<String>,
+    pub map: Option<String>,
+    pub gametype: u8,
+    pub max_players: u8,
+    pub time_limit: u16,
+    pub score_limit: u16,
+    pub bots: u8,
+    pub server_name: Option<String>,
+    /// Whether the last server asked for a password. The password itself is
+    /// never written here: every start gets a fresh one.
+    pub use_password: bool,
+    /// `internet_lan`, `lan` or `internet`.
+    pub network: String,
+    /// `friends`, `selected` or `invite`.
+    pub join_policy: String,
+    pub join_user_ids: Vec<String>,
 }
 
 impl Default for Settings {
@@ -285,6 +322,9 @@ impl Default for Settings {
             online_url: online::default_online_url().to_string(),
             online_token: None,
             online_user: None,
+            // --- slice: play with friends ---
+            host_defaults: BTreeMap::new(),
+            host_firewall_note_seen: false,
         }
     }
 }
@@ -557,6 +597,12 @@ pub struct SettingsPatch {
     /// Read and thrown away, for the same reason as the token above.
     #[serde(deserialize_with = "sent")]
     pub online_user: Option<Option<OnlineUser>>,
+
+    // --- slice: play with friends ---
+    /// The settings of the host screen, merged one game at a time like the
+    /// folders above: a game mapped to `null` loses its entry.
+    pub host_defaults: Option<BTreeMap<Game, Option<HostDefaults>>>,
+    pub host_firewall_note_seen: Option<bool>,
 }
 
 /// Reads a field and remembers that it was there, `null` included.
@@ -659,6 +705,22 @@ impl SettingsPatch {
             // not a way to clear it: an address is always in force, and the
             // one the field falls back to is the default service.
             settings.online_url = online::normalize_online_url(&value);
+        }
+        // --- slice: play with friends ---
+        if let Some(entries) = self.host_defaults {
+            for (game, value) in entries {
+                match value {
+                    Some(defaults) => {
+                        settings.host_defaults.insert(game, defaults);
+                    }
+                    None => {
+                        settings.host_defaults.remove(&game);
+                    }
+                }
+            }
+        }
+        if let Some(value) = self.host_firewall_note_seen {
+            settings.host_firewall_note_seen = value;
         }
     }
 
@@ -883,11 +945,65 @@ mod tests {
                 created_at: "2026-09-10T10:00:00Z".into(),
                 admin: false,
             }),
+            // --- slice: play with friends ---
+            host_defaults: BTreeMap::from([(
+                Game::JediAcademy,
+                HostDefaults {
+                    client_id: Some("everyday".into()),
+                    map: Some("mp/ffa3".into()),
+                    max_players: 8,
+                    score_limit: 20,
+                    use_password: true,
+                    network: "internet_lan".into(),
+                    join_policy: "friends".into(),
+                    ..HostDefaults::default()
+                },
+            )]),
+            host_firewall_note_seen: true,
         }
     }
 
     fn patch(json: &str) -> SettingsPatch {
         serde_json::from_str(json).expect("the patch parses")
+    }
+
+    // --- slice: play with friends ---
+    #[test]
+    fn the_host_defaults_merge_one_game_at_a_time_and_carry_no_password() {
+        let mut settings = filled();
+        patch(
+            r#"{ "hostDefaults": { "jo": { "clientId": "jk2", "map": "ffa_bespin", "network": "lan" } } }"#,
+        )
+        .apply(&mut settings);
+        // The Jedi Academy entry survives a patch about the other game.
+        assert_eq!(
+            settings.host_defaults[&Game::JediAcademy].map.as_deref(),
+            Some("mp/ffa3")
+        );
+        assert_eq!(settings.host_defaults[&Game::JediOutcast].network, "lan");
+
+        patch(r#"{ "hostDefaults": { "ja": null }, "hostFirewallNoteSeen": false }"#)
+            .apply(&mut settings);
+        assert!(!settings.host_defaults.contains_key(&Game::JediAcademy));
+        assert!(settings.host_defaults.contains_key(&Game::JediOutcast));
+        assert!(!settings.host_firewall_note_seen);
+
+        // A password has no field to land in: it is dropped on the way in and
+        // never reaches `settings.json`.
+        assert!(serde_json::from_str::<SettingsPatch>(
+            r#"{ "hostDefaults": { "ja": { "password": "k7m2q9xa" } } }"#
+        )
+        .map(|patch| {
+            let mut settings = Settings::default();
+            patch.apply(&mut settings);
+            serde_json::to_string(&settings).expect("serializes")
+        })
+        .is_ok_and(|json| !json.contains("k7m2q9xa")));
+
+        // A document written before the fields reads as nothing seen yet.
+        let older: Settings = serde_json::from_str("{}").expect("an empty document");
+        assert!(older.host_defaults.is_empty());
+        assert!(!older.host_firewall_note_seen);
     }
 
     #[test]

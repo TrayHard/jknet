@@ -69,9 +69,7 @@
     "join": "Unirse a la partida",
     "joining": "Iniciando la partida…",
     "invite": "Invitar a mi partida",
-    "inviteHintNoServer": "Únase primero a un servidor y después invite ahí a sus amigos",
     "inviteHint": "Invitar a {{server}}",
-    "noServer": "Únase a un servidor desde la pantalla Servidores para poder invitar a alguien.",
     "removeConfirm": "¿Quitar a {{name}}? Los dos tendrán que enviar una solicitud nueva para volver a ser amigos.",
     "remove": "Quitar amigo"
   },

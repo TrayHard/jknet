@@ -48,7 +48,7 @@ use crate::launch::{GameExited, GameStarted};
 use crate::servers;
 use crate::state::AppState;
 
-use super::{FriendsState, EVENT_CHANGED};
+use super::{FriendsState, HostPresence, EVENT_CHANGED};
 
 /// How often the launcher repeats itself. The contract times a player out
 /// after 90 s, so three ticks may be lost before a friend sees them go dark.
@@ -147,6 +147,86 @@ fn in_game(app: &AppHandle, started: &GameStarted) -> Presence {
     }
 }
 
+// --- slice: play with friends ---
+/// The presence the launcher reports: `raw` as the game events left it, with
+/// the private server added and the loopback addresses taken out.
+///
+/// Two rules, one function, because both are about what friends may read:
+///
+/// - A game that joined `127.0.0.1:<port>` of this launcher's own private
+///   server advertises the address friends use instead — the relay, or the
+///   first address of the local network — and the name of that server.
+/// - Any other loopback address (`127.0.0.0/8`, `localhost`, `0.0.0.0`) is
+///   dropped with its server name. It means «this machine» to whoever reads
+///   it, which is never the machine of the player who pressed **Join**: the
+///   **Connect…** window used to send `127.0.0.1:29070` of a local test server
+///   to every friend.
+pub fn effective(raw: &Presence, hosting: Option<&HostPresence>) -> Presence {
+    let mut presence = raw.clone();
+    presence.hosting = hosting.map(|hosting| hosting.info.clone());
+    let Some(address) = raw.server_address.as_deref() else {
+        return presence;
+    };
+    if !is_loopback(address) {
+        return presence;
+    }
+    let own_server = |hosting: &&HostPresence| {
+        let host = address.trim().rsplit_once(':').map(|(host, _)| host).unwrap_or("");
+        (host == "127.0.0.1" || host.eq_ignore_ascii_case("localhost"))
+            && port_of(address) == Some(hosting.local_port)
+    };
+    match hosting.filter(own_server) {
+        Some(hosting) => {
+            presence.server_address = hosting
+                .info
+                .relay_address
+                .clone()
+                .or_else(|| hosting.info.lan_addresses.first().cloned());
+            presence.server_name = Some(hosting.server_name.clone());
+        }
+        None => {
+            presence.server_address = None;
+            presence.server_name = None;
+        }
+    }
+    presence
+}
+
+/// Whether an `ip:port` names this machine.
+pub fn is_loopback(address: &str) -> bool {
+    let address = address.trim();
+    let host = match address.rsplit_once(':') {
+        Some((host, port)) if !host.is_empty() && port.chars().all(|c| c.is_ascii_digit()) => host,
+        _ => address,
+    };
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    if host.eq_ignore_ascii_case("localhost") || host == "::1" {
+        return true;
+    }
+    host.parse::<std::net::Ipv4Addr>()
+        .is_ok_and(|ip| ip.is_loopback() || ip.is_unspecified())
+}
+
+/// The port of an `ip:port`.
+fn port_of(address: &str) -> Option<u16> {
+    address.trim().rsplit_once(':')?.1.parse().ok()
+}
+
+/// Records the private server of this launcher, or its end, and sends the
+/// presence at once when that changed anything.
+pub fn set_hosting(app: &AppHandle, hosting: Option<HostPresence>) {
+    if !app.state::<FriendsState>().set_hosting(hosting) {
+        return;
+    }
+    if let Err(e) = app.emit(EVENT_CHANGED, ()) {
+        log::debug!("cannot emit {EVENT_CHANGED}: {e}");
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        push(&handle).await;
+    });
+}
+
 /// Writes the presence into the state and sends it at once.
 pub async fn set_and_push(app: &AppHandle, presence: Presence) {
     app.state::<FriendsState>().set_presence(presence);
@@ -164,7 +244,7 @@ pub async fn set_and_push(app: &AppHandle, presence: Presence) {
 ///
 /// Silent while signed out, and silent on failure: this is a background
 /// request nobody asked for, and the next heartbeat is the retry.
-async fn push(app: &AppHandle) {
+pub(crate) async fn push(app: &AppHandle) {
     let Ok(settings) = app.state::<AppState>().settings() else {
         return;
     };
@@ -245,6 +325,84 @@ mod tests {
             ..Presence::default()
         };
         assert_eq!(body(&presence), r#"{"status":"in_game","clientName":"Everyday"}"#);
+    }
+
+    // --- slice: play with friends ---
+
+    fn hosting(relay: Option<&str>) -> HostPresence {
+        HostPresence {
+            info: crate::online::HostingInfo {
+                session_id: "5e0b7c1f9a2d4c38".into(),
+                game: "ja".into(),
+                map: Some("mp/ffa3".into()),
+                max_players: 8,
+                lan_addresses: vec!["192.168.1.23:29070".into()],
+                relay_address: relay.map(str::to_string),
+                password: Some("k7m2q9xa".into()),
+                join_policy: "friends".into(),
+                join_user_ids: Some(Vec::new()),
+                ..crate::online::HostingInfo::default()
+            },
+            local_port: 29070,
+            server_name: "Tray's game".into(),
+        }
+    }
+
+    fn joined(address: &str) -> Presence {
+        Presence {
+            status: Presence::IN_GAME.into(),
+            server_address: Some(address.into()),
+            server_name: Some("whatever the cache said".into()),
+            client_name: Some("Everyday".into()),
+            ..Presence::default()
+        }
+    }
+
+    #[test]
+    fn the_host_on_its_own_server_advertises_the_address_friends_use() {
+        let relayed = effective(&joined("127.0.0.1:29070"), Some(&hosting(Some("203.0.113.5:29210"))));
+        assert_eq!(relayed.server_address.as_deref(), Some("203.0.113.5:29210"));
+        assert_eq!(relayed.server_name.as_deref(), Some("Tray's game"));
+        assert_eq!(relayed.hosting.as_ref().map(|h| h.session_id.as_str()), Some("5e0b7c1f9a2d4c38"));
+
+        // No relay: the first address of the network.
+        let local = effective(&joined("127.0.0.1:29070"), Some(&hosting(None)));
+        assert_eq!(local.server_address.as_deref(), Some("192.168.1.23:29070"));
+
+        // The body the service gets carries the whole object.
+        let body = serde_json::to_value(PresenceUpdate::from(&relayed)).unwrap();
+        assert_eq!(body["serverAddress"], "203.0.113.5:29210");
+        assert_eq!(body["hosting"]["password"], "k7m2q9xa");
+        assert_eq!(body["hosting"]["relayAddress"], "203.0.113.5:29210");
+    }
+
+    #[test]
+    fn a_loopback_address_is_never_published() {
+        // The Connect… window on a local test server, with or without a
+        // private server of its own running on another port.
+        for address in ["127.0.0.1:29070", "127.0.0.1:29071", "127.77.0.5:29070", "localhost:29070", "LOCALHOST", "0.0.0.0:29070", "[::1]:29070"] {
+            for host in [None, Some(hosting(Some("203.0.113.5:29210")))] {
+                let presence = effective(&joined(address), host.as_ref());
+                let expected = match (&host, address) {
+                    (Some(_), "127.0.0.1:29070") | (Some(_), "localhost:29070") => {
+                        Some("203.0.113.5:29210")
+                    }
+                    _ => None,
+                };
+                assert_eq!(presence.server_address.as_deref(), expected, "{address}");
+                assert_eq!(presence.status, Presence::IN_GAME, "still in a game");
+                if expected.is_none() {
+                    assert_eq!(presence.server_name, None, "{address}");
+                }
+                let body = serde_json::to_string(&PresenceUpdate::from(&presence)).unwrap();
+                assert!(!body.contains("127.") && !body.contains("localhost"), "{body}");
+            }
+        }
+        // An ordinary server passes as it is.
+        let public = effective(&joined("203.0.113.10:29070"), None);
+        assert_eq!(public.server_address.as_deref(), Some("203.0.113.10:29070"));
+        assert!(!is_loopback("192.168.1.23:29070"));
+        assert!(!is_loopback("203.0.113.10"));
     }
 
     #[test]

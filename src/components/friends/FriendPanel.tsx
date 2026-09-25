@@ -1,10 +1,12 @@
-import { Gamepad2, Send, UserMinus } from "lucide-react";
+import { Gamepad2, Send, Swords, UserMinus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { Friend, Presence } from "../../lib/ipc";
+import type { Friend, HostSession, Presence } from "../../lib/ipc";
+// --- slice: play with friends ---
+import { isHostLive } from "../host/hostModel";
 import { Avatar, Badge, Button } from "../ui";
-import { canJoin, myServer, providerHandle } from "./presence";
+import { canJoin, inviteOnly, myServer, providerHandle } from "./presence";
 import { useStatusLine } from "./useStatusLine";
 
 interface FriendPanelProps {
@@ -19,6 +21,13 @@ interface FriendPanelProps {
   removing: boolean;
   /** Result of the last invite to this friend, or `null`. */
   inviteNote: string | null;
+  // --- slice: play with friends ---
+  /** The private server of this launcher, or `null`. */
+  hostSession: HostSession | null;
+  /** **Invite to my game** while the private server runs: `host_invite`. */
+  onHostInvite: () => void;
+  /** **Host and invite**: the screen of the private server, this friend marked. */
+  onHostAndInvite: () => void;
 }
 
 /**
@@ -41,13 +50,22 @@ export function FriendPanel({
   inviting,
   removing,
   inviteNote,
+  hostSession,
+  onHostInvite,
+  onHostAndInvite,
 }: FriendPanelProps) {
   const { t } = useTranslation("friends");
   const { t: tCommon } = useTranslation("common");
+  const { t: tHost } = useTranslation("host");
   const statusLine = useStatusLine();
   const [confirming, setConfirming] = useState(false);
   const server = myServer(mine);
   const joinable = canJoin(friend);
+  // --- slice: play with friends ---
+  const locked = inviteOnly(friend);
+  const hosting = isHostLive(hostSession);
+  const hostReady = hosting && hostSession.status === "running";
+  const name = friend.user.displayName;
 
   // Selecting somebody else drops a confirmation the player left open, so the
   // red button is never armed for a friend they are no longer looking at.
@@ -105,24 +123,51 @@ export function FriendPanel({
         >
           {joining ? t("panel.joining") : t("panel.join")}
         </Button>
-        <Button
-          block
-          icon={<Send size={16} />}
-          disabled={server === null || inviting}
-          onClick={onInvite}
-          title={
-            server === null
-              ? t("panel.inviteHintNoServer")
-              : t("panel.inviteHint", { server: server.name ?? server.address })
-          }
-        >
-          {inviting ? tCommon("states.sending") : t("panel.invite")}
-        </Button>
+        {/* --- slice: play with friends --- the host kept this server to
+            invites: the button is off, and the line says whose door it is. */}
+        {locked ? (
+          <p className="text-body-sm text-fg-muted">{tHost("friends.inviteOnly", { name })}</p>
+        ) : null}
+        {hosting ? (
+          // --- slice: play with friends --- my own private server comes
+          // first: the invite carries its addresses and its password.
+          <Button
+            block
+            icon={<Send size={16} />}
+            disabled={!hostReady || inviting}
+            onClick={onHostInvite}
+            title={
+              hostReady
+                ? tHost("friends.inviteToServer", { name, server: hostSession.settings.serverName })
+                : tHost("friends.notReady")
+            }
+          >
+            {inviting ? tCommon("states.sending") : t("panel.invite")}
+          </Button>
+        ) : server !== null ? (
+          <Button
+            block
+            icon={<Send size={16} />}
+            disabled={inviting}
+            onClick={onInvite}
+            title={t("panel.inviteHint", { server: server.name ?? server.address })}
+          >
+            {inviting ? tCommon("states.sending") : t("panel.invite")}
+          </Button>
+        ) : (
+          // --- slice: play with friends --- not in a game and no server:
+          // the way to play together is to host one.
+          <Button
+            block
+            icon={<Swords size={16} />}
+            onClick={onHostAndInvite}
+            title={tHost("friends.hostAndInviteHint", { name })}
+          >
+            {tHost("friends.hostAndInvite")}
+          </Button>
+        )}
         {inviteNote ? (
           <p className="text-body-sm text-fg-muted">{inviteNote}</p>
-        ) : null}
-        {server === null && friend.presence.status !== "offline" ? (
-          <p className="text-body-sm text-fg-muted">{t("panel.noServer")}</p>
         ) : null}
       </div>
 

@@ -38,6 +38,17 @@ export interface StatusLine {
  * than to "Playing on undefined".
  */
 export function statusLine(presence: Presence): StatusLine {
+  // --- slice: play with friends ---
+  // A friend hosting a private server says so first, whether or not they play
+  // on it: the line is what tells the player there is a game to walk into.
+  // The key lives in the `host` catalog, where every string of the feature is.
+  const hosting = presence.hosting;
+  if (hosting != null && presence.status !== "offline") {
+    return {
+      key: "host:friends.hosting",
+      values: { map: hosting.map ?? "—", players: hosting.players, max: hosting.maxPlayers },
+    };
+  }
   if (presence.status === "in_game") {
     const { serverName, serverAddress } = presence;
     if (serverName && serverAddress) {
@@ -129,12 +140,30 @@ export function matchesSearch(friend: Friend, search: string): boolean {
   ].some((field) => field.toLowerCase().includes(needle));
 }
 
-/** Whether a friend can be joined right now. */
+/**
+ * Whether a friend can be joined right now.
+ *
+ * --- slice: play with friends ---
+ * A friend's private server decides by itself: the service marks `canJoin`
+ * for the friends the host let in without an invite, and only they have the
+ * password. Everybody else sees the server and waits for an invite.
+ */
 export function canJoin(friend: Friend): boolean {
+  const hosting = friend.presence.hosting;
+  if (hosting != null && friend.presence.status !== "offline") {
+    return hosting.canJoin === true;
+  }
   return (
     friend.presence.status === "in_game" &&
     (friend.presence.serverAddress ?? "").trim() !== ""
   );
+}
+
+// --- slice: play with friends ---
+/** A friend's private server this player may not walk into without an invite. */
+export function inviteOnly(friend: Friend): boolean {
+  const hosting = friend.presence.hosting;
+  return hosting != null && friend.presence.status !== "offline" && hosting.canJoin !== true;
 }
 
 /** The server the player is on, or `null` when they are not on one. */

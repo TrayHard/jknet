@@ -72,9 +72,7 @@
     "join": "Dołącz do gry",
     "joining": "Uruchamianie gry…",
     "invite": "Zaproś do mojej gry",
-    "inviteHintNoServer": "Najpierw dołącz do serwera, a potem zaproś na niego znajomych",
     "inviteHint": "Zaproś na {{server}}",
-    "noServer": "Dołącz do serwera na ekranie Serwery, aby kogoś na niego zaprosić.",
     "removeConfirm": "Usunąć {{name}}? Aby znów zostać znajomymi, trzeba będzie wysłać nowe zaproszenie.",
     "remove": "Usuń znajomego"
   },

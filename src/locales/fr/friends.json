@@ -69,9 +69,7 @@
     "join": "Rejoindre la partie",
     "joining": "Démarrage du jeu…",
     "invite": "Inviter dans ma partie",
-    "inviteHintNoServer": "Rejoignez d’abord un serveur, puis invitez-y vos amis",
     "inviteHint": "Inviter sur {{server}}",
-    "noServer": "Rejoignez un serveur depuis l’écran Serveurs pour y inviter quelqu’un.",
     "removeConfirm": "Retirer {{name}} ? Vous devrez tous les deux envoyer une nouvelle demande pour redevenir amis.",
     "remove": "Retirer l’ami"
   },

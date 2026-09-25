@@ -1,0 +1,254 @@
+{
+  "title": "Play with friends",
+  "subtitle": "Host a private server on this PC. Friends join from JKNet without port forwarding.",
+  "loading": "Reading your clients and maps…",
+  "noClient": {
+    "title": "No client can host a server",
+    "text": "Create an OpenJK, EternalJK or TaystJK client to host a game.",
+    "action": "Go to Clients"
+  },
+  "setup": {
+    "client": {
+      "label": "Client",
+      "hint": "The server runs this client's engine, mod and files.",
+      "option": "{{client}} · {{engine}}",
+      "noDedicatedServer": "No dedicated server",
+      "engineMissing": "Dedicated server missing",
+      "blockedNoDedicated": "{{engine}} has no dedicated server. Pick another client.",
+      "blockedEngineMissing": "The dedicated server of {{engine}} is missing. Reinstall the engine on the Clients screen."
+    },
+    "map": {
+      "label": "Map",
+      "search": "Search maps",
+      "noMatch": "No map matches your search.",
+      "none": "This client has no map for this game type.",
+      "loading": "Reading the maps…",
+      "library": "From your library",
+      "libraryHint": "Friends need this map too."
+    },
+    "gametype": {
+      "label": "Game type"
+    },
+    "maxPlayers": {
+      "label": "Max players"
+    },
+    "timeLimit": {
+      "label": "Match time limit"
+    },
+    "scoreLimit": {
+      "frag": "Frag limit",
+      "capture": "Capture limit"
+    },
+    "noLimit": "No limit",
+    "bots": {
+      "label": "Bots",
+      "off": "Off",
+      "fill": "Fill to {{count}}",
+      "hint": "Bots fill empty slots until this many players are in."
+    },
+    "serverName": {
+      "label": "Server name"
+    },
+    "password": {
+      "label": "Password",
+      "require": "Require a password",
+      "new": "New password",
+      "hint": "Friends from JKNet get it with the invite.",
+      "invalid": "1 to 24 characters: letters, digits, _ and -."
+    },
+    "network": {
+      "label": "Who can connect",
+      "internet_lan": {
+        "title": "Internet and local network",
+        "text": "Friends anywhere join through the JKNet relay. Players on your network connect directly."
+      },
+      "lan": {
+        "title": "Local network only",
+        "text": "Only players on your network can join. Nothing goes through the relay."
+      },
+      "internet": {
+        "title": "Internet only",
+        "text": "Everyone joins through the JKNet relay. Windows does not ask about the firewall."
+      }
+    },
+    "firewall": "Windows may ask whether the {{engine}} server can use your network. Choose Allow so players on your network can join.",
+    "signIn": {
+      "text": "Sign in to JKNet Online to let friends join over the internet. Local network play works without an account.",
+      "action": "Sign in"
+    },
+    "startAndPlay": "Start and play",
+    "startServer": "Start server",
+    "stopGameFirst": "Stop the running game first."
+  },
+  "starting": {
+    "title": "Starting your server",
+    "stopping": "Stopping…",
+    "steps": {
+      "server": "Start the dedicated server",
+      "map": "Load {{map}}",
+      "relay": "Connect to the JKNet relay",
+      "ready": "Ready"
+    },
+    "stepState": {
+      "pending": "waiting",
+      "active": "in progress",
+      "done": "done",
+      "failed": "failed",
+      "skipped": "skipped"
+    }
+  },
+  "running": {
+    "badge": "Running",
+    "stopping": "Stopping",
+    "details": "{{map}} · {{gametype}} · {{players}}/{{max}} players",
+    "relay": {
+      "active": "Internet: JKNet relay, {{region}}. {{time}} left.",
+      "activeNoRegion": "Internet: JKNet relay. {{time}} left.",
+      "connecting": "Connecting to the JKNet relay…"
+    },
+    "relayDown": {
+      "text": "The JKNet relay is not available: {{reason}}. Players on your network can still join.",
+      "quotaActive": "You already use the relay for another server. Players on your network can still join.",
+      "quotaDaily": "Your relay time for today is used up. It resets at {{time}}. Players on your network can still join."
+    },
+    "relayReason": {
+      "unavailable": "it is busy or switched off",
+      "node_silent": "no answer from the relay in 10 seconds",
+      "rate_limited": "too many requests, try again in a minute",
+      "signed_out": "you are signed out of JKNet Online",
+      "network": "JKNet Online is out of reach",
+      "expired": "the relay time ran out",
+      "other": "something went wrong"
+    },
+    "autoStop": {
+      "nobodyJoined": "Stops in {{time}} if nobody joins.",
+      "empty": "Stops in {{time}}: the server is empty."
+    },
+    "play": "Play",
+    "changeMap": "Change map",
+    "stop": "Stop server",
+    "players": {
+      "title": "Players",
+      "empty": "Nobody has joined yet.",
+      "bot": "Bot"
+    },
+    "join": {
+      "title": "How friends join",
+      "internet": "Internet",
+      "lan": "Local network",
+      "password": "Password",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copyLabel": "Copy {{label}}",
+      "console": "Copy console command",
+      "consoleHint": "Players without JKNet: open the console with Shift+~ and paste the command."
+    }
+  },
+  "stopDialog": {
+    "title": "Stop the server?",
+    "stop": "Stop",
+    "text_one": "{{count}} player will be disconnected.",
+    "text_few": "{{count}} players will be disconnected.",
+    "text_many": "{{count}} players will be disconnected.",
+    "text_other": "{{count}} players will be disconnected."
+  },
+  "changeMap": {
+    "title": "Change map",
+    "text": "Players stay connected while the server loads the new map.",
+    "apply": "Apply"
+  },
+  "stopped": {
+    "title": "Server stopped",
+    "reason": {
+      "user": "You stopped the server.",
+      "empty": "Stopped after {{minutes}} min with no players.",
+      "relay_expired": "The relay time ran out.",
+      "launcher_exit": "JKNet closed and stopped the server.",
+      "other": "The server stopped."
+    },
+    "startAgain": "Start again",
+    "changeSettings": "Change settings",
+    "summary_one": "Ran for {{duration}}. {{count}} player joined.",
+    "summary_few": "Ran for {{duration}}. {{count}} players joined.",
+    "summary_many": "Ran for {{duration}}. {{count}} players joined.",
+    "summary_other": "Ran for {{duration}}. {{count}} players joined."
+  },
+  "failed": {
+    "exited": "The server closed during startup (exit code {{code}}).",
+    "timeout": "The server did not load {{map}} in 30 seconds.",
+    "portsBusy": "No free port between {{from}} and {{to}}. Stop other servers on this PC and try again.",
+    "mapMissing": "The server did not find the map {{map}}. Pick another map.",
+    "crashed": "The server closed unexpectedly (exit code {{code}}).",
+    "spawn": "The server did not start: {{message}}",
+    "other": "The server stopped with an error.",
+    "showLog": "Show log",
+    "back": "Back to settings",
+    "logEmpty": "The server printed nothing before it closed.",
+    "logLabel": "Last lines of the server log"
+  },
+  "panel": {
+    "title": "Invite friends",
+    "caption": "Friends you mark here get an invite when the server is ready.",
+    "signIn": "Sign in to invite friends.",
+    "signInAction": "Sign in",
+    "noFriends": "Add friends on the Friends screen to invite them here.",
+    "offline": "Offline · {{count}}",
+    "invite": "Invite",
+    "invited": "Invited",
+    "invitedAgo": "{{time}} ago",
+    "invitedJustNow": "Just now",
+    "inYourGame": "In your game",
+    "relayNeeded": "Friends outside your network can't join until the relay connects.",
+    "markFriend": "Invite {{name}} when the server is ready"
+  },
+  "policy": {
+    "label": "Who can join without an invite",
+    "friends": "All friends",
+    "selected": "Friends I choose",
+    "invite": "Nobody (invite only)",
+    "hint": "Friends who can join get the password and see Join game while the server runs.",
+    "noFriends": "You have no friends to choose yet."
+  },
+  "home": {
+    "idle": {
+      "title": "Play with friends",
+      "text": "Host a private server on this PC and invite friends. No port forwarding.",
+      "action": "Host a game"
+    },
+    "starting": {
+      "title": "Your server is starting…"
+    },
+    "running": {
+      "title": "Your server is running",
+      "text": "{{map}} · {{players}}/{{max}} players · {{duration}}"
+    },
+    "open": "Open",
+    "stop": "Stop"
+  },
+  "friends": {
+    "hosting": "Hosting {{map}} · {{players}}/{{max}}",
+    "hostAndInvite": "Host and invite",
+    "hostAndInviteHint": "Start a private server and invite {{name}}",
+    "inviteToServer": "Invite {{name}} to {{server}}",
+    "inviteOnly": "{{name}}'s server is invite only.",
+    "notReady": "Your server is still starting. Invite once it runs."
+  },
+  "join": {
+    "lan": "Joining over your local network",
+    "relay": "Joining through the JKNet relay",
+    "probeFailed": "{{name}}'s server did not answer on your network. The game will keep trying."
+  },
+  "quit": {
+    "title": "Stop your server and quit?",
+    "textEmpty": "Closing JKNet stops your server.",
+    "confirm": "Stop and quit",
+    "stopping": "Stopping…",
+    "text_one": "{{count}} player is on your server. Closing JKNet stops it.",
+    "text_few": "{{count}} players are on your server. Closing JKNet stops it.",
+    "text_many": "{{count}} players are on your server. Closing JKNet stops it.",
+    "text_other": "{{count}} players are on your server. Closing JKNet stops it."
+  },
+  "update": {
+    "blocked": "Stop your server to install the update."
+  }
+}

@@ -66,9 +66,7 @@
     "join": "Spiel beitreten",
     "joining": "Das Spiel startet…",
     "invite": "In mein Spiel einladen",
-    "inviteHintNoServer": "Treten Sie erst einem Server bei, dann laden Sie Ihre Freunde dorthin ein",
     "inviteHint": "Zu {{server}} einladen",
-    "noServer": "Treten Sie im Bereich Server einem Server bei, um jemanden dorthin einzuladen.",
     "removeConfirm": "{{name}} entfernen? Sie müssen beide eine neue Anfrage senden, um wieder Freunde zu sein.",
     "remove": "Freund entfernen"
   },

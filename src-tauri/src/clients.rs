@@ -462,8 +462,12 @@ pub fn delete_client(
     state: tauri::State<'_, AppState>,
     installs: tauri::State<'_, InstallState>,
     bundles: tauri::State<'_, BundlesState>,
+    // --- slice: play with friends ---
+    host: tauri::State<'_, crate::hosting::HostState>,
     id: String,
 ) -> Result<()> {
+    // The dedicated server of a private server runs out of this folder.
+    host.refuse_if_hosting(&id)?;
     remove_client(state.client_records(), &installs, &bundles, &state.paths()?, &id)?;
     // --- slice: client window ---
     // A window editing a client that no longer exists has nothing to show and

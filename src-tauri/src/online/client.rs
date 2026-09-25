@@ -35,7 +35,7 @@ use crate::settings::Settings;
 
 use super::types::{
     Friend, FriendsList, Invite, LoginSession, Me, NewInvite, OnlineUser, Presence, PresenceUpdate,
-    SendRequestResult,
+    RelayGrant, SendRequestResult,
 };
 
 /// Where the service runs while it is being developed: `npm run tauri dev` and
@@ -603,6 +603,46 @@ impl OnlineClient {
             .map(|_| ())
     }
 
+    // -- Relay (slice: play with friends) -----------------------------------
+
+    /// Asks for a relay session: a port on a node for a limited time, and the
+    /// ticket and key the tunnel opens it with.
+    ///
+    /// The service answers `503 relay_unavailable` when the relay is off or full,
+    /// `403 relay_quota` when the account holds a session already or used up
+    /// its day, `429 rate_limited` past twelve requests a minute.
+    pub async fn create_relay_session(
+        &self,
+        ctx: &OnlineContext,
+        game: &str,
+        preferred_nodes: &[String],
+    ) -> Result<RelayGrant> {
+        let body = serde_json::json!({ "game": game, "preferredNodes": preferred_nodes });
+        self.call(ctx, Method::POST, "/v1/relay/sessions", Some(body), Auth::Required)
+            .await
+            .map_err(relay_refusal)?
+            .json()
+    }
+
+    /// Extends the ticket of a relay session. The same document with a later
+    /// `expiresAt` and a new ticket; the key stays the same.
+    pub async fn renew_relay_session(&self, ctx: &OnlineContext, id: &str) -> Result<RelayGrant> {
+        let path = format!("/v1/relay/sessions/{}/renew", path_segment(id)?);
+        self.call(ctx, Method::POST, &path, None, Auth::Required)
+            .await
+            .map_err(relay_refusal)?
+            .json()
+    }
+
+    /// Closes a relay session. A second call, or a session the service has
+    /// already closed, is not an error on the service side.
+    pub async fn close_relay_session(&self, ctx: &OnlineContext, id: &str) -> Result<()> {
+        let path = format!("/v1/relay/sessions/{}", path_segment(id)?);
+        self.call(ctx, Method::DELETE, &path, None, Auth::Required)
+            .await
+            .map(|_| ())
+    }
+
     // -- Transport ----------------------------------------------------------
 
     pub async fn community(&self, ctx: &OnlineContext, method: Method, path: &str, body: Option<Value>, auth: bool) -> Result<Value> {
@@ -832,6 +872,20 @@ impl OnlineClient {
     }
 }
 
+// --- slice: play with friends ---
+/// The refusal of the relay API that has a variant of its own here: the relay
+/// is off or full. The quota refusal is [`AppError::RelayQuota`] already,
+/// since [`online_error`] reads its details; everything else stays what
+/// [`OnlineClient::call`] made of it.
+fn relay_refusal(error: AppError) -> AppError {
+    match error {
+        AppError::Online { code, message } if code == "relay_unavailable" => {
+            AppError::RelayUnavailable(message)
+        }
+        other => other,
+    }
+}
+
 /// Serializes a request body without the `json` feature of `reqwest`, which
 /// would pull a second copy of `serde_json` into the build for no gain.
 fn to_value<T: serde::Serialize>(value: &T) -> Result<Value> {
@@ -886,24 +940,42 @@ fn online_error(status: StatusCode, body: &[u8]) -> AppError {
         code: String,
         #[serde(default)]
         message: String,
+        #[serde(default)]
+        details: Option<Value>,
     }
 
     if let Ok(envelope) = serde_json::from_slice::<Envelope>(body) {
-        if !envelope.error.code.trim().is_empty() {
-            return AppError::Online {
-                code: envelope.error.code,
-                message: if envelope.error.message.trim().is_empty() {
-                    message_for_status(status)
-                } else if status == StatusCode::PAYLOAD_TOO_LARGE {
-                    // --- slice: bundles ---
-                    // The service spells its body limit as `invalid` in the
-                    // words of its framework; the size is what the player
-                    // needs to hear about.
-                    format!("{}: {}", message_for_status(status), envelope.error.message)
-                } else {
-                    envelope.error.message
-                },
+        let Body { code, message, details } = envelope.error;
+        if !code.trim().is_empty() {
+            let message = if message.trim().is_empty() {
+                message_for_status(status)
+            } else if status == StatusCode::PAYLOAD_TOO_LARGE {
+                // --- slice: bundles ---
+                // The service spells its body limit as `invalid` in the
+                // words of its framework; the size is what the player
+                // needs to hear about.
+                format!("{}: {message}", message_for_status(status))
+            } else {
+                message
             };
+            // --- slice: play with friends ---
+            // The details name the quota and when the time of the day comes
+            // back, which the words of the message only suggest.
+            if code == "relay_quota" {
+                let detail = |key: &str| {
+                    details
+                        .as_ref()
+                        .and_then(|details| details.get(key))
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                };
+                return AppError::RelayQuota {
+                    message,
+                    quota: detail("reason"),
+                    resets_at: detail("resetsAt"),
+                };
+            }
+            return AppError::Online { code, message };
         }
     }
 
@@ -1204,6 +1276,37 @@ mod tests {
                 assert_eq!(message, "JKHub sign-in is not configured yet");
             }
             other => panic!("expected a service error, got {other:?}"),
+        }
+    }
+
+    // --- slice: play with friends ---
+    #[test]
+    fn a_relay_quota_refusal_keeps_its_details() {
+        let body = br#"{"error":{"code":"relay_quota","message":"Your relay time for today is used up","details":{"reason":"daily_time","resetsAt":"2026-09-26T00:00:00Z"}}}"#;
+        match online_error(StatusCode::FORBIDDEN, body) {
+            AppError::RelayQuota { message, quota, resets_at } => {
+                assert_eq!(message, "Your relay time for today is used up");
+                assert_eq!(quota.as_deref(), Some("daily_time"));
+                assert_eq!(resets_at.as_deref(), Some("2026-09-26T00:00:00Z"));
+            }
+            other => panic!("expected a relay quota, got {other:?}"),
+        }
+        // Without details, or with details of another shape, the words stay.
+        let body = br#"{"error":{"code":"relay_quota","message":"You already use the relay for another server","details":["active_session"]}}"#;
+        match online_error(StatusCode::FORBIDDEN, body) {
+            AppError::RelayQuota { message, quota, resets_at } => {
+                assert_eq!(message, "You already use the relay for another server");
+                assert_eq!((quota, resets_at), (None, None));
+            }
+            other => panic!("expected a relay quota, got {other:?}"),
+        }
+        // The other refusal of the relay gets its variant from the mapper.
+        let body = br#"{"error":{"code":"relay_unavailable","message":"The JKNet relay is not available on this service"}}"#;
+        match relay_refusal(online_error(StatusCode::SERVICE_UNAVAILABLE, body)) {
+            AppError::RelayUnavailable(message) => {
+                assert_eq!(message, "The JKNet relay is not available on this service");
+            }
+            other => panic!("expected the relay to be unavailable, got {other:?}"),
         }
     }
 

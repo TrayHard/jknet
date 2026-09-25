@@ -62,10 +62,12 @@ use crate::error::{AppError, Result};
 // --- slice: game switch --- the port of a friend's server names their game.
 use crate::game::Game;
 use crate::online::{
-    Friend, FriendRequest, Invite, NewInvite, OnlineClient, OnlineContext, Presence,
+    Friend, FriendRequest, HostingInfo, Invite, NewInvite, OnlineClient, OnlineContext, Presence,
     SendRequestResult,
 };
-use crate::launch::{self, LaunchState, RunningGame};
+// --- slice: play with friends ---
+use crate::hosting::join::{self as host_join, JoinResult};
+use crate::launch::LaunchState;
 use crate::state::AppState;
 
 /// Emitted when any of the three lists may have changed.
@@ -88,8 +90,12 @@ const MAX_QUERY_LEN: usize = 96;
 /// demand, because a stale list on screen is worse than a spinner and the
 /// document is small.
 pub struct FriendsState {
-    /// The presence the launcher reports about the player.
+    /// The presence the launcher reports about the player, as the game
+    /// events left it. [`FriendsState::presence`] adds the private server.
     presence: Mutex<Presence>,
+    // --- slice: play with friends ---
+    /// The private server this launcher runs, while friends may see it.
+    hosting: Mutex<Option<HostPresence>>,
     /// Whether the live socket is up right now.
     live: AtomicBool,
     /// A fingerprint of the service and the token the launcher is working as.
@@ -108,28 +114,57 @@ impl Default for FriendsState {
     fn default() -> Self {
         FriendsState {
             presence: Mutex::new(presence::online()),
+            hosting: Mutex::new(None),
             live: AtomicBool::new(false),
             account: watch::channel(0).0,
         }
     }
 }
 
+// --- slice: play with friends ---
+/// What the presence says about the private server of this launcher.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostPresence {
+    /// The whole object the service gets, password and join list included.
+    pub info: HostingInfo,
+    /// The port the host's own game joins on `127.0.0.1`.
+    pub local_port: u16,
+    /// The name of the server, for the status line of friends.
+    pub server_name: String,
+}
+
 impl FriendsState {
-    /// The presence as the launcher currently sees it.
+    /// The presence as the launcher reports it: what the game events left,
+    /// with the private server added and no loopback address in it.
     ///
     /// A poisoned lock answers with the value that was in it. This state is
-    /// one status and three strings, so there is no half-written presence to
+    /// one status and a few strings, so there is no half-written presence to
     /// protect anyone from, and a launcher that stops reporting because an
     /// unrelated thread panicked would be the worse failure.
     pub fn presence(&self) -> Presence {
-        self.presence
+        let raw = self
+            .presence
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .clone()
+            .clone();
+        let hosting = self.hosting.lock().unwrap_or_else(|e| e.into_inner());
+        presence::effective(&raw, hosting.as_ref())
     }
 
     pub fn set_presence(&self, presence: Presence) {
         *self.presence.lock().unwrap_or_else(|e| e.into_inner()) = presence;
+    }
+
+    // --- slice: play with friends ---
+    /// Records the private server, `None` once it stops. Answers whether
+    /// anything changed, which is when the presence goes out again.
+    pub fn set_hosting(&self, hosting: Option<HostPresence>) -> bool {
+        let mut current = self.hosting.lock().unwrap_or_else(|e| e.into_inner());
+        if *current == hosting {
+            return false;
+        }
+        *current = hosting;
+        true
     }
 
     pub fn live(&self) -> bool {
@@ -360,9 +395,61 @@ pub async fn send_invite(
             server_address: server_address.to_string(),
             server_name: blank_to_none(server_name),
             message: blank_to_none(message),
+            // --- slice: play with friends --- a private server invites
+            // through `host_invite`, which carries its `hosting`.
+            hosting: None,
         },
     )
     .await
+}
+
+// --- slice: play with friends ---
+/// Answers an invite: joins its private server, or starts the default client
+/// of the game on the ordinary server it names.
+///
+/// The invite and the friend list are read again rather than taken from the
+/// screen. The host's presence may carry fresher addresses than the invite
+/// — the relay may have come up after it went out — and those win when the
+/// label of the session is the same; the password of the invite stays, it is
+/// the one addressed to this player.
+///
+/// The invite stays on the service: the toast dismisses it, as before.
+#[tauri::command]
+pub async fn accept_invite(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    launch: tauri::State<'_, LaunchState>,
+    invite_id: String,
+) -> Result<JoinResult> {
+    let ctx = require_account(&state)?;
+    let (invites, list) = tokio::try_join!(online.list_invites(&ctx), online.get_friends(&ctx))?;
+    let invite = invites
+        .into_iter()
+        .find(|invite| invite.id == invite_id)
+        .ok_or_else(|| AppError::NotFound(format!("invite {invite_id}")))?;
+    match invite.hosting {
+        Some(hosting) => {
+            let live = list
+                .friends
+                .iter()
+                .find(|friend| friend.user.id == invite.from.id)
+                .and_then(|friend| friend.presence.hosting.as_ref());
+            let hosting = freshest(hosting, live);
+            host_join::join_private(&app, &state, &launch, &hosting).await
+        }
+        None => host_join::join_direct(&app, &state, &launch, invite.server_address.trim()),
+    }
+}
+
+/// The hosting of an invite with the addresses of the live presence of the
+/// same session, when there is one.
+fn freshest(mut invited: HostingInfo, live: Option<&HostingInfo>) -> HostingInfo {
+    if let Some(live) = live.filter(|live| live.session_id == invited.session_id) {
+        invited.lan_addresses = live.lan_addresses.clone();
+        invited.relay_address = live.relay_address.clone();
+    }
+    invited
 }
 
 /// Drops an invite this player was sent.
@@ -383,6 +470,12 @@ pub async fn dismiss_invite(
 /// The friend list is fetched again rather than taken from what the screen
 /// last drew: a friend who changed servers a second ago would otherwise send
 /// the player to the address they left.
+///
+/// --- slice: play with friends ---
+/// A friend who hosts a private server is joined the way an invite is: the
+/// client of the game the server names, the local network first, then the
+/// relay, with the password the service handed this player. A server the
+/// host did not open to this player refuses with `AppError::HostInviteOnly`.
 #[tauri::command]
 pub async fn join_friend(
     app: AppHandle,
@@ -390,16 +483,25 @@ pub async fn join_friend(
     online: tauri::State<'_, OnlineClient>,
     launch: tauri::State<'_, LaunchState>,
     user_id: String,
-) -> Result<RunningGame> {
+) -> Result<JoinResult> {
     let ctx = require_account(&state)?;
     let list = online.get_friends(&ctx).await?;
+    if let Some(friend) = list.friends.iter().find(|friend| friend.user.id == user_id) {
+        if let Some(hosting) = friend.presence.hosting.as_ref() {
+            if hosting.can_join == Some(false) {
+                return Err(AppError::HostInviteOnly {
+                    name: friend.user.display_name.clone(),
+                });
+            }
+            return host_join::join_private(&app, &state, &launch, hosting).await;
+        }
+    }
     let address = joinable_address(&list.friends, &user_id)?;
     // --- slice: game switch ---
     // Presence carries no game, so the port answers for it: following a friend
     // onto a Jedi Outcast server with a Jedi Academy client would start a game
     // that cannot reach the address it was given.
-    let client_id = default_client(&state, Game::from_server_address(&address))?;
-
+    //
     // The whole launch path, arguments included, belongs to `launch.rs`. A
     // second copy of it here is how `+connect` ends up in the wrong place on
     // one of the two screens that can start a game.
@@ -408,16 +510,7 @@ pub async fn join_friend(
     // No profile named, which means the default profile of that client: going
     // to a friend is the same game the Play button starts, under the same name
     // and the same skin.
-    launch::start_client(
-        &app,
-        &state,
-        &launch,
-        &client_id,
-        Some(&address),
-        &[],
-        crate::profiles::ProfileChoice::default(),
-        crate::engines::LaunchMode::Multiplayer,
-    )
+    host_join::join_direct(&app, &state, &launch, &address)
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +651,10 @@ fn joinable_address(friends: &[Friend], user_id: &str) -> Result<String> {
 /// stands in for Jedi Academy, so a launcher that has not written the map yet
 /// joins a friend exactly as it did before. The refusal names the game, because
 /// «create a client» means a different client depending on which one it is.
-fn default_client(state: &AppState, game: Game) -> Result<String> {
+///
+/// --- slice: play with friends --- `pub(crate)` for the join of a private
+/// server, which picks the client the same way.
+pub(crate) fn default_client(state: &AppState, game: Game) -> Result<String> {
     let settings = state.settings()?;
     settings
         .default_client_ids
@@ -676,6 +772,36 @@ mod tests {
         // friend requests the service allows per minute.
         assert!(clean_query(&"n".repeat(MAX_QUERY_LEN + 1)).is_err());
         assert!(clean_query(&"n".repeat(MAX_QUERY_LEN)).is_ok());
+    }
+
+    // --- slice: play with friends ---
+    #[test]
+    fn an_invite_takes_the_live_addresses_of_the_same_session_and_keeps_its_password() {
+        let invited = HostingInfo {
+            session_id: "5e0b7c1f9a2d4c38".into(),
+            lan_addresses: vec!["192.168.1.23:29070".into()],
+            relay_address: None,
+            password: Some("k7m2q9xa".into()),
+            ..HostingInfo::default()
+        };
+        let live = HostingInfo {
+            session_id: "5e0b7c1f9a2d4c38".into(),
+            lan_addresses: vec!["192.168.1.24:29070".into()],
+            relay_address: Some("203.0.113.5:29210".into()),
+            // The presence of a friend who is not in the join list.
+            password: None,
+            can_join: Some(false),
+            ..HostingInfo::default()
+        };
+        let merged = freshest(invited.clone(), Some(&live));
+        assert_eq!(merged.relay_address.as_deref(), Some("203.0.113.5:29210"));
+        assert_eq!(merged.lan_addresses, ["192.168.1.24:29070"]);
+        assert_eq!(merged.password.as_deref(), Some("k7m2q9xa"));
+
+        // Another session of the same host: the invite stands as it was.
+        let other = HostingInfo { session_id: "ffffffffffffffff".into(), ..live };
+        assert_eq!(freshest(invited.clone(), Some(&other)), invited);
+        assert_eq!(freshest(invited.clone(), None), invited);
     }
 
     #[test]

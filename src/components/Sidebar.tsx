@@ -1,4 +1,4 @@
-import { ContactRound, Library, Monitor, Server, Settings, Users, Images, FileSliders, Globe } from "lucide-react";
+import { ContactRound, Library, Monitor, Server, Settings, Users, Images, FileSliders, Globe, Swords } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -7,9 +7,13 @@ import { clientsOfGame, useActiveGame, useDefaultClient } from "../lib/game";
 import {
   useAccountState,
   useClients,
+  // --- slice: play with friends ---
+  useHostSession,
   useOnlineFriendCount,
 } from "../lib/queries";
 import { GameSwitch } from "./GameSwitch";
+// --- slice: play with friends ---
+import { humanCount } from "./host/hostModel";
 import { Avatar, NavItem } from "./ui";
 
 /**
@@ -19,6 +23,15 @@ import { Avatar, NavItem } from "./ui";
 export function Sidebar() {
   const { t } = useTranslation("nav");
   const { t: communityText } = useTranslation("servers");
+  // --- slice: play with friends ---
+  const { t: hostText } = useTranslation("host");
+  // People on the private server while it runs; nothing while it does not,
+  // so a zero never reads as «a server with nobody on it» that is not there.
+  const hostSession = useHostSession().data ?? null;
+  const hostPlayers =
+    hostSession !== null && hostSession.status === "running"
+      ? humanCount(hostSession.players)
+      : undefined;
   const navigate = useNavigate();
   const clients = useClients();
   // --- slice: account ---
@@ -50,6 +63,13 @@ export function Sidebar() {
             to="/servers"
             icon={<Server size={20} />}
             label={t("items.servers")}
+          />
+          {/* --- slice: play with friends --- */}
+          <NavItem
+            to="/host"
+            icon={<Swords size={20} />}
+            label={hostText("title")}
+            count={hostPlayers}
           />
         </Group>
 

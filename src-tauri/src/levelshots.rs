@@ -958,6 +958,37 @@ pub async fn get_levelshot(
     Ok(resolve(&index, &dir, &key).map(|shot| served(&app, shot)))
 }
 
+// --- slice: play with friends ---
+/// The pictures the index already holds for these maps of one game, by map
+/// key, each put into the asset protocol's scope.
+///
+/// No rebuild and no targeted scan: the host screen lists tens of maps at
+/// once and has no use for a spinner per row. A map the index does not know
+/// yet simply has no picture there; `get_levelshot` finds it when the screen
+/// asks for that one map.
+pub(crate) fn cached_pictures(
+    app: &AppHandle,
+    paths: &DataPaths,
+    game: Game,
+    maps: &[String],
+) -> std::collections::HashMap<String, String> {
+    let dir = cache_dir(paths);
+    let mut out = std::collections::HashMap::new();
+    let Some(index) = load_index(&dir).filter(|index| index.version == INDEX_VERSION) else {
+        return out;
+    };
+    for map in maps {
+        let key = index_key(game, map);
+        if key.is_empty() {
+            continue;
+        }
+        if let Some(shot) = resolve(&index, &dir, &key) {
+            out.insert(map_key(map), served(app, shot).path);
+        }
+    }
+    out
+}
+
 // --- slice: servers robustness ---
 /// Puts one answer of [`get_levelshot`] into the asset protocol's scope.
 ///

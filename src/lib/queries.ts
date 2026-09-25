@@ -135,6 +135,15 @@ import {
   errorMessage,
   friendsEvents,
   friendsIpc,
+  // --- slice: play with friends ---
+  hostEvents,
+  hostIpc,
+  type HostJoinPolicy,
+  type HostMap,
+  type HostOptions,
+  type HostSession,
+  type HostSettings,
+  type JoinResult,
   onlineErrorCode,
   onlineErrorMessage,
   ipc,
@@ -1909,13 +1918,34 @@ export function useSendInvite() {
   });
 }
 
-/** Starts the default client on the server a friend is playing on. */
+/**
+ * Starts the default client on the server a friend is playing on.
+ *
+ * --- slice: play with friends ---
+ * The answer is a `JoinResult`: the game, and which path reached a private
+ * server (`lan`, `relay`) or `direct` for an ordinary one, for the toast.
+ */
 export function useJoinFriend() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (userId: string) => friendsIpc.joinFriend(userId),
-    onSuccess: (running) => {
-      queryClient.setQueryData(launchKeys.runningGame, running);
+    onSuccess: (result: JoinResult) => {
+      queryClient.setQueryData(launchKeys.runningGame, result.game);
+    },
+  });
+}
+
+// --- slice: play with friends ---
+/**
+ * **Join** of an invite toast: the private server of `hosting`, or the
+ * ordinary server of the address. The toast still dismisses the invite.
+ */
+export function useAcceptInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (inviteId: string) => friendsIpc.acceptInvite(inviteId),
+    onSuccess: (result: JoinResult) => {
+      queryClient.setQueryData(launchKeys.runningGame, result.game);
     },
   });
 }
@@ -1988,6 +2018,206 @@ export function useFriendsEvents(): void {
       for (const stop of stops) stop();
     };
   }, [queryClient, configured]);
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: play with friends ---
+//
+// The one private server of the launcher. The session is a single document the
+// core owns: `host_get_session` reads it once and `host:session` replaces it
+// on every change, so nothing here polls. Mount `useHostEvents` once, above
+// the router, for the document to stay current on every screen (the sidebar
+// counter and the Home card read it too).
+// ---------------------------------------------------------------------------
+
+export const hostKeys = {
+  all: ["host"] as const,
+  /** The session, or `null` while no server was started in this run. */
+  session: ["host", "session"] as const,
+  options: (game: Game) => ["host", "options", game] as const,
+  maps: (clientId: string, gametype: number | null) => ["host", "maps", clientId, gametype] as const,
+};
+
+/** The private server, `null` when none was started. Kept current by `host:session`. */
+export function useHostSession(): UseQueryResult<HostSession | null> {
+  return useQuery({
+    queryKey: hostKeys.session,
+    queryFn: hostIpc.getSession,
+    staleTime: Infinity,
+  });
+}
+
+/**
+ * The clients, modes and defaults of the **Setup** form of one game, the active
+ * one when `game` is left out. Refetched when the screen opens: the clients,
+ * the account and the defaults may have moved since.
+ */
+export function useHostOptions(game?: Game): UseQueryResult<HostOptions> {
+  const active = useActiveGame();
+  const target = game ?? active;
+  return useQuery({
+    queryKey: hostKeys.options(target),
+    queryFn: () => hostIpc.getOptions(target),
+    staleTime: 0,
+  });
+}
+
+/**
+ * The maps of one client, only those that offer `gametype` when it is given.
+ * Reading the archives costs a moment, so the answer is kept for a minute.
+ */
+export function useHostMaps(
+  clientId: string | null,
+  gametype?: number,
+): UseQueryResult<HostMap[]> {
+  return useQuery({
+    queryKey: hostKeys.maps(clientId ?? "", gametype ?? null),
+    queryFn: () => hostIpc.listMaps(clientId as string, gametype),
+    enabled: clientId !== null && clientId !== "",
+    staleTime: 60_000,
+  });
+}
+
+/** Drops a session the core answered with straight into the cache. */
+function useHostWriter<TVariables>(
+  mutationFn: (variables: TVariables) => Promise<HostSession>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn,
+    onSuccess: (session) => queryClient.setQueryData(hostKeys.session, session),
+  });
+}
+
+/**
+ * **Start and play** and **Start server**. The session answers in `starting`;
+ * the steps arrive as `host:session`. The firewall note and the defaults of
+ * the form change with a start, so both are read again.
+ */
+export function useStartHost() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: HostSettings) => hostIpc.start(settings),
+    onSuccess: (session) => {
+      queryClient.setQueryData(hostKeys.session, session);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+      void queryClient.invalidateQueries({ queryKey: ["host", "options"] });
+    },
+  });
+}
+
+/**
+ * **Stop server**, **Cancel** of a start, and the first half of **Stop and
+ * quit**: resolves once the server is down, so the caller may close the window
+ * next (`getCurrentWindow().close()` goes through, the core no longer holds it).
+ */
+export function useStopHost() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => hostIpc.stop(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: hostKeys.session });
+    },
+  });
+}
+
+/** **Play** of the running server: my own game, joined with the password. */
+export function useJoinOwnServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (profileId?: string) => hostIpc.joinOwn(profileId),
+    onSuccess: (running) => {
+      queryClient.setQueryData(launchKeys.runningGame, running);
+    },
+  });
+}
+
+/** **Apply** of the **Change map** dialog. */
+export function useChangeHostMap() {
+  return useHostWriter(({ map, gametype }: { map: string; gametype: number }) =>
+    hostIpc.changeMap(map, gametype),
+  );
+}
+
+/** **Who can join without an invite**, while the server runs. */
+export function useSetHostJoinPolicy() {
+  return useHostWriter(
+    ({ joinPolicy, joinUserIds }: { joinPolicy: HostJoinPolicy; joinUserIds: string[] }) =>
+      hostIpc.setJoinPolicy(joinPolicy, joinUserIds),
+  );
+}
+
+/** **Retry** of the relay line. */
+export function useRetryHostRelay() {
+  return useHostWriter((_: void) => hostIpc.retryRelay());
+}
+
+/**
+ * **Invite** in the **Invite friends** panel and **Invite to my game** of the
+ * friend panel while the server runs. The session lists the invite under
+ * `invited` with the next `host:session`.
+ */
+export function useHostInvite() {
+  return useMutation({
+    mutationFn: ({ toUserId, message }: { toUserId: string; message?: string | null }) =>
+      hostIpc.invite(toUserId, message),
+  });
+}
+
+/** **Show log**: `logs\host-server.log` in the system viewer. */
+export function useOpenHostLog() {
+  return useMutation({ mutationFn: () => hostIpc.openLog() });
+}
+
+/**
+ * Subscribes to `host:session` for the whole window. Mount once, above the
+ * router: the session moves on every screen, and the sidebar and the Home card
+ * follow it.
+ */
+export function useHostEvents(): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let stop: UnlistenFn | undefined;
+    void listen<HostSession>(hostEvents.session, (event) => {
+      queryClient.setQueryData(hostKeys.session, event.payload);
+    }).then((off) => {
+      if (disposed) off();
+      else stop = off;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [queryClient]);
+}
+
+/**
+ * Calls `onRequest` when the player closes the main window while the server
+ * runs: the core has kept the window open and waits for **Stop and quit**
+ * (`useStopHost`, then `getCurrentWindow().close()`) or **Cancel** (nothing).
+ *
+ * The window's own `onCloseRequested` handler (the unsaved-draft guard) must
+ * not destroy the window while `useHostSession` shows a live session: the
+ * core cannot stop a `destroy()` from the frontend.
+ */
+export function useHostCloseRequested(onRequest: () => void): void {
+  const latest = useRef(onRequest);
+  latest.current = onRequest;
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let stop: UnlistenFn | undefined;
+    void listen(hostEvents.closeRequested, () => latest.current()).then((off) => {
+      if (disposed) off();
+      else stop = off;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, []);
 }
 
 // --- slice: jkhub -----------------------------------------------------------

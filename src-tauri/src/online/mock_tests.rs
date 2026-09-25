@@ -200,6 +200,7 @@ async fn signs_in_reads_the_account_renames_it_and_signs_out() {
                 server_address: Some("203.0.113.10:29070".into()),
                 server_name: Some("EU FFA".into()),
                 client_name: Some("Everyday".into()),
+                hosting: None,
             },
         )
         .await
@@ -217,6 +218,7 @@ async fn signs_in_reads_the_account_renames_it_and_signs_out() {
                 server_address: "203.0.113.10:29070".into(),
                 server_name: Some("EU FFA".into()),
                 message: Some("Duel?".into()),
+                hosting: None,
             },
         )
         .await

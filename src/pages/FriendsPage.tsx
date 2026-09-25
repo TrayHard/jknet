@@ -15,6 +15,9 @@ import { useNavigate } from "react-router";
 
 import { FriendPanel } from "../components/friends/FriendPanel";
 import { FriendRow } from "../components/friends/FriendRow";
+// --- slice: play with friends ---
+import { HOST_INVITE_PARAM, isHostLive } from "../components/host/hostModel";
+import { useJoinToast } from "../components/host/joinToast";
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
 import {
@@ -48,6 +51,9 @@ import {
   useDeclineFriendRequest,
   useFriendsState,
   useGames,
+  // --- slice: play with friends ---
+  useHostInvite,
+  useHostSession,
   useOnlineConfigured,
   useJoinFriend,
   useRemoveFriend,
@@ -94,6 +100,13 @@ export function FriendsPage() {
   const remove = useRemoveFriend();
   const invite = useSendInvite();
   const join = useJoinFriend();
+  // --- slice: play with friends ---
+  // My private server, when there is one: **Invite to my game** sends its
+  // invite then, and a friend with nowhere to go gets **Host and invite**.
+  const hostSession = useHostSession().data ?? null;
+  const hostInvite = useHostInvite();
+  const hostRunning = isHostLive(hostSession) && hostSession.status === "running";
+  const joinToast = useJoinToast();
 
   // --- slice: game switch ---
   // Presence names a server, not a game, so the port of the address answers
@@ -107,13 +120,32 @@ export function FriendsPage() {
   const missingClientToast = useMissingClientToast();
 
   const joinFriend = (friend: Friend) => {
-    const game = gameFromServerAddress(friend.presence.serverAddress, games);
+    // --- slice: play with friends --- a private server names its game: the
+    // ports of the relay lie outside both games' windows and would read as
+    // Jedi Academy whatever the host plays.
+    const game =
+      friend.presence.hosting?.game ?? gameFromServerAddress(friend.presence.serverAddress, games);
     if (findDefaultClient(clients.data, settings.data, game) === undefined) {
       missingClientToast(game);
       return;
     }
     setNote(null);
-    join.mutate(friend.user.id);
+    join.mutate(friend.user.id, {
+      // --- slice: play with friends --- which way the game went.
+      onSuccess: (result) =>
+        joinToast(result, {
+          hostName: friend.user.displayName,
+          serverName: friend.presence.serverName,
+          hosting: friend.presence.hosting,
+        }),
+    });
+  };
+
+  // --- slice: play with friends ---
+  /** **Invite to my game** while my private server runs. */
+  const inviteToMyServer = (friend: Friend) => {
+    setNote(null);
+    hostInvite.mutate({ toUserId: friend.user.id });
   };
 
   const view = friends.data;
@@ -153,7 +185,10 @@ export function FriendsPage() {
         id: "invite",
         label: t("panel.invite"),
         icon: <Send size={14} />,
-        disabled: onMyServer === null || invite.isPending,
+        // --- slice: play with friends --- my private server first.
+        disabled: isHostLive(hostSession)
+          ? !hostRunning || hostInvite.isPending
+          : onMyServer === null || invite.isPending,
       },
       {
         id: "remove",
@@ -169,6 +204,11 @@ export function FriendsPage() {
         return;
       }
       if (id === "invite") {
+        // --- slice: play with friends ---
+        if (hostRunning) {
+          inviteToMyServer(friend);
+          return;
+        }
         if (onMyServer === null) return;
         setNote(null);
         invite.mutate({
@@ -372,14 +412,24 @@ export function FriendsPage() {
             friend={selected}
             mine={view?.presence ?? NO_PRESENCE}
             joining={join.isPending}
-            inviting={invite.isPending}
+            inviting={invite.isPending || hostInvite.isPending}
             removing={remove.isPending}
             inviteNote={
               invite.error
                 ? errorText(invite.error)
-                : invite.isSuccess && invite.variables?.toUserId === selected.user.id
-                  ? t("notices.inviteSent", { name: selected.user.displayName })
-                  : null
+                : // --- slice: play with friends ---
+                  hostInvite.error
+                  ? errorText(hostInvite.error)
+                  : (invite.isSuccess && invite.variables?.toUserId === selected.user.id) ||
+                      (hostInvite.isSuccess && hostInvite.variables?.toUserId === selected.user.id)
+                    ? t("notices.inviteSent", { name: selected.user.displayName })
+                    : null
+            }
+            // --- slice: play with friends ---
+            hostSession={hostSession}
+            onHostInvite={() => inviteToMyServer(selected)}
+            onHostAndInvite={() =>
+              void navigate(`/host?${HOST_INVITE_PARAM}=${encodeURIComponent(selected.user.id)}`)
             }
             onJoin={() => joinFriend(selected)}
             onInvite={() => {

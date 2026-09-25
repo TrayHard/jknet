@@ -55,6 +55,7 @@ room than the English text suggests:
 | Server table headings | `servers:columns.*` | 56–116 px, uppercase, no wrapping |
 | Mode badges | `games:gametypesShort.*` | 60 px, uppercase; keep them to 5–6 characters |
 | Filter labels | `servers:filters.mode/mod/players/version` | a word each, in a row that has to fit on one line |
+| Match row of Play with friends | `host:setup.gametype.label`, `maxPlayers.label`, `timeLimit.label`, `scoreLimit.*`, `bots.label`, `setup.noLimit`, `setup.bots.*` | about 120 px per field, labels uppercase; a value that does not fit is cut with an ellipsis |
 
 Everything else wraps.
 
@@ -183,6 +184,15 @@ Everything else wraps.
 | `bundles:editor.overview.languages.*` | The strip over the name, the summary and the description of a draft: the bundle is written in one *default language* and may carry a *translation* into each other language the launcher speaks. `default` is a badge of one word on the chip of the default language; `defaultLanguage` is the label inside a dropdown, uppercased by the code, so keep it to two words; `add` is what the dropdown of languages to add says on its face and `addLabel` its accessible name. `translation` stands under the strip while a translation is shown: `{{language}}` and `{{default}}` are native names of languages — «Русский», «Deutsch» — and are never translated. `copyFromDefault` and `remove` are two small buttons on that line; `removeTitle`, `removeBody` and `removeConfirm` are the question in front of **Remove** on a translation that says something. |
 | `bundles:editor.overview.nameHintTranslation`, `editor.overview.invalid.translationName` | The hint under the name field of a translation and the sentence that replaces it: an empty translated name is allowed and means «show the default language», a name that says something is held to 2–64 characters like the default one. |
 | `bundles:card.languages`, `bundles:details.language` | The tooltip of the «EN · RU» badge on a card — `{{languages}}` is a list of native names the launcher builds, never translated — and the accessible name of the row of code buttons over the record of a bundle that picks the language of its text. |
+| `host:setup.client.option` | A client name and an engine name, both as they are: only the separator is yours. |
+| `host:setup.firewall` | Names a button of the Windows firewall prompt: use the label Windows prints in your language. `{{engine}}` is an engine name. |
+| `host:running.relayDown.text`, `running.relayReason.*` | The reasons fill `{{reason}}` in the middle of the sentence, after «is not available:», so they start in lower case and carry no full stop. |
+| `host:running.relay.active` | `{{region}}` is the region of the relay as the service names it, not translated; `{{time}}` is a duration already formatted, «3 h 12 min». |
+| `host:running.autoStop.*` | `{{time}}` is a countdown written as a clock, `14:32`. |
+| `host:panel.invitedAgo`, `panel.invitedJustNow` | Printed in capitals under the **Invited** button of a friend: `{{time}}` is a duration already formatted, «2 min». |
+| `host:starting.stepState.*` | Never shown: a screen reader reads it after the label of a starting step. One word each. |
+| `host:friends.hosting` | The status line of a friend who hosts a private server, on the Friends screen: `{{map}}` is a map name and stays as it is. |
+| `host:policy.*` | **Who can join without an invite**: `friends`, `selected` and `invite` are three radio labels, and **Join game** in `policy.hint` names the button `friends:panel.join` — use the words you gave it. |
 
 ## How to check your work
 

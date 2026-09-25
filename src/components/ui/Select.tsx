@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -17,6 +18,17 @@ export interface SelectOption {
   label: string;
   /** Listed and read out, but not choosable. */
   disabled?: boolean;
+  // --- slice: play with friends ---
+  /**
+   * A mark drawn before the label, in the list and in the trigger: the logo of
+   * the engine a client runs. Keep it at 16 px, the height of the text.
+   */
+  icon?: ReactNode;
+  /**
+   * A second line under the label in the list, as `ComboboxOption` has it:
+   * the reason a disabled option is off. The trigger shows the label alone.
+   */
+  hint?: string;
 }
 
 /** `sm` is 28 px high, `md` is 36 px — the two heights the Button kit uses. */
@@ -384,6 +396,12 @@ export function Select({
         {label ? (
           <span className="text-label-xs text-fg-muted shrink-0">{label}</span>
         ) : null}
+        {/* --- slice: play with friends --- the mark of the chosen option. */}
+        {selected?.icon ? (
+          <span aria-hidden="true" className="flex shrink-0">
+            {selected.icon}
+          </span>
+        ) : null}
         <span
           className={cn(
             "truncate",
@@ -449,7 +467,9 @@ export function Select({
                     }}
                     onClick={() => commit(index)}
                     className={cn(
-                      "flex items-center gap-8 h-32 px-12 text-body-sm",
+                      "flex items-center gap-8 px-12 text-body-sm",
+                      // --- slice: play with friends --- a hint is a second line.
+                      option.hint ? "min-h-32 py-6" : "h-32",
                       option.disabled
                         ? "text-fg-disabled cursor-not-allowed"
                         : "cursor-pointer",
@@ -461,7 +481,24 @@ export function Select({
                           : "text-fg",
                     )}
                   >
-                    <span className="flex-1 min-w-0 truncate">{option.label}</span>
+                    {option.icon ? (
+                      <span
+                        aria-hidden="true"
+                        className={cn("flex shrink-0", option.disabled && "opacity-50")}
+                      >
+                        {option.icon}
+                      </span>
+                    ) : null}
+                    {option.hint ? (
+                      <span className="flex-1 min-w-0 flex flex-col">
+                        <span className="truncate">{option.label}</span>
+                        <span className="truncate text-label-xs text-fg-muted">
+                          {option.hint}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="flex-1 min-w-0 truncate">{option.label}</span>
+                    )}
                     {isSelected ? (
                       <Check size={14} aria-hidden className="shrink-0" />
                     ) : null}

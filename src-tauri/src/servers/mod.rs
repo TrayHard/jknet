@@ -48,8 +48,8 @@
 //! The wire formats live in [`protocol`] and the sockets in [`net`]; this
 //! module only decides what to ask and what to keep.
 
-mod net;
-mod protocol;
+pub(crate) mod net;
+pub(crate) mod protocol;
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;

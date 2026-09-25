@@ -60,10 +60,23 @@
  *                                         told by its first bytes
  *     GET    /v1/blobs/:sha256            HEAD too, one Range; a picture comes
  *                                         with its Content-Type and inline
+ *     *      /v1/relay/*                  503 relay_unavailable: the mock has no
+ *                                         relay node; the launcher's server
+ *                                         stays up for the local network
+ *
+ * The `hosting` object of a private server (TASK-41) passes through the way
+ * the service passes it: `PUT /v1/presence` keeps the host's whole object
+ * and `GET /v1/me` answers it back; a friend's presence reaches this
+ * account as the service's view for it — no `joinUserIds`, `canJoin` set,
+ * the password only where `canJoin` is true. Jan hosts one and lets this
+ * account in through the `selected` policy. An invite keeps its `hosting`
+ * whole, password included: it goes to one friend.
  *
  * Two routes are deliberately outside the contract, both marked below:
  * `POST /v1/dev/token` hands out a token without the browser round trip, and
- * `POST /v1/dev/invite` makes an invitation arrive on demand.
+ * `POST /v1/dev/invite` makes an invitation arrive on demand; with
+ * `?hosting=1` or `{ "hosting": true }` the invitation leads to a private
+ * server and carries its `hosting`.
  *
  * Environment:
  *
@@ -172,6 +185,9 @@ function seedWorld() {
         serverName: null,
         clientName: "Duel japro",
         since: later(-3 * 60_000),
+        // --- slice: play with friends --- Jan hosts a private server and
+        // lets this account in through the `selected` policy.
+        hosting: privateServer("selected", [account.id]),
       },
       friendsSince: "2026-04-19T09:30:00Z",
     },
@@ -259,7 +275,8 @@ function route(request, response, url, body) {
   // not appeared yet.
   if (path === "/v1/dev/invite" && method === "POST") {
     return withAuth(request, response, () => {
-      const invite = incomingInvite();
+      const withHosting = url.searchParams.get("hosting") === "1" || body?.hosting === true;
+      const invite = incomingInvite(withHosting);
       world.invites.unshift(invite);
       broadcast("invite", { invite });
       return send(response, 201, invite);
@@ -282,7 +299,7 @@ function route(request, response, url, body) {
   if (path === "/v1/friends" && method === "GET") {
     return withAuth(request, response, () =>
       send(response, 200, {
-        friends: world.friends,
+        friends: world.friends.map(friendView),
         incoming: world.incoming,
         outgoing: world.outgoing,
       }),
@@ -336,14 +353,19 @@ function route(request, response, url, body) {
       if (!["online", "in_game"].includes(body?.status)) {
         return fail(response, 400, "invalid", "status must be online or in_game.");
       }
+      const hosting = body.hosting ?? null;
+      const refused = hosting && hostingProblem(hosting);
+      if (refused) return fail(response, 400, "invalid", refused);
       presence = {
         status: body.status,
         serverAddress: body.serverAddress ?? null,
         serverName: body.serverName ?? null,
         clientName: body.clientName ?? null,
         since: nowIso(),
+        hosting,
       };
-      console.log(`  presence -> ${presence.status} ${presence.serverAddress ?? ""}`);
+      const hosted = hosting ? ` hosting ${hosting.map} (${hosting.joinPolicy})` : "";
+      console.log(`  presence -> ${presence.status} ${presence.serverAddress ?? ""}${hosted}`);
       return send(response, 200, presence);
     });
   }
@@ -357,6 +379,12 @@ function route(request, response, url, body) {
       if (!body?.toUserId || !body?.serverAddress) {
         return fail(response, 400, "invalid", "An invite needs a friend and a server.");
       }
+      const hosting = body.hosting ?? null;
+      let refused = hosting ? hostingProblem(hosting) : null;
+      if (hosting && !refused && ![hosting.relayAddress, ...(hosting.lanAddresses ?? [])].includes(body.serverAddress)) {
+        refused = "serverAddress must be the relay address or an address of the network of the host.";
+      }
+      if (refused) return fail(response, 400, "invalid", refused);
       const invite = {
         id: id(),
         from: account,
@@ -365,6 +393,7 @@ function route(request, response, url, body) {
         message: body.message ?? null,
         createdAt: nowIso(),
         expiresAt: later(10 * 60_000),
+        hosting,
       };
       console.log(`  invite -> ${body.toUserId} at ${invite.serverAddress}`);
       return send(response, 201, invite);
@@ -377,6 +406,13 @@ function route(request, response, url, body) {
       world.invites = world.invites.filter((invite) => invite.id !== inviteMatch[1]);
       return send(response, 204, null);
     });
+  }
+
+  // --- slice: play with friends --- no relay node behind this mock.
+  if (path === "/v1/relay" || path.startsWith("/v1/relay/")) {
+    return withAuth(request, response, () =>
+      fail(response, 503, "relay_unavailable", "The mock service has no relay node."),
+    );
   }
 
   if (path.startsWith("/v1/bundles") || path.startsWith("/v1/blobs/")) {
@@ -629,8 +665,23 @@ function drop(requestId) {
   return null;
 }
 
-/** The invitation the scripted friend sends. */
-function incomingInvite() {
+/** The invitation the scripted friend sends; to a private server of his own
+ *  when `withHosting` is set. */
+function incomingInvite(withHosting = false) {
+  if (withHosting) {
+    // An invite carries the password whatever the policy: it goes to one friend.
+    const { joinUserIds: _unused, ...hosting } = privateServer("invite", []);
+    return {
+      id: id(),
+      from: cast?.kyle ?? account,
+      serverAddress: hosting.relayAddress,
+      serverName: "Kyle's game",
+      message: "Duel?",
+      createdAt: nowIso(),
+      expiresAt: later(10 * 60_000),
+      hosting,
+    };
+  }
   return {
     id: id(),
     from: cast?.kyle ?? account,
@@ -640,6 +691,76 @@ function incomingInvite() {
     createdAt: nowIso(),
     expiresAt: later(10 * 60_000),
   };
+}
+
+// --- slice: play with friends ---
+
+/** The whole `hosting` object of a private server, as the host's launcher
+ *  sends it. The addresses are documentation ranges. */
+function privateServer(joinPolicy, joinUserIds) {
+  return {
+    sessionId: "5e0b7c1f9a2d4c38",
+    game: "ja",
+    mod: null,
+    map: "mp/ffa3",
+    gametype: 0,
+    players: 1,
+    maxPlayers: 8,
+    lanAddresses: ["192.168.1.23:29070"],
+    relayAddress: "203.0.113.5:29210",
+    password: "k7m2q9xa",
+    joinPolicy,
+    joinUserIds,
+  };
+}
+
+/** A friend as this account sees them: the service's view of their `hosting`. */
+function friendView(friend) {
+  const hosting = friend.presence?.hosting;
+  if (!hosting) return friend;
+  return { ...friend, presence: { ...friend.presence, hosting: hostingFor(hosting, account?.id) } };
+}
+
+/** The view of a `hosting` object for one recipient: no `joinUserIds`,
+ *  `canJoin` set, the password only where `canJoin` is true. */
+function hostingFor(hosting, recipientId) {
+  const { joinUserIds = [], password, ...rest } = hosting;
+  const canJoin =
+    hosting.joinPolicy === "friends" ||
+    (hosting.joinPolicy === "selected" && joinUserIds.includes(recipientId));
+  return canJoin ? { ...rest, password, canJoin } : { ...rest, canJoin };
+}
+
+/** Whether an address is `a.b.c.d:port` in a range of a local network. */
+function isPrivateAddress(address) {
+  const match = /^(\d+)\.(\d+)\.\d+\.\d+:\d+$/.exec(String(address));
+  if (!match) return false;
+  const [a, b] = [Number(match[1]), Number(match[2])];
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+/** The first rule of the contract a `hosting` object breaks, or `null`. */
+function hostingProblem(hosting) {
+  if (!/^[0-9a-f]{16}$/.test(String(hosting.sessionId))) {
+    return "hosting.sessionId must be 16 hex characters.";
+  }
+  if (!["ja", "jo"].includes(hosting.game)) return "hosting.game must be ja or jo.";
+  if (!["friends", "selected", "invite"].includes(hosting.joinPolicy)) {
+    return "hosting.joinPolicy must be friends, selected or invite.";
+  }
+  const lan = hosting.lanAddresses ?? [];
+  if (!Array.isArray(lan) || lan.length > 4 || !lan.every(isPrivateAddress)) {
+    return "hosting.lanAddresses takes up to four private IPv4 addresses.";
+  }
+  if (hosting.password != null && !/^[A-Za-z0-9_-]{1,24}$/.test(hosting.password)) {
+    return "hosting.password is up to 24 letters, digits, _ or -.";
+  }
+  return null;
 }
 
 /** Matches a display name, a `provider:name` or an id, as the service does. */
@@ -1999,7 +2120,7 @@ server.on("upgrade", (request, socket) => {
       };
       write(
         socket,
-        frame("presence.updated", { userId: kyle.user.id, presence: kyle.presence }),
+        frame("presence.updated", { userId: kyle.user.id, presence: friendView(kyle).presence }),
       );
     }
   }, PING_INTERVAL_MS);

@@ -53,6 +53,6 @@ pub use types::Me;
 // re-exporting them would be a public surface nothing asks for.
 // `Auth` and `path_segment` are the two the bundles module names.
 pub use types::{
-    Friend, FriendRemoved, FriendRequest, Invite, LiveFrame, NewInvite, OnlineUser, Presence,
-    PresenceUpdate, PresenceUpdated, SendRequestResult, SignInPoll,
+    Friend, FriendRemoved, FriendRequest, HostingInfo, Invite, LiveFrame, NewInvite, OnlineUser,
+    Presence, PresenceUpdate, PresenceUpdated, RelayGrant, SendRequestResult, SignInPoll,
 };

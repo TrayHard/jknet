@@ -6,6 +6,8 @@ import { Link, useNavigate } from "react-router";
 // --- slice: home client block ---
 import { EngineLogo } from "../components/EngineLogo";
 import { GameFilesNotice } from "../components/GameFilesNotice";
+// --- slice: play with friends ---
+import { HostCard } from "../components/host/HostCard";
 import { MapPreview } from "../components/MapPreview";
 // --- slice: server actions ---
 import { useMissingClientToast } from "../components/MissingClientToast";
@@ -541,6 +543,11 @@ export function HomePage() {
           ) : null}
         </div>
       </section>
+
+      {/* --- slice: play with friends --- between the hero and the server
+          blocks: a game with friends is the other way into a match, and a
+          server already running here is worth seeing before starting one. */}
+      <HostCard className="mt-24" />
 
       {/* The player's own servers come before the crowd's: Favorites is a list
           they built by hand, History is where they actually played, and

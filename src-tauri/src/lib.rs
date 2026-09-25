@@ -30,6 +30,7 @@
 //! | `bundles`        | bundles on JKNet Online: catalogue, publish, install |
 //! | `archive`        | one bounded walk over the entries of a pk3, for the modules that list one |
 //! | `pk3_editor`     | one pk3 archive open for editing, and the rewrite that saves it |
+//! | `hosting`        | a private server on this PC, its relay tunnel, and joining one |
 
 mod account;
 // --- slice: bundles ---
@@ -78,6 +79,15 @@ mod error;
 mod friends;
 mod game;
 mod game_files;
+// --- slice: play with friends ---
+// A private server on this PC: the dedicated server of a client under a
+// pseudo console, the tunnel to the relay, and the join of a guest.
+mod hosting;
+/// The whole chain of a private server without a window, for
+/// `examples/host_smoke.rs`. Not an API: nothing outside this repository
+/// calls it.
+#[doc(hidden)]
+pub use hosting::smoke;
 // --- slice: jkhub ---
 // The public pages of jkhub.org, read behind a limiter and a cache. The module
 // owns its own HTTP client because a guest download needs the cookie jar the
@@ -185,8 +195,17 @@ pub fn run() {
         .on_window_event(|window, event| {
             let label = window.label();
             match event {
-                tauri::WindowEvent::CloseRequested { .. } => {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
                     log::info!("window {label}: close requested");
+                    // --- slice: play with friends ---
+                    // Closing JKNet stops the private server, so the window
+                    // asks first. The frontend guard of unsaved drafts holds
+                    // every close of `main` anyway; this covers a window that
+                    // has no such guard.
+                    if label == "main" && hosting::hold_close(window.app_handle()) {
+                        api.prevent_close();
+                        return;
+                    }
                 }
                 tauri::WindowEvent::Destroyed => {
                     log::info!("window {label}: destroyed");
@@ -197,6 +216,10 @@ pub fn run() {
                 return;
             }
             video::cancel_all(&window.state::<video::VideoState>());
+            // --- slice: play with friends ---
+            // The window went without asking: stop the server on the way out
+            // rather than leave it to the Job Object.
+            hosting::shutdown_on_exit(window.app_handle());
             // Best effort by design: `close_all` logs whatever refuses to
             // close and never panics, so the way out of the launcher cannot be
             // blocked by a window that is already gone.
@@ -371,6 +394,9 @@ pub fn run() {
         // The archives open in the editor. One session per archive, and the
         // folder each one keeps its unsaved bytes in goes with the session.
         .manage(pk3_editor::Pk3EditorState::default())
+        // --- slice: play with friends ---
+        // The one private server, its session and its supervisor.
+        .manage(hosting::HostState::default())
         .invoke_handler(tauri::generate_handler![
             video::list_video_jobs,
             video::export_demo_video,
@@ -481,6 +507,19 @@ pub fn run() {
             friends::send_invite,
             friends::dismiss_invite,
             friends::join_friend,
+            // --- slice: play with friends ---
+            friends::accept_invite,
+            hosting::host_get_options,
+            hosting::host_list_maps,
+            hosting::host_start,
+            hosting::host_stop,
+            hosting::host_get_session,
+            hosting::host_join_own,
+            hosting::host_change_map,
+            hosting::host_set_join_policy,
+            hosting::host_retry_relay,
+            hosting::host_invite,
+            hosting::host_open_log,
             // --- slice: jkhub ---
             jkhub::jkhub_categories,
             jkhub::jkhub_list,
