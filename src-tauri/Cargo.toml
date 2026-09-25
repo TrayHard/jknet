@@ -1,6 +1,6 @@
 [package]
 name = "jknet"
-version = "0.5.0"
+version = "0.6.0"
 description = "Launcher for Star Wars Jedi Knight: Jedi Academy and Jedi Outcast"
 authors = ["JKNet"]
 edition = "2021"
