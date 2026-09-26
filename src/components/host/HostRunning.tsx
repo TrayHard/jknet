@@ -5,6 +5,7 @@ import { useFormat } from "../../i18n/useFormat";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { hostInviteCard } from "../../lib/chat/cardDrafts";
 import type { HostSession } from "../../lib/ipc";
+import { HostChatCard } from "../chat/HostChatCard";
 import { useShareDialog } from "../chat/ShareToChatDialog";
 import { Badge, Button } from "../ui";
 import { AddressField, CopyButton } from "./CopyButton";
@@ -39,7 +40,8 @@ interface HostRunningProps {
 /**
  * The **Running** state: the server, the players on it, and how to reach it.
  *
- * Three cards, as the design has them. The relay line turns into a warning
+ * Three cards, as the design has them, and the card of the server chat
+ * between the first two while chats are on. The relay line turns into a warning
  * with **Retry** when the relay drops, and the **Internet** row of the
  * addresses goes with it: an address that does not answer is worse than
  * none. The auto-stop line counts down only while the server is empty.
@@ -195,6 +197,9 @@ export function HostRunning({
           </Button>
         </div>
       </section>
+
+      {/* --- slice: chat groups --- the server chat and the host's history switch (D1). */}
+      <HostChatCard sessionId={session.id} stopping={isStopping} />
 
       <section className="flex flex-col gap-8 rounded-lg border border-line bg-surface p-16">
         <h3 className="text-heading-sm text-fg">{t("running.players.title")}</h3>

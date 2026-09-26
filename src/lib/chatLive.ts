@@ -31,6 +31,8 @@ let uploads: Readonly<Record<string, ChatUploadEvent>> = {};
 // --- slice: chat cards --- how far each download has got, by file id.
 let downloads: Readonly<Record<string, ChatDownloadEvent>> = {};
 let dropped: readonly ChatStagedFile[] = [];
+// --- slice: chat groups --- sessions whose server chat the host ended.
+let endedSessions: ReadonlySet<string> = new Set();
 const listeners = new Set<Listener>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -138,6 +140,22 @@ export const chatLive = {
     return dropped.length;
   },
 
+  /**
+   * --- slice: chat groups --- the host ended the chat of this server: the
+   * core does not open it again while the same server runs, and the Play
+   * with friends screen says so instead of waiting for it.
+   */
+  markServerChatEnded(sessionId: string) {
+    const key = sessionId.toLowerCase();
+    if (endedSessions.has(key)) return;
+    endedSessions = new Set([...endedSessions, key]);
+    publish();
+  },
+
+  serverChatEnded(sessionId: string): boolean {
+    return endedSessions.has(sessionId.toLowerCase());
+  },
+
   /** Everything goes on sign-out: nothing of one account may show for the next. */
   reset() {
     for (const timer of timers.values()) clearTimeout(timer);
@@ -146,6 +164,7 @@ export const chatLive = {
     uploads = {};
     downloads = {};
     dropped = [];
+    endedSessions = new Set();
     publish();
   },
 };
@@ -173,4 +192,9 @@ export function useDownloadProgress(fileId: string): ChatDownloadEvent | undefin
 /** How many dropped files wait for a composer. */
 export function useDroppedCount(): number {
   return useSyncExternalStore(subscribe, () => chatLive.droppedCount());
+}
+
+/** --- slice: chat groups --- whether the host ended the chat of this server. */
+export function useServerChatEnded(sessionId: string): boolean {
+  return useSyncExternalStore(subscribe, () => chatLive.serverChatEnded(sessionId));
 }

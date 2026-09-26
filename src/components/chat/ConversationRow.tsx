@@ -6,6 +6,7 @@ import { badgeLabel, rowBadge } from "../../lib/chat/unread";
 import { cn } from "../../lib/format";
 import type { Conversation } from "../../lib/ipc";
 import { useChatPrivacy } from "../../lib/queries";
+import { Badge } from "../ui";
 import { ConversationAvatar } from "./ConversationAvatar";
 import { useChatNames, useChatTimes, useMessageSummary } from "./useChatText";
 import { useTypingText } from "./TypingLine";
@@ -69,6 +70,12 @@ export function ConversationRow({ conversation, selected, onSelect, typing, dens
           >
             {title}
           </span>
+          {/* --- slice: chat groups --- a server chat lives while its server runs. */}
+          {conversation.kind === "server" ? (
+            <Badge tone="success" className="shrink-0">
+              {t("list.live")}
+            </Badge>
+          ) : null}
           {!conversation.canSend ? (
             <Lock size={12} className="shrink-0 text-fg-muted" aria-label={t("list.readOnly")} />
           ) : null}

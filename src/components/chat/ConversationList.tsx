@@ -1,4 +1,4 @@
-import { MessageCircle, Search, WifiOff, X } from "lucide-react";
+import { MessageCircle, Search, UserPlus, WifiOff, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -8,12 +8,15 @@ import {
   sortConversations,
   type ConversationFilter,
 } from "../../lib/chat/conversation";
+import { SEARCH_MAX, SEARCH_MIN_ALL } from "../../lib/chat/search";
 import { cn } from "../../lib/format";
-import type { ChatStateView } from "../../lib/ipc";
+import type { ChatSearchHas, ChatStateView } from "../../lib/ipc";
 import { useChatTypingMap } from "../../lib/queries";
 import { Input } from "../ui";
+import { SearchKindChips } from "./ChatSearch";
 import { ChatSearchResults } from "./ChatSearchResults";
 import { ConversationRow } from "./ConversationRow";
+import { GroupDialog } from "./GroupDialog";
 import { GroupInviteRow } from "./GroupInviteRow";
 import { useChatNames } from "./useChatText";
 
@@ -53,6 +56,9 @@ export function ConversationList({
   const typing = useChatTypingMap();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<ConversationFilter>("all");
+  // --- slice: chat groups --- what the messages found carry, and **New group**.
+  const [has, setHas] = useState<ChatSearchHas | null>(null);
+  const [creating, setCreating] = useState(false);
 
   // The title as printed joins the names the query is matched against: it is
   // what the player reads, «Deleted account» and «Kai's server» included.
@@ -65,33 +71,49 @@ export function ConversationList({
       ),
     [state.conversations, filter, query, names],
   );
-  const searching = query.trim().length >= 3;
+  const searching = [...query.trim()].length >= SEARCH_MIN_ALL;
   const hasServer = state.conversations.some((conversation) => conversation.kind === "server");
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
       <div className={cn("flex flex-col gap-8", dense ? "p-8" : "px-12 pt-12 pb-8")}>
-        <Input
-          icon={<Search size={14} />}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("list.search")}
-          aria-label={t("list.search")}
-          className={dense ? "h-32" : undefined}
-          trailing={
-            query !== "" ? (
-              <button
-                type="button"
-                aria-label={t("list.clearSearch")}
-                title={t("list.clearSearch")}
-                onClick={() => setQuery("")}
-                className="flex size-20 items-center justify-center rounded-xs text-fg-muted hover:text-fg cursor-pointer"
-              >
-                <X size={12} />
-              </button>
-            ) : null
-          }
-        />
+        <div className="flex items-center gap-6">
+          <Input
+            icon={<Search size={14} />}
+            value={query}
+            maxLength={SEARCH_MAX}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("list.search")}
+            aria-label={t("list.search")}
+            className={cn("min-w-0 flex-1", dense && "h-32")}
+            trailing={
+              query !== "" ? (
+                <button
+                  type="button"
+                  aria-label={t("list.clearSearch")}
+                  title={t("list.clearSearch")}
+                  onClick={() => setQuery("")}
+                  className="flex size-20 items-center justify-center rounded-xs text-fg-muted hover:text-fg cursor-pointer"
+                >
+                  <X size={12} />
+                </button>
+              ) : null
+            }
+          />
+          <button
+            type="button"
+            aria-label={t("group.new")}
+            title={t("group.new")}
+            onClick={() => setCreating(true)}
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-md border border-line text-fg-secondary cursor-pointer select-none",
+              "transition-colors duration-150 hover:bg-hover-overlay hover:text-fg",
+              dense ? "size-32" : "size-36",
+            )}
+          >
+            <UserPlus size={16} />
+          </button>
+        </div>
         <div role="tablist" aria-label={t("list.filter")} className="flex items-center gap-4">
           {FILTERS.map((entry) => (
             <button
@@ -117,6 +139,7 @@ export function ConversationList({
             {t("list.offline")}
           </p>
         ) : null}
+        {searching ? <SearchKindChips value={has} onChange={setHas} /> : null}
       </div>
 
       <div className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto", dense ? "px-4 pb-8" : "px-8 pb-12")}>
@@ -124,7 +147,13 @@ export function ConversationList({
           <section aria-label={t("invites.title")} className="flex flex-col gap-4 pb-8">
             <h3 className="px-8 pt-4 text-label-xs text-fg-muted">{t("invites.title")}</h3>
             {state.groupInvites.map((invite) => (
-              <GroupInviteRow key={invite.conversationId} invite={invite} onJoined={onSelect} />
+              <GroupInviteRow
+                key={invite.conversationId}
+                invite={invite}
+                onJoined={onSelect}
+                onOpen={() => onSelect(invite.conversationId)}
+                selected={invite.conversationId === selectedId}
+              />
             ))}
           </section>
         ) : null}
@@ -155,8 +184,31 @@ export function ConversationList({
           </div>
         ) : null}
 
-        {searching ? <ChatSearchResults query={query} onOpenMessage={onOpenMessage} /> : null}
+        {/* --- slice: chat groups --- the server chat is there only while the server runs. */}
+        {filter === "server" && hasServer && query.trim() === "" ? (
+          <p className="px-8 pt-8 text-body-sm text-fg-muted">{t("list.serverNote")}</p>
+        ) : null}
+
+        {searching ? (
+          <ChatSearchResults
+            query={query}
+            has={has}
+            onOpenMessage={onOpenMessage}
+            onClearFilters={has !== null ? () => setHas(null) : undefined}
+          />
+        ) : null}
       </div>
+
+      {creating ? (
+        <GroupDialog
+          onClose={() => setCreating(false)}
+          onCreated={(conversationId) => {
+            setQuery("");
+            setFilter("all");
+            onSelect(conversationId);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

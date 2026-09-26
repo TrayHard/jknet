@@ -1,4 +1,4 @@
-import { ArrowDown, EyeOff, Search, X } from "lucide-react";
+import { ArrowDown, EyeOff } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -24,10 +24,11 @@ import {
   useChatThreadJumps,
   useReportChatViewing,
 } from "../../lib/queries";
-import { Button, Input } from "../ui";
-import { ChatSearchResults } from "./ChatSearchResults";
+import { Button } from "../ui";
+import { ChatSearch } from "./ChatSearch";
 import { Composer } from "./Composer";
 import { DayDivider } from "./DayDivider";
+import { GroupInfoPanel } from "./GroupInfoPanel";
 import { useLinkOpener } from "./LinkConfirmDialog";
 import { MessageGroup } from "./MessageGroup";
 import { OutboxStatus } from "./OutboxStatus";
@@ -55,7 +56,17 @@ interface ThreadProps {
   /** Buttons the layout adds to the header. */
   headerActions?: ReactNode;
   jump?: ThreadJump | null;
+  /**
+   * --- slice: chat groups --- a search hit in another chat: the surface
+   * opens that chat on the message.
+   */
+  onOpenMessage?: (conversationId: string, seq: number) => void;
+  /** --- slice: chat groups --- I left the chat or ended it: back to the list. */
+  onGone?: () => void;
 }
+
+/** What the info of a group or a server chat opens on. */
+type InfoPanel = { mode: "view" | "rename" | "add"; key: number } | null;
 
 /** Closer to the top than this, the older page is fetched. */
 const LOAD_EDGE_PX = 400;
@@ -85,7 +96,15 @@ interface Anchor {
  * The window reports what it shows, which is what the core reads messages as
  * read by and holds notifications back for.
  */
-export function Thread({ conversationId, variant, onBack, headerActions, jump = null }: ThreadProps) {
+export function Thread({
+  conversationId,
+  variant,
+  onBack,
+  headerActions,
+  jump = null,
+  onOpenMessage,
+  onGone,
+}: ThreadProps) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const names = useChatNames();
@@ -101,7 +120,9 @@ export function Thread({ conversationId, variant, onBack, headerActions, jump = 
   const [highlight, setHighlight] = useState<number | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [searching, setSearching] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // --- slice: chat groups --- the info of a group or a server chat, over
+  // the messages; `key` opens it anew when the header asks twice.
+  const [info, setInfo] = useState<InfoPanel>(null);
 
   const scroller = useRef<HTMLDivElement>(null);
   const divider = useRef<HTMLDivElement>(null);
@@ -122,7 +143,7 @@ export function Thread({ conversationId, variant, onBack, headerActions, jump = 
     setReplyTo(null);
     setHighlight(null);
     setSearching(false);
-    setSearchQuery("");
+    setInfo(null);
     stick.current = true;
     anchor.current = null;
   }, [conversationId]);
@@ -262,10 +283,12 @@ export function Thread({ conversationId, variant, onBack, headerActions, jump = 
     if (node !== null) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   };
 
+  // --- slice: chat groups --- the info over the messages hides them: they
+  // are not being read, and no composer takes dropped files.
   useReportChatViewing(
     conversation === null ? null : conversationId,
-    atBottom && loaded && !hasAfter,
-    conversation?.canSend ?? false,
+    atBottom && loaded && !hasAfter && info === null,
+    (conversation?.canSend ?? false) && info === null,
   );
 
   const actions = useMemo<ThreadActions | null>(
@@ -306,49 +329,54 @@ export function Thread({ conversationId, variant, onBack, headerActions, jump = 
         <ThreadHeader
           conversation={conversation}
           onBack={onBack}
-          onSearch={() => setSearching((open) => !open)}
-          searching={searching}
+          onSearch={() => {
+            setInfo(null);
+            setSearching((open) => !open);
+          }}
+          searching={searching && info === null}
+          onInfo={(mode) =>
+            setInfo((current) =>
+              current !== null && mode === "view" ? null : { mode, key: (current?.key ?? 0) + 1 },
+            )
+          }
+          infoOpen={info !== null}
           actions={headerActions}
           dense={dense}
         />
 
-        {searching ? (
-          <div className="flex max-h-[45%] shrink-0 flex-col border-b border-line-subtle">
-            <div className="p-8">
-              <Input
-                autoFocus
-                icon={<Search size={14} />}
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder={t("thread.searchPlaceholder", { name: title })}
-                aria-label={t("thread.search")}
-                className="h-32"
-                trailing={
-                  <button
-                    type="button"
-                    aria-label={t("thread.closeSearch")}
-                    title={t("thread.closeSearch")}
-                    onClick={() => setSearching(false)}
-                    className="flex size-20 items-center justify-center rounded-xs text-fg-muted cursor-pointer hover:text-fg"
-                  >
-                    <X size={12} />
-                  </button>
-                }
-              />
-            </div>
-            {searchQuery.trim() !== "" ? (
-              <div className="min-h-0 overflow-y-auto px-4 pb-8">
-                <ChatSearchResults
-                  query={searchQuery}
-                  conversationId={conversationId}
-                  onOpenMessage={(_, seq) => jumpTo(seq)}
-                />
-              </div>
-            ) : null}
+        {/* --- slice: chat groups --- the search with its scope and filters;
+            a hit in another chat opens that chat. */}
+        {searching && info === null ? (
+          <div className="flex max-h-[55%] shrink-0 flex-col border-b border-line-subtle">
+            <ChatSearch
+              conversationId={conversationId}
+              dense={dense}
+              onClose={() => setSearching(false)}
+              onOpenMessage={(id, seq) => {
+                if (id === conversationId) jumpTo(seq);
+                else onOpenMessage?.(id, seq);
+              }}
+            />
           </div>
         ) : null}
 
         <div className="relative min-h-0 flex-1">
+          {info !== null ? (
+            <div className="absolute inset-0 z-10 bg-surface">
+              <GroupInfoPanel
+                key={info.key}
+                conversation={conversation}
+                renaming={info.mode === "rename"}
+                adding={info.mode === "add"}
+                dense={dense}
+                onClose={() => setInfo(null)}
+                onLeft={() => {
+                  setInfo(null);
+                  onGone?.();
+                }}
+              />
+            </div>
+          ) : null}
           <div
             ref={scroller}
             onScroll={onScroll}
@@ -436,17 +464,20 @@ export function Thread({ conversationId, variant, onBack, headerActions, jump = 
           ) : null}
         </div>
 
-        <TypingLine conversationId={conversationId} />
-        <Composer
-          conversation={conversation}
-          replyTo={replyTo}
-          onClearReply={() => setReplyTo(null)}
-          onSent={() => {
-            stick.current = true;
-            if (hasAfter) void jumps.toPresent();
-          }}
-          dense={dense}
-        />
+        {/* Hidden, not gone, under the info: the composer keeps its files. */}
+        <div className={info !== null ? "hidden" : "contents"}>
+          <TypingLine conversationId={conversationId} />
+          <Composer
+            conversation={conversation}
+            replyTo={replyTo}
+            onClearReply={() => setReplyTo(null)}
+            onSent={() => {
+              stick.current = true;
+              if (hasAfter) void jumps.toPresent();
+            }}
+            dense={dense}
+          />
+        </div>
       </div>
       {link.dialog}
     </ThreadContext>

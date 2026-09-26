@@ -1,15 +1,19 @@
-import { ArrowLeft, AtSign, Bell, BellOff, Check, Lock, Search } from "lucide-react";
+import { ArrowLeft, AtSign, Bell, BellOff, Check, Info, Lock, Pencil, Search, UserPlus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { peerOf } from "../../lib/chat/conversation";
+import { canAddMembers, canRename } from "../../lib/chat/groups";
 import { cn } from "../../lib/format";
 import type { ChatNotifyLevel, Conversation } from "../../lib/ipc";
 import { useFriendPresence, useSetChatNotify } from "../../lib/queries";
 import { useStatusLine } from "../friends/useStatusLine";
-import { Menu, type MenuItem } from "../ui";
+import { Badge, Menu, type MenuItem } from "../ui";
 import { ConversationAvatar } from "./ConversationAvatar";
 import { useChatNames } from "./useChatText";
+
+/** What the info of a group opens on: the info, the name field, or **Add friends**. */
+export type ThreadInfoMode = "view" | "rename" | "add";
 
 interface ThreadHeaderProps {
   conversation: Conversation;
@@ -18,6 +22,12 @@ interface ThreadHeaderProps {
   /** **Search in this chat**. */
   onSearch?: () => void;
   searching?: boolean;
+  /**
+   * --- slice: chat groups --- the info of a group or a server chat: a
+   * press on the title, or an item of the menu.
+   */
+  onInfo?: (mode: ThreadInfoMode) => void;
+  infoOpen?: boolean;
   /**
    * Buttons of the layout, at the end of the row: **Pop out**, **Pin** and
    * **Close** of the drawer, the compact toggle of the chat window.
@@ -35,8 +45,22 @@ interface ThreadHeaderProps {
  *
  * A direct chat with a deleted account is titled **Deleted account** with a
  * lock: nothing can be sent there.
+ *
+ * --- slice: chat groups --- The title of a group or a server chat opens its
+ * info; the menu adds **Group info**, **Add friends** and — for the owner
+ * only (D5) — **Rename group** before the notification levels. A server chat
+ * carries **Live** while it exists: it goes when the server stops.
  */
-export function ThreadHeader({ conversation, onBack, onSearch, searching = false, actions, dense = false }: ThreadHeaderProps) {
+export function ThreadHeader({
+  conversation,
+  onBack,
+  onSearch,
+  searching = false,
+  onInfo,
+  infoOpen = false,
+  actions,
+  dense = false,
+}: ThreadHeaderProps) {
   const { t } = useTranslation("chat");
   const names = useChatNames();
   const statusLine = useStatusLine();
@@ -44,6 +68,8 @@ export function ThreadHeader({ conversation, onBack, onSearch, searching = false
   const peer = peerOf(conversation, names.meId);
   const presence = useFriendPresence(peer?.id ?? null);
   const title = names.title(conversation);
+  const server = conversation.kind === "server";
+  const hasInfo = conversation.kind !== "direct" && onInfo !== undefined;
 
   const subtitle = !conversation.canSend
     ? conversation.kind === "direct" && peer === null
@@ -53,7 +79,7 @@ export function ThreadHeader({ conversation, onBack, onSearch, searching = false
       ? presence
         ? statusLine(presence)
         : ""
-      : conversation.kind === "server"
+      : server
         ? t("thread.serverMembers", { count: conversation.members.length })
         : t("thread.members", { count: conversation.members.length });
 
@@ -74,6 +100,47 @@ export function ThreadHeader({ conversation, onBack, onSearch, searching = false
         <BellOff size={14} />
       ),
   }));
+  if (hasInfo) {
+    const group: MenuItem[] = [
+      { id: "info", label: server ? t("info.openServer") : t("info.open"), icon: <Info size={14} /> },
+    ];
+    if (conversation.kind === "group") {
+      group.push({
+        id: "add",
+        label: t("info.add"),
+        icon: <UserPlus size={14} />,
+        disabled: !canAddMembers(conversation),
+      });
+    }
+    if (canRename(conversation, names.meId)) {
+      group.push({ id: "rename", label: t("info.rename"), icon: <Pencil size={14} /> });
+    }
+    items.unshift(...group);
+  }
+
+  const identity = (
+    <>
+      <ConversationAvatar conversation={conversation} meId={names.meId} size={dense ? "sm" : "md"} />
+      <span className="flex min-w-0 flex-1 flex-col text-left">
+        <span className="flex items-center gap-6 min-w-0">
+          <span className="truncate text-body-md-medium text-fg [unicode-bidi:isolate]">{title}</span>
+          {!conversation.canSend ? <Lock size={12} className="shrink-0 text-fg-muted" /> : null}
+        </span>
+        {/* The badge goes under the title: in the 380 px drawer the title
+            needs the whole first line. */}
+        {server || subtitle !== "" ? (
+          <span className="flex min-w-0 items-center gap-6">
+            {server ? (
+              <Badge tone="success" className="shrink-0">
+                {t("list.live")}
+              </Badge>
+            ) : null}
+            {subtitle !== "" ? <span className="truncate text-body-sm text-fg-muted">{subtitle}</span> : null}
+          </span>
+        ) : null}
+      </span>
+    </>
+  );
 
   return (
     <header className={cn("flex shrink-0 items-center gap-8 border-b border-line-subtle", dense ? "h-44 px-8" : "h-56 px-12")}>
@@ -88,14 +155,23 @@ export function ThreadHeader({ conversation, onBack, onSearch, searching = false
           <ArrowLeft size={16} />
         </button>
       ) : null}
-      <ConversationAvatar conversation={conversation} meId={names.meId} size={dense ? "sm" : "md"} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-6 min-w-0">
-          <span className="truncate text-body-md-medium text-fg [unicode-bidi:isolate]">{title}</span>
-          {!conversation.canSend ? <Lock size={12} className="shrink-0 text-fg-muted" /> : null}
-        </span>
-        {subtitle !== "" ? <span className="truncate text-body-sm text-fg-muted">{subtitle}</span> : null}
-      </div>
+      {hasInfo ? (
+        <button
+          type="button"
+          onClick={() => onInfo?.("view")}
+          aria-expanded={infoOpen}
+          title={server ? t("info.openServer") : t("info.open")}
+          className={cn(
+            "-mx-4 flex min-w-0 flex-1 items-center gap-8 rounded-md px-4 py-2 cursor-pointer select-none",
+            "transition-colors duration-100 hover:bg-hover-overlay",
+            infoOpen && "bg-selected-overlay",
+          )}
+        >
+          {identity}
+        </button>
+      ) : (
+        <div className="flex min-w-0 flex-1 items-center gap-8">{identity}</div>
+      )}
       <div className="flex shrink-0 items-center gap-2">
         {onSearch ? (
           <button
@@ -115,11 +191,14 @@ export function ThreadHeader({ conversation, onBack, onSearch, searching = false
         <Menu
           size="sm"
           dots="vertical"
-          ariaLabel={t("notify.menu")}
+          ariaLabel={hasInfo ? t("thread.menu") : t("notify.menu")}
           items={items}
-          onSelect={(id) =>
-            setNotify.mutate({ conversationId: conversation.id, notify: id as ChatNotifyLevel })
-          }
+          onSelect={(id) => {
+            if (id === "info") onInfo?.("view");
+            else if (id === "add") onInfo?.("add");
+            else if (id === "rename") onInfo?.("rename");
+            else setNotify.mutate({ conversationId: conversation.id, notify: id as ChatNotifyLevel });
+          }}
         />
         {actions}
       </div>

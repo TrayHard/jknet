@@ -7,6 +7,7 @@ import { cn } from "../../lib/format";
 import { useChatState, useOnlineConfigured } from "../../lib/queries";
 import { ChatUnavailable } from "./ChatUnavailable";
 import { ConversationList } from "./ConversationList";
+import { GroupInviteBanner } from "./GroupInviteBanner";
 import { Thread, type ChatSurfaceVariant, type ThreadJump } from "./Thread";
 
 export type { ChatSurfaceVariant } from "./Thread";
@@ -87,6 +88,12 @@ export function ChatSurface({
   if (!view.available) return notReady(<ChatUnavailable reason="noChat" />);
 
   const dense = variant === "compact";
+  // --- slice: chat groups --- an id that is an invitation, not a chat yet:
+  // the banner stands where the thread will be once the player joins.
+  const invite =
+    conversationId === null || view.conversations.some((conversation) => conversation.id === conversationId)
+      ? null
+      : (view.groupInvites.find((entry) => entry.conversationId === conversationId) ?? null);
   const list = (
     <ConversationList
       state={view}
@@ -98,7 +105,17 @@ export function ChatSurface({
     />
   );
   const thread =
-    conversationId === null ? null : (
+    conversationId === null ? null : invite !== null ? (
+      <GroupInviteBanner
+        key={`invite:${conversationId}`}
+        invite={invite}
+        dense={dense}
+        onBack={variant === "split" ? undefined : () => onSelect(null)}
+        actions={threadActions}
+        onJoined={(id) => onSelect(id)}
+        onDeclined={() => onSelect(null)}
+      />
+    ) : (
       <Thread
         key={conversationId}
         conversationId={conversationId}
@@ -106,6 +123,8 @@ export function ChatSurface({
         onBack={variant === "split" ? undefined : () => onSelect(null)}
         headerActions={threadActions}
         jump={jump !== null && jump.conversationId === conversationId ? jump : null}
+        onOpenMessage={openMessage}
+        onGone={() => onSelect(null)}
       />
     );
 

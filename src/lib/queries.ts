@@ -62,10 +62,13 @@ import {
   placeIncoming,
 } from "./chat/mergeMessages";
 import { applyRead, unreadTotals, type UnreadTotals } from "./chat/unread";
+// --- slice: chat groups ---
+import { searchReady } from "./chat/search";
 import {
   chatLive,
   useDownloadProgress,
   useDroppedCount,
+  useServerChatEnded,
   useTypingIn,
   useTypingMap,
   useUploadProgress,
@@ -4093,9 +4096,16 @@ export function useRemoveChatMember() {
 /** **Leave** a group or a server chat. */
 export function useLeaveChat() {
   const queryClient = useQueryClient();
+  const meId = useChatMeId();
   return useMutation({
     mutationFn: (conversationId: string) => chatIpc.leave(conversationId),
     onSuccess: (_, conversationId) => {
+      // --- slice: chat groups --- the host who leaves the chat of their
+      // server ends it for the rest of that server's run.
+      const left = queryClient
+        .getQueryData<ChatStateView>(chatKeys.state)
+        ?.conversations.find((c) => c.id === conversationId);
+      markEndedServerChat(left ?? null, meId);
       queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) =>
         state === undefined
           ? state
@@ -4104,6 +4114,21 @@ export function useLeaveChat() {
       queryClient.removeQueries({ queryKey: chatKeys.thread(conversationId) });
     },
   });
+}
+
+/**
+ * --- slice: chat groups --- remembers that the host ended the chat of their
+ * running server, which the core then does not open again for that session.
+ */
+function markEndedServerChat(conversation: Conversation | null, meId: string | null): void {
+  if (conversation === null || conversation.kind !== "server" || conversation.server === null) return;
+  if (meId === null || conversation.server.hostId !== meId) return;
+  chatLive.markServerChatEnded(conversation.server.sessionId);
+}
+
+/** --- slice: chat groups --- whether the host ended the chat of this running server. */
+export function useHostChatEnded(sessionId: string): boolean {
+  return useServerChatEnded(sessionId);
 }
 
 /**
@@ -4407,7 +4432,9 @@ export function useSetChatDrawerPinned() {
  */
 export function useChatSearch(q: string, filters: ChatSearchFilters = {}) {
   const trimmed = q.trim();
-  const enough = trimmed.length >= 3 || (trimmed.length >= 1 && Boolean(filters.conversationId));
+  // --- slice: chat groups --- the lengths the service takes, counted in
+  // characters as it counts them: at most 64, and three across every chat.
+  const enough = searchReady(trimmed, filters.conversationId ?? null);
   return useInfiniteQuery({
     queryKey: chatKeys.search(trimmed, filters),
     queryFn: ({ pageParam }: { pageParam: string | null }) => chatIpc.search(trimmed, filters, pageParam),
@@ -4652,6 +4679,9 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
         }));
         queryClient.removeQueries({ queryKey: chatKeys.thread(event.conversationId) });
         chatLive.setTyping(event.conversationId, []);
+        // --- slice: chat groups --- left by its host, in this window or
+        // another: the chat of that server stays ended.
+        if (event.reason === "left") markEndedServerChat(gone, me.current);
         latest.current.onRemoved?.(event, gone);
       }),
 
