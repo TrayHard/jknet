@@ -18,6 +18,7 @@
 //! | `links.rs`  | links: which open at once, which ask first, opening in the system browser |
 //! | `server.rs` | the chat of a private server: the host opens and closes it, guests join it |
 //! | `window.rs` | the separate chat window and its compact mode, where a notification opens a conversation |
+//! | `notify.rs` | what a message deserves (toast, Windows notification, sound, the summary after a game) and showing it |
 //!
 //! Live frames are hints and the REST answers are the truth: a reconnect, a
 //! `chat.resync` or a sign-in refetches the whole sync document, and a window
@@ -40,6 +41,7 @@
 //! | `chat:download` | `{fileId, received, total, path?, status}` | a file is coming down, arrived (`cached`), failed (`remote`) or is `gone` |
 //! | `chat:files-staged` | `{files, refused}`, to the drop window only | files dropped on a composer were staged |
 //! | `chat:open`   | `{conversationId}`, to `chat` or `main` | show this conversation, or the list for `null` |
+//! | `chat:notify` | `{conversationId, seq, title, text, mention}`, to `main` | a message deserves a toast in the launcher window |
 //! | `chat:window` | `{open, compact, alwaysOnTop, opacity}` | the chat window opened, closed or changed mode |
 //!
 //! A window that receives `chat:resync` drops the threads listed in `reset`
@@ -53,6 +55,7 @@ pub mod frames;
 pub mod links;
 #[cfg(test)]
 mod mock_tests;
+pub mod notify;
 #[cfg(test)]
 mod online_tests;
 mod outbox;
@@ -151,6 +154,9 @@ pub struct ChatState {
     /// The chat of the private server this launcher hosts, and the joins of
     /// friends' servers still trying.
     servers: Mutex<server::ServerChats>,
+    /// Messages kept for the summary after a game, and the pace of
+    /// notifications and sounds.
+    notify: Mutex<notify::NotifyBook>,
 }
 
 impl Default for ChatState {
@@ -170,6 +176,7 @@ impl Default for ChatState {
             wake: Notify::new(),
             synced_at: Mutex::new(None),
             servers: Mutex::new(server::ServerChats::default()),
+            notify: Mutex::new(notify::NotifyBook::default()),
         }
     }
 }
@@ -261,6 +268,8 @@ impl ChatState {
         // A server that keeps running opens a chat of the next account at
         // its next heartbeat.
         *self.servers() = server::ServerChats::default();
+        // The next account's summary after a game counts its own messages.
+        *lock(&self.notify) = notify::NotifyBook::default();
         self.available.store(true, Ordering::Relaxed);
         known
     }
@@ -665,6 +674,9 @@ fn toggle_reaction(groups: &mut Vec<ReactionGroup>, user_id: &str, emoji: &str, 
 pub fn start(app: &AppHandle) {
     files::start(app);
     sync::start(app);
+    // --- slice: chat notifications ---
+    // The summary of the messages a game held back goes out when it exits.
+    notify::start(app);
 }
 
 /// The live socket came up or went down: `connected` of `chat:state` moved.
@@ -740,14 +752,23 @@ pub(crate) fn schedule_state(app: &AppHandle) {
             .state::<ChatState>()
             .state_pending
             .store(false, Ordering::Release);
-        emit(&handle, EVENT_STATE, current_view(&handle));
+        publish_state(&handle, current_view(&handle));
     });
 }
 
 /// Emits `chat:state` now, for the answer of a resync that the windows wait
 /// for before they act on `chat:resync`.
 pub(crate) fn emit_state_now(app: &AppHandle) {
-    emit(app, EVENT_STATE, current_view(app));
+    publish_state(app, current_view(app));
+}
+
+/// Sends the state to the windows and its unread counts to the tray icon.
+fn publish_state(app: &AppHandle, view: ChatStateView) {
+    // --- slice: chat notifications ---
+    // The badge of the tray icon; its menu and tooltip carry the words the
+    // main window sends, counts included.
+    crate::tray::set_unread(app, view.unread_total > 0 || view.mention_total > 0);
+    emit(app, EVENT_STATE, view);
 }
 
 /// Emits the queue of one conversation.

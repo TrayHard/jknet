@@ -8,7 +8,7 @@
 //!
 //! | Frame                       | What it does                                   | Event          |
 //! | --------------------------- | ---------------------------------------------- | -------------- |
-//! | `chat.message`              | moves the summary, settles the outbox entry    | `chat:message` |
+//! | `chat.message`              | moves the summary, settles the outbox entry, asks `notify` | `chat:message` |
 //! | `chat.read`                 | moves a read marker                            | `chat:read`    |
 //! | `chat.typing`               | notes who types, until `ttlMs` runs out        | `chat:typing`  |
 //! | `chat.reaction`             | patches the last message of the summary        | `chat:reaction`|
@@ -31,8 +31,8 @@ use tauri::{AppHandle, Manager};
 use crate::online::{ChatMessage, ChatPrivacy, Conversation, GroupInvite};
 
 use super::{
-    emit, emit_outbox, lock, my_id, schedule_state, sync, ChatState, EVENT_MESSAGE, EVENT_REACTION,
-    EVENT_READ, EVENT_REMOVED, EVENT_TYPING,
+    emit, emit_outbox, lock, my_id, notify, schedule_state, sync, ChatState, EVENT_MESSAGE,
+    EVENT_REACTION, EVENT_READ, EVENT_REMOVED, EVENT_TYPING,
 };
 
 /// How long a typing hint lasts when the frame does not say.
@@ -187,6 +187,9 @@ pub enum Effect {
     Resync,
     /// Emit `chat:typing` again for this conversation once the hint ran out.
     TypingExpires { conversation_id: String, after: Duration },
+    /// A message of somebody else arrived: decide whether it notifies. When
+    /// its conversation is being fetched ([`Effect::Refresh`]), after that.
+    Notify(Box<ChatMessage>),
 }
 
 fn emit_effect<T: Serialize>(event: &'static str, payload: &T) -> Effect {
@@ -233,6 +236,12 @@ pub fn apply(chat: &ChatState, me: Option<&str>, frame: Frame, now: Instant) -> 
                 ));
             }
             effects.insert(0, emit_effect(EVENT_MESSAGE, &*message));
+            // A new message of somebody else: `notify::decide` says whether
+            // it deserves more than a counter. A replayed or old one, and the
+            // player's own, never do.
+            if (applied.fresh || !applied.known) && !message.is_from(me) && message.is_user() {
+                effects.push(Effect::Notify(message));
+            }
         }
         Frame::Read(mark) => {
             let (known, refresh) = chat.book().apply_read(me, &mark);
@@ -339,16 +348,46 @@ pub fn handle(app: &AppHandle, kind: &str, payload: Value) {
 
 /// Carries out what [`apply`] asked for.
 pub(super) fn run(app: &AppHandle, effects: Vec<Effect>) {
+    // A message of a conversation the core does not know yet (the first
+    // message of a new direct chat) notifies once the conversation is in:
+    // its name and its level are what the notification needs.
+    let refreshing: Vec<String> = effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::Refresh(conversation_id) => Some(conversation_id.clone()),
+            _ => None,
+        })
+        .collect();
+    let mut after_refresh: Vec<ChatMessage> = Vec::new();
+    let effects: Vec<Effect> = effects
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::Notify(message) if refreshing.contains(&message.conversation_id) => {
+                after_refresh.push(*message);
+                None
+            }
+            other => Some(other),
+        })
+        .collect();
     for effect in effects {
         match effect {
             Effect::Emit { event, payload } => emit(app, event, payload),
             Effect::State => schedule_state(app),
             Effect::Outbox(conversation_id) => emit_outbox(app, &conversation_id),
             Effect::MarkRead(conversation_id) => sync::queue_read(app, &conversation_id),
+            Effect::Notify(message) => notify::incoming(app, &message),
             Effect::Refresh(conversation_id) => {
                 let handle = app.clone();
+                let waiting: Vec<ChatMessage> = after_refresh
+                    .iter()
+                    .filter(|message| message.conversation_id == conversation_id)
+                    .cloned()
+                    .collect();
                 tauri::async_runtime::spawn(async move {
                     sync::refresh_conversation(&handle, &conversation_id).await;
+                    for message in waiting {
+                        notify::incoming(&handle, &message);
+                    }
                 });
             }
             Effect::Resync => app.state::<ChatState>().request_resync(),
@@ -521,6 +560,36 @@ mod tests {
         assert!(effects.contains(&Effect::Refresh("new".into())));
         // The window still hears about the message.
         assert_eq!(emitted(&effects), [EVENT_MESSAGE]);
+        // And it may notify, once the conversation is in.
+        assert!(effects.contains(&Effect::Notify(Box::new(message("new", 1, Some(KYLE))))));
+    }
+
+    // --- slice: chat notifications ---
+    #[test]
+    fn only_a_new_message_of_somebody_else_asks_for_a_notification() {
+        let notifies = |effects: &[Effect]| {
+            effects
+                .iter()
+                .filter(|effect| matches!(effect, Effect::Notify(_)))
+                .count()
+        };
+        let chat = state_with(vec![conversation("c", 2, 2)]);
+        let fresh = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 3, Some(KYLE)))), Instant::now());
+        assert_eq!(notifies(&fresh), 1);
+        // The same message again (a replay after a reconnect) does not.
+        let replay = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 3, Some(KYLE)))), Instant::now());
+        assert_eq!(notifies(&replay), 0);
+        // The player's own message, from this device or another, does not.
+        let own = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 4, Some(ME)))), Instant::now());
+        assert_eq!(notifies(&own), 0);
+        // A system message does not.
+        let mut system = message("c", 5, None);
+        system.kind = "system".into();
+        let system = apply(&chat, Some(ME), Frame::Message(Box::new(system)), Instant::now());
+        assert_eq!(notifies(&system), 0);
+        // A deleted account's message is somebody else's.
+        let deleted = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 6, None))), Instant::now());
+        assert_eq!(notifies(&deleted), 1);
     }
 
     #[test]

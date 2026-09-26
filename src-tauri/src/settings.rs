@@ -47,6 +47,33 @@ pub struct ActiveGameChanged {
 /// document, which that event says nothing about.
 pub const DEFAULT_CLIENTS_EVENT: &str = "settings:default-clients";
 
+// --- slice: chat notifications ---
+/// Emitted when `chatNotifications` changed, by a patch or by the core itself
+/// (the **Do not disturb** item of the tray menu), and only then.
+///
+/// The tray keeps its check mark in step through it, and a window whose
+/// settings screen is open refreshes its copy: the tray writes the document
+/// behind every window's back.
+pub const CHAT_NOTIFICATIONS_EVENT: &str = "settings:chat-notifications";
+
+/// Payload of [`CHAT_NOTIFICATIONS_EVENT`]: the switches as they now stand.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatNotificationsChanged {
+    pub chat_notifications: ChatNotifications,
+}
+
+/// Announces the chat notification switches of the document as it landed on
+/// disk.
+pub fn emit_chat_notifications(app: &AppHandle, settings: &Settings) {
+    let payload = ChatNotificationsChanged {
+        chat_notifications: settings.chat_notifications.clone(),
+    };
+    if let Err(e) = app.emit(CHAT_NOTIFICATIONS_EVENT, payload) {
+        log::warn!("cannot emit {CHAT_NOTIFICATIONS_EVENT}: {e}");
+    }
+}
+
 /// Payload of [`DEFAULT_CLIENTS_EVENT`]: the map as it now stands.
 ///
 /// The whole map rather than the one game that moved: a listener invalidates
@@ -281,6 +308,145 @@ pub struct Settings {
     /// alone (`chat::window`): [`SettingsPatch::apply`] drops it, and the
     /// window's own commands change it.
     pub chat_window: ChatWindowSettings,
+
+    // --- slice: chat notifications ---
+    /// How a chat message reaches the player: the toast in the launcher, the
+    /// Windows notification, the sound, and when all of them stay silent.
+    /// Privacy and the level of each conversation live on the service.
+    pub chat_notifications: ChatNotifications,
+    /// Whether the close button of the launcher window hides it in the tray
+    /// instead of quitting (D6). On by default: chat keeps arriving and a
+    /// private server keeps running. **Quit** of the tray menu leaves.
+    pub close_to_tray: bool,
+    /// True once the first hide into the tray told the player where the
+    /// launcher went. Written by the core (`tray`).
+    pub close_to_tray_hint_seen: bool,
+    /// Whether a launcher started with Windows stays in the tray instead of
+    /// opening its window. A start by hand always opens the window.
+    pub start_minimized: bool,
+    // --- slice: chat files ---
+    /// Pictures of a chat up to this many MiB download by themselves when a
+    /// window shows them; 0 turns that off. At most [`MAX_CHAT_AUTO_DOWNLOAD_MB`],
+    /// the largest file a chat carries.
+    pub chat_auto_download_mb: u32,
+}
+
+// --- slice: chat notifications ---
+/// The sounds a chat message can play, the values of `soundName`. Each is a
+/// folder of `resources/sounds/` with `message.wav` and `mention.wav`.
+pub const CHAT_SOUNDS: &[&str] = &[DEFAULT_CHAT_SOUND, "saber", "comlink"];
+/// The sound of a fresh install: a short chime.
+pub const DEFAULT_CHAT_SOUND: &str = "default";
+
+/// Whether a string may be stored in `soundName`.
+pub fn is_chat_sound(value: &str) -> bool {
+    CHAT_SOUNDS.contains(&value)
+}
+
+/// Pictures up to this size download by themselves until the player moves
+/// the setting.
+pub const DEFAULT_CHAT_AUTO_DOWNLOAD_MB: u32 = 10;
+/// The largest file a chat carries, and so the largest sensible threshold.
+pub const MAX_CHAT_AUTO_DOWNLOAD_MB: u32 = 25;
+
+/// How chat messages reach the player. What each switch does is decided in
+/// one place, `chat::notify::decide`.
+///
+/// A missing field reads as its default (`#[serde(default)]`), so a
+/// `settings.json` written before a switch existed keeps working.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ChatNotifications {
+    /// A toast inside the launcher window while it is focused.
+    pub in_app: bool,
+    /// A Windows notification while no window of the launcher is focused.
+    pub os: bool,
+    /// A sound for each message that notifies.
+    pub sound: bool,
+    /// Which sound: one of [`CHAT_SOUNDS`]. A name a newer launcher wrote
+    /// plays the default one.
+    pub sound_name: String,
+    /// The text of the message in the toast and the notification. Off, they
+    /// only say that a message came.
+    pub show_text: bool,
+    /// **Do not disturb**: nothing notifies, the counters still grow.
+    pub dnd: bool,
+    /// Mentions and replies to the player notify during **Do not disturb**
+    /// and quiet hours all the same (D7). Off by default.
+    pub mentions_break_dnd: bool,
+    /// While a game started from JKNet runs, messages wait for one summary
+    /// instead of notifying one by one.
+    pub dnd_in_game: bool,
+    /// The one Windows notification after the game: "N messages in K chats".
+    pub summary_after_game: bool,
+    /// A daily stretch of silence, in local time. `None`: no quiet hours.
+    pub quiet_hours: Option<QuietHours>,
+}
+
+impl Default for ChatNotifications {
+    /// Written out rather than derived: most switches start on.
+    fn default() -> Self {
+        ChatNotifications {
+            in_app: true,
+            os: true,
+            sound: true,
+            sound_name: DEFAULT_CHAT_SOUND.to_string(),
+            show_text: true,
+            dnd: false,
+            mentions_break_dnd: false,
+            dnd_in_game: true,
+            summary_after_game: true,
+            quiet_hours: None,
+        }
+    }
+}
+
+/// Quiet hours: from `from` up to `to`, both `HH:MM` of the local clock. A
+/// range whose `to` is earlier than its `from` runs across midnight; one whose
+/// ends are equal is empty.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct QuietHours {
+    pub from: String,
+    pub to: String,
+}
+
+impl Default for QuietHours {
+    /// What the settings screen offers when the switch goes on.
+    fn default() -> Self {
+        QuietHours {
+            from: "23:00".into(),
+            to: "08:00".into(),
+        }
+    }
+}
+
+impl QuietHours {
+    /// The range as minutes of the day, or `None` when either end is not a
+    /// time: a hand-edited file with a typo then has no quiet hours rather
+    /// than silence all day.
+    pub fn minutes(&self) -> Option<(u16, u16)> {
+        Some((parse_clock(&self.from)?, parse_clock(&self.to)?))
+    }
+}
+
+/// Reads `H:MM` or `HH:MM` of a 24-hour clock as minutes since midnight.
+pub fn parse_clock(text: &str) -> Option<u16> {
+    let (hours, minutes) = text.trim().split_once(':')?;
+    if hours.is_empty() || hours.len() > 2 || minutes.len() != 2 {
+        return None;
+    }
+    if !hours.bytes().chain(minutes.bytes()).all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let hours: u16 = hours.parse().ok()?;
+    let minutes: u16 = minutes.parse().ok()?;
+    (hours < 24 && minutes < 60).then_some(hours * 60 + minutes)
+}
+
+/// Writes minutes since midnight as `HH:MM`.
+fn format_clock(minutes: u16) -> String {
+    format!("{:02}:{:02}", minutes / 60, minutes % 60)
 }
 
 // --- slice: chat window ---
@@ -409,6 +575,13 @@ impl Default for Settings {
             // --- slice: chat window ---
             chat_open_in: CHAT_OPEN_IN_MAIN.to_string(),
             chat_window: ChatWindowSettings::default(),
+            // --- slice: chat notifications ---
+            chat_notifications: ChatNotifications::default(),
+            close_to_tray: true,
+            close_to_tray_hint_seen: false,
+            start_minimized: true,
+            // --- slice: chat files ---
+            chat_auto_download_mb: DEFAULT_CHAT_AUTO_DOWNLOAD_MB,
         }
     }
 }
@@ -606,6 +779,24 @@ impl Settings {
             .map_err(|e| AppError::json("cannot serialize settings", e))?;
         fs::write(&file, text).map_err(|e| AppError::io_path("cannot write", &file, e))
     }
+
+    // --- slice: chat notifications ---
+    /// Changes the document from the core rather than from a patch: the
+    /// tray's **Do not disturb**, the flag of the first hide into the tray.
+    ///
+    /// The same rule as every writer: the file wins for the fields `change`
+    /// does not touch. Writes only when `change` moved something, and
+    /// answers the document as it now stands.
+    pub fn edit(state: &AppState, change: impl FnOnce(&mut Settings)) -> Result<Settings> {
+        let mut document = Settings::current(state)?;
+        let before = document.clone();
+        change(&mut document);
+        if document != before {
+            document.save(state)?;
+        }
+        state.set_settings(document.clone())?;
+        Ok(document)
+    }
 }
 
 /// A partial update of [`Settings`]: every field is optional.
@@ -698,6 +889,94 @@ pub struct SettingsPatch {
     /// copy from a whole document must not move it. Declared so such a
     /// document is still accepted.
     pub chat_window: Option<ChatWindowSettings>,
+
+    // --- slice: chat notifications ---
+    /// The switches the caller changed, merged one by one: a patch with
+    /// `{"dnd": true}` leaves the sound alone.
+    pub chat_notifications: Option<ChatNotificationsPatch>,
+    pub close_to_tray: Option<bool>,
+    pub close_to_tray_hint_seen: Option<bool>,
+    pub start_minimized: Option<bool>,
+    // --- slice: chat files ---
+    /// 0 to [`MAX_CHAT_AUTO_DOWNLOAD_MB`]; [`SettingsPatch::validate`]
+    /// refuses more.
+    pub chat_auto_download_mb: Option<u32>,
+}
+
+// --- slice: chat notifications ---
+/// A partial update of [`ChatNotifications`], with the same rules as the
+/// patch it travels in.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChatNotificationsPatch {
+    pub in_app: Option<bool>,
+    pub os: Option<bool>,
+    pub sound: Option<bool>,
+    /// One of [`CHAT_SOUNDS`]; [`SettingsPatch::validate`] refuses anything
+    /// else.
+    pub sound_name: Option<String>,
+    pub show_text: Option<bool>,
+    pub dnd: Option<bool>,
+    pub mentions_break_dnd: Option<bool>,
+    pub dnd_in_game: Option<bool>,
+    pub summary_after_game: Option<bool>,
+    /// `null` turns quiet hours off; a range turns them on. Both ends are
+    /// `HH:MM`, stored with two digits for the hour.
+    #[serde(deserialize_with = "sent")]
+    pub quiet_hours: Option<Option<QuietHours>>,
+}
+
+impl ChatNotificationsPatch {
+    fn apply(self, target: &mut ChatNotifications) {
+        let flags = [
+            (self.in_app, &mut target.in_app),
+            (self.os, &mut target.os),
+            (self.sound, &mut target.sound),
+            (self.show_text, &mut target.show_text),
+            (self.dnd, &mut target.dnd),
+            (self.mentions_break_dnd, &mut target.mentions_break_dnd),
+            (self.dnd_in_game, &mut target.dnd_in_game),
+            (self.summary_after_game, &mut target.summary_after_game),
+        ];
+        for (value, field) in flags {
+            if let Some(value) = value {
+                *field = value;
+            }
+        }
+        if let Some(value) = self.sound_name {
+            target.sound_name = value;
+        }
+        if let Some(value) = self.quiet_hours {
+            target.quiet_hours = value.map(|range| match range.minutes() {
+                Some((from, to)) => QuietHours {
+                    from: format_clock(from),
+                    to: format_clock(to),
+                },
+                // `validate` refused this already; kept as sent otherwise.
+                None => range,
+            });
+        }
+    }
+
+    fn validate(&self) -> Result<()> {
+        if let Some(name) = self.sound_name.as_deref() {
+            if !is_chat_sound(name) {
+                return Err(AppError::InvalidInput(format!(
+                    "{name:?} is not a chat sound; the sounds are {CHAT_SOUNDS:?}"
+                )));
+            }
+        }
+        if let Some(Some(range)) = &self.quiet_hours {
+            for end in [&range.from, &range.to] {
+                if parse_clock(end).is_none() {
+                    return Err(AppError::InvalidInput(format!(
+                        "{end:?} is not a time of day; quiet hours take HH:MM"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Reads a field and remembers that it was there, `null` included.
@@ -829,6 +1108,23 @@ impl SettingsPatch {
         if let Some(value) = self.chat_open_in {
             settings.chat_open_in = value;
         }
+        // --- slice: chat notifications ---
+        if let Some(patch) = self.chat_notifications {
+            patch.apply(&mut settings.chat_notifications);
+        }
+        if let Some(value) = self.close_to_tray {
+            settings.close_to_tray = value;
+        }
+        if let Some(value) = self.close_to_tray_hint_seen {
+            settings.close_to_tray_hint_seen = value;
+        }
+        if let Some(value) = self.start_minimized {
+            settings.start_minimized = value;
+        }
+        // --- slice: chat files ---
+        if let Some(value) = self.chat_auto_download_mb {
+            settings.chat_auto_download_mb = value;
+        }
     }
 
     // --- slice: account ---
@@ -872,6 +1168,18 @@ impl SettingsPatch {
             if !CHAT_OPEN_IN.contains(&place) {
                 return Err(AppError::InvalidInput(format!(
                     "{place:?} is not a place chats open in; the places are {CHAT_OPEN_IN:?}"
+                )));
+            }
+        }
+        // --- slice: chat notifications ---
+        if let Some(patch) = &self.chat_notifications {
+            patch.validate()?;
+        }
+        // --- slice: chat files ---
+        if let Some(megabytes) = self.chat_auto_download_mb {
+            if megabytes > MAX_CHAT_AUTO_DOWNLOAD_MB {
+                return Err(AppError::InvalidInput(format!(
+                    "pictures download by themselves up to at most {MAX_CHAT_AUTO_DOWNLOAD_MB} MiB, not {megabytes}"
                 )));
             }
         }
@@ -977,6 +1285,8 @@ pub fn update_settings(
         settings.default_client_ids.clone(),
         settings.default_client_id.clone(),
     );
+    // --- slice: chat notifications ---
+    let was_notifications = settings.chat_notifications.clone();
     patch.apply(&mut settings);
     settings.save(&state)?;
     state.set_settings(settings.clone())?;
@@ -999,6 +1309,11 @@ pub fn update_settings(
         != was_defaults
     {
         emit_default_clients(&app, &settings);
+    }
+    // --- slice: chat notifications ---
+    // The tray's check mark follows **Do not disturb** through this event.
+    if settings.chat_notifications != was_notifications {
+        emit_chat_notifications(&app, &settings);
     }
     Ok(settings.redacted())
 }
@@ -1097,11 +1412,162 @@ mod tests {
                     height: 520,
                 }),
             },
+            // --- slice: chat notifications ---
+            chat_notifications: ChatNotifications {
+                in_app: false,
+                os: false,
+                sound: false,
+                sound_name: "comlink".into(),
+                show_text: false,
+                dnd: true,
+                mentions_break_dnd: true,
+                dnd_in_game: false,
+                summary_after_game: false,
+                quiet_hours: Some(QuietHours {
+                    from: "22:30".into(),
+                    to: "07:15".into(),
+                }),
+            },
+            close_to_tray: false,
+            close_to_tray_hint_seen: true,
+            start_minimized: false,
+            // --- slice: chat files ---
+            chat_auto_download_mb: 25,
         }
     }
 
     fn patch(json: &str) -> SettingsPatch {
         serde_json::from_str(json).expect("the patch parses")
+    }
+
+    // --- slice: chat notifications ---
+    #[test]
+    fn a_fresh_launcher_notifies_hides_to_the_tray_and_keeps_quiet_hours_off() {
+        let settings = Settings::default();
+        let notify = &settings.chat_notifications;
+        assert!(notify.in_app && notify.os && notify.sound && notify.show_text);
+        assert_eq!(notify.sound_name, DEFAULT_CHAT_SOUND);
+        assert!(!notify.dnd, "Do not disturb starts off");
+        assert!(!notify.mentions_break_dnd, "mentions stay silent in DND (D7)");
+        assert!(notify.dnd_in_game && notify.summary_after_game);
+        assert_eq!(notify.quiet_hours, None);
+        assert!(settings.close_to_tray, "the close button hides to the tray (D6)");
+        assert!(!settings.close_to_tray_hint_seen);
+        assert!(settings.start_minimized);
+        assert_eq!(settings.chat_auto_download_mb, DEFAULT_CHAT_AUTO_DOWNLOAD_MB);
+
+        // A document written before chat notifications reads as the defaults,
+        // and so does a block that lacks a switch added later.
+        let older: Settings = serde_json::from_str("{}").expect("an empty document");
+        assert_eq!(older.chat_notifications, ChatNotifications::default());
+        assert!(older.close_to_tray && older.start_minimized);
+        let partial: Settings =
+            serde_json::from_str(r#"{"chatNotifications":{"dnd":true}}"#).expect("a partial block");
+        assert_eq!(
+            partial.chat_notifications,
+            ChatNotifications {
+                dnd: true,
+                ..ChatNotifications::default()
+            }
+        );
+    }
+
+    #[test]
+    fn the_notification_switches_round_trip_in_camel_case() {
+        let settings = filled();
+        let text = serde_json::to_string(&settings).expect("serializes");
+        assert!(text.contains(
+            r#""chatNotifications":{"inApp":false,"os":false,"sound":false,"soundName":"comlink","showText":false,"dnd":true,"mentionsBreakDnd":true,"dndInGame":false,"summaryAfterGame":false,"quietHours":{"from":"22:30","to":"07:15"}}"#
+        ), "{text}");
+        assert!(text.contains(r#""closeToTray":false,"closeToTrayHintSeen":true,"startMinimized":false,"chatAutoDownloadMb":25"#), "{text}");
+        let back: Settings = serde_json::from_str(&text).expect("reads back");
+        assert_eq!(back, settings);
+    }
+
+    #[test]
+    fn a_notification_patch_merges_one_switch_at_a_time() {
+        let mut settings = filled();
+        let before = settings.clone();
+        let dnd_off = patch(r#"{"chatNotifications":{"dnd":false}}"#);
+        dnd_off.validate().expect("a switch");
+        dnd_off.apply(&mut settings);
+        assert_eq!(
+            settings,
+            Settings {
+                chat_notifications: ChatNotifications {
+                    dnd: false,
+                    ..before.chat_notifications.clone()
+                },
+                ..before.clone()
+            },
+            "only Do not disturb moved"
+        );
+
+        // `null` turns quiet hours off, a range turns them on, written with
+        // two digits for the hour.
+        patch(r#"{"chatNotifications":{"quietHours":null}}"#).apply(&mut settings);
+        assert_eq!(settings.chat_notifications.quiet_hours, None);
+        let on = patch(r#"{"chatNotifications":{"quietHours":{"from":"9:05","to":"17:00"}}}"#);
+        on.validate().expect("two times");
+        on.apply(&mut settings);
+        assert_eq!(
+            settings.chat_notifications.quiet_hours,
+            Some(QuietHours {
+                from: "09:05".into(),
+                to: "17:00".into()
+            })
+        );
+        // A patch that does not mention quiet hours leaves them alone.
+        patch(r#"{"chatNotifications":{"sound":true}}"#).apply(&mut settings);
+        assert!(settings.chat_notifications.quiet_hours.is_some());
+        assert!(settings.chat_notifications.sound);
+
+        // The tray and startup switches are plain booleans.
+        patch(r#"{"closeToTray":true,"startMinimized":true,"closeToTrayHintSeen":false}"#)
+            .apply(&mut settings);
+        assert!(settings.close_to_tray && settings.start_minimized);
+        assert!(!settings.close_to_tray_hint_seen);
+    }
+
+    #[test]
+    fn a_notification_patch_is_refused_for_an_unknown_sound_a_bad_time_or_a_big_threshold() {
+        for json in [
+            r#"{"chatNotifications":{"soundName":"wookiee"}}"#,
+            r#"{"chatNotifications":{"quietHours":{"from":"24:00","to":"08:00"}}}"#,
+            r#"{"chatNotifications":{"quietHours":{"from":"23:00","to":"8"}}}"#,
+            r#"{"chatNotifications":{"quietHours":{"from":"23:60","to":"08:00"}}}"#,
+            r#"{"chatNotifications":{"quietHours":{"from":"-1:00","to":"08:00"}}}"#,
+            r#"{"chatAutoDownloadMb":26}"#,
+        ] {
+            let error = patch(json).validate().expect_err(json);
+            assert!(matches!(error, AppError::InvalidInput(_)), "{json}: {error:?}");
+        }
+        for name in CHAT_SOUNDS {
+            patch(&format!(r#"{{"chatNotifications":{{"soundName":"{name}"}}}}"#))
+                .validate()
+                .expect("a shipped sound");
+        }
+        patch(r#"{"chatAutoDownloadMb":0}"#).validate().expect("0 turns it off");
+        patch(r#"{"chatAutoDownloadMb":25}"#).validate().expect("the largest file");
+        // An unknown switch is refused like an unknown field of the patch.
+        assert!(serde_json::from_str::<SettingsPatch>(r#"{"chatNotifications":{"volume":70}}"#).is_err());
+    }
+
+    #[test]
+    fn a_clock_time_reads_as_minutes_of_the_day() {
+        assert_eq!(parse_clock("00:00"), Some(0));
+        assert_eq!(parse_clock("8:30"), Some(8 * 60 + 30));
+        assert_eq!(parse_clock(" 23:59 "), Some(23 * 60 + 59));
+        for bad in ["", "24:00", "12:60", "12", "12:5", "123:00", "ab:cd", "+1:00", "12:00:00"] {
+            assert_eq!(parse_clock(bad), None, "{bad:?}");
+        }
+        assert_eq!(format_clock(65), "01:05");
+        assert_eq!(QuietHours::default().minutes(), Some((23 * 60, 8 * 60)));
+        let typo = QuietHours {
+            from: "23:00".into(),
+            to: "oops".into(),
+        };
+        assert_eq!(typo.minutes(), None);
     }
 
     // --- slice: chat window ---

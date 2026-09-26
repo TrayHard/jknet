@@ -31,7 +31,8 @@
 //! | `archive`        | one bounded walk over the entries of a pk3, for the modules that list one |
 //! | `pk3_editor`     | one pk3 archive open for editing, and the rewrite that saves it |
 //! | `hosting`        | a private server on this PC, its relay tunnel, and joining one |
-//! | `chat`           | friends chat: summaries, the send queue, the `chat.*` frames, attachments |
+//! | `chat`           | friends chat: summaries, the send queue, the `chat.*` frames, attachments, notifications |
+//! | `tray`           | the tray icon, closing into it, quitting, starting with Windows |
 
 mod account;
 // --- slice: bundles ---
@@ -127,6 +128,11 @@ mod servers;
 mod settings;
 mod state;
 mod timestamp;
+// --- slice: chat notifications ---
+// The icon in the notification area, the close button that hides into it,
+// **Quit**, and the start with Windows. Its own module: it is about the
+// launcher's lifecycle, not about chat, even though chat is why it exists.
+mod tray;
 
 use std::path::PathBuf;
 
@@ -174,7 +180,26 @@ fn resolve_config_root(app: &tauri::App) -> PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     configure_tls();
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // --- slice: chat notifications ---
+    // One launcher at a time. This has to stay the first plugin, registered
+    // on the Builder and not in `setup`: Tauri initializes Builder plugins in
+    // `build()`, before it creates the config windows and runs `setup`, and
+    // this plugin ends a second process in its own init. Registered later, a
+    // second start would create `main` and run the whole bootstrap (the data
+    // folder, the legacy move, the settings) before quitting.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        tray::raise_from_second_start(app, &args);
+    }));
+    // The start with Windows, which passes `--autostart` so `setup` knows the
+    // player did not open the launcher by hand.
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        Some(vec![tray::AUTOSTART_ARG]),
+    ));
+    builder
         .manage(video::VideoState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -209,6 +234,18 @@ pub fn run() {
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     log::info!("window {label}: close requested");
+                    // --- slice: chat notifications ---
+                    // The close button of the launcher window hides it into
+                    // the tray (D6): chat and a private server keep going,
+                    // so nothing below has anything to ask. **Quit** of the
+                    // tray and a player who switched `closeToTray` off get
+                    // the usual close.
+                    if tray::close_action_of(window.app_handle(), label) == tray::CloseAction::Hide
+                    {
+                        api.prevent_close();
+                        tray::hide_to_tray(window);
+                        return;
+                    }
                     // --- slice: play with friends ---
                     // Closing JKNet stops the private server, so the window
                     // asks first. The frontend guard of unsaved drafts holds
@@ -318,9 +355,18 @@ pub fn run() {
                 // --- slice: chat window ---
                 // The plugin keeps one set of bounds per label; the chat
                 // window has two, one per mode, and keeps them itself.
+                // --- slice: chat notifications ---
+                // Everything but visibility: whether the launcher window
+                // shows is `setup`'s call below, and a window closed into
+                // the tray must not come back hidden, or shown behind the
+                // player's back, because the plugin remembered it.
                 app.handle().plugin(
                     tauri_plugin_window_state::Builder::default()
                         .with_denylist(&[chat::window::LABEL])
+                        .with_state_flags(
+                            tauri_plugin_window_state::StateFlags::all()
+                                & !tauri_plugin_window_state::StateFlags::VISIBLE,
+                        )
                         .build(),
                 )?;
                 // --- slice: installer ---
@@ -389,6 +435,26 @@ pub fn run() {
                 }
                 Err(e) => log::warn!("cannot read the service address: {e}"),
             }
+            // --- slice: chat notifications ---
+            // The tray icon first, then the window: the launcher window is
+            // created hidden, and a start with Windows keeps it in the tray
+            // when the player asked for that.
+            #[cfg(desktop)]
+            tray::build(app.handle());
+            let args: Vec<String> = std::env::args().collect();
+            let start_minimized = app
+                .state::<AppState>()
+                .settings()
+                .map(|settings| settings.start_minimized)
+                .unwrap_or(false);
+            if tray::starts_hidden(&args, start_minimized) {
+                log::info!("started with Windows, staying in the tray");
+            } else if let Some(main) = app.get_webview_window("main") {
+                if let Err(e) = main.show() {
+                    log::error!("cannot show the launcher window: {e}");
+                }
+                let _ = main.set_focus();
+            }
             Ok(())
         })
         // --- slice: launch ---
@@ -439,6 +505,10 @@ pub fn run() {
         // --- slice: play with friends ---
         // The one private server, its session and its supervisor.
         .manage(hosting::HostState::default())
+        // --- slice: chat notifications ---
+        // The tray icon's menu and words, and whether **Quit** is under way.
+        .manage(tray::TrayState::default())
+        .manage(tray::Lifecycle::default())
         .invoke_handler(tauri::generate_handler![
             video::list_video_jobs,
             video::export_demo_video,
@@ -615,6 +685,16 @@ pub fn run() {
             chat::window::chat_window_set_compact,
             chat::window::chat_window_set_always_on_top,
             chat::window::chat_window_set_opacity,
+            // --- slice: chat notifications ---
+            // The sound of the settings screen's **Preview**; the tray's
+            // words; closing into the tray, quitting, starting with Windows.
+            chat::notify::chat_preview_sound,
+            tray::set_tray_labels,
+            tray::app_close_action,
+            tray::app_quit,
+            tray::app_quit_cancelled,
+            tray::get_autostart,
+            tray::set_autostart,
             // --- slice: jkhub ---
             jkhub::jkhub_categories,
             jkhub::jkhub_list,

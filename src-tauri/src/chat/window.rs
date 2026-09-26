@@ -829,7 +829,6 @@ fn open_in_window(app: &AppHandle, conversation_id: Option<String>) {
 /// the tray or while the game runs stays hidden, and the conversation opens
 /// in the chat window, which is small enough to sit over the game.
 /// `conversation_id` `None` shows the list.
-#[allow(dead_code)] // called by the chat notifications (slice L7)
 pub fn open_conversation(app: &AppHandle, conversation_id: Option<String>) {
     let main_visible = app
         .get_webview_window(MAIN_LABEL)
@@ -843,7 +842,6 @@ pub fn open_conversation(app: &AppHandle, conversation_id: Option<String>) {
 
 /// **Open chats** of the tray: `chatOpenIn` alone decides, and `main` brings
 /// the launcher back from the tray with its drawer open.
-#[allow(dead_code)] // called by the tray (slice L7)
 pub fn open_chats(app: &AppHandle, conversation_id: Option<String>) {
     if opens_in_main(app) && show_in_main(app, conversation_id.clone()) {
         return;
