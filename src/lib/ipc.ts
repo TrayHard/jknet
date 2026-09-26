@@ -4204,8 +4204,11 @@ export interface ChatDraft {
   replySeq?: number | null;
 }
 
-/** Why the service did not add somebody to a group. */
-export type ChatRefusalReason = "not_friend" | "member" | "full" | "cooldown";
+/**
+ * Why the service did not add somebody to a group. `too_many_groups`: the
+ * player is in as many groups as one player may be in.
+ */
+export type ChatRefusalReason = "not_friend" | "member" | "full" | "cooldown" | "too_many_groups";
 
 export interface ChatRefusal {
   userId: string;
@@ -4441,9 +4444,21 @@ export interface ChatDownloadEvent {
   status?: ChatFileLocal["status"];
 }
 
-/** Payload of `chat:files-staged`: files dropped on the window, already staged. */
+/** A file dropped on the window that the core refused to stage, and why. */
+export interface ChatStageRefusal {
+  name: string;
+  error: AppErrorEnvelope;
+}
+
+/**
+ * Payload of `chat:files-staged`: files dropped on the window, already
+ * staged, and every dropped file that did not stage (a settings file, bytes
+ * holding the session token, more than 25 MiB, an empty file, a folder, an
+ * 11th file).
+ */
 export interface ChatFilesStagedEvent {
   files: ChatStagedFile[];
+  refused: ChatStageRefusal[];
 }
 
 /** Event names of the chat slice. */

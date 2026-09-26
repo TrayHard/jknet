@@ -162,6 +162,29 @@ describe("room in a group", () => {
     assert.equal(outOfRoom(answer), true);
   });
 
+  test("a player in too many groups is reported right after the full seats", () => {
+    const answer = addOutcome({
+      added: [],
+      invited: [],
+      refused: [
+        { userId: "a", reason: "member" },
+        { userId: "b", reason: "too_many_groups" },
+        { userId: "c", reason: "full" },
+        { userId: "d", reason: "too_many_groups" },
+      ],
+    });
+    assert.deepEqual(answer.refused, [
+      { reason: "full", userIds: ["c"] },
+      { reason: "too_many_groups", userIds: ["b", "d"] },
+      { reason: "member", userIds: ["a"] },
+    ]);
+    assert.equal(outOfRoom(answer), true);
+    assert.equal(
+      outOfRoom(addOutcome({ added: [], invited: [], refused: [{ userId: "b", reason: "too_many_groups" }] })),
+      false,
+    );
+  });
+
   test("only a refusal for want of room says the seats are gone", () => {
     assert.equal(outOfRoom(addOutcome({ added: ["a"], invited: [], refused: [] })), false);
     assert.equal(

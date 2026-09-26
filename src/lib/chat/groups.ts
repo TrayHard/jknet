@@ -162,7 +162,7 @@ export interface AddOutcome {
   refused: Array<{ reason: ChatRefusalReason; userIds: string[] }>;
 }
 
-const REFUSAL_ORDER: ChatRefusalReason[] = ["full", "cooldown", "not_friend", "member"];
+const REFUSAL_ORDER: ChatRefusalReason[] = ["full", "too_many_groups", "cooldown", "not_friend", "member"];
 
 export function addOutcome(result: ChatAddResult): AddOutcome {
   const refused: AddOutcome["refused"] = [];

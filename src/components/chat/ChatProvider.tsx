@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { useErrorText } from "../../i18n/errors";
 // --- slice: chat notifications ---
 import { trayLabels, type ChatTranslate } from "../../lib/chat/tray";
-import type { ChatNotifyEvent, ChatRemovedEvent, Conversation } from "../../lib/ipc";
+import type { ChatNotifyEvent, ChatRemovedEvent, ChatStageRefusal, Conversation } from "../../lib/ipc";
 import {
   useAnswerGroupInvite,
   useChatEvents,
@@ -13,7 +13,6 @@ import {
   useChatUnread,
   useOnlineConfigured,
   useSetTrayLabels,
-  type ChatStageRefusal,
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 import { useToasts } from "../ToastsProvider";

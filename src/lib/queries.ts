@@ -54,7 +54,7 @@ import {
   type ChatCard,
   type ChatCommandDanger,
   type ChatImportTarget,
-  type AppErrorEnvelope,
+  type ChatStageRefusal,
   // --- slice: chat notifications ---
   appEvents,
   appLifecycleIpc,
@@ -4811,20 +4811,6 @@ export interface ChatEventHandlers {
   onRefused?: (refused: ChatStageRefusal[]) => void;
 }
 
-/** A file dropped on the window that the core refused to stage, and why. */
-export interface ChatStageRefusal {
-  name: string;
-  error: AppErrorEnvelope;
-}
-
-/**
- * `chat:files-staged` as the core sends it: besides the staged files it
- * names every dropped file that did not stage (a settings file, bytes holding
- * the session token, more than 25 MiB, an empty file, a folder, an 11th file).
- * A core that predates `refused` leaves it out.
- */
-type ChatFilesStagedPayload = ChatFilesStagedEvent & { refused?: ChatStageRefusal[] };
-
 /**
  * Subscribes to a chat event in Tauri, or to the stand-in bus of `devChat.ts` in a browser.
  *
@@ -5066,12 +5052,13 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
         }
       }),
 
-      listenChat<ChatFilesStagedPayload>(
+      listenChat<ChatFilesStagedEvent>(
         chatEvents.filesStaged,
         (event) => {
           chatLive.addDropped(event.files);
           // --- slice: chat cards --- a file that did not stage is named
-          // with its reason rather than left out without a word.
+          // with its reason rather than left out without a word. The guard
+          // stays for a core that predates `refused` and leaves it out.
           const refused = Array.isArray(event.refused) ? event.refused : [];
           if (refused.length > 0) latest.current.onRefused?.(refused);
         },

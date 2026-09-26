@@ -14,6 +14,8 @@ function refusalKey(reason: ChatRefusalReason | string): string {
   switch (reason) {
     case "full":
       return "group.report.full";
+    case "too_many_groups":
+      return "group.report.tooManyGroups";
     case "cooldown":
       return "group.report.cooldown";
     case "not_friend":
