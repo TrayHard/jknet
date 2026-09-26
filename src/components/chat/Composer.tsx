@@ -108,6 +108,10 @@ export function Composer({
   const emojiButton = useRef<HTMLButtonElement>(null);
   const loadedFor = useRef<string | null>(null);
   const lastSaved = useRef("");
+  // --- slice: chat layout --- what the timer below has not saved yet, and
+  // whether a draft of the core was put into the field since it last ran.
+  const unsaved = useRef<{ conversationId: string; text: string } | null>(null);
+  const justLoaded = useRef(false);
 
   // A new conversation starts from its own draft and its own files.
   useEffect(() => {
@@ -129,6 +133,9 @@ export function Composer({
     if (loadedFor.current === conversationId && (focused || stored === lastSaved.current)) return;
     loadedFor.current = conversationId;
     lastSaved.current = stored;
+    // --- slice: chat layout --- the field is replaced: nothing typed is pending.
+    unsaved.current = null;
+    justLoaded.current = true;
     const decoded = decodeMentions(stored, nameOf, t("people.deleted"));
     setText(decoded.text);
     setPicks(decoded.picks);
@@ -139,8 +146,22 @@ export function Composer({
   // The draft goes to the core a moment after the last key.
   const body = useMemo(() => encodeMentions(text, picks), [text, picks]);
   useEffect(() => {
-    if (loadedFor.current !== conversationId || body === lastSaved.current) return;
+    if (loadedFor.current !== conversationId) return;
+    // --- slice: chat layout --- run in the commit of a load, this effect
+    // still sees the text from before it; the render with the loaded text
+    // follows and decides. Taken for typing, the old text would be saved
+    // over the draft just read when the composer closes at once.
+    if (justLoaded.current) {
+      justLoaded.current = false;
+      if (body !== lastSaved.current) return;
+    }
+    if (body === lastSaved.current) {
+      unsaved.current = null;
+      return;
+    }
+    unsaved.current = { conversationId, text: body };
     const timer = setTimeout(() => {
+      unsaved.current = null;
       lastSaved.current = body;
       setDraft.mutate({ conversationId, text: body });
     }, DRAFT_DEBOUNCE_MS);
@@ -148,6 +169,25 @@ export function Composer({
     // The mutation object changes identity on every state change of its own;
     // the text and the conversation are what start a save.
   }, [body, conversationId]);
+
+  // --- slice: chat layout ---
+  // A composer goes away with its thread: **Close** or `Escape` in the
+  // drawer, **Back**, another chat. The keys of the last moment go to the
+  // core then instead of waiting for a timer that no longer runs. The save is
+  // read through a ref so that only leaving the conversation runs the flush,
+  // whatever the identity of `mutate` does between renders.
+  const saveDraft = useRef(setDraft.mutate);
+  saveDraft.current = setDraft.mutate;
+  useEffect(
+    () => () => {
+      const pending = unsaved.current;
+      if (pending === null) return;
+      unsaved.current = null;
+      lastSaved.current = pending.text;
+      saveDraft.current(pending);
+    },
+    [conversationId],
+  );
 
   // Files dropped on the window, staged by the core, join the tray.
   const takeDropped = dropped.take;
@@ -237,6 +277,9 @@ export function Composer({
     }
     setError(null);
     const message = body.replace(/^\s+|\s+$/g, "");
+    // --- slice: chat layout --- the text goes into the outbox now, not
+    // into a draft, even if the thread closes before the core answers.
+    unsaved.current = null;
     send.mutate(
       {
         conversationId,

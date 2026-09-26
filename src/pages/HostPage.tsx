@@ -364,14 +364,19 @@ export function HostPage() {
   return (
     <div className="flex flex-col h-full p-24">
       {header}
-      <div className="flex flex-1 min-h-0 gap-24">
-        <div className="flex flex-1 min-w-0 flex-col gap-12 overflow-y-auto">
+      {/* --- slice: chat layout --- on a narrow page (the chat drawer
+          pinned, `AppShell`) the invite panel goes under the server instead
+          of beside it, and the two scroll as one column. */}
+      <div className="flex flex-1 min-h-0 gap-24 @max-[760px]/page:flex-col @max-[760px]/page:overflow-y-auto">
+        <div className="flex flex-1 min-w-0 flex-col gap-12 overflow-y-auto @max-[760px]/page:flex-none @max-[760px]/page:overflow-visible">
           {main}
           {actionError !== null && view !== "setup" ? (
             <p className="text-body-sm text-fg-danger">{errorText(actionError)}</p>
           ) : null}
         </div>
         <InvitePanel
+          // --- slice: chat layout ---
+          className="@max-[760px]/page:w-auto @max-[760px]/page:overflow-visible"
           mode={panelMode}
           friends={friends}
           policy={policySource?.joinPolicy ?? "friends"}

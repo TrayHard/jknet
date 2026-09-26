@@ -10,6 +10,14 @@
     "withMentions_one": "{{label}}, {{count}} Erwähnung",
     "withMentions_other": "{{label}}, {{count}} Erwähnungen"
   },
+  "drawer": {
+    "label": "Chats",
+    "title": "Chats",
+    "popOut": "In eigenem Fenster öffnen",
+    "pin": "Neben der Seite anheften",
+    "unpin": "Lösen: über der Seite schweben",
+    "close": "Chats schließen"
+  },
   "surface": {
     "loading": "Chats werden geladen…",
     "pick": "Wählen Sie links einen Chat oder klicken Sie bei einem Freund auf „Nachricht“."

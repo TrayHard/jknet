@@ -1,32 +1,33 @@
-import { ROW_COLUMNS } from "./ServerRow";
+import { cn } from "../../lib/format";
+import { ROW_CELL, ROW_GRID } from "./ServerRow";
 
 /** Width of the grey bar in each column, so the skeleton reads as a table. */
 // --- slice: servers home tweaks --- nine bars since the eye closed the row.
-const BAR_WIDTHS = [
-  "16px",
-  "60%",
-  "24px",
-  "80px",
-  "40px",
-  "56px",
-  "36px",
-  "40px",
-  "16px",
+// --- slice: chat layout --- with the class that drops a column on a narrow page.
+const BARS: Array<{ width: string; cell?: string }> = [
+  { width: "16px" },
+  { width: "60%" },
+  { width: "24px" },
+  { width: "80px", cell: ROW_CELL.map },
+  { width: "40px", cell: ROW_CELL.mode },
+  { width: "56px" },
+  { width: "36px" },
+  { width: "40px", cell: ROW_CELL.mod },
+  { width: "16px" },
 ];
 
 /** One loading placeholder line, the SkeletonRow of the design. */
 export function SkeletonRow() {
   return (
     <div
-      style={{ gridTemplateColumns: ROW_COLUMNS }}
-      className="grid items-center gap-12 h-40 px-12"
+      className={cn("grid items-center gap-12 h-40 px-12", ROW_GRID)}
       aria-hidden="true"
     >
-      {BAR_WIDTHS.map((width, index) => (
+      {BARS.map((bar, index) => (
         <span
           key={index}
-          style={{ width }}
-          className="h-8 rounded-full bg-elevated animate-pulse"
+          style={{ width: bar.width }}
+          className={cn("h-8 rounded-full bg-elevated animate-pulse", bar.cell)}
         />
       ))}
     </div>

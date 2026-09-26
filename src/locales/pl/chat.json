@@ -14,6 +14,14 @@
     "withMentions_many": "{{label}}, {{count}} wzmianek",
     "withMentions_other": "{{label}}, {{count}} wzmianki"
   },
+  "drawer": {
+    "label": "Czaty",
+    "title": "Czaty",
+    "popOut": "Otwórz w osobnym oknie",
+    "pin": "Przypnij obok strony",
+    "unpin": "Odepnij: nad stroną",
+    "close": "Zamknij czaty"
+  },
   "surface": {
     "loading": "Wczytywanie czatów…",
     "pick": "Wybierz czat po lewej albo kliknij „Wiadomość” przy znajomym."

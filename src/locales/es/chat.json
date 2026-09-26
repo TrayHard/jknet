@@ -12,6 +12,14 @@
     "withMentions_many": "{{label}}, {{count}} menciones",
     "withMentions_other": "{{label}}, {{count}} menciones"
   },
+  "drawer": {
+    "label": "Chats",
+    "title": "Chats",
+    "popOut": "Abrir en una ventana aparte",
+    "pin": "Fijar junto a la página",
+    "unpin": "Soltar: flotar sobre la página",
+    "close": "Cerrar los chats"
+  },
   "surface": {
     "loading": "Cargando sus chats…",
     "pick": "Elija un chat a la izquierda o pulse «Mensaje» junto a un amigo."

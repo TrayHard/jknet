@@ -25,6 +25,9 @@ import { Badge, Button, Input, Select, Dialog } from "../components/ui";
 import { TagEditor } from "../components/TagEditor";
 import { ConfigCodeEditor } from "../components/ConfigCodeEditor";
 import { VideoJobCard } from "../components/VideoJobCard";
+// --- slice: chat layout ---
+import { FOLDED_HIDDEN, FOLDED_OVER_LIST, FoldedPanelBack } from "../components/FoldedPanel";
+import { cn } from "../lib/format";
 
 export function MediaPage() {
   const { t, i18n } = useTranslation("common"),
@@ -237,7 +240,10 @@ export function MediaPage() {
                 }}
           />
         ))}
-        <div className="grid grid-cols-[minmax(260px,0.85fr)_minmax(320px,1.15fr)] gap-20 items-start">
+        {/* --- slice: chat layout --- on a narrow page (the chat drawer
+            pinned, `AppShell`) the list takes the width and the preview of
+            the selected item folds over it (`FoldedPanel.tsx`). */}
+        <div className="relative grid grid-cols-[minmax(260px,0.85fr)_minmax(320px,1.15fr)] gap-20 items-start @max-[760px]/page:grid-cols-1">
           <div className="flex flex-col gap-8 max-h-[calc(100vh-220px)] overflow-auto pr-4">
             {items.map((item) => (
               <div
@@ -296,7 +302,15 @@ export function MediaPage() {
             ) : null}
           </div>
           {selected ? (
-            <section className="sticky top-16 min-w-0 rounded-lg border border-line bg-surface overflow-hidden">
+            <section
+              className={cn(
+                "sticky top-16 min-w-0 rounded-lg border border-line bg-surface overflow-hidden",
+                // --- slice: chat layout ---
+                FOLDED_OVER_LIST,
+                "@max-[760px]/page:overflow-y-auto",
+              )}
+            >
+              <FoldedPanelBack onBack={() => setSelectedId("")} className="p-8" />
               {selected.kind === "screenshots" && selected.preview ? (
                 <img
                   src={selected.preview}
@@ -450,7 +464,7 @@ export function MediaPage() {
               </div>
             </section>
           ) : (
-            <div className="flex min-h-240 items-center justify-center rounded-lg border border-dashed border-line text-body-sm text-fg-muted">
+            <div className={cn("flex min-h-240 items-center justify-center rounded-lg border border-dashed border-line text-body-sm text-fg-muted", FOLDED_HIDDEN)}>
               {t("media.selectItem")}
             </div>
           )}

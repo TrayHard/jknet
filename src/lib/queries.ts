@@ -4234,6 +4234,20 @@ export function useOpenChatWindow() {
 }
 
 /**
+ * **Pin** of the chat drawer, kept in `settings.json` as `chatDrawerPinned`.
+ *
+ * Only the settings document is refreshed: `useUpdateSettings` also re-reads
+ * the clients, the game files and the account, none of which a pin changes.
+ */
+export function useSetChatDrawerPinned() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pinned: boolean) => ipc.updateSettings({ chatDrawerPinned: pinned }),
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
+  });
+}
+
+/**
  * Searching the messages of every chat, or of one.
  *
  * Three characters at least across all chats, one within a chat: the

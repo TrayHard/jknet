@@ -667,8 +667,12 @@ function InstalledTab({
         />
       </div>
 
-      <div className="flex items-start gap-24">
-        <aside className="w-200 shrink-0 flex flex-col gap-2">
+      {/* --- slice: chat layout --- the widths are the page's, not the
+          window's: the chat drawer pinned beside the page takes 380 px of the
+          window (`AppShell`). On a narrow page the categories wrap above the
+          cards instead of taking 200 px beside them. */}
+      <div className="flex items-start gap-24 @max-[760px]/page:flex-col @max-[760px]/page:items-stretch @max-[760px]/page:gap-16">
+        <aside className="w-200 shrink-0 flex flex-col gap-2 @max-[760px]/page:w-auto @max-[760px]/page:flex-row @max-[760px]/page:flex-wrap @max-[760px]/page:gap-4">
           <CategoryButton
             label={t("categories.all")}
             count={[...counts.values()].reduce((sum, n) => sum + n, 0)}
@@ -700,7 +704,7 @@ function InstalledTab({
               text={t("empty.filteredText")}
             />
           ) : (
-            <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">
+            <ul className="grid grid-cols-1 @min-[568px]/page:grid-cols-2 @min-[1048px]/page:grid-cols-3 gap-12">
               {shown.map((item) => (
                 <LibraryCard
                   key={item.id}

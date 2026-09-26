@@ -19,13 +19,15 @@ import { useTranslation } from "react-i18next";
 // --- slice: servers home tweaks ---
 import { Link, useSearchParams } from "react-router";
 
+// --- slice: chat layout ---
+import { FOLDED_HIDDEN, FOLDED_PAGE } from "../components/FoldedPanel";
 // --- slice: game switch ---
 import { useMissingClientToast } from "../components/MissingClientToast";
 import { PageHeader } from "../components/PageHeader";
 import { ServerDetails } from "../components/servers/ServerDetails";
 // --- slice: selection context menu ---
 import { useServerContextMenu } from "../components/servers/ServerMenu";
-import { ROW_COLUMNS, ServerRow } from "../components/servers/ServerRow";
+import { ROW_CELL, ROW_GRID, ServerRow } from "../components/servers/ServerRow";
 import { SkeletonRows } from "../components/servers/SkeletonRow";
 import { Tabs, type TabDefinition } from "../components/servers/Tabs";
 import {
@@ -451,8 +453,10 @@ export function ServersPage() {
 
   const listError = cached.error !== null ? errorText(cached.error) : null;
 
+  // --- slice: chat layout --- `relative`: on a narrow page the details of
+  // the selected server take the whole screen (`FoldedPanel.tsx`).
   return (
-    <div className="flex flex-col h-full p-24">
+    <div className="relative flex flex-col h-full p-24">
       <PageHeader
         title={t("title")}
         subtitle={
@@ -646,7 +650,13 @@ export function ServersPage() {
         </div>
 
         {selected === undefined ? (
-          <aside className="flex flex-col items-center justify-center gap-12 w-320 shrink-0 rounded-lg border border-dashed border-line text-center px-24">
+          <aside
+            className={cn(
+              "flex flex-col items-center justify-center gap-12 w-320 shrink-0 rounded-lg border border-dashed border-line text-center px-24",
+              // --- slice: chat layout ---
+              FOLDED_HIDDEN,
+            )}
+          >
             <span className="flex items-center justify-center size-48 rounded-full bg-surface text-fg-muted">
               <ServerIcon size={24} />
             </span>
@@ -654,6 +664,9 @@ export function ServersPage() {
           </aside>
         ) : (
           <ServerDetails
+            // --- slice: chat layout ---
+            className={FOLDED_PAGE}
+            onBack={() => setSelectedAddress(null)}
             server={selected}
             players={status.data?.players}
             playersLoading={status.isFetching && status.data === undefined}
@@ -944,19 +957,20 @@ function SortHeader({
 
   return (
     <div
-      style={{ gridTemplateColumns: ROW_COLUMNS }}
-      className="grid items-center gap-12 h-28 px-12 border-b border-line"
+      // --- slice: chat layout --- the template of the rows, which drops
+      // columns on a narrow page.
+      className={cn("grid items-center gap-12 h-28 px-12 border-b border-line", ROW_GRID)}
     >
       <span />
       {cell("name", t("columns.server"))}
       <span />
-      {cell("map", t("columns.map"))}
-      {cell("mode", t("columns.mode"))}
+      {cell("map", t("columns.map"), ROW_CELL.map)}
+      {cell("mode", t("columns.mode"), ROW_CELL.mode)}
       {cell("players", t("columns.players"))}
       {/* --- slice: server actions --- the heading sits over its values, and
           the values of this column are left-aligned. */}
       {cell("ping", t("columns.ping"), "justify-start")}
-      {cell("mod", t("columns.mod"))}
+      {cell("mod", t("columns.mod"), ROW_CELL.mod)}
       {/* --- slice: servers home tweaks --- the eye column. A heading over a
           button that says what it does on hover would only take the width the
           rows need for the mod folder beside it. */}

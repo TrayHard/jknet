@@ -35,9 +35,26 @@ import { ServerName } from "./ServerName";
  * window opens with (`src-tauri/tauri.conf.json`), so the mark column gives
  * 16 of them back: it carries one optional 14 px lock and had 40 px to do it
  * in. Widen it again when the trust mark lands beside the lock.
+ *
+ * --- slice: chat layout ---
+ * Classes rather than an inline template, so a narrow page can drop columns.
+ * The page is the `page` container of `AppShell`: with the chat drawer
+ * pinned it is 668 px wide in the 1280 px window and 488 px at the 1100 px
+ * minimum. Below 720 px the map and the mod go, below 560 px the mode too,
+ * and the name keeps room to be read; the details panel names all three. A
+ * cell of a column that can go carries its class from `ROW_CELL`.
  */
-export const ROW_COLUMNS =
-  "16px minmax(0, 1fr) 24px 116px 60px 76px 56px 60px 16px";
+export const ROW_GRID =
+  "grid-cols-[16px_minmax(0,1fr)_24px_116px_60px_76px_56px_60px_16px] " +
+  "@max-[720px]/page:grid-cols-[16px_minmax(0,1fr)_24px_60px_76px_56px_16px] " +
+  "@max-[560px]/page:grid-cols-[16px_minmax(0,1fr)_24px_76px_56px_16px]";
+
+/** The cells of the columns a narrow page drops, in the header, the rows and the skeleton. */
+export const ROW_CELL = {
+  map: "@max-[720px]/page:hidden",
+  mode: "@max-[560px]/page:hidden",
+  mod: "@max-[720px]/page:hidden",
+} as const;
 
 /** Which badge tone a game type gets, so the modes stay apart at a glance. */
 const MODE_TONE: Record<number, BadgeTone> = {
@@ -116,11 +133,12 @@ export function ServerRow({
           onSelect();
         }
       }}
-      style={{ gridTemplateColumns: ROW_COLUMNS }}
       className={cn(
         // --- slice: servers home tweaks --- `group`, so the eye at the end
         // can read the hover of the whole row rather than of itself.
         "group grid items-center gap-12 h-40 px-12 rounded-md cursor-pointer",
+        // --- slice: chat layout ---
+        ROW_GRID,
         "transition-colors duration-100",
         selected
           ? "bg-selected-overlay text-fg"
@@ -166,14 +184,14 @@ export function ServerRow({
 
       {/* A map name is what the operator put in `mapname`: data, never a
           string to translate. */}
-      <span className="text-mono-xs text-fg-muted truncate" title={server.map}>
+      <span className={cn("text-mono-xs text-fg-muted truncate", ROW_CELL.map)} title={server.map}>
         {server.map || tCommon("values.empty")}
       </span>
 
       {/* --- slice: servers home tweaks --- `centered`, because this badge
           stands in a column with others under it. The rule itself lives in
           the kit, so the row of Home cannot line its modes up differently. */}
-      <Badge tone={MODE_TONE[server.gametype] ?? "neutral"} centered>
+      <Badge tone={MODE_TONE[server.gametype] ?? "neutral"} centered className={ROW_CELL.mode}>
         {gametypes.short(server.game, server.gametype)}
       </Badge>
 
@@ -199,7 +217,7 @@ export function ServerRow({
         </span>
       )}
 
-      <span className="text-mono-xs text-fg-muted truncate" title={server.modName}>
+      <span className={cn("text-mono-xs text-fg-muted truncate", ROW_CELL.mod)} title={server.modName}>
         {server.modName}
       </span>
 

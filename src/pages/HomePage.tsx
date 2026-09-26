@@ -371,12 +371,15 @@ export function HomePage() {
         </div>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-xl border border-line bg-surface p-32 shadow-card">
+      {/* --- slice: chat layout --- on a narrow page (the chat drawer pinned,
+          `AppShell`) the map picture goes above the text, full width, instead
+          of squeezing the heading to a few letters beside it. */}
+      <section className="relative overflow-hidden rounded-xl border border-line bg-surface p-32 shadow-card @max-[760px]/page:p-20">
         <div
           aria-hidden="true"
           className="absolute -top-40 -right-24 size-240 rounded-full bg-accent-glow blur-3xl"
         />
-        <div className="relative flex items-start gap-24">
+        <div className="relative flex items-start gap-24 @max-[760px]/page:flex-col-reverse @max-[760px]/page:items-stretch @max-[760px]/page:gap-16">
           <div className="flex flex-col gap-24 flex-1 min-w-0">
             {/* The label says what the hero is showing. Three answers, and
                 every one of them names the thing under it: the game that is
@@ -538,7 +541,7 @@ export function HomePage() {
               serverName={
                 continueServer ? t("hero.lastServer") : heroServer.hostnameClean
               }
-              className="w-240 h-140 shrink-0"
+              className="w-240 h-140 shrink-0 @max-[760px]/page:w-auto @max-[760px]/page:h-120"
             />
           ) : null}
         </div>

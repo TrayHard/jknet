@@ -17,6 +17,8 @@ import { useNavigate } from "react-router";
 
 // --- slice: chat ---
 import { useMessageFriend } from "../components/chat/useOpenChat";
+// --- slice: chat layout ---
+import { FOLDED_HIDDEN, FOLDED_PAGE } from "../components/FoldedPanel";
 import { FriendPanel } from "../components/friends/FriendPanel";
 import { FriendRow } from "../components/friends/FriendRow";
 // --- slice: play with friends ---
@@ -47,6 +49,8 @@ import {
 // --- slice: i18n ---
 import { useErrorText } from "../i18n/errors";
 import type { Friend, Presence } from "../lib/ipc";
+// --- slice: chat layout ---
+import { cn } from "../lib/format";
 // --- slice: game switch ---
 import { findDefaultClient, gameFromServerAddress } from "../lib/game";
 import {
@@ -297,8 +301,10 @@ export function FriendsPage() {
     );
   }
 
+  // --- slice: chat layout --- `relative`: on a narrow page the panel of the
+  // selected friend takes the whole screen (`FoldedPanel.tsx`).
   return (
-    <div className="flex flex-col h-full p-24">
+    <div className="relative flex flex-col h-full p-24">
       <PageHeader
         title={t("title")}
         subtitle={
@@ -421,7 +427,13 @@ export function FriendsPage() {
         </div>
 
         {selected === undefined ? (
-          <aside className="flex flex-col items-center justify-center gap-12 w-320 shrink-0 rounded-lg border border-dashed border-line text-center px-24">
+          <aside
+            className={cn(
+              "flex flex-col items-center justify-center gap-12 w-320 shrink-0 rounded-lg border border-dashed border-line text-center px-24",
+              // --- slice: chat layout ---
+              FOLDED_HIDDEN,
+            )}
+          >
             <span className="flex items-center justify-center size-48 rounded-full bg-surface text-fg-muted">
               <Users size={24} />
             </span>
@@ -429,6 +441,9 @@ export function FriendsPage() {
           </aside>
         ) : (
           <FriendPanel
+            // --- slice: chat layout ---
+            className={FOLDED_PAGE}
+            onBack={() => setSelectedId(null)}
             friend={selected}
             mine={view?.presence ?? NO_PRESENCE}
             joining={join.isPending}

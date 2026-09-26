@@ -557,8 +557,11 @@ export function JkhubBrowser({
         </Button>
       </div>
 
-      <div className="flex items-start gap-24">
-        <aside className="w-232 shrink-0">
+      {/* --- slice: chat layout --- on a narrow page (the chat drawer
+          pinned, `AppShell`) the tree sits above the files in a box of its
+          own height instead of taking 232 px beside them. */}
+      <div className="flex items-start gap-24 @max-[760px]/page:flex-col @max-[760px]/page:items-stretch @max-[760px]/page:gap-16">
+        <aside className="w-232 shrink-0 @max-[760px]/page:w-auto @max-[760px]/page:max-h-240 @max-[760px]/page:overflow-y-auto @max-[760px]/page:rounded-lg @max-[760px]/page:border @max-[760px]/page:border-line @max-[760px]/page:p-8">
           <JkhubTree
             categories={tree}
             selected={scoped}

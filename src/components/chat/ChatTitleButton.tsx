@@ -12,8 +12,9 @@ import { useOpenChat } from "./useOpenChat";
  *
  * **Chats** in the title bar of the main window, before the window buttons:
  * the unread count of the chats that are not muted, and `@` while a mention
- * waits, muted chats included. A click shows or hides the chat of this
- * window — the drawer once the layout provides it, the chat window until then.
+ * waits, muted chats included. A click opens or closes the chat drawer of
+ * layout B; it stays pressed while the drawer is open. A window without the
+ * drawer opens the chat window instead.
  */
 export function ChatTitleButton() {
   const { t } = useTranslation("chat");
@@ -26,12 +27,14 @@ export function ChatTitleButton() {
 
   const base = unread > 0 ? t("titleBar.chatsUnread", { count: unread }) : t("titleBar.chats");
   const label = mentions > 0 ? t("titleBar.withMentions", { label: base, count: mentions }) : base;
+  const open = layout?.isOpen === true;
 
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
+      aria-pressed={layout === null ? undefined : open}
       onClick={() => {
         const target = layout ?? currentChatLayout();
         if (target !== null) target.toggle();
@@ -39,7 +42,8 @@ export function ChatTitleButton() {
       }}
       className={cn(
         "relative flex h-40 w-44 items-center justify-center cursor-pointer select-none",
-        "text-fg-secondary transition-colors duration-150 hover:bg-hover-overlay hover:text-fg",
+        "transition-colors duration-150 hover:bg-hover-overlay hover:text-fg",
+        open ? "bg-selected-overlay text-fg-accent" : "text-fg-secondary",
       )}
     >
       <MessageCircle size={16} />

@@ -258,6 +258,15 @@ export interface Settings {
   hostDefaults: Partial<Record<Game, HostDefaults>>;
   /** True once a server was started in a mode with the local network. */
   hostFirewallNoteSeen: boolean;
+  // --- slice: chat ---
+  /**
+   * The chat drawer of the main window docked beside the page instead of
+   * floating over it; `false` on a fresh install. Whether the drawer is open
+   * is not kept: every launch starts with it closed.
+   *
+   * Absent from a core that predates the field, which reads as `false`.
+   */
+  chatDrawerPinned?: boolean;
 }
 
 /**
@@ -316,6 +325,8 @@ export interface SettingsPatch {
   /** Merged one game at a time; `null` for a game forgets its entry. */
   hostDefaults?: Partial<Record<Game, HostDefaults | null>>;
   hostFirewallNoteSeen?: boolean;
+  // --- slice: chat ---
+  chatDrawerPinned?: boolean;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */

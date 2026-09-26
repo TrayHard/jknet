@@ -12,6 +12,14 @@
     "withMentions_many": "{{label}}, {{count}} mentions",
     "withMentions_other": "{{label}}, {{count}} mentions"
   },
+  "drawer": {
+    "label": "Discussions",
+    "title": "Discussions",
+    "popOut": "Ouvrir dans une fenêtre séparée",
+    "pin": "Épingler à côté de la page",
+    "unpin": "Détacher : flotter au-dessus de la page",
+    "close": "Fermer les discussions"
+  },
   "surface": {
     "loading": "Chargement de vos discussions…",
     "pick": "Choisissez une discussion à gauche ou cliquez sur « Message » à côté d’un ami."

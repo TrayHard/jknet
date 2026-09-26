@@ -8,6 +8,8 @@ import { useFormat } from "../../i18n/useFormat";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { cn } from "../../lib/format";
 import type { ServerInfo, ServerPlayer } from "../../lib/ipc";
+// --- slice: chat layout ---
+import { FoldedPanelBack } from "../FoldedPanel";
 import { MapPreview } from "../MapPreview";
 import { Badge, Button, Toggle } from "../ui";
 import { botCount, realPlayers } from "./filter";
@@ -78,6 +80,11 @@ interface ServerDetailsProps {
   connecting: boolean;
   /** Shown under the button when `canConnect` is false. */
   hint?: ReactNode;
+  // --- slice: chat layout ---
+  /** Extra classes: how the screen folds the panel on a narrow page. */
+  className?: string;
+  /** **Back** of the folded panel: clears the selection. */
+  onBack?: () => void;
 }
 
 /**
@@ -105,6 +112,8 @@ export function ServerDetails({
   canConnect,
   connecting,
   hint,
+  className,
+  onBack,
 }: ServerDetailsProps) {
   const { t } = useTranslation("servers");
   const { t: tCommon } = useTranslation("common");
@@ -126,7 +135,14 @@ export function ServerDetails({
   };
 
   return (
-    <aside className="flex flex-col gap-16 w-320 shrink-0 min-h-0 rounded-lg border border-line bg-surface p-16">
+    <aside
+      className={cn(
+        "flex flex-col gap-16 w-320 shrink-0 min-h-0 rounded-lg border border-line bg-surface p-16",
+        className,
+      )}
+    >
+      {/* --- slice: chat layout --- */}
+      {onBack ? <FoldedPanelBack onBack={onBack} /> : null}
       {/* --- slice: maps --- */}
       <MapPreview map={server.map} game={server.game} compact className="h-96" />
       <Link className="text-accent text-body-sm-medium" to={`/community?${new URLSearchParams({ address: server.address, name: server.hostnameClean, game: server.game })}`}>{t("community.page")}</Link>

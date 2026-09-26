@@ -29,6 +29,11 @@ interface PageHeaderProps {
  * out of its box, because a search field and two buttons refuse to shrink.
  * Given a basis to fall back to, the buttons drop to a line of their own
  * instead.
+ *
+ * --- slice: chat layout ---
+ * The buttons wrap among themselves too. With the chat drawer pinned the
+ * page is 488 px wide at the 1100 px minimum, less than a search field and
+ * two buttons need even on a line of their own.
  */
 export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
   return (
@@ -40,7 +45,7 @@ export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
         ) : null}
       </div>
       {actions ? (
-        <div className="flex items-center gap-8 pt-4 ml-auto">{actions}</div>
+        <div className="flex flex-wrap items-center justify-end gap-8 pt-4 ml-auto">{actions}</div>
       ) : null}
     </div>
   );

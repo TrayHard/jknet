@@ -784,14 +784,19 @@ function ClientCard({
     // One row of three parts: the mark, everything the card says, and the one
     // button the player came to press. Nothing is stacked under the row, so
     // **Launch** sits against the middle of the card at any height.
+    //
+    // --- slice: chat layout --- except on a narrow page (the chat drawer
+    // pinned, `AppShell`): there the launch buttons drop under the text and
+    // the small buttons wrap, rather than squeezing the card to a column of
+    // cut words and clipping **Delete** off its end.
     <li
-      className="flex items-center gap-12 rounded-lg border border-line bg-surface p-16"
+      className="flex items-center gap-12 rounded-lg border border-line bg-surface p-16 @max-[760px]/page:flex-wrap"
       // --- slice: selection context menu ---
       onContextMenu={(event) => menu.open(event, client)}
     >
       {menu.menu}
       <EngineLogo engineId={client.engineId} name={engineName} size={44} />
-      <div className="flex-1 min-w-0 flex flex-col gap-4">
+      <div className="flex-1 min-w-0 flex flex-col gap-4 @max-[760px]/page:basis-[calc(100%-56px)]">
         <div className="flex items-center gap-8">
           <span className="text-heading-sm text-fg truncate">{client.name}</span>
           {isDefault ? (
@@ -901,7 +906,7 @@ function ClientCard({
             one that destroys it, and the way to its files. `overflow-hidden`
             keeps a row too wide for the card — a long locale on the minimum
             window of 1100 px — inside it instead of spilling under Launch. */}
-        <div className="flex items-center gap-8 flex-nowrap pt-4 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-8 flex-nowrap pt-4 min-w-0 overflow-hidden @max-[760px]/page:flex-wrap">
           {!engine?.installable ? (
             <p className="text-body-sm text-fg-muted" title={engine ? (engineUnavailableReason(engine, errorText) ?? undefined) : undefined}>
               {engine ? (engineUnavailableReason(engine, errorText) ?? t("card.manualInstall")) : tCommon("states.loading")}
@@ -1009,7 +1014,7 @@ function ClientCard({
           size="lg"
           variant="danger"
           icon={<Square size={16} />}
-          className="shrink-0"
+          className="shrink-0 @max-[760px]/page:ml-56"
           onClick={onStop}
         >
           {t("engine.stop")}
@@ -1052,8 +1057,9 @@ function LaunchButtons({
 }): ReactNode {
   const { t } = useTranslation("clients");
   const { t: tBundles } = useTranslation("bundles");
+  // --- slice: chat layout --- under the text of the card on a narrow page.
   return (
-    <div className="flex items-center gap-8 shrink-0">
+    <div className="flex items-center gap-8 shrink-0 @max-[760px]/page:ml-56">
       {multiplayer ? (
         <Button
           size="lg"

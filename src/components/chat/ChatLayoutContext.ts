@@ -6,11 +6,12 @@ import { createContext, use, useEffect } from "react";
  * The chat layout of a window: whatever mounts the chat surface in it and can
  * show a conversation on request.
  *
- * The main window's layout (the drawer of layout B) provides it from
- * `AppShell`; the chat window provides its own, which selects the
- * conversation in place. `useOpenChat` is the reader. A window without a
- * layout — a client window, or the main window before the drawer exists —
- * opens the separate chat window instead.
+ * The main window's layout (the drawer of layout B,
+ * `layout/useChatDrawerLayout.ts`) provides it from `AppShell`; the chat
+ * window provides its own, which selects the conversation in place.
+ * `useOpenChat` is the reader. A window without a layout — a client window,
+ * the first-run shell of the main window — opens the separate chat window
+ * instead.
  */
 export interface ChatLayout {
   /** Whether the surface is on screen now. */

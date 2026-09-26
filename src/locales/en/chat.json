@@ -10,6 +10,14 @@
     "withMentions_one": "{{label}}, {{count}} mention",
     "withMentions_other": "{{label}}, {{count}} mentions"
   },
+  "drawer": {
+    "label": "Chats",
+    "title": "Chats",
+    "popOut": "Open in a separate window",
+    "pin": "Pin beside the page",
+    "unpin": "Unpin: float over the page",
+    "close": "Close chats"
+  },
   "surface": {
     "loading": "Loading your chats…",
     "pick": "Pick a chat on the left, or press Message next to a friend."

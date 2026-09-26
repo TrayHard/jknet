@@ -10,6 +10,14 @@
     "withMentions_one": "{{label}}, {{count}} említés",
     "withMentions_other": "{{label}}, {{count}} említés"
   },
+  "drawer": {
+    "label": "Csevegések",
+    "title": "Csevegések",
+    "popOut": "Megnyitás külön ablakban",
+    "pin": "Rögzítés az oldal mellé",
+    "unpin": "Rögzítés feloldása: lebegés az oldal fölött",
+    "close": "Csevegések bezárása"
+  },
   "surface": {
     "loading": "Csevegések betöltése…",
     "pick": "Válasszon csevegést a bal oldalon, vagy kattintson az „Üzenet” gombra egy barátja mellett."

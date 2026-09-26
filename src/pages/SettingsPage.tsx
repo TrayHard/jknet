@@ -104,8 +104,10 @@ export function SettingsPage() {
           read the rest of it has to be able to find this one. */}
       <LanguageCard onError={setError} />
 
-      <section className="flex items-start gap-16 rounded-lg border border-line bg-surface p-16 mb-24">
-        <div className="flex-1 min-w-0">
+      {/* --- slice: chat layout --- on a narrow page (the chat drawer
+          pinned, `AppShell`) the button goes under the text. */}
+      <section className="flex items-start gap-16 rounded-lg border border-line bg-surface p-16 mb-24 @max-[760px]/page:flex-wrap">
+        <div className="flex-1 min-w-0 @max-[760px]/page:basis-full">
           <h2 className="text-heading-sm text-fg pb-4">{t("dataFolder.title")}</h2>
           <p className="text-body-sm text-fg-secondary pb-8">
             {t("dataFolder.text")}
@@ -205,12 +207,13 @@ function LanguageCard({ onError }: { onError: (message: string) => void }) {
     );
   };
 
+  // --- slice: chat layout --- on a narrow page the list goes under the text.
   return (
-    <section className="flex items-start gap-16 rounded-lg border border-line bg-surface p-16 mb-24">
+    <section className="flex items-start gap-16 rounded-lg border border-line bg-surface p-16 mb-24 @max-[760px]/page:flex-wrap">
       <span className="flex items-center justify-center size-36 rounded-md bg-elevated text-fg-secondary shrink-0">
         <Languages size={20} />
       </span>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 @max-[760px]/page:basis-[calc(100%-52px)]">
         <h2 className="text-heading-sm text-fg pb-4">{t("language.title")}</h2>
         <p className="text-body-sm text-fg-secondary">{t("language.text")}</p>
         {hint === null ? null : (
@@ -226,7 +229,7 @@ function LanguageCard({ onError }: { onError: (message: string) => void }) {
         // Wide enough for the longest option any language produces: the system
         // entry names the language it would pick, in that language, and the
         // Russian variant is the widest.
-        className="w-240 shrink-0"
+        className="w-240 shrink-0 @max-[760px]/page:ml-52"
       />
     </section>
   );

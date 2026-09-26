@@ -88,7 +88,10 @@ export function EnginePage() {
               setDialogOpen(true);
             }}
           />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-16 pt-24">
+          {/* --- slice: chat layout --- two columns from the page width the
+              1280 px window gives, whether or not the chat drawer takes its
+              share of the window. */}
+          <div className="grid grid-cols-1 @min-[1048px]/page:grid-cols-2 gap-16 pt-24">
             <Facts engine={engine} />
             <div className="flex flex-col gap-16">
               <Links engine={engine} />
@@ -125,10 +128,12 @@ function EngineHead({
   const note = useEngineNote()(engine.status);
   const errorText = useErrorText();
 
+  // --- slice: chat layout --- on a narrow page the button drops under the
+  // text instead of squeezing it to a few words a line.
   return (
-    <div className="flex items-start gap-16">
+    <div className="flex items-start gap-16 @max-[760px]/page:flex-wrap">
       <EngineLogo engineId={engine.id} name={engine.name} size={64} />
-      <div className="flex-1 min-w-0 flex flex-col gap-8">
+      <div className="flex-1 min-w-0 flex flex-col gap-8 @max-[760px]/page:basis-[calc(100%-80px)]">
         <div className="flex items-center gap-8 flex-wrap">
           <h1 className="text-display-lg text-fg">{engine.name}</h1>
           <Badge tone="neutral">{label(engine.game)}</Badge>
@@ -155,7 +160,7 @@ function EngineHead({
       <Button
         variant="primary"
         icon={<Plus size={16} />}
-        className="shrink-0"
+        className="shrink-0 @max-[760px]/page:ml-80"
         onClick={onNewClient}
         disabled={!engine.installable}
       >

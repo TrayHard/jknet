@@ -65,8 +65,10 @@ export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: stri
       <LibrarySort value="name" onChange={() => {}} options={[{ value: "name", label: t("sort.name") }]} direction={direction} onDirection={setDirection} />
       <Button icon={<RefreshCw size={16} />} disabled={query.isFetching} onClick={() => { setPicked(null); void query.refetch(); }}>{common("actions.refresh")}</Button>
     </div>
-    <div className="flex items-start gap-24">
-      <aside className="w-200 shrink-0 flex flex-col gap-2">
+    {/* --- slice: chat layout --- widths of the page, which the pinned chat
+        drawer narrows: on a narrow page the kinds wrap above the entries. */}
+    <div className="flex items-start gap-24 @max-[760px]/page:flex-col @max-[760px]/page:items-stretch @max-[760px]/page:gap-16">
+      <aside className="w-200 shrink-0 flex flex-col gap-2 @max-[760px]/page:w-auto @max-[760px]/page:flex-row @max-[760px]/page:flex-wrap @max-[760px]/page:gap-4">
         {/* --- slice: pk3 contents --- the taxonomy has two dozen groups; the rail lists the ones the catalogue holds. */}
         {PREVIEW_KINDS.filter(group => group === "all" || query.data.entries.some(entry => entry.kind === group)).map(group => <button key={group} type="button" onClick={() => setKind(group)} aria-pressed={kind === group}
           className={cn("flex items-center gap-8 min-h-36 px-12 py-8 rounded-md cursor-pointer text-body-sm transition-colors", kind === group ? "bg-selected-overlay text-fg" : "text-fg-secondary hover:bg-hover-overlay hover:text-fg")}>
@@ -79,7 +81,7 @@ export function BaseGameBrowser({ game, clientId }: { game: Game; clientId: stri
         {!entries.length ? <EmptyState icon={<Search size={24} />} title={t("empty.filteredTitle")} text={t("baseGame.noResults")} /> : null}
         {PREVIEW_KINDS.filter(group => visible.some(entry => entry.kind === group)).map(group => <section key={group} className="mb-20" aria-label={t(`preview.kind.${group}`)}>
           <h3 className="flex items-center gap-8 text-label-sm text-fg-muted mb-12"><LibraryObjectIcon kind={group} size={16} />{t(`preview.kind.${group}`)}</h3>
-          <ul className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-12">
+          <ul className="grid grid-cols-1 @min-[568px]/page:grid-cols-2 @min-[1048px]/page:grid-cols-3 gap-12">
             {visible.filter(entry => entry.kind === group).map(entry => <li key={entry.id}>
               {entry.kind === "map" ? <BaseGameMapCard entry={entry} archive={query.data.archives[entry.archive]} images={mapShots.data?.get(entry.id)} onOpen={() => setPicked(entry)} />
               : <button type="button" className="w-full h-full flex items-center gap-12 p-16 rounded-lg border border-line bg-surface hover:bg-hover-overlay text-left cursor-pointer"

@@ -2,7 +2,10 @@ import { Gamepad2, MessageCircle, Send, Swords, UserMinus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+// --- slice: chat layout ---
+import { cn } from "../../lib/format";
 import type { Friend, HostSession, Presence } from "../../lib/ipc";
+import { FoldedPanelBack } from "../FoldedPanel";
 // --- slice: play with friends ---
 import { isHostLive } from "../host/hostModel";
 import { Avatar, Badge, Button } from "../ui";
@@ -32,6 +35,11 @@ interface FriendPanelProps {
   /** **Message**: the direct chat with this friend. Absent: no button. */
   onMessage?: () => void;
   messaging?: boolean;
+  // --- slice: chat layout ---
+  /** Extra classes: how the screen folds the panel on a narrow page. */
+  className?: string;
+  /** **Back** of the folded panel: clears the selection. */
+  onBack?: () => void;
 }
 
 /**
@@ -59,6 +67,8 @@ export function FriendPanel({
   onHostAndInvite,
   onMessage,
   messaging = false,
+  className,
+  onBack,
 }: FriendPanelProps) {
   const { t } = useTranslation("friends");
   const { t: tCommon } = useTranslation("common");
@@ -78,7 +88,14 @@ export function FriendPanel({
   useEffect(() => setConfirming(false), [friend.user.id]);
 
   return (
-    <aside className="flex flex-col gap-16 w-320 shrink-0 rounded-lg border border-line bg-surface p-16 overflow-y-auto">
+    <aside
+      className={cn(
+        "flex flex-col gap-16 w-320 shrink-0 rounded-lg border border-line bg-surface p-16 overflow-y-auto",
+        className,
+      )}
+    >
+      {/* --- slice: chat layout --- */}
+      {onBack ? <FoldedPanelBack onBack={onBack} /> : null}
       <div className="flex items-center gap-12">
         <Avatar
           name={friend.user.displayName}

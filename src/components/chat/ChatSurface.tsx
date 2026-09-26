@@ -23,7 +23,11 @@ interface ChatSurfaceProps {
   onSelect: (conversationId: string | null) => void;
   /** Buttons the layout adds to the header of the thread. */
   threadActions?: ReactNode;
-  /** A bar the layout puts above the list: the title and the buttons of the drawer. */
+  /**
+   * A bar the layout puts above the list: the title and the buttons of the
+   * drawer. The stacked layouts also keep it above «Sign in to chat» and the
+   * other states without a list.
+   */
   listHeader?: ReactNode;
   className?: string;
 }
@@ -55,20 +59,32 @@ export function ChatSurface({
     setJump({ conversationId: id, seq, key: Date.now() });
   };
 
-  if (configured === false) return <ChatUnavailable reason="notConfigured" className={className} />;
-  if (state.isPending) {
-    return (
-      <div className={cn("flex h-full items-center justify-center p-24 text-body-sm text-fg-muted", className)}>
-        {t("surface.loading")}
+  // Until there are chats to show, the stacked layouts keep their bar: it
+  // holds the drawer's **Close** and **Pin**, which must not go with the list.
+  const notReady = (body: ReactNode) =>
+    variant === "split" || listHeader === undefined ? (
+      <div className={cn("h-full", className)}>{body}</div>
+    ) : (
+      <div className={cn("flex h-full min-h-0 flex-col", className)}>
+        {listHeader}
+        <div className="min-h-0 flex-1">{body}</div>
       </div>
+    );
+
+  if (configured === false) return notReady(<ChatUnavailable reason="notConfigured" />);
+  if (state.isPending) {
+    return notReady(
+      <div className="flex h-full items-center justify-center p-24 text-body-sm text-fg-muted">
+        {t("surface.loading")}
+      </div>,
     );
   }
   if (state.isError) {
-    return <ChatUnavailable reason="failed" detail={errorText(state.error)} className={className} />;
+    return notReady(<ChatUnavailable reason="failed" detail={errorText(state.error)} />);
   }
   const view = state.data;
-  if (!view.signedIn) return <ChatUnavailable reason="signedOut" className={className} />;
-  if (!view.available) return <ChatUnavailable reason="noChat" className={className} />;
+  if (!view.signedIn) return notReady(<ChatUnavailable reason="signedOut" />);
+  if (!view.available) return notReady(<ChatUnavailable reason="noChat" />);
 
   const dense = variant === "compact";
   const list = (

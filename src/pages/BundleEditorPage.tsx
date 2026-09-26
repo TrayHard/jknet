@@ -223,7 +223,8 @@ export function BundleEditorPage() {
             <SaveState saving={saveState.saving} saved={saveState.saved} error={saveError} />
           </p>
         </div>
-        <div className="flex items-center gap-8 pt-4 ml-auto">
+        {/* --- slice: chat layout --- wraps like the buttons of `PageHeader`. */}
+        <div className="flex flex-wrap items-center justify-end gap-8 pt-4 ml-auto">
           <Button icon={<FlaskConical size={16} />} disabled={blocked || running} onClick={openTest}>
             {t("editor.testLocally")}
           </Button>
@@ -252,9 +253,15 @@ export function BundleEditorPage() {
         </div>
       ) : null}
 
-      <div className="flex items-start gap-24">
+      {/* --- slice: chat layout --- on a narrow page (the chat drawer pinned,
+          `AppShell`) the navigation wraps above the section instead of
+          taking 232 px beside it. */}
+      <div className="flex items-start gap-24 @max-[760px]/page:flex-col @max-[760px]/page:items-stretch @max-[760px]/page:gap-16">
         {/* The navigation column: the same width and the same lines as the sidebar. */}
-        <nav className="w-232 shrink-0 flex flex-col gap-4" aria-label={t("editor.sections")}>
+        <nav
+          className="w-232 shrink-0 flex flex-col gap-4 @max-[760px]/page:w-auto @max-[760px]/page:flex-row @max-[760px]/page:flex-wrap"
+          aria-label={t("editor.sections")}
+        >
           <NavLine
             icon={<Info size={16} />}
             label={t("editor.nav.overview")}
@@ -454,7 +461,8 @@ function NavLine({
       className={cn(
         "flex items-center gap-12 h-36 px-12 rounded-md select-none cursor-pointer",
         "text-display-nav transition-colors duration-150 text-left",
-        nested && "ml-20",
+        // --- slice: chat layout --- no indent where the lines wrap as a row.
+        nested && "ml-20 @max-[760px]/page:ml-0",
         active ? "bg-selected-overlay text-fg" : "text-fg-secondary hover:bg-hover-overlay hover:text-fg",
       )}
     >

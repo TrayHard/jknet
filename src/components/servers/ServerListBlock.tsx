@@ -173,6 +173,10 @@ export function ServerListBlock({
                 // width the same column has on the Servers table, so a player
                 // reading both sees one row and not two designs.
                 "grid-cols-[minmax(0,1fr)_116px_auto_76px_56px_auto]",
+                // --- slice: chat layout --- a narrow page (the chat drawer
+                // pinned, `AppShell`) drops the map and the mode, which the
+                // Servers screen shows once the row is opened.
+                "@max-[760px]/page:grid-cols-[minmax(0,1fr)_76px_56px_auto]",
                 "border-b border-line-subtle last:border-b-0",
                 onOpen === undefined
                   ? undefined
@@ -198,7 +202,7 @@ export function ServerListBlock({
                   what the operator put in `mapname`: data, never translated,
                   and cut off rather than allowed to push the row apart. */}
               <span
-                className="text-mono-xs text-fg-muted truncate"
+                className="text-mono-xs text-fg-muted truncate @max-[760px]/page:hidden"
                 title={server.map}
               >
                 {server.map || tCommon("values.empty")}
@@ -206,7 +210,7 @@ export function ServerListBlock({
               {/* --- slice: servers home tweaks --- the same pill as the one
                   on the table of the Servers screen, down to the floor under
                   its width and the label centred in it. */}
-              <Badge tone="accent" centered>
+              <Badge tone="accent" centered className="@max-[760px]/page:hidden">
                 {gametypes.label(server.game, server.gametype, server.gametypeLabel)}
               </Badge>
               {/* --- slice: server actions ---
