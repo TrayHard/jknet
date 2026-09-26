@@ -26,6 +26,7 @@
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -36,6 +37,11 @@ use crate::settings::Settings;
 use super::types::{
     Friend, FriendsList, Invite, LoginSession, Me, NewInvite, OnlineUser, Presence, PresenceUpdate,
     RelayGrant, SendRequestResult,
+};
+// --- slice: chat ---
+use super::types::{
+    AddResult, ChatMessage, ChatPrivacy, ChatPrivacyPatch, ChatSyncDoc, Conversation, FileMeta,
+    FileRegistration, GroupResult, MessagePage, NewMessage, ReactionGroup, SearchPage,
 };
 
 /// Where the service runs while it is being developed: `npm run tauri dev` and
@@ -93,6 +99,42 @@ const TRANSFER_STALL_TIMEOUT: Duration = Duration::from_secs(60);
 /// Providers the service knows. `dev` only answers on a service started with
 /// `JKNET_ONLINE_DEV_PROVIDER=1`, which in practice means a service on this machine.
 pub const PROVIDERS: [&str; 3] = ["jkhub", "discord", "dev"];
+
+// --- slice: chat ---
+/// The path prefix of the chat API. A refusal under it names its cause in
+/// `details.reason`, which [`chat_refusal`] turns into the code.
+const CHAT_PREFIX: &str = "/v1/chat/";
+
+/// The code of a service that has no chat API at all: an older deployment
+/// answers every `/v1/chat/*` route with `404 No such endpoint`. The chat
+/// screens say "Chat is not available" on it instead of an error.
+pub const CHAT_UNAVAILABLE_CODE: &str = "chat_unavailable";
+
+/// Where a page of history starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageAnchor {
+    /// The newest page.
+    Latest,
+    /// The messages right before this `seq`.
+    Before(u64),
+    /// The messages right after this `seq`.
+    After(u64),
+    /// A page with this `seq` in the middle, for a jump to a search result.
+    Around(u64),
+}
+
+/// The filters of `GET /v1/chat/search`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchQuery {
+    pub q: String,
+    pub conversation_id: Option<String>,
+    pub sender_id: Option<String>,
+    /// `file`, `image`, `video`, `card` or `link`.
+    pub has: Option<String>,
+    /// The `nextCursor` of the previous page.
+    pub before: Option<String>,
+    pub limit: Option<u32>,
+}
 
 // ---------------------------------------------------------------------------
 // Context
@@ -685,35 +727,52 @@ impl OnlineClient {
         body: reqwest::Body,
     ) -> Result<BlobReceipt> {
         self.check_context(ctx)?;
-        let token = ctx.token()?;
+        ctx.token()?;
         let path = format!("/v1/blobs/{}", path_segment(sha256)?);
+        self.put_stream(ctx, &path, size, body).await?.json()
+    }
+
+    // --- slice: chat ---
+    /// Uploads a stream of `size` bytes to `path` on the transfer client,
+    /// with the token: the body of a bundle file or of a chat file.
+    ///
+    /// No retry, for the reason [`OnlineClient::put_blob`] gives: the stream
+    /// is spent by the first attempt.
+    pub async fn put_stream(
+        &self,
+        ctx: &OnlineContext,
+        path: &str,
+        size: u64,
+        body: reqwest::Body,
+    ) -> Result<OnlineResponse> {
+        self.check_context(ctx)?;
+        let token = ctx.token()?;
         let response = self
             .transfer()?
-            .put(ctx.url(&path))
+            .put(ctx.url(path))
             .header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"))
             .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
             .header(reqwest::header::CONTENT_LENGTH, size)
             .body(body)
             .send()
             .await
-            .map_err(|e| transport_error(&Method::PUT, &path, &e))?;
+            .map_err(|e| transport_error(&Method::PUT, path, &e))?;
         let status = response.status();
         let bytes = response
             .bytes()
             .await
-            .map_err(|e| transport_error(&Method::PUT, &path, &e))?;
+            .map_err(|e| transport_error(&Method::PUT, path, &e))?;
         log::info!("online PUT {path} -> {}", status.as_u16());
         if !status.is_success() {
-            if refuses_the_token(status, &path) {
+            if refuses_the_token(status, path) {
                 self.note_refused_token(token);
             }
-            return Err(online_error(status, &bytes));
+            return Err(service_error(path, status, &bytes));
         }
-        OnlineResponse {
+        Ok(OnlineResponse {
             status,
             body: bytes.to_vec(),
-        }
-        .json()
+        })
     }
 
     /// `GET /v1/blobs/{sha256}`: opens the stream of one file of a bundle.
@@ -733,22 +792,60 @@ impl OnlineClient {
     ) -> Result<reqwest::Response> {
         self.check_context(ctx)?;
         let path = format!("/v1/blobs/{}", path_segment(sha256)?);
-        let mut request = self.transfer()?.get(ctx.url(&path));
+        self.get_stream(ctx, &path, from, Auth::None).await
+    }
+
+    // --- slice: chat ---
+    /// Opens the stream of `path` on the transfer client with the token,
+    /// from byte `start` on: the content of a chat file, which only members
+    /// may read. The caller checks for `206` before it appends to a partial
+    /// file.
+    pub async fn get_range(
+        &self,
+        ctx: &OnlineContext,
+        path: &str,
+        start: u64,
+    ) -> Result<reqwest::Response> {
+        self.get_stream(ctx, path, start, Auth::Required).await
+    }
+
+    /// The one GET of the transfer client, anonymous for a bundle file and
+    /// authenticated for a chat file.
+    async fn get_stream(
+        &self,
+        ctx: &OnlineContext,
+        path: &str,
+        from: u64,
+        auth: Auth,
+    ) -> Result<reqwest::Response> {
+        self.check_context(ctx)?;
+        let token = match auth {
+            Auth::None => None,
+            Auth::Optional => ctx.token.as_deref(),
+            Auth::Required => Some(ctx.token()?),
+        };
+        let mut request = self.transfer()?.get(ctx.url(path));
+        if let Some(token) = token {
+            request = request.header(reqwest::header::AUTHORIZATION, format!("Bearer {token}"));
+        }
         if from > 0 {
             request = request.header(reqwest::header::RANGE, format!("bytes={from}-"));
         }
         let response = request
             .send()
             .await
-            .map_err(|e| transport_error(&Method::GET, &path, &e))?;
+            .map_err(|e| transport_error(&Method::GET, path, &e))?;
         let status = response.status();
         log::info!("online GET {path} -> {}", status.as_u16());
         if !status.is_success() {
             let bytes = response
                 .bytes()
                 .await
-                .map_err(|e| transport_error(&Method::GET, &path, &e))?;
-            return Err(online_error(status, &bytes));
+                .map_err(|e| transport_error(&Method::GET, path, &e))?;
+            if let Some(token) = token.filter(|_| refuses_the_token(status, path)) {
+                self.note_refused_token(token);
+            }
+            return Err(service_error(path, status, &bytes));
         }
         Ok(response)
     }
@@ -866,10 +963,419 @@ impl OnlineClient {
             if let Some(token) = token.filter(|_| refuses_the_token(status, path)) {
                 self.note_refused_token(token);
             }
-            return Err(online_error(status, &body));
+            return Err(service_error(path, status, &body));
         }
         Ok(OnlineResponse { status, body })
     }
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: chat ---
+// The chat API, one method per route. Ids go through `path_segment`, so a
+// conversation id can never climb out of `/v1/chat/`.
+// ---------------------------------------------------------------------------
+
+impl OnlineClient {
+    /// `GET /v1/chat/conversations`: every conversation, the group invites,
+    /// the settings and the file quota.
+    pub async fn chat_sync(&self, ctx: &OnlineContext) -> Result<ChatSyncDoc> {
+        self.request(ctx, Method::GET, "/v1/chat/conversations", None, Auth::Required)
+            .await
+    }
+
+    pub async fn chat_conversation(&self, ctx: &OnlineContext, id: &str) -> Result<Conversation> {
+        let path = format!("/v1/chat/conversations/{}", path_segment(id)?);
+        self.request(ctx, Method::GET, &path, None, Auth::Required).await
+    }
+
+    /// `PUT /v1/chat/direct/{userId}`: the direct conversation with a friend,
+    /// made on the first call and returned as it is on every later one.
+    pub async fn chat_open_direct(&self, ctx: &OnlineContext, user_id: &str) -> Result<Conversation> {
+        let path = format!("/v1/chat/direct/{}", path_segment(user_id)?);
+        self.request(ctx, Method::PUT, &path, None, Auth::Required).await
+    }
+
+    /// `POST /v1/chat/groups`. The same `client_id` twice answers the group
+    /// the first call made.
+    pub async fn chat_create_group(
+        &self,
+        ctx: &OnlineContext,
+        client_id: &str,
+        title: Option<&str>,
+        member_ids: &[String],
+    ) -> Result<GroupResult> {
+        let mut body = serde_json::json!({ "clientId": client_id, "memberIds": member_ids });
+        if let Some(title) = title {
+            body["title"] = Value::String(title.to_string());
+        }
+        self.request(ctx, Method::POST, "/v1/chat/groups", Some(body), Auth::Required)
+            .await
+    }
+
+    /// `PATCH /v1/chat/groups/{id}`: the title, the history setting, or both.
+    /// The owner only; anybody else gets `owner_only`.
+    pub async fn chat_patch_group(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        title: Option<&str>,
+        history_for_new_members: Option<bool>,
+    ) -> Result<Conversation> {
+        let path = format!("/v1/chat/groups/{}", path_segment(id)?);
+        let mut body = serde_json::Map::new();
+        if let Some(title) = title {
+            body.insert("title".into(), Value::String(title.to_string()));
+        }
+        if let Some(on) = history_for_new_members {
+            body.insert("historyForNewMembers".into(), Value::Bool(on));
+        }
+        self.request(ctx, Method::PATCH, &path, Some(Value::Object(body)), Auth::Required)
+            .await
+    }
+
+    pub async fn chat_add_members(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        user_ids: &[String],
+    ) -> Result<AddResult> {
+        let path = format!("/v1/chat/groups/{}/members", path_segment(id)?);
+        let body = serde_json::json!({ "userIds": user_ids });
+        self.request(ctx, Method::POST, &path, Some(body), Auth::Required)
+            .await
+    }
+
+    /// Accepts a pending group invite.
+    pub async fn chat_join_group(&self, ctx: &OnlineContext, id: &str) -> Result<Conversation> {
+        let path = format!("/v1/chat/groups/{}/join", path_segment(id)?);
+        self.request(ctx, Method::POST, &path, None, Auth::Required).await
+    }
+
+    /// Declines an invite addressed to `user_id` when that is the caller,
+    /// cancels it when the caller sent it or owns the group.
+    pub async fn chat_remove_group_invite(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "/v1/chat/groups/{}/invites/{}",
+            path_segment(id)?,
+            path_segment(user_id)?
+        );
+        self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
+    }
+
+    /// Leaves a group or a server chat (`user_id` is the caller), or removes
+    /// somebody from one (the owner or the host).
+    pub async fn chat_remove_member(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        user_id: &str,
+    ) -> Result<()> {
+        let path = format!(
+            "/v1/chat/conversations/{}/members/{}",
+            path_segment(id)?,
+            path_segment(user_id)?
+        );
+        self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
+    }
+
+    /// `PATCH /v1/chat/servers/{sessionId}`: the history setting of a server
+    /// chat. The host only.
+    pub async fn chat_patch_server(
+        &self,
+        ctx: &OnlineContext,
+        session_id: &str,
+        history_for_new_members: bool,
+    ) -> Result<Conversation> {
+        let path = format!("/v1/chat/servers/{}", path_segment(session_id)?);
+        let body = serde_json::json!({ "historyForNewMembers": history_for_new_members });
+        self.request(ctx, Method::PATCH, &path, Some(body), Auth::Required)
+            .await
+    }
+
+    /// One page of history. `limit` is clamped by the service to 200.
+    pub async fn chat_messages(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        anchor: PageAnchor,
+        limit: Option<u32>,
+    ) -> Result<MessagePage> {
+        let mut path = format!("/v1/chat/conversations/{}/messages", path_segment(id)?);
+        let mut query = Vec::new();
+        match anchor {
+            PageAnchor::Latest => {}
+            PageAnchor::Before(seq) => query.push(format!("before={seq}")),
+            PageAnchor::After(seq) => query.push(format!("after={seq}")),
+            PageAnchor::Around(seq) => query.push(format!("around={seq}")),
+        }
+        if let Some(limit) = limit {
+            query.push(format!("limit={}", limit.clamp(1, 200)));
+        }
+        if !query.is_empty() {
+            path.push('?');
+            path.push_str(&query.join("&"));
+        }
+        self.request(ctx, Method::GET, &path, None, Auth::Required).await
+    }
+
+    /// Sends a message. A replay of the same `clientId` answers the stored
+    /// message with `200` instead of `201`, and the caller need not know which.
+    pub async fn chat_send(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        message: &NewMessage,
+    ) -> Result<ChatMessage> {
+        let path = format!("/v1/chat/conversations/{}/messages", path_segment(id)?);
+        let body = to_value(message)?;
+        self.request(ctx, Method::POST, &path, Some(body), Auth::Required)
+            .await
+    }
+
+    /// Moves the read marker. The service keeps it monotonic and clamps it to
+    /// the last message, and answers the marker it kept.
+    pub async fn chat_read(&self, ctx: &OnlineContext, id: &str, seq: u64) -> Result<u64> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Answer {
+            read_seq: u64,
+        }
+        let path = format!("/v1/chat/conversations/{}/read", path_segment(id)?);
+        let body = serde_json::json!({ "seq": seq });
+        let answer: Answer = self
+            .request(ctx, Method::POST, &path, Some(body), Auth::Required)
+            .await?;
+        Ok(answer.read_seq)
+    }
+
+    /// Adds or takes back one reaction, and answers the reactions of the
+    /// message after the change.
+    pub async fn chat_react(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        seq: u64,
+        emoji: &str,
+        on: bool,
+    ) -> Result<Vec<ReactionGroup>> {
+        #[derive(serde::Deserialize)]
+        struct Answer {
+            #[serde(default)]
+            reactions: Vec<ReactionGroup>,
+        }
+        let path = format!("/v1/chat/conversations/{}/reactions", path_segment(id)?);
+        let body = serde_json::json!({ "seq": seq, "emoji": emoji, "on": on });
+        let answer: Answer = self
+            .request(ctx, Method::PUT, &path, Some(body), Auth::Required)
+            .await?;
+        Ok(answer.reactions)
+    }
+
+    /// `all`, `mentions` or `mute` for one conversation, for this account.
+    pub async fn chat_set_notify(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        notify: &str,
+    ) -> Result<Conversation> {
+        let path = format!("/v1/chat/conversations/{}/notify", path_segment(id)?);
+        let body = serde_json::json!({ "notify": notify });
+        self.request(ctx, Method::PUT, &path, Some(body), Auth::Required)
+            .await
+    }
+
+    pub async fn chat_search(&self, ctx: &OnlineContext, query: &SearchQuery) -> Result<SearchPage> {
+        let mut path = format!(
+            "/v1/chat/search?q={}",
+            utf8_percent_encode(query.q.trim(), NON_ALPHANUMERIC)
+        );
+        let mut push = |key: &str, value: Option<&str>| {
+            if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
+                path.push_str(&format!("&{key}={}", utf8_percent_encode(value, NON_ALPHANUMERIC)));
+            }
+        };
+        push("conversationId", query.conversation_id.as_deref());
+        push("senderId", query.sender_id.as_deref());
+        push("has", query.has.as_deref());
+        push("before", query.before.as_deref());
+        if let Some(limit) = query.limit {
+            path.push_str(&format!("&limit={}", limit.clamp(1, 50)));
+        }
+        self.request(ctx, Method::GET, &path, None, Auth::Required).await
+    }
+
+    /// `POST /v1/chat/files`: registers a file for one conversation before its
+    /// bytes go up.
+    pub async fn chat_register_file(
+        &self,
+        ctx: &OnlineContext,
+        conversation_id: &str,
+        name: &str,
+        size: u64,
+        sha256: &str,
+        meta: Option<&FileMeta>,
+    ) -> Result<FileRegistration> {
+        let mut body = serde_json::json!({
+            "conversationId": conversation_id,
+            "name": name,
+            "size": size,
+            "sha256": sha256,
+        });
+        if let Some(meta) = meta {
+            body["meta"] = to_value(meta)?;
+        }
+        self.request(ctx, Method::POST, "/v1/chat/files", Some(body), Auth::Required)
+            .await
+    }
+
+    /// `PUT /v1/chat/files/{id}/content`: the bytes of a registered file.
+    pub async fn chat_upload_file(
+        &self,
+        ctx: &OnlineContext,
+        file_id: &str,
+        size: u64,
+        body: reqwest::Body,
+    ) -> Result<FileRegistration> {
+        let path = format!("/v1/chat/files/{}/content", path_segment(file_id)?);
+        let response = self.put_stream(ctx, &path, size, body).await?;
+        // The upload answers `{file}` alone; the registration shape is reused
+        // with `needsUpload` false, which is what an uploaded file is.
+        response.json()
+    }
+
+    pub async fn chat_settings(&self, ctx: &OnlineContext) -> Result<ChatPrivacy> {
+        self.request(ctx, Method::GET, "/v1/chat/settings", None, Auth::Required)
+            .await
+    }
+
+    pub async fn chat_update_settings(
+        &self,
+        ctx: &OnlineContext,
+        patch: &ChatPrivacyPatch,
+    ) -> Result<ChatPrivacy> {
+        let body = to_value(patch)?;
+        self.request(ctx, Method::PATCH, "/v1/chat/settings", Some(body), Auth::Required)
+            .await
+    }
+}
+
+// The routes of server chats and the download of a chat file. Their callers
+// are the server-chat hooks of hosting and joining and the file cache, which
+// land after the plumbing that carries these.
+#[allow(dead_code)]
+impl OnlineClient {
+    /// `PUT /v1/chat/servers/{sessionId}`: the host opens the chat of the
+    /// server it runs now. `409 not_hosting` until its presence says so.
+    pub async fn chat_open_server(
+        &self,
+        ctx: &OnlineContext,
+        session_id: &str,
+    ) -> Result<Conversation> {
+        let path = format!("/v1/chat/servers/{}", path_segment(session_id)?);
+        self.request(ctx, Method::PUT, &path, None, Auth::Required).await
+    }
+
+    /// A guest joins the chat of a friend's server.
+    pub async fn chat_join_server(
+        &self,
+        ctx: &OnlineContext,
+        session_id: &str,
+        host_user_id: &str,
+    ) -> Result<Conversation> {
+        let path = format!("/v1/chat/servers/{}/join", path_segment(session_id)?);
+        let body = serde_json::json!({ "hostUserId": host_user_id });
+        self.request(ctx, Method::POST, &path, Some(body), Auth::Required)
+            .await
+    }
+
+    /// The host ends the chat of its server. A second call is not an error.
+    pub async fn chat_close_server(&self, ctx: &OnlineContext, session_id: &str) -> Result<()> {
+        let path = format!("/v1/chat/servers/{}", path_segment(session_id)?);
+        self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
+    }
+
+    /// Opens the content of a chat file from byte `start`.
+    pub async fn chat_file_content(
+        &self,
+        ctx: &OnlineContext,
+        file_id: &str,
+        start: u64,
+    ) -> Result<reqwest::Response> {
+        let path = format!("/v1/chat/files/{}/content", path_segment(file_id)?);
+        self.get_range(ctx, &path, start).await
+    }
+}
+
+/// Whether a failure is worth another attempt of the same request later: the
+/// network, a rate limit, or a service that failed on its own side.
+///
+/// A refusal with a reason — not a friend, too long, not the owner — will be
+/// refused again, so it is not.
+pub fn is_retryable(error: &AppError) -> bool {
+    match error {
+        AppError::Network(_) => true,
+        AppError::Online { code, .. } => {
+            matches!(code.as_str(), "rate_limited" | "internal" | "provider_error")
+        }
+        _ => false,
+    }
+}
+
+/// Whether the service answered that it has no chat API at all.
+pub fn is_chat_unavailable(error: &AppError) -> bool {
+    matches!(error, AppError::Online { code, .. } if code == CHAT_UNAVAILABLE_CODE)
+}
+
+/// The error of a refused request, by the path it was refused on.
+fn service_error(path: &str, status: StatusCode, body: &[u8]) -> AppError {
+    if path.starts_with(CHAT_PREFIX) {
+        chat_refusal(status, body)
+    } else {
+        online_error(status, body)
+    }
+}
+
+/// A refusal of the chat API.
+///
+/// The chat routes answer with the codes of the contract and name the cause
+/// in `details.reason`: `403 forbidden` is `owner_only` in one place and
+/// `not_friends` in another, and the screens need the cause. So the reason
+/// becomes the code the frontend reads. A service without chat routes answers
+/// `404 No such endpoint`, which becomes [`CHAT_UNAVAILABLE_CODE`].
+fn chat_refusal(status: StatusCode, body: &[u8]) -> AppError {
+    let error = online_error(status, body);
+    let AppError::Online { code, message } = error else {
+        return error;
+    };
+    if status == StatusCode::NOT_FOUND
+        && code == "not_found"
+        && message.trim().eq_ignore_ascii_case("no such endpoint")
+    {
+        return AppError::Online {
+            code: CHAT_UNAVAILABLE_CODE.to_string(),
+            message: "this JKNet Online service has no chat".to_string(),
+        };
+    }
+    match refusal_reason(body) {
+        Some(reason) => AppError::Online { code: reason, message },
+        None => AppError::Online { code, message },
+    }
+}
+
+/// `error.details.reason` of an error document, when it is a code: lower
+/// case letters and underscores, like the codes it stands in for.
+fn refusal_reason(body: &[u8]) -> Option<String> {
+    let document: Value = serde_json::from_slice(body).ok()?;
+    let reason = document.pointer("/error/details/reason")?.as_str()?.trim();
+    let is_code = !reason.is_empty()
+        && reason.len() <= 40
+        && reason.chars().all(|c| c.is_ascii_lowercase() || c == '_');
+    is_code.then(|| reason.to_string())
 }
 
 // --- slice: play with friends ---
@@ -1374,6 +1880,69 @@ mod tests {
             body: Vec::new(),
         };
         response.json::<()>().expect("204 carries nothing");
+    }
+
+    // --- slice: chat ---
+    #[test]
+    fn a_chat_refusal_takes_its_reason_as_the_code() {
+        let body = br#"{"error":{"code":"forbidden","message":"Only the owner can rename the group","details":{"reason":"owner_only"}}}"#;
+        match service_error("/v1/chat/groups/01J", StatusCode::FORBIDDEN, body) {
+            AppError::Online { code, message } => {
+                assert_eq!(code, "owner_only");
+                assert_eq!(message, "Only the owner can rename the group");
+            }
+            other => panic!("expected a chat refusal, got {other:?}"),
+        }
+        // Without a reason the code of the document stays.
+        let body = br#"{"error":{"code":"not_found","message":"No such conversation"}}"#;
+        match service_error("/v1/chat/conversations/01J", StatusCode::NOT_FOUND, body) {
+            AppError::Online { code, .. } => assert_eq!(code, "not_found"),
+            other => panic!("expected a chat refusal, got {other:?}"),
+        }
+        // A reason that is not a code does not replace one.
+        let body = br#"{"error":{"code":"invalid","message":"x","details":{"reason":"Not A Code"}}}"#;
+        match service_error("/v1/chat/files", StatusCode::BAD_REQUEST, body) {
+            AppError::Online { code, .. } => assert_eq!(code, "invalid"),
+            other => panic!("expected a chat refusal, got {other:?}"),
+        }
+        // Outside the chat API the details are left alone, as before.
+        let body = br#"{"error":{"code":"forbidden","message":"x","details":{"reason":"owner_only"}}}"#;
+        match service_error("/v1/friends", StatusCode::FORBIDDEN, body) {
+            AppError::Online { code, .. } => assert_eq!(code, "forbidden"),
+            other => panic!("expected a service error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_service_without_chat_routes_marks_the_chat_unavailable() {
+        // What the service's fallback route answers, and what the mock's does.
+        for body in [
+            &br#"{"error":{"code":"not_found","message":"No such endpoint"}}"#[..],
+            &br#"{"error":{"code":"not_found","message":"no such endpoint"}}"#[..],
+        ] {
+            let error = service_error("/v1/chat/conversations", StatusCode::NOT_FOUND, body);
+            assert!(is_chat_unavailable(&error), "{error:?}");
+        }
+        // A conversation the player is not in is an ordinary 404.
+        let body = br#"{"error":{"code":"not_found","message":"No such conversation"}}"#;
+        let error = service_error("/v1/chat/conversations/01J", StatusCode::NOT_FOUND, body);
+        assert!(!is_chat_unavailable(&error));
+        // And the same fallback outside chat means something else.
+        let body = br#"{"error":{"code":"not_found","message":"No such endpoint"}}"#;
+        let error = service_error("/v1/bundles/x", StatusCode::NOT_FOUND, body);
+        assert!(!is_chat_unavailable(&error));
+    }
+
+    #[test]
+    fn only_the_network_a_rate_limit_and_a_failing_service_are_retried() {
+        assert!(is_retryable(&AppError::Network("reset".into())));
+        for code in ["rate_limited", "internal", "provider_error"] {
+            assert!(is_retryable(&AppError::Online { code: code.into(), message: "x".into() }));
+        }
+        for code in ["not_friends", "too_long", "unauthorized", "not_found", "file_gone"] {
+            assert!(!is_retryable(&AppError::Online { code: code.into(), message: "x".into() }));
+        }
+        assert!(!is_retryable(&AppError::SignedOut));
     }
 
     #[test]

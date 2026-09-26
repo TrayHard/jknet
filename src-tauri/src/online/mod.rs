@@ -56,3 +56,16 @@ pub use types::{
     Friend, FriendRemoved, FriendRequest, HostingInfo, Invite, LiveFrame, NewInvite, OnlineUser,
     Presence, PresenceUpdate, PresenceUpdated, RelayGrant, SendRequestResult, SignInPoll,
 };
+// --- slice: chat ---
+// The chat API: its wire types, which `crate::chat` keeps and forwards to the
+// windows as they are, and the helpers that read its refusals. Only what
+// `crate::chat` names; the structures nested inside these travel with them.
+pub use client::{is_chat_unavailable, is_retryable, PageAnchor, SearchQuery};
+pub use types::{
+    AddResult, ChatMessage, ChatPrivacy, ChatPrivacyPatch, ChatQuota, ChatSyncDoc, Conversation,
+    FileMeta, GroupInvite, GroupResult, MessagePage, NewMessage, ReactionGroup, SearchPage,
+};
+/// The member entry of a conversation, which the tests of `crate::chat` build
+/// summaries from.
+#[cfg(test)]
+pub use types::ChatMember;

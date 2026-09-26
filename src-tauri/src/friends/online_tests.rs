@@ -34,10 +34,10 @@ use crate::online::{
 const FRAME_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// One signed-in account: who it is and how to call as it.
-struct Player {
-    name: String,
-    user: OnlineUser,
-    ctx: OnlineContext,
+pub(crate) struct Player {
+    pub(crate) name: String,
+    pub(crate) user: OnlineUser,
+    pub(crate) ctx: OnlineContext,
 }
 
 #[tokio::test]
@@ -231,7 +231,7 @@ where
 /// The launcher opens `session.url` in the system browser and lets the player
 /// type a name; this does the same two requests with `reqwest`, because that
 /// form is the whole of the `dev` provider.
-async fn sign_in(client: &OnlineClient, display_name: &str) -> Player {
+pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player {
     let anonymous = OnlineContext {
         base_url: DEV_ONLINE_URL.into(),
         token: None,

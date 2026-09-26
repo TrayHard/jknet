@@ -31,6 +31,7 @@
 //! | `archive`        | one bounded walk over the entries of a pk3, for the modules that list one |
 //! | `pk3_editor`     | one pk3 archive open for editing, and the rewrite that saves it |
 //! | `hosting`        | a private server on this PC, its relay tunnel, and joining one |
+//! | `chat`           | friends chat: summaries, the send queue, the `chat.*` frames |
 
 mod account;
 // --- slice: bundles ---
@@ -43,6 +44,11 @@ mod archive;
 // plan, the upload and the install. Its own module rather than a part of
 // `clients`: a bundle lives on the service, and a client only keeps a link.
 mod bundles;
+// --- slice: chat ---
+// Friends chat on top of `online` and the live socket of `friends`: the
+// summaries of every conversation, the send queue, read markers and the
+// `chat.*` frames. The core is the only writer; windows display and report.
+mod chat;
 mod community;
 // --- slice: player profiles ---
 // The skins and saber hilts a client can offer a profile, read out of the
@@ -209,6 +215,10 @@ pub fn run() {
                 }
                 tauri::WindowEvent::Destroyed => {
                     log::info!("window {label}: destroyed");
+                    // --- slice: chat ---
+                    // A closed window no longer shows a conversation, so
+                    // messages there count as unread again.
+                    chat::forget_window(window.app_handle(), label);
                 }
                 _ => return,
             }
@@ -313,6 +323,10 @@ pub fn run() {
             // cost nothing until a token appears, and neither of them touches
             // the window, so nothing here can hold up the first frame.
             friends::start(app.handle());
+            // --- slice: chat ---
+            // The sync task: it follows the account and the epochs of the
+            // live socket that `friends::start` has just set up.
+            chat::start(app.handle());
             // --- slice: jkhub ---
             // One client, one cookie jar and one limiter for the whole run.
             // Built here rather than per call: the session a `csrfKey` belongs
@@ -378,6 +392,10 @@ pub fn run() {
         // up. Kept apart from `AppState` for the same reason as the two above:
         // a background task must not queue behind a settings write.
         .manage(FriendsState::default())
+        // --- slice: chat ---
+        // The summaries, drafts, send queue and read markers of chat. Memory
+        // only: the service keeps the history.
+        .manage(chat::ChatState::default())
         // --- slice: servers browser ---
         // Which tabs of which game have a scan in flight. Two tabs may scan at
         // once, one tab may not scan twice: the guard lives here rather than in
@@ -520,6 +538,30 @@ pub fn run() {
             hosting::host_retry_relay,
             hosting::host_invite,
             hosting::host_open_log,
+            // --- slice: chat ---
+            chat::chat_get_state,
+            chat::chat_get_messages,
+            chat::chat_open_direct,
+            chat::chat_send,
+            chat::chat_retry,
+            chat::chat_discard,
+            chat::chat_set_viewing,
+            chat::chat_mark_read,
+            chat::chat_typing,
+            chat::chat_react,
+            chat::chat_create_group,
+            chat::chat_rename_group,
+            chat::chat_set_history_for_new_members,
+            chat::chat_add_members,
+            chat::chat_remove_member,
+            chat::chat_leave,
+            chat::chat_answer_group_invite,
+            chat::chat_set_notify,
+            chat::chat_search,
+            chat::chat_get_privacy,
+            chat::chat_update_privacy,
+            chat::chat_get_draft,
+            chat::chat_set_draft,
             // --- slice: jkhub ---
             jkhub::jkhub_categories,
             jkhub::jkhub_list,

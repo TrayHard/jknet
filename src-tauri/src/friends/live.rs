@@ -19,6 +19,15 @@
 //! | `presence.updated` | `friends:presence`  | patch one row               |
 //! | `invite`           | `friends:invite`    | toast, and refetch          |
 //! | `ping`             | —                   | answered with `pong`        |
+//! | `chat.*`           | `chat:*`            | see `crate::chat::frames`   |
+//!
+//! --- slice: chat ---
+//! The upgrade request says `X-JKNet-Features: chat`, and only a socket that
+//! says so receives `chat.*` frames: launchers up to 0.6.0 never see them.
+//! The same socket carries frames the other way, the typing hint of chat,
+//! through a small queue in [`FriendsState`] that exists while the socket is
+//! up. Every opening bumps [`FriendsState::bump_epoch`], which is how chat
+//! knows to refetch what it may have missed.
 //!
 //! A `friend.*` frame carries the whole entity, and forwarding it would mean
 //! merging three lists in the window. Refetching one small document instead
@@ -56,7 +65,7 @@ use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION;
@@ -85,6 +94,18 @@ const SILENCE_TIMEOUT: Duration = Duration::from_secs(90);
 /// How long the loop waits before looking for a token again, when nothing
 /// wakes it sooner.
 const SIGNED_OUT_POLL: Duration = Duration::from_secs(60);
+
+// --- slice: chat ---
+/// The header that opts a socket in to the frames of newer features.
+const FEATURES_HEADER: &str = "x-jknet-features";
+
+/// What this launcher asks for in [`FEATURES_HEADER`].
+const FEATURES: &str = "chat";
+
+/// How many outbound frames may wait for the socket. Typing hints go out at
+/// most one per conversation every 3 s, so a full queue means a socket that
+/// stopped writing, and dropping is the right answer.
+const OUTBOUND_CAPACITY: usize = 16;
 
 /// Starts the live task. Called once from `setup`; runs for the process.
 pub fn start(app: &AppHandle) {
@@ -155,7 +176,22 @@ pub(crate) fn upgrade_request(ctx: &OnlineContext) -> Result<Request, String> {
         .map_err(|_| "the stored token cannot travel in a header".to_string())?;
     value.set_sensitive(true);
     request.headers_mut().insert(AUTHORIZATION, value);
+    // --- slice: chat ---
+    request
+        .headers_mut()
+        .insert(FEATURES_HEADER, HeaderValue::from_static(FEATURES));
     Ok(request)
+}
+
+// --- slice: chat ---
+/// Takes the outbound queue back from [`FriendsState`] however the socket
+/// ends, so a frame is never queued for a socket that is gone.
+struct OutboundGuard<'a>(&'a AppHandle);
+
+impl Drop for OutboundGuard<'_> {
+    fn drop(&mut self) {
+        self.0.state::<FriendsState>().set_outbound(None);
+    }
 }
 
 /// Holds one connection open and forwards its frames.
@@ -175,6 +211,15 @@ async fn pump(
         .map_err(|e| format!("cannot open {url}: {e}"))?;
     log::info!("live socket open");
     set_connected(app, true);
+    // --- slice: chat ---
+    // The queue of frames for the service lives as long as this socket.
+    let (outbound, mut outgoing) = mpsc::channel::<String>(OUTBOUND_CAPACITY);
+    let friends = app.state::<FriendsState>();
+    friends.set_outbound(Some(outbound));
+    let _outbound = OutboundGuard(app);
+    // Chat refetches what it keeps: frames sent while the socket was down
+    // are not replayed.
+    friends.bump_epoch();
     // A fresh socket may have missed anything, so the screen refetches once.
     emit(app, EVENT_CHANGED, ());
 
@@ -188,6 +233,17 @@ async fn pump(
                 let _ = socket.close(None).await;
                 log::info!("live socket closed: the account changed");
                 return Ok(delivered);
+            }
+            // --- slice: chat ---
+            // A frame for the service. The sender half lives in
+            // `FriendsState` until the guard above takes it back, so `None`
+            // cannot arrive while this loop runs.
+            Some(text) = outgoing.recv() => {
+                socket
+                    .send(Message::Text(text.into()))
+                    .await
+                    .map_err(|e| format!("cannot send a frame: {e}"))?;
+                continue;
             }
             next = tokio::time::timeout(SILENCE_TIMEOUT, socket.next()) => match next {
                 Err(_) => return Err("no frame for 90 s, reconnecting".into()),
@@ -275,6 +331,8 @@ fn handle_frame(app: &AppHandle, text: &str) -> bool {
         "friend.request" | "friend.accepted" | "me.updated" => {
             emit(app, EVENT_CHANGED, ());
         }
+        // --- slice: chat ---
+        kind if kind.starts_with("chat.") => crate::chat::frames::handle(app, kind, frame.payload),
         other => log::debug!("live frame {other} ignored"),
     }
     false
@@ -282,7 +340,13 @@ fn handle_frame(app: &AppHandle, text: &str) -> bool {
 
 /// Records whether the socket is up, for the badge on the Friends screen.
 fn set_connected(app: &AppHandle, connected: bool) {
-    app.state::<FriendsState>().set_live(connected);
+    let state = app.state::<FriendsState>();
+    let was = state.live();
+    state.set_live(connected);
+    // --- slice: chat --- the chat screens show whether they are live too.
+    if was != connected {
+        crate::chat::connection_changed(app);
+    }
 }
 
 /// Emits and swallows the failure: the only way `emit` fails is a window that
@@ -333,6 +397,8 @@ mod tests {
         assert!(request.headers().contains_key("sec-websocket-key"));
         // Neither the address nor a `{:?}` of the request prints the token.
         assert!(!format!("{request:?}").contains("deadbeef"));
+        // --- slice: chat --- the socket opts in to the frames of chat.
+        assert_eq!(request.headers()["x-jknet-features"], "chat");
     }
 
     #[test]
@@ -370,7 +436,9 @@ mod live_tests {
     use crate::online::mock_tests::MockOnline;
 
     /// Not the stock port: a machine running the real service has that one.
-    const PORT: u16 = 8795;
+    /// Not 8795 either, which a mock test of bundles takes: two ignored
+    /// suites run together must not share a port.
+    const PORT: u16 = 8800;
 
     #[tokio::test]
     #[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]

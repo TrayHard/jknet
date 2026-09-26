@@ -162,7 +162,18 @@ impl DataPaths {
     pub fn bundle_preview_cache_dir(&self) -> PathBuf {
         self.cache.join(BUNDLES_DIR).join(BUNDLE_PREVIEW_CACHE_DIR)
     }
+
+    // --- slice: chat ---
+    /// `cache\chat\`: the files of chat, staged and downloaded. It belongs to
+    /// one account and goes when the player signs out or switches accounts.
+    pub fn chat_cache_dir(&self) -> PathBuf {
+        self.cache.join(CHAT_DIR)
+    }
 }
+
+// --- slice: chat ---
+/// Name of the folder of chat files inside `cache\`.
+pub const CHAT_DIR: &str = "chat";
 
 // --- slice: bundles ---
 /// Name of the folder of everything about bundles inside the data root.

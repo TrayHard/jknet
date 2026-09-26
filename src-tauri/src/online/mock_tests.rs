@@ -65,6 +65,13 @@ impl Drop for MockOnline {
 impl MockOnline {
     /// Starts the mock and waits until it accepts a connection.
     pub(crate) fn start(port: u16) -> MockOnline {
+        MockOnline::start_with(port, &[])
+    }
+
+    // --- slice: chat ---
+    /// Starts the mock with extra environment variables, such as how fast the
+    /// cast answers in chat.
+    pub(crate) fn start_with(port: u16, env: &[(&str, &str)]) -> MockOnline {
         let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("src-tauri has a parent")
@@ -72,7 +79,8 @@ impl MockOnline {
             .join("mock-online.mjs");
         assert!(script.is_file(), "{} is missing", script.display());
 
-        let child = Command::new("node")
+        let mut command = Command::new("node");
+        command
             .arg(&script)
             .arg("--port")
             .arg(port.to_string())
@@ -80,7 +88,11 @@ impl MockOnline {
             // default exists to show a real player a real "waiting" state.
             .env("MOCK_ONLINE_DEV_DELAY_MS", "0")
             .stdout(Stdio::null())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::inherit());
+        for (key, value) in env {
+            command.env(key, value);
+        }
+        let child = command
             .spawn()
             .expect("node is on PATH and scripts/mock-online.mjs starts");
 

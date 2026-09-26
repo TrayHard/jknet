@@ -43,8 +43,10 @@
 //! `friends:changed` is a nudge, not a payload: the window answers it by
 //! calling [`get_friends_state`], which keeps one writer for the three lists.
 
+/// `pub(crate)` for its sign-in helper: the chat walk against the real
+/// service signs its two players in the same way.
 #[cfg(test)]
-mod online_tests;
+pub(crate) mod online_tests;
 pub mod live;
 pub mod presence;
 
@@ -55,7 +57,7 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{AppHandle, Listener, Manager};
-use tokio::sync::watch;
+use tokio::sync::{mpsc, watch};
 
 use crate::account::{AccountChanged, ACCOUNT_CHANGED_EVENT};
 use crate::error::{AppError, Result};
@@ -105,6 +107,15 @@ pub struct FriendsState {
     /// a rename announces the same event as a sign-in, and dropping a working
     /// socket over a new display name would be a reconnect for nothing.
     account: watch::Sender<u64>,
+    // --- slice: chat ---
+    /// Bumped each time the live socket opens. A new value means frames may
+    /// have been missed while it was down, so `crate::chat` refetches what it
+    /// keeps.
+    connected_epoch: watch::Sender<u64>,
+    /// Where a frame for the service goes while the socket is up: the typing
+    /// frame of chat. `None` while it is down, so a frame is dropped rather
+    /// than queued for a socket that may never come.
+    outbound: Mutex<Option<mpsc::Sender<String>>>,
 }
 
 impl Default for FriendsState {
@@ -117,6 +128,8 @@ impl Default for FriendsState {
             hosting: Mutex::new(None),
             live: AtomicBool::new(false),
             account: watch::channel(0).0,
+            connected_epoch: watch::channel(0).0,
+            outbound: Mutex::new(None),
         }
     }
 }
@@ -192,6 +205,36 @@ impl FriendsState {
     /// A receiver that resolves whenever the account changes.
     pub fn account_changes(&self) -> watch::Receiver<u64> {
         self.account.subscribe()
+    }
+
+    // --- slice: chat ---
+
+    /// Notes that the live socket has just opened. `send_modify` rather than
+    /// `send`: nobody may be listening yet, which must not lose the count.
+    pub fn bump_epoch(&self) {
+        self.connected_epoch.send_modify(|epoch| *epoch = epoch.wrapping_add(1));
+    }
+
+    /// A receiver that resolves whenever the live socket opens again.
+    pub fn connected_epochs(&self) -> watch::Receiver<u64> {
+        self.connected_epoch.subscribe()
+    }
+
+    /// Hands the live task the sender of its outbound frames, or takes it
+    /// back when the socket closes.
+    pub fn set_outbound(&self, sender: Option<mpsc::Sender<String>>) {
+        *self.outbound.lock().unwrap_or_else(|e| e.into_inner()) = sender;
+    }
+
+    /// Queues one text frame for the service. `false` when the socket is down
+    /// or its queue is full: the frames that travel this way are hints, and
+    /// a stale one is worth less than none.
+    pub fn send_frame(&self, text: String) -> bool {
+        let guard = self.outbound.lock().unwrap_or_else(|e| e.into_inner());
+        match guard.as_ref() {
+            Some(sender) => sender.try_send(text).is_ok(),
+            None => false,
+        }
     }
 }
 
@@ -905,6 +948,38 @@ mod tests {
                 .is_err(),
             "the tasks were woken by something that did not change"
         );
+    }
+
+    // --- slice: chat ---
+    #[tokio::test]
+    async fn every_opening_of_the_socket_is_a_new_epoch() {
+        let state = FriendsState::default();
+        let mut epochs = state.connected_epochs();
+        state.bump_epoch();
+        assert!(epochs.changed().await.is_ok());
+        assert_eq!(*epochs.borrow_and_update(), 1);
+        // Counted even with nobody listening, which is startup.
+        drop(epochs);
+        state.bump_epoch();
+        assert_eq!(*state.connected_epochs().borrow(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_frame_goes_out_only_while_the_socket_is_up() {
+        let state = FriendsState::default();
+        assert!(!state.send_frame("{\"type\":\"chat.typing\"}".into()), "no socket");
+
+        let (sender, mut receiver) = mpsc::channel(1);
+        state.set_outbound(Some(sender));
+        assert!(state.send_frame("one".into()));
+        // A full queue drops the hint rather than waiting.
+        assert!(!state.send_frame("two".into()));
+        assert_eq!(receiver.recv().await.as_deref(), Some("one"));
+
+        state.set_outbound(None);
+        assert!(!state.send_frame("three".into()));
+        // The sender went with the socket, so the receiver sees the end.
+        assert_eq!(receiver.recv().await, None);
     }
 
     // --- slice: online gate ---

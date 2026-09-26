@@ -3,7 +3,7 @@
  *
  * The real service is a separate service. This script answers the part of API v1
  * the launcher uses — sign-in, the account, friends, presence, invites, the
- * live socket and bundles — keeps everything in memory, and depends on nothing
+ * live socket, bundles and chat — keeps everything in memory, and depends on nothing
  * but Node itself, so it starts in the time it takes to read this sentence and
  * forgets everything when it stops.
  *
@@ -63,6 +63,32 @@
  *     *      /v1/relay/*                  503 relay_unavailable: the mock has no
  *                                         relay node; the launcher's server
  *                                         stays up for the local network
+ *     GET    /v1/chat/conversations       the chat sync document
+ *     GET    /v1/chat/conversations/:id   PUT /v1/chat/direct/:userId
+ *     POST   /v1/chat/groups              PATCH /v1/chat/groups/:id (owner only)
+ *     POST   /v1/chat/groups/:id/members  POST /v1/chat/groups/:id/join
+ *     DELETE /v1/chat/groups/:id/invites/:userId
+ *     DELETE /v1/chat/conversations/:id/members/:userId
+ *     PUT    /v1/chat/servers/:sessionId  POST …/join  PATCH (host only)  DELETE
+ *     GET    /v1/chat/conversations/:id/messages   ?before=&after=&around=&limit=
+ *     POST   /v1/chat/conversations/:id/messages   clientId replays answer 200
+ *     POST   /v1/chat/conversations/:id/read       PUT …/reactions  PUT …/notify
+ *     GET    /v1/chat/search              substring, scoped like the service
+ *     POST   /v1/chat/files               PUT|GET|HEAD /v1/chat/files/:id/content
+ *     GET    /v1/chat/settings            PATCH /v1/chat/settings
+ *                                         the two privacy switches are
+ *                                         reciprocal: hiding read receipts
+ *                                         hides everybody's, hiding typing
+ *                                         stops the cast's typing frames.
+ *                                         A refusal names its cause in
+ *                                         error.details.reason. chat.* frames
+ *                                         reach only a socket that sent
+ *                                         X-JKNet-Features: chat
+ *
+ * The cast answers in chat: a message to Kyle, Jan or a group is read, typed
+ * at and answered a moment later. The seeded conversations include one with
+ * a deleted account (read-only, `senderId: null`) and the chat of Jan's
+ * private server, which the account joins through the `selected` policy.
  *
  * The `hosting` object of a private server (TASK-41) passes through the way
  * the service passes it: `PUT /v1/presence` keeps the host's whole object
@@ -72,11 +98,14 @@
  * account in through the `selected` policy. An invite keeps its `hosting`
  * whole, password included: it goes to one friend.
  *
- * Two routes are deliberately outside the contract, both marked below:
+ * Four routes are deliberately outside the contract, all marked below:
  * `POST /v1/dev/token` hands out a token without the browser round trip, and
  * `POST /v1/dev/invite` makes an invitation arrive on demand; with
  * `?hosting=1` or `{ "hosting": true }` the invitation leads to a private
- * server and carries its `hosting`.
+ * server and carries its `hosting`. `POST /v1/dev/chat` makes a member of
+ * the cast post `{ conversationId?, body?, mention? }` (Kyle's direct
+ * conversation by default), and `GET /v1/dev/chat/typing` lists the typing
+ * frames the launcher sent.
  *
  * Environment:
  *
@@ -86,6 +115,8 @@
  *                                      when no browser opens its form
  *     MOCK_ONLINE_TAKEN_NAME   Taken      display name that answers 409
  *     MOCK_ONLINE_ADMIN        1          whether the account reviews bundles
+ *     MOCK_ONLINE_CHAT_REPLY_MS 2500      how long the cast takes to answer in
+ *                                      chat; 0 keeps the cast silent
  *
  * What it is not: it does not check the shape of what you send it beyond what
  * the launcher needs to see refused, and it has no persistence. A test that
@@ -204,12 +235,16 @@ function seedWorld() {
     { id: id(), from: account, to: cast.dash, createdAt: later(-2 * 60_000) },
   ];
   world.invites = [];
+  // --- slice: chat ---
+  seedChat();
 }
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
-  // A file upload is bytes, not JSON.
-  const raw = request.method === "PUT" && url.pathname.startsWith("/v1/blobs/");
+  // A file upload is bytes, not JSON: a bundle file, or a chat file.
+  const raw =
+    request.method === "PUT" &&
+    (url.pathname.startsWith("/v1/blobs/") || /^\/v1\/chat\/files\/[^/]+\/content$/.test(url.pathname));
   readBody(request, raw)
     .then((body) => route(request, response, url, body))
     .catch((e) => {
@@ -316,6 +351,8 @@ function route(request, response, url, body) {
       const friend = accept(acceptMatch[1]);
       if (!friend) return fail(response, 404, "not_found", "That request is gone.");
       broadcast("friend.accepted", { friend });
+      // --- slice: chat --- a read-only conversation with them can send again.
+      directStateChanged(friend.user.id);
       return send(response, 200, friend);
     });
   }
@@ -344,6 +381,8 @@ function route(request, response, url, body) {
         return fail(response, 404, "not_found", "You are not friends with them.");
       }
       broadcast("friend.removed", { userId: friendMatch[1] });
+      // --- slice: chat --- the conversation with them turns read-only (D2).
+      directStateChanged(friendMatch[1]);
       return send(response, 204, null);
     });
   }
@@ -417,6 +456,19 @@ function route(request, response, url, body) {
 
   if (path.startsWith("/v1/bundles") || path.startsWith("/v1/blobs/")) {
     return routeBundles(request, response, url, path, method, body);
+  }
+
+  // --- slice: chat ---
+  if (path.startsWith("/v1/chat/")) {
+    return withAuth(request, response, () => routeChat(request, response, url, path, method, body));
+  }
+  // Not in the contract: a member of the cast posts now, and the typing
+  // frames the launcher sent so far.
+  if (path === "/v1/dev/chat" && method === "POST") {
+    return withAuth(request, response, () => devChatPost(response, body));
+  }
+  if (path === "/v1/dev/chat/typing" && method === "GET") {
+    return withAuth(request, response, () => send(response, 200, { frames: typingSeen }));
   }
 
   return notFound(response);
@@ -1968,6 +2020,1029 @@ function withAdmin(request, response, handler) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// --- slice: chat ---
+// Chat
+// ---------------------------------------------------------------------------
+
+/**
+ * The chat of this account with the cast. The cast are not accounts, so the
+ * mock plays them: a message of the account in a conversation with one of
+ * them is read, typed at and answered a moment later, within the account's
+ * privacy settings. `chat.*` frames reach only a socket that sent
+ * `X-JKNet-Features: chat`, as on the service.
+ *
+ * Seeded at sign-in: a direct conversation with Kyle (one unread), one with
+ * Jan carrying a card of his private server, the group "Saber school" owned
+ * by Kyle with a message and a reply of a deleted account and a mention of
+ * this account, a read-only conversation with a deleted account, the chat of
+ * Jan's private server (not joined; join it with his id as `hostUserId`),
+ * and an invite into Mara's group "Night raid". Mara asks before she is
+ * added to a group, so adding her makes an invite.
+ */
+const CHAT_MAX_BODY_CHARS = 4000;
+const CHAT_MAX_CARDS = 5;
+const CHAT_MAX_FILES = 10;
+const CHAT_MAX_FILE_BYTES = 25 * 1024 * 1024;
+const CHAT_QUOTA_BYTES = 1024 * 1024 * 1024;
+const CHAT_GROUP_MAX_MEMBERS = 20;
+const CHAT_CARD_TYPES = ["server", "hostInvite", "bundle", "jkhubMod", "map", "profile", "bind", "config"];
+const CHAT_EXECUTABLE_EXTENSIONS = new Set(
+  "exe com scr bat cmd ps1 psm1 vbs vbe js jse wsf wsh hta msi msp msix appx lnk url pif cpl dll sys inf reg jar scf chm iso img vhd vhdx application gadget xll docm xlsm pptm".split(" "),
+);
+/** How long the cast takes to answer; `0` turns the answers off. */
+const CHAT_REPLY_MS = Number(process.env.MOCK_ONLINE_CHAT_REPLY_MS ?? "2500");
+const CHAT_REPLIES = ["gg", "On my way", "Duel after this round?", "Nice one 👍", "brb, reloading the map"];
+
+/** Conversations by id; `members` is a Map by user id, `messages` in seq order. */
+const chats = new Map();
+/** Chat files by id, their bytes kept in memory. */
+const chatFiles = new Map();
+/** Group invites addressed to this account. */
+let groupInvites = [];
+/** The account's chat settings: both privacy switches are reciprocal. */
+let chatSettings = defaultChatSettings();
+/** A global counter standing in for `chat_messages.pk`: the search cursor. */
+let chatPk = 0;
+/** An account that was deleted: its id survives only in old tokens. */
+let deletedId = null;
+/** The `chat.typing` frames the launcher sent, for `GET /v1/dev/chat/typing`. */
+const typingSeen = [];
+
+function defaultChatSettings() {
+  return { shareReadReceipts: true, shareTyping: true, groupAdd: "friends" };
+}
+
+/** Everyone the mock can name: the account and the cast. */
+function userById(userId) {
+  if (account && account.id === userId) return account;
+  const known = [...Object.values(cast ?? {}), ...world.outgoing.map((request) => request.to)];
+  return known.find((user) => user.id === userId) ?? null;
+}
+
+function isFriend(userId) {
+  return world.friends.some((friend) => friend.user.id === userId);
+}
+
+/** Only Mara asks before she is added to a group. */
+function asksBeforeAdding(userId) {
+  return cast && userId === cast.mara.id;
+}
+
+function newConversation(kind, { ownerId = null, title = null, peerId = null, server = null, createClientId = null, createdAt = nowIso() } = {}) {
+  const conversation = {
+    id: id(),
+    kind,
+    title,
+    ownerId,
+    peerId,
+    server,
+    createClientId,
+    historyForNewMembers: false,
+    lastSeq: 0,
+    lastMessageAt: null,
+    createdAt,
+    members: new Map(),
+    messages: [],
+  };
+  chats.set(conversation.id, conversation);
+  return conversation;
+}
+
+function addMember(conversation, userId, { role = "member", visibleFromSeq = 0, joinedAt = nowIso() } = {}) {
+  conversation.members.set(userId, { userId, role, joinedAt, visibleFromSeq, readSeq: 0, notify: "all" });
+}
+
+/** Stores one message and answers it. `senderId: null` is a system message,
+ *  or, with `kind: "user"`, a message of a deleted account. */
+function post(conversation, senderId, body, { kind = "user", cards = [], fileIds = [], replySeq = null, system = null, clientId = null, at = nowIso() } = {}) {
+  const seq = ++conversation.lastSeq;
+  const mentions = new Set();
+  for (const [, userId] of String(body).matchAll(/<@([0-9A-Za-z]+)>/g)) {
+    if (conversation.members.has(userId) && userId !== senderId) mentions.add(userId);
+  }
+  const replied = replySeq == null ? null : conversation.messages.find((message) => message.seq === replySeq);
+  if (replied?.senderId && replied.senderId !== senderId && conversation.members.has(replied.senderId)) {
+    mentions.add(replied.senderId);
+  }
+  const message = {
+    pk: ++chatPk,
+    seq,
+    senderId,
+    clientId,
+    kind,
+    body,
+    cards,
+    fileIds,
+    mentions: [...mentions],
+    replySeq: replied ? replySeq : null,
+    reactions: new Map(),
+    system,
+    createdAt: at,
+  };
+  conversation.messages.push(message);
+  conversation.lastMessageAt = at;
+  for (const fileId of fileIds) {
+    const file = chatFiles.get(fileId);
+    if (file) file.messageSeq = seq;
+  }
+  const author = senderId && conversation.members.get(senderId);
+  if (author) author.readSeq = seq;
+  return message;
+}
+
+function systemPost(conversation, event, fields = {}) {
+  return post(conversation, null, "", { kind: "system", system: { event, ...fields } });
+}
+
+function seedChat() {
+  chats.clear();
+  chatFiles.clear();
+  groupInvites = [];
+  chatSettings = defaultChatSettings();
+  chatPk = 0;
+  typingSeen.length = 0;
+  deletedId = id();
+  const me = account.id;
+  const minutesAgo = (minutes) => later(-minutes * 60_000);
+
+  const kyle = newConversation("direct", { peerId: cast.kyle.id, createdAt: minutesAgo(90) });
+  addMember(kyle, me);
+  addMember(kyle, cast.kyle.id);
+  post(kyle, cast.kyle.id, "Duel on ffa3 tonight?", { at: minutesAgo(50) });
+  post(kyle, me, "Sure, after nine", { at: minutesAgo(48) });
+  post(kyle, cast.kyle.id, "Bring your best saber stance 😄", { at: minutesAgo(5) });
+  kyle.members.get(me).readSeq = 2;
+  kyle.members.get(cast.kyle.id).readSeq = 3;
+
+  const jan = newConversation("direct", { peerId: cast.jan.id, createdAt: minutesAgo(30) });
+  addMember(jan, me);
+  addMember(jan, cast.jan.id);
+  const janServer = privateServer("selected", [me]);
+  post(jan, cast.jan.id, "My server is up, come in", {
+    at: minutesAgo(3),
+    cards: [{
+      type: "hostInvite",
+      v: 1,
+      fallbackText: "Jan's game on mp/ffa3",
+      sessionId: janServer.sessionId,
+      name: "Jan's game",
+      hostId: cast.jan.id,
+      game: janServer.game,
+      map: janServer.map,
+      gametype: janServer.gametype,
+    }],
+  });
+
+  const school = newConversation("group", { ownerId: cast.kyle.id, title: "Saber school", createdAt: minutesAgo(240) });
+  for (const userId of [cast.kyle.id, me, cast.jan.id, cast.mara.id]) {
+    addMember(school, userId, { role: userId === cast.kyle.id ? "owner" : "member", joinedAt: minutesAgo(240) });
+  }
+  systemPost(school, "created", { by: cast.kyle.id });
+  post(school, cast.kyle.id, "Welcome to saber school!", { at: minutesAgo(230) });
+  const farewell = post(school, null, "I'm off for a while, thanks <@" + me + ">", { at: minutesAgo(200) });
+  systemPost(school, "memberLeft", { userId: deletedId });
+  post(school, cast.mara.id, "See you around!", { at: minutesAgo(190), replySeq: farewell.seq });
+  const lesson = post(school, cast.jan.id, "Lesson two: the kata of <@" + deletedId + "> is still the best", { at: minutesAgo(60) });
+  lesson.reactions.set("👍", new Set([cast.kyle.id, cast.mara.id]));
+  post(school, cast.kyle.id, "<@" + me + "> you're up next", { at: minutesAgo(2) });
+  school.members.get(me).readSeq = 3;
+
+  const gone = newConversation("direct", { peerId: deletedId, createdAt: minutesAgo(3000) });
+  addMember(gone, me);
+  post(gone, null, "gg, thanks for all the games", { at: minutesAgo(2900) });
+  post(gone, me, "Anytime!", { at: minutesAgo(2890) });
+
+  const hosted = newConversation("server", {
+    ownerId: cast.jan.id,
+    server: { hostId: cast.jan.id, sessionId: janServer.sessionId },
+    createdAt: minutesAgo(4),
+  });
+  addMember(hosted, cast.jan.id, { role: "owner" });
+  systemPost(hosted, "serverStarted", { by: cast.jan.id });
+  post(hosted, cast.jan.id, "Warming up on ffa3, the lobby is open", { at: minutesAgo(4) });
+
+  const raid = newConversation("group", { ownerId: cast.mara.id, title: "Night raid", createdAt: minutesAgo(20) });
+  addMember(raid, cast.mara.id, { role: "owner" });
+  addMember(raid, cast.kyle.id);
+  systemPost(raid, "created", { by: cast.mara.id });
+  groupInvites = [{ conversationId: raid.id, invitedBy: cast.mara.id, createdAt: minutesAgo(15), expiresAt: later(7 * 24 * 60 * 60_000) }];
+}
+
+// -- What the account sees -------------------------------------------------
+
+/** Rewrites tokens and ids of accounts that no longer exist, as the service's
+ *  row mapper does. */
+function chatText(text) {
+  return String(text).replace(/<@([0-9A-Za-z]+)>/g, (token, userId) => (userById(userId) ? token : "<@deleted>"));
+}
+
+function messageWire(conversation, message) {
+  const me = account.id;
+  const member = conversation.members.get(me);
+  let replyTo = null;
+  if (message.replySeq != null) {
+    const replied = conversation.messages.find((entry) => entry.seq === message.replySeq);
+    replyTo = !replied || (member && replied.seq <= member.visibleFromSeq)
+      ? { seq: message.replySeq, missing: true }
+      : {
+          seq: replied.seq,
+          senderId: replied.senderId && userById(replied.senderId) ? replied.senderId : null,
+          excerpt: chatText(replied.body).slice(0, 140),
+        };
+  }
+  const system = message.system
+    ? {
+        ...message.system,
+        userId: message.system.userId && userById(message.system.userId) ? message.system.userId : null,
+        by: message.system.by && userById(message.system.by) ? message.system.by : null,
+      }
+    : null;
+  return {
+    conversationId: conversation.id,
+    seq: message.seq,
+    senderId: message.senderId && userById(message.senderId) ? message.senderId : null,
+    clientId: message.clientId,
+    kind: message.kind,
+    body: chatText(message.body),
+    cards: message.cards,
+    files: message.fileIds.map((fileId) => chatFiles.get(fileId)).filter(Boolean).map(fileWire),
+    mentions: message.mentions.filter((userId) => userById(userId)),
+    replyTo,
+    reactions: [...message.reactions].map(([emoji, users]) => ({ emoji, userIds: [...users] })),
+    system,
+    createdAt: message.createdAt,
+  };
+}
+
+function fileWire(file) {
+  return {
+    id: file.id,
+    name: file.name,
+    size: file.size,
+    mediaType: file.mediaType,
+    class: file.class,
+    danger: file.danger,
+    meta: file.meta,
+  };
+}
+
+function canSend(conversation) {
+  if (conversation.kind !== "direct") return true;
+  return Boolean(userById(conversation.peerId)) && isFriend(conversation.peerId);
+}
+
+function visibleMessages(conversation) {
+  const member = conversation.members.get(account.id);
+  return conversation.messages.filter((message) => message.seq > (member?.visibleFromSeq ?? 0));
+}
+
+function conversationWire(conversation) {
+  const me = account.id;
+  const member = conversation.members.get(me);
+  const shared = chatSettings.shareReadReceipts;
+  const visible = visibleMessages(conversation);
+  const unreadFrom = Math.max(member.readSeq, member.visibleFromSeq);
+  const unread = visible.filter((message) => message.kind === "user" && message.senderId !== me && message.seq > unreadFrom).length;
+  const unreadMentions = visible.filter((message) => message.seq > unreadFrom && message.mentions.includes(me)).length;
+  const last = visible[visible.length - 1];
+  return {
+    id: conversation.id,
+    kind: conversation.kind,
+    title: conversation.title,
+    ownerId: conversation.ownerId && userById(conversation.ownerId) ? conversation.ownerId : null,
+    members: [...conversation.members.values()]
+      .filter((entry) => userById(entry.userId))
+      .map((entry) => ({
+        user: userById(entry.userId),
+        role: entry.role,
+        joinedAt: entry.joinedAt,
+        // D8: another member's marker only while both share receipts; the
+        // cast always shares.
+        readSeq: entry.userId === me || shared ? entry.readSeq : null,
+      })),
+    lastSeq: conversation.lastSeq,
+    lastMessage: last ? messageWire(conversation, last) : null,
+    readSeq: member.readSeq,
+    visibleFromSeq: member.visibleFromSeq,
+    unread: Math.min(unread, 100),
+    unreadMentions: Math.min(unreadMentions, 100),
+    notify: member.notify,
+    canSend: canSend(conversation),
+    historyForNewMembers: conversation.kind === "direct" ? false : conversation.historyForNewMembers,
+    server: conversation.server,
+    createdAt: conversation.createdAt,
+  };
+}
+
+function groupInviteWire(invite) {
+  const conversation = chats.get(invite.conversationId);
+  return {
+    conversationId: invite.conversationId,
+    title: conversation?.title ?? null,
+    invitedBy: userById(invite.invitedBy),
+    memberCount: conversation?.members.size ?? 0,
+    createdAt: invite.createdAt,
+    expiresAt: invite.expiresAt,
+  };
+}
+
+function myConversations() {
+  return [...chats.values()]
+    .filter((conversation) => conversation.members.has(account.id))
+    .sort((a, b) => String(b.lastMessageAt ?? b.createdAt).localeCompare(String(a.lastMessageAt ?? a.createdAt)));
+}
+
+function chatQuota() {
+  const usedBytes = [...chatFiles.values()]
+    .filter((file) => file.uploaderId === account.id)
+    .reduce((sum, file) => sum + file.size, 0);
+  return { usedBytes, quotaBytes: CHAT_QUOTA_BYTES, nextFreeAt: null };
+}
+
+function syncDoc() {
+  return {
+    conversations: myConversations().map(conversationWire),
+    groupInvites: groupInvites.map(groupInviteWire),
+    settings: chatSettings,
+    quota: chatQuota(),
+  };
+}
+
+// -- Frames ----------------------------------------------------------------
+
+/** Every chat frame goes to this account only: the cast has no sockets. */
+const broadcastChat = (type, payload) => {
+  for (const client of sockets) {
+    if (client.chat) write(client.socket, frame(type, payload));
+  }
+};
+
+function announceMessage(conversation, message) {
+  broadcastChat("chat.message", { message: messageWire(conversation, message) });
+}
+
+function announceConversation(conversation) {
+  if (conversation.members.has(account.id)) {
+    broadcastChat("chat.conversation", { conversation: conversationWire(conversation) });
+  }
+}
+
+/** A direct conversation reads `canSend` from the friendship; tell the
+ *  launcher when that moved. */
+function directStateChanged(userId) {
+  for (const conversation of chats.values()) {
+    if (conversation.kind === "direct" && conversation.peerId === userId) announceConversation(conversation);
+  }
+}
+
+/** A member of the cast reads what the account wrote, types, and answers. */
+function scriptReply(conversation, message) {
+  if (CHAT_REPLY_MS <= 0) return;
+  const me = account.id;
+  const others = [...conversation.members.keys()].filter((userId) => userId !== me && userById(userId) && isFriend(userId));
+  if (others.length === 0) return;
+  const responder = conversation.kind === "direct" ? others[0] : others[Math.floor(Math.random() * others.length)];
+  setTimeout(() => {
+    const member = conversation.members.get(responder);
+    if (!member || !chats.has(conversation.id)) return;
+    member.readSeq = Math.max(member.readSeq, message.seq);
+    if (chatSettings.shareReadReceipts) {
+      broadcastChat("chat.read", { conversationId: conversation.id, userId: responder, seq: member.readSeq });
+    }
+  }, Math.min(800, CHAT_REPLY_MS / 2));
+  setTimeout(() => {
+    if (chatSettings.shareTyping && chats.has(conversation.id)) {
+      broadcastChat("chat.typing", { conversationId: conversation.id, userId: responder, ttlMs: 6000 });
+    }
+  }, Math.min(1200, CHAT_REPLY_MS / 2));
+  setTimeout(() => {
+    if (!chats.has(conversation.id) || !conversation.members.has(responder)) return;
+    let body = CHAT_REPLIES[Math.floor(Math.random() * CHAT_REPLIES.length)];
+    if (conversation.kind !== "direct" && Math.random() < 0.5) body = `<@${me}> ${body}`;
+    const reply = post(conversation, responder, body, { replySeq: Math.random() < 0.3 ? message.seq : null });
+    announceMessage(conversation, reply);
+  }, CHAT_REPLY_MS);
+}
+
+// -- Routes ----------------------------------------------------------------
+
+function refuse(response, status, code, reason, message, extra = {}) {
+  return send(response, status, { error: { code, message, details: { reason, ...extra } } });
+}
+
+function noConversation(response) {
+  return fail(response, 404, "not_found", "No such conversation");
+}
+
+function routeChat(request, response, url, path, method, body) {
+  const me = account.id;
+  if (path === "/v1/chat/conversations" && method === "GET") return send(response, 200, syncDoc());
+
+  const conversationMatch = path.match(/^\/v1\/chat\/conversations\/([^/]+)(?:\/(messages|read|reactions|notify))?$/);
+  if (conversationMatch) {
+    const conversation = chats.get(conversationMatch[1]);
+    if (!conversation || !conversation.members.has(me)) return noConversation(response);
+    const action = conversationMatch[2];
+    if (!action && method === "GET") return send(response, 200, conversationWire(conversation));
+    if (action === "messages" && method === "GET") return chatHistory(response, conversation, url);
+    if (action === "messages" && method === "POST") return chatSend(response, conversation, body);
+    if (action === "read" && method === "POST") return chatRead(response, conversation, body);
+    if (action === "reactions" && method === "PUT") return chatReact(response, conversation, body);
+    if (action === "notify" && method === "PUT") return chatNotify(response, conversation, body);
+    return notFound(response);
+  }
+
+  const memberMatch = path.match(/^\/v1\/chat\/conversations\/([^/]+)\/members\/([^/]+)$/);
+  if (memberMatch && method === "DELETE") return chatRemoveMember(response, memberMatch[1], memberMatch[2]);
+
+  const directMatch = path.match(/^\/v1\/chat\/direct\/([^/]+)$/);
+  if (directMatch && method === "PUT") return chatOpenDirect(response, directMatch[1]);
+
+  if (path === "/v1/chat/groups" && method === "POST") return chatCreateGroup(response, body);
+  const groupMatch = path.match(/^\/v1\/chat\/groups\/([^/]+)(?:\/(members|join))?$/);
+  if (groupMatch) {
+    const conversation = chats.get(groupMatch[1]);
+    if (!conversation || conversation.kind !== "group") return noConversation(response);
+    if (groupMatch[2] === "join" && method === "POST") return chatJoinGroup(response, conversation);
+    if (!conversation.members.has(me)) return noConversation(response);
+    if (!groupMatch[2] && method === "PATCH") return chatPatchGroup(response, conversation, body);
+    if (groupMatch[2] === "members" && method === "POST") return chatAddMembers(response, conversation, body);
+    return notFound(response);
+  }
+  const inviteMatch = path.match(/^\/v1\/chat\/groups\/([^/]+)\/invites\/([^/]+)$/);
+  if (inviteMatch && method === "DELETE") {
+    const before = groupInvites.length;
+    if (inviteMatch[2] === me) {
+      groupInvites = groupInvites.filter((invite) => invite.conversationId !== inviteMatch[1]);
+      if (groupInvites.length !== before) broadcastChat("chat.groupInvite.removed", { conversationId: inviteMatch[1] });
+      return send(response, 204, null);
+    }
+    const conversation = chats.get(inviteMatch[1]);
+    if (!conversation || !conversation.members.has(me)) return noConversation(response);
+    return send(response, 204, null);
+  }
+
+  const serverMatch = path.match(/^\/v1\/chat\/servers\/([0-9a-f]{16})(\/join)?$/);
+  if (serverMatch) {
+    const sessionId = serverMatch[1];
+    if (serverMatch[2] && method === "POST") return chatJoinServer(response, sessionId, body);
+    if (!serverMatch[2] && method === "PUT") return chatOpenServer(response, sessionId);
+    if (!serverMatch[2] && method === "PATCH") return chatPatchServer(response, sessionId, body);
+    if (!serverMatch[2] && method === "DELETE") {
+      for (const conversation of [...chats.values()]) {
+        if (conversation.kind === "server" && conversation.ownerId === me && conversation.server.sessionId === sessionId) {
+          endChat(conversation, "ended");
+        }
+      }
+      return send(response, 204, null);
+    }
+    return notFound(response);
+  }
+
+  if (path === "/v1/chat/search" && method === "GET") return chatSearch(response, url);
+
+  if (path === "/v1/chat/files" && method === "POST") return chatRegisterFile(response, body);
+  const fileMatch = path.match(/^\/v1\/chat\/files\/([^/]+)\/content$/);
+  if (fileMatch && method === "PUT") return chatUploadFile(request, response, fileMatch[1], body);
+  if (fileMatch && (method === "GET" || method === "HEAD")) {
+    return chatDownloadFile(request, response, fileMatch[1], method === "HEAD");
+  }
+
+  if (path === "/v1/chat/settings" && method === "GET") return send(response, 200, chatSettings);
+  if (path === "/v1/chat/settings" && method === "PATCH") {
+    const next = { ...chatSettings };
+    for (const key of ["shareReadReceipts", "shareTyping"]) {
+      if (body?.[key] !== undefined) {
+        if (typeof body[key] !== "boolean") return fail(response, 400, "invalid", `${key} must be true or false`);
+        next[key] = body[key];
+      }
+    }
+    if (body?.groupAdd !== undefined) {
+      if (!["friends", "ask"].includes(body.groupAdd)) return fail(response, 400, "invalid", "groupAdd must be friends or ask");
+      next.groupAdd = body.groupAdd;
+    }
+    chatSettings = next;
+    broadcastChat("chat.settings", { settings: chatSettings });
+    return send(response, 200, chatSettings);
+  }
+
+  return notFound(response);
+}
+
+function chatHistory(response, conversation, url) {
+  const visible = visibleMessages(conversation);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 200);
+  const number = (key) => (url.searchParams.has(key) ? Number(url.searchParams.get(key)) : null);
+  const before = number("before");
+  const after = number("after");
+  const around = number("around");
+  let page;
+  if (around !== null) {
+    const half = Math.floor(limit / 2);
+    const older = visible.filter((message) => message.seq < around).slice(-half);
+    const newer = visible.filter((message) => message.seq >= around).slice(0, limit - older.length);
+    page = [...older, ...newer];
+  } else if (before !== null) {
+    page = visible.filter((message) => message.seq < before).slice(-limit);
+  } else if (after !== null) {
+    page = visible.filter((message) => message.seq > after).slice(0, limit);
+  } else {
+    page = visible.slice(-limit);
+  }
+  const first = page[0]?.seq ?? before ?? (after !== null ? after + 1 : Infinity);
+  const last = page[page.length - 1]?.seq ?? (after ?? (before !== null ? before - 1 : -Infinity));
+  return send(response, 200, {
+    messages: page.map((message) => messageWire(conversation, message)),
+    hasBefore: visible.some((message) => message.seq < first),
+    hasAfter: visible.some((message) => message.seq > last),
+  });
+}
+
+function cleanBody(text) {
+  return String(text ?? "")
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, "")
+    .replace(/\n{5,}/g, "\n\n\n\n");
+}
+
+/** The card rules the launcher can meet on the service, loosely: the shape,
+ *  the version, and the host of a `hostInvite`. */
+function checkCard(card) {
+  if (!card || typeof card !== "object" || !CHAT_CARD_TYPES.includes(card.type) || card.v !== 1) return null;
+  if (JSON.stringify(card).length > 8 * 1024 && card.type !== "config") return null;
+  if (card.type !== "hostInvite") return card;
+  const hosting = presence.hosting;
+  if (!hosting || hosting.sessionId !== card.sessionId) return null;
+  // The service fills what the card may say about the server from the live
+  // hosting; the password and the addresses never reach it.
+  return {
+    type: "hostInvite",
+    v: 1,
+    fallbackText: String(card.fallbackText ?? "").slice(0, 200),
+    sessionId: hosting.sessionId,
+    name: card.name ?? null,
+    hostId: account.id,
+    game: hosting.game,
+    mod: hosting.mod ?? null,
+    map: hosting.map ?? null,
+    gametype: hosting.gametype ?? null,
+  };
+}
+
+function chatSend(response, conversation, body) {
+  const me = account.id;
+  const clientId = String(body?.clientId ?? "");
+  if (!/^[0-9A-Za-z]{10,32}$/.test(clientId)) return fail(response, 400, "invalid", "clientId must be a ULID");
+  for (const other of chats.values()) {
+    const stored = other.messages.find((message) => message.senderId === me && message.clientId === clientId);
+    if (stored) return send(response, 200, messageWire(other, stored));
+  }
+  if (!canSend(conversation)) return refuse(response, 403, "forbidden", "not_friends", "You can only read this conversation");
+  const text = cleanBody(body?.body);
+  if ([...text].length > CHAT_MAX_BODY_CHARS) {
+    return refuse(response, 400, "invalid", "too_long", `A message is at most ${CHAT_MAX_BODY_CHARS} characters`);
+  }
+  const rawCards = Array.isArray(body?.cards) ? body.cards : [];
+  if (rawCards.length > CHAT_MAX_CARDS) return refuse(response, 400, "invalid", "card", `A message carries at most ${CHAT_MAX_CARDS} cards`);
+  const cards = rawCards.map(checkCard);
+  if (cards.some((card) => card === null)) return refuse(response, 400, "invalid", "card", "A card is not one this service knows");
+  const fileIds = Array.isArray(body?.fileIds) ? body.fileIds.map(String) : [];
+  if (fileIds.length > CHAT_MAX_FILES) return fail(response, 400, "invalid", `A message carries at most ${CHAT_MAX_FILES} files`);
+  for (const fileId of fileIds) {
+    const file = chatFiles.get(fileId);
+    if (!file) return refuse(response, 404, "not_found", "file_gone", "That file is gone; upload it again");
+    if (file.conversationId !== conversation.id || file.uploaderId !== me || file.status !== "ready" || file.messageSeq != null) {
+      return refuse(response, 409, "conflict", "file_not_ready", "That file is not ready to be sent");
+    }
+  }
+  if (!text.trim() && cards.length === 0 && fileIds.length === 0) {
+    return refuse(response, 400, "invalid", "empty", "A message needs text, a card or a file");
+  }
+  const visible = visibleMessages(conversation);
+  const replySeq = visible.some((message) => message.seq === body?.replySeq && message.kind === "user") ? body.replySeq : null;
+  // Tokens of people who are not members become plain names.
+  const cleaned = text.replace(/<@([0-9A-Za-z]+)>/g, (token, userId) => {
+    if (conversation.members.has(userId)) return token;
+    const user = userById(userId);
+    return user ? `@${user.displayName}` : "";
+  });
+  const message = post(conversation, me, cleaned, { cards, fileIds, replySeq, clientId });
+  announceMessage(conversation, message);
+  scriptReply(conversation, message);
+  return send(response, 201, messageWire(conversation, message));
+}
+
+function chatRead(response, conversation, body) {
+  const member = conversation.members.get(account.id);
+  const seq = Number(body?.seq);
+  if (!Number.isInteger(seq) || seq < 0) return fail(response, 400, "invalid", "seq must be a whole number");
+  member.readSeq = Math.max(member.readSeq, Math.min(seq, conversation.lastSeq));
+  broadcastChat("chat.read", { conversationId: conversation.id, userId: account.id, seq: member.readSeq });
+  return send(response, 200, { readSeq: member.readSeq });
+}
+
+function isEmoji(text) {
+  const value = String(text ?? "");
+  if (!value || Buffer.byteLength(value, "utf8") > 32 || [...value].length > 10) return false;
+  if (/[\s\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/.test(value)) return false;
+  return !/[ -~]/.test(value.replace(/[0-9#*](?=[️⃣])/g, ""));
+}
+
+function chatReact(response, conversation, body) {
+  const me = account.id;
+  const message = visibleMessages(conversation).find((entry) => entry.seq === body?.seq && entry.kind === "user");
+  if (!message) return fail(response, 404, "not_found", "No such message");
+  if (!canSend(conversation)) return refuse(response, 403, "forbidden", "not_friends", "You can only read this conversation");
+  if (!isEmoji(body?.emoji)) return fail(response, 400, "invalid", "That is not an emoji");
+  const emoji = body.emoji;
+  const on = body?.on !== false;
+  if (on) {
+    const mine = [...message.reactions.values()].filter((users) => users.has(me)).length;
+    if (!message.reactions.get(emoji)?.has(me)) {
+      if (mine >= 3) return fail(response, 400, "invalid", "At most three reactions per message");
+      if (!message.reactions.has(emoji) && message.reactions.size >= 20) {
+        return fail(response, 400, "invalid", "At most twenty different reactions per message");
+      }
+      message.reactions.set(emoji, new Set([...(message.reactions.get(emoji) ?? []), me]));
+    }
+  } else if (message.reactions.has(emoji)) {
+    message.reactions.get(emoji).delete(me);
+    if (message.reactions.get(emoji).size === 0) message.reactions.delete(emoji);
+  }
+  broadcastChat("chat.reaction", { conversationId: conversation.id, seq: message.seq, userId: me, emoji, on });
+  return send(response, 200, {
+    seq: message.seq,
+    reactions: [...message.reactions].map(([key, users]) => ({ emoji: key, userIds: [...users] })),
+  });
+}
+
+function chatNotify(response, conversation, body) {
+  if (!["all", "mentions", "mute"].includes(body?.notify)) return fail(response, 400, "invalid", "notify must be all, mentions or mute");
+  conversation.members.get(account.id).notify = body.notify;
+  announceConversation(conversation);
+  return send(response, 200, conversationWire(conversation));
+}
+
+function chatOpenDirect(response, userId) {
+  const me = account.id;
+  if (userId === me || !userById(userId)) return fail(response, 404, "not_found", "No such player");
+  const existing = [...chats.values()].find((conversation) => conversation.kind === "direct" && conversation.peerId === userId);
+  if (existing) return send(response, 200, conversationWire(existing));
+  if (!isFriend(userId)) return fail(response, 404, "not_found", "No such player");
+  const conversation = newConversation("direct", { peerId: userId });
+  addMember(conversation, me);
+  addMember(conversation, userId);
+  announceConversation(conversation);
+  return send(response, 201, conversationWire(conversation));
+}
+
+/** Adds a member after its join message, which is the first message it sees
+ *  unless the conversation shows history to new members (D1). */
+function join(conversation, userId, event, by) {
+  const message = systemPost(conversation, event, { userId, by });
+  addMember(conversation, userId, { visibleFromSeq: conversation.historyForNewMembers ? 0 : message.seq - 1 });
+  return message;
+}
+
+function chatCreateGroup(response, body) {
+  const me = account.id;
+  const clientId = String(body?.clientId ?? "");
+  if (!clientId) return fail(response, 400, "invalid", "clientId is required");
+  const replay = [...chats.values()].find((conversation) => conversation.ownerId === me && conversation.createClientId === clientId);
+  if (replay) return send(response, 200, { conversation: conversationWire(replay), added: [], invited: [], refused: [] });
+  const title = body?.title == null ? null : String(body.title).trim() || null;
+  if (title && [...title].length > 64) return fail(response, 400, "invalid", "A title is at most 64 characters");
+  const ids = [...new Set(Array.isArray(body?.memberIds) ? body.memberIds.map(String) : [])].filter((userId) => userId !== me);
+  if (ids.length > CHAT_GROUP_MAX_MEMBERS - 1) return refuse(response, 400, "invalid", "group_full", "That is more people than a group holds");
+  const conversation = newConversation("group", { ownerId: me, title, createClientId: clientId });
+  addMember(conversation, me, { role: "owner" });
+  const added = [];
+  const invited = [];
+  const refused = [];
+  for (const userId of ids) {
+    if (!isFriend(userId)) refused.push({ userId, reason: "not_friend" });
+    else if (asksBeforeAdding(userId)) invited.push(userId);
+    else {
+      addMember(conversation, userId);
+      added.push(userId);
+    }
+  }
+  systemPost(conversation, "created", { by: me });
+  announceConversation(conversation);
+  return send(response, 201, { conversation: conversationWire(conversation), added, invited, refused });
+}
+
+function chatPatchGroup(response, conversation, body) {
+  const me = account.id;
+  if (body?.title === undefined && body?.historyForNewMembers === undefined) {
+    return fail(response, 400, "invalid", "Change the title or the history setting");
+  }
+  if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the owner of the group can change it");
+  if (body.title !== undefined) {
+    const title = body.title == null ? null : String(body.title).trim() || null;
+    if (title && [...title].length > 64) return fail(response, 400, "invalid", "A title is at most 64 characters");
+    if (title !== conversation.title) {
+      conversation.title = title;
+      announceMessage(conversation, systemPost(conversation, "renamed", { by: me, title }));
+    }
+  }
+  if (body.historyForNewMembers !== undefined) {
+    const on = Boolean(body.historyForNewMembers);
+    if (on !== conversation.historyForNewMembers) {
+      conversation.historyForNewMembers = on;
+      announceMessage(conversation, systemPost(conversation, "historyForNewMembers", { on, by: me }));
+    }
+  }
+  announceConversation(conversation);
+  return send(response, 200, conversationWire(conversation));
+}
+
+function chatAddMembers(response, conversation, body) {
+  const me = account.id;
+  const ids = [...new Set(Array.isArray(body?.userIds) ? body.userIds.map(String) : [])];
+  const added = [];
+  const invited = [];
+  const refused = [];
+  for (const userId of ids) {
+    if (conversation.members.has(userId)) refused.push({ userId, reason: "member" });
+    else if (!isFriend(userId)) refused.push({ userId, reason: "not_friend" });
+    else if (conversation.members.size >= CHAT_GROUP_MAX_MEMBERS) refused.push({ userId, reason: "full" });
+    else if (asksBeforeAdding(userId)) invited.push(userId);
+    else {
+      announceMessage(conversation, join(conversation, userId, "memberAdded", me));
+      added.push(userId);
+    }
+  }
+  announceConversation(conversation);
+  return send(response, 200, { added, invited, refused });
+}
+
+function chatJoinGroup(response, conversation) {
+  const me = account.id;
+  const invite = groupInvites.find((entry) => entry.conversationId === conversation.id);
+  if (!invite) return fail(response, 404, "not_found", "That invite is gone");
+  if (conversation.members.size >= CHAT_GROUP_MAX_MEMBERS) return refuse(response, 409, "conflict", "group_full", "The group is full");
+  groupInvites = groupInvites.filter((entry) => entry !== invite);
+  const message = join(conversation, me, "memberJoined", null);
+  announceMessage(conversation, message);
+  announceConversation(conversation);
+  broadcastChat("chat.groupInvite.removed", { conversationId: conversation.id });
+  return send(response, 200, conversationWire(conversation));
+}
+
+/** Deletes a conversation and tells the account, if it was a member. */
+function endChat(conversation, reason) {
+  const wasMember = conversation.members.has(account.id);
+  chats.delete(conversation.id);
+  if (wasMember) broadcastChat("chat.conversation.removed", { conversationId: conversation.id, reason });
+}
+
+function chatRemoveMember(response, conversationId, userId) {
+  const me = account.id;
+  const conversation = chats.get(conversationId);
+  if (!conversation || !conversation.members.has(me)) return noConversation(response);
+  if (conversation.kind === "direct") return fail(response, 400, "invalid", "A direct conversation cannot be left");
+  if (userId === me) {
+    conversation.members.delete(me);
+    systemPost(conversation, "memberLeft", { userId: me });
+    if (conversation.ownerId === me && conversation.kind === "group") {
+      // D4: the earliest-joined remaining member takes over.
+      const next = [...conversation.members.values()].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
+      if (next) {
+        next.role = "owner";
+        conversation.ownerId = next.userId;
+        systemPost(conversation, "ownerChanged", { userId: next.userId, by: me });
+      }
+    }
+    if (conversation.members.size === 0 || (conversation.kind === "server" && conversation.ownerId === me)) chats.delete(conversation.id);
+    broadcastChat("chat.conversation.removed", { conversationId, reason: "left" });
+    return send(response, 204, null);
+  }
+  if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the owner can remove members");
+  if (!conversation.members.has(userId)) return fail(response, 404, "not_found", "Not a member");
+  conversation.members.delete(userId);
+  announceMessage(conversation, systemPost(conversation, "memberRemoved", { userId, by: me }));
+  announceConversation(conversation);
+  return send(response, 204, null);
+}
+
+function chatOpenServer(response, sessionId) {
+  const me = account.id;
+  if (presence.hosting?.sessionId !== sessionId) {
+    return refuse(response, 409, "conflict", "not_hosting", "You are not hosting that server");
+  }
+  const existing = [...chats.values()].find((conversation) => conversation.kind === "server" && conversation.ownerId === me && conversation.server.sessionId === sessionId);
+  if (existing) return send(response, 200, conversationWire(existing));
+  for (const conversation of [...chats.values()]) {
+    if (conversation.kind === "server" && conversation.ownerId === me) endChat(conversation, "ended");
+  }
+  const conversation = newConversation("server", { ownerId: me, server: { hostId: me, sessionId } });
+  addMember(conversation, me, { role: "owner" });
+  systemPost(conversation, "serverStarted", { by: me });
+  announceConversation(conversation);
+  return send(response, 201, conversationWire(conversation));
+}
+
+function chatJoinServer(response, sessionId, body) {
+  const me = account.id;
+  const hostId = String(body?.hostUserId ?? "");
+  const conversation = [...chats.values()].find((entry) => entry.kind === "server" && entry.server.hostId === hostId && entry.server.sessionId === sessionId);
+  const host = world.friends.find((friend) => friend.user.id === hostId);
+  if (!conversation || host?.presence?.hosting?.sessionId !== sessionId) return noConversation(response);
+  if (conversation.members.has(me)) return send(response, 200, conversationWire(conversation));
+  const invited = world.invites.some((invite) => invite.from.id === hostId && invite.hosting?.sessionId === sessionId);
+  if (!hostingFor(host.presence.hosting, me).canJoin && !invited) {
+    return fail(response, 403, "forbidden", "The host did not open the server to you");
+  }
+  announceMessage(conversation, join(conversation, me, "memberJoined", null));
+  announceConversation(conversation);
+  return send(response, 200, conversationWire(conversation));
+}
+
+function chatPatchServer(response, sessionId, body) {
+  const me = account.id;
+  const conversation = [...chats.values()].find((entry) => entry.kind === "server" && entry.server.sessionId === sessionId && entry.members.has(me));
+  if (!conversation) return noConversation(response);
+  if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the host can change the chat of the server");
+  if (typeof body?.historyForNewMembers !== "boolean") return fail(response, 400, "invalid", "historyForNewMembers must be true or false");
+  if (body.historyForNewMembers !== conversation.historyForNewMembers) {
+    conversation.historyForNewMembers = body.historyForNewMembers;
+    announceMessage(conversation, systemPost(conversation, "historyForNewMembers", { on: body.historyForNewMembers, by: me }));
+  }
+  announceConversation(conversation);
+  return send(response, 200, conversationWire(conversation));
+}
+
+function chatSearch(response, url) {
+  const q = String(url.searchParams.get("q") ?? "").trim();
+  const conversationId = url.searchParams.get("conversationId");
+  const senderId = url.searchParams.get("senderId");
+  const has = url.searchParams.get("has");
+  const cursor = url.searchParams.has("before") ? Number(url.searchParams.get("before")) : Infinity;
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 20) || 20, 1), 50);
+  if (!q || [...q].length > 64) return fail(response, 400, "invalid", "Search for 1 to 64 characters");
+  if ([...q].length < 3 && !conversationId) return fail(response, 400, "invalid", "A search of one or two characters needs a conversation");
+  const needle = q.toLocaleLowerCase();
+  const hits = [];
+  for (const conversation of myConversations()) {
+    if (conversationId && conversation.id !== conversationId) continue;
+    for (const message of visibleMessages(conversation)) {
+      if (message.kind !== "user" || message.pk >= cursor) continue;
+      if (senderId && message.senderId !== senderId) continue;
+      const files = message.fileIds.map((fileId) => chatFiles.get(fileId)).filter(Boolean);
+      if (has === "file" && files.length === 0) continue;
+      if ((has === "image" || has === "video") && !files.some((file) => file.class === has)) continue;
+      if (has === "card" && message.cards.length === 0) continue;
+      if (has === "link" && !message.body.includes("://")) continue;
+      const names = chatText(message.body).replace(/<@([0-9A-Za-z]+)>/g, (token, userId) => userById(userId)?.displayName ?? "");
+      const text = [names, ...message.cards.map((card) => card.fallbackText ?? ""), ...files.map((file) => file.name)].join("\n");
+      if (text.toLocaleLowerCase().includes(needle)) hits.push({ conversation, message });
+    }
+  }
+  hits.sort((a, b) => b.message.pk - a.message.pk);
+  const page = hits.slice(0, limit);
+  return send(response, 200, {
+    results: page.map(({ conversation, message }) => ({ message: messageWire(conversation, message) })),
+    nextCursor: hits.length > limit ? String(page[page.length - 1].message.pk) : null,
+  });
+}
+
+/** What the service calls the file, whatever the sender said. */
+function sanitizeFileName(name) {
+  const cleaned = String(name ?? "")
+    .replace(/[\\/:*?"<>|\u0000-\u001f‪-‮⁦-⁩]/g, "")
+    .replace(/[. ]+$/, "")
+    .slice(0, 120);
+  return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(cleaned) || !cleaned ? "file" : cleaned;
+}
+
+function classifyFile(name, bytes) {
+  const extension = name.includes(".") ? name.split(".").pop().toLowerCase() : "";
+  const head = bytes.subarray(0, 8);
+  const executable =
+    head.subarray(0, 2).toString("latin1") === "MZ" ||
+    head.subarray(0, 4).toString("latin1") === "\u007fELF" ||
+    head.subarray(0, 2).toString("latin1") === "#!" ||
+    CHAT_EXECUTABLE_EXTENSIONS.has(extension);
+  if (executable) return { class: "executable", mediaType: "application/octet-stream", danger: true };
+  const picture = imageType(bytes);
+  if (picture) return { class: "image", mediaType: picture, danger: false };
+  if (bytes.subarray(4, 8).toString("latin1") === "ftyp") return { class: "video", mediaType: "video/mp4", danger: false };
+  if (bytes.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))) return { class: "video", mediaType: "video/webm", danger: false };
+  if (head.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) return { class: "archive", mediaType: "application/octet-stream", danger: false };
+  if (["dm_25", "dm_26", "dm_15"].includes(extension)) return { class: "demo", mediaType: "application/octet-stream", danger: false };
+  if (extension === "cfg" && !bytes.includes(0)) return { class: "config", mediaType: "application/octet-stream", danger: false };
+  return { class: "other", mediaType: "application/octet-stream", danger: false };
+}
+
+function chatRegisterFile(response, body) {
+  const me = account.id;
+  const conversation = chats.get(String(body?.conversationId ?? ""));
+  if (!conversation || !conversation.members.has(me)) return noConversation(response);
+  if (!canSend(conversation)) return refuse(response, 403, "forbidden", "not_friends", "You can only read this conversation");
+  const size = Number(body?.size);
+  if (!Number.isInteger(size) || size < 1 || size > CHAT_MAX_FILE_BYTES) {
+    return refuse(response, 400, "invalid", "file_too_large", `A file is 1 byte to ${CHAT_MAX_FILE_BYTES} bytes`);
+  }
+  const sha256 = String(body?.sha256 ?? "");
+  if (!/^[0-9a-f]{64}$/.test(sha256)) return fail(response, 400, "invalid", "sha256 must be 64 lowercase hex characters");
+  const quota = chatQuota();
+  if (quota.usedBytes + size > quota.quotaBytes) {
+    return refuse(response, 400, "invalid", "quota_account", "Your chat files are over the quota", { usedBytes: quota.usedBytes, quotaBytes: quota.quotaBytes });
+  }
+  const own = [...chatFiles.values()].find((file) => file.uploaderId === me && file.sha256 === sha256 && file.status === "ready");
+  const file = {
+    id: id(),
+    conversationId: conversation.id,
+    uploaderId: me,
+    messageSeq: null,
+    sha256,
+    size,
+    name: sanitizeFileName(body?.name),
+    mediaType: own?.mediaType ?? "application/octet-stream",
+    class: own?.class ?? "other",
+    danger: own?.danger ?? false,
+    meta: body?.meta ?? null,
+    status: own ? "ready" : "pending",
+    bytes: own?.bytes ?? null,
+    createdAt: nowIso(),
+  };
+  chatFiles.set(file.id, file);
+  return send(response, 201, { file: fileWire(file), needsUpload: !own });
+}
+
+function chatUploadFile(request, response, fileId, bytes) {
+  const file = chatFiles.get(fileId);
+  if (!file || file.uploaderId !== account.id) return fail(response, 404, "not_found", "No such file");
+  if (file.status === "ready") return send(response, 200, { file: fileWire(file) });
+  const length = Number(request.headers["content-length"]);
+  if (length !== file.size || bytes.length !== file.size) {
+    return refuse(response, 400, "invalid", "size_mismatch", "The body is not the size the file was registered with");
+  }
+  if (sha256Of(bytes) !== file.sha256) return refuse(response, 400, "invalid", "hash_mismatch", "The SHA-256 of the body does not match");
+  Object.assign(file, classifyFile(file.name, bytes), { status: "ready", bytes });
+  console.log(`  chat file ${file.name}, ${file.size} bytes, ${file.class}`);
+  return send(response, 200, { file: fileWire(file) });
+}
+
+function chatDownloadFile(request, response, fileId, headOnly) {
+  const me = account.id;
+  const file = chatFiles.get(fileId);
+  const conversation = file && chats.get(file.conversationId);
+  const member = conversation?.members.get(me);
+  const allowed =
+    file?.status === "ready" &&
+    (file.uploaderId === me || (file.messageSeq != null && member && file.messageSeq > member.visibleFromSeq));
+  if (!allowed) return fail(response, 404, "not_found", "No such file");
+  if (!file.bytes) return refuse(response, 404, "not_found", "file_gone", "The file is no longer stored");
+  const bytes = file.bytes;
+  const headers = {
+    "content-type": ["image", "video"].includes(file.class) ? file.mediaType : "application/octet-stream",
+    "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "sandbox; default-src 'none'",
+    "accept-ranges": "bytes",
+    etag: `"${file.sha256}"`,
+    "cache-control": "no-store",
+    ...CORS,
+  };
+  let start = 0;
+  let end = bytes.length - 1;
+  let status = 200;
+  const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range ?? "");
+  if (range) {
+    start = Number(range[1]);
+    end = range[2] ? Math.min(Number(range[2]), end) : end;
+    if (start >= bytes.length || start > end) {
+      response.writeHead(416, { ...headers, "content-range": `bytes */${bytes.length}` });
+      return response.end();
+    }
+    status = 206;
+    headers["content-range"] = `bytes ${start}-${end}/${bytes.length}`;
+  }
+  const slice = bytes.subarray(start, end + 1);
+  headers["content-length"] = slice.length;
+  response.writeHead(status, headers);
+  return response.end(headOnly ? undefined : slice);
+}
+
+/** Not in the contract: a member of the cast posts on demand, so a toast or
+ *  a badge can be looked at without waiting for a scripted answer. */
+function devChatPost(response, body) {
+  const me = account.id;
+  const conversation = body?.conversationId
+    ? chats.get(String(body.conversationId))
+    : [...chats.values()].find((entry) => entry.kind === "direct" && entry.peerId === cast?.kyle.id);
+  if (!conversation || !conversation.members.has(me)) return noConversation(response);
+  const sender = [...conversation.members.keys()].find((userId) => userId !== me && userById(userId));
+  if (!sender) return fail(response, 409, "conflict", "Nobody else is in that conversation");
+  let text = String(body?.body ?? "Anyone up for a duel?");
+  if (body?.mention) text = `<@${me}> ${text}`;
+  const message = post(conversation, sender, text);
+  announceMessage(conversation, message);
+  return send(response, 201, messageWire(conversation, message));
+}
+
 
 // ---------------------------------------------------------------------------
 // Plumbing
@@ -2094,9 +3169,14 @@ server.on("upgrade", (request, socket) => {
       "Connection: Upgrade\r\n" +
       `Sec-WebSocket-Accept: ${answer}\r\n\r\n`,
   );
-  console.log("WS open");
+  // --- slice: chat --- only a socket that asks for chat frames gets them,
+  // which is what keeps launchers up to 0.6.0 unaware of chat.
+  const chat = String(request.headers["x-jknet-features"] ?? "")
+    .split(",")
+    .some((feature) => feature.trim().toLowerCase() === "chat");
+  console.log(`WS open${chat ? " (chat)" : ""}`);
 
-  const client = { socket, missed: 0, buffer: Buffer.alloc(0) };
+  const client = { socket, missed: 0, buffer: Buffer.alloc(0), chat };
   sockets.add(client);
 
   const ping = setInterval(() => {
@@ -2152,11 +3232,19 @@ server.on("upgrade", (request, socket) => {
       }
       if (message.opcode !== 0x1) continue;
       try {
-        if (JSON.parse(message.payload.toString("utf8")).type === "pong") {
+        const incoming = JSON.parse(message.payload.toString("utf8"));
+        if (incoming.type === "pong") {
           client.missed = 0;
+        } else if (incoming.type === "chat.typing" && client.chat) {
+          // --- slice: chat --- the other members are the cast, who have
+          // no sockets to relay the hint to; it is kept for the dev route.
+          const conversationId = String(incoming.payload?.conversationId ?? "");
+          typingSeen.push({ conversationId, at: nowIso() });
+          if (typingSeen.length > 100) typingSeen.shift();
+          console.log(`  typing -> ${conversationId}`);
         }
       } catch {
-        /* a frame that is not JSON is not a pong */
+        /* a frame that is not JSON is neither */
       }
     }
   });

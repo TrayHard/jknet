@@ -479,3 +479,611 @@ pub struct SignInPoll {
     /// What the provider said when `status` is `error`.
     pub error: Option<String>,
 }
+
+// ---------------------------------------------------------------------------
+// --- slice: chat ---
+// The chat API, `/v1/chat/*`
+// ---------------------------------------------------------------------------
+//
+// Every structure below reaches the frontend as it came off the wire, so its
+// JSON is the contract's. Cards stay `serde_json::Value`: the service
+// validates them, the frontend renders them, and the core only carries them.
+// A `null` sender, reply author or system id means "Deleted account" and is
+// kept as `None` rather than dropped.
+
+/// A conversation as the service computes it for the signed-in player.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Conversation {
+    pub id: String,
+    /// `direct`, `group` or `server`.
+    pub kind: String,
+    /// `None` for a direct conversation and for a group nobody named: the
+    /// frontend then prints the names of the members.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// The owner of a group or the host of a server chat.
+    #[serde(default)]
+    pub owner_id: Option<String>,
+    /// A direct conversation whose peer deleted the account holds the viewer
+    /// alone.
+    #[serde(default)]
+    pub members: Vec<ChatMember>,
+    #[serde(default)]
+    pub last_seq: u64,
+    #[serde(default)]
+    pub last_message: Option<ChatMessage>,
+    /// The viewer's own read marker.
+    #[serde(default)]
+    pub read_seq: u64,
+    /// Messages at or below this `seq` are hidden from the viewer.
+    #[serde(default)]
+    pub visible_from_seq: u64,
+    /// Unread messages of others, capped at 100 by the service.
+    #[serde(default)]
+    pub unread: u32,
+    #[serde(default)]
+    pub unread_mentions: u32,
+    /// `all`, `mentions` or `mute`.
+    #[serde(default = "notify_all")]
+    pub notify: String,
+    /// `false` for a direct conversation after unfriending or with a deleted
+    /// account: the thread is read-only. Absent reads as read-only.
+    #[serde(default)]
+    pub can_send: bool,
+    #[serde(default)]
+    pub history_for_new_members: bool,
+    /// Set on a server chat only, and never more than these two ids.
+    #[serde(default)]
+    pub server: Option<ServerChatRef>,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+fn notify_all() -> String {
+    "all".to_string()
+}
+
+/// The private server a server chat belongs to.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerChatRef {
+    pub host_id: String,
+    /// `jknet_session` of the server: 16 hex characters.
+    pub session_id: String,
+}
+
+/// One member of a conversation.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMember {
+    pub user: OnlineUser,
+    /// `owner` or `member`.
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub joined_at: String,
+    /// Another member's marker is `None` unless both sides share read
+    /// receipts; the viewer's own is always there.
+    #[serde(default)]
+    pub read_seq: Option<u64>,
+}
+
+/// One message of a conversation, addressed by `(conversationId, seq)`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessage {
+    pub conversation_id: String,
+    pub seq: u64,
+    /// `None` on a system message, and on a user message of a deleted
+    /// account.
+    #[serde(default)]
+    pub sender_id: Option<String>,
+    /// The ULID the sending launcher made, which is how its outbox finds the
+    /// message again.
+    #[serde(default)]
+    pub client_id: Option<String>,
+    /// `user` or `system`.
+    #[serde(default = "kind_user")]
+    pub kind: String,
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub cards: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub files: Vec<FileRef>,
+    /// The members this message mentions, the author of the message it
+    /// replies to included.
+    #[serde(default)]
+    pub mentions: Vec<String>,
+    #[serde(default)]
+    pub reply_to: Option<ReplyRef>,
+    #[serde(default)]
+    pub reactions: Vec<ReactionGroup>,
+    #[serde(default)]
+    pub system: Option<SystemEvent>,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+fn kind_user() -> String {
+    "user".to_string()
+}
+
+impl ChatMessage {
+    /// Whether this message was written by `me`. A deleted account's message
+    /// has no sender and is never anybody's own.
+    pub fn is_from(&self, me: Option<&str>) -> bool {
+        me.is_some() && self.sender_id.as_deref() == me
+    }
+
+    /// Whether a player wrote it, as opposed to the service.
+    pub fn is_user(&self) -> bool {
+        self.kind != "system"
+    }
+}
+
+/// What a system message records: `created`, `memberAdded`, `renamed`,
+/// `historyForNewMembers` and the rest of the contract's list.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemEvent {
+    pub event: String,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
+}
+
+/// The quote of the message a reply answers.
+///
+/// Two shapes on the wire: `{seq, senderId, excerpt}`, or `{seq, missing:
+/// true}` when the original expired or is hidden from the viewer. The
+/// frontend receives the same two shapes, so it can tell them apart by the
+/// presence of `missing`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplyRef {
+    pub seq: u64,
+    #[serde(default)]
+    pub sender_id: Option<String>,
+    #[serde(default)]
+    pub excerpt: String,
+    #[serde(default)]
+    pub missing: bool,
+}
+
+impl Serialize for ReplyRef {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        if self.missing {
+            let mut out = serializer.serialize_struct("ReplyRef", 2)?;
+            out.serialize_field("seq", &self.seq)?;
+            out.serialize_field("missing", &true)?;
+            return out.end();
+        }
+        let mut out = serializer.serialize_struct("ReplyRef", 3)?;
+        out.serialize_field("seq", &self.seq)?;
+        out.serialize_field("senderId", &self.sender_id)?;
+        out.serialize_field("excerpt", &self.excerpt)?;
+        out.end()
+    }
+}
+
+/// The players who reacted to a message with one emoji.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReactionGroup {
+    pub emoji: String,
+    #[serde(default)]
+    pub user_ids: Vec<String>,
+}
+
+/// A file attached to a message, or registered for one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRef {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub media_type: String,
+    /// `image`, `video`, `demo`, `config`, `archive`, `executable` or
+    /// `other`, as the service classified the bytes.
+    #[serde(default)]
+    pub class: String,
+    #[serde(default)]
+    pub danger: bool,
+    #[serde(default)]
+    pub meta: Option<FileMeta>,
+}
+
+/// What the sender's launcher said about a file when it registered it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// `media`, `file` or `clipboard`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+}
+
+/// An invitation into a group, for a player who asked to be asked.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupInvite {
+    pub conversation_id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    pub invited_by: OnlineUser,
+    #[serde(default)]
+    pub member_count: u32,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub expires_at: String,
+}
+
+/// The chat settings of the account, `ChatSettings` in the contract: the
+/// two reciprocal privacy switches and who may add the player to a group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ChatPrivacy {
+    pub share_read_receipts: bool,
+    pub share_typing: bool,
+    /// `friends` or `ask`.
+    pub group_add: String,
+}
+
+/// A missing settings row means the defaults, on the service and here.
+impl Default for ChatPrivacy {
+    fn default() -> Self {
+        ChatPrivacy {
+            share_read_receipts: true,
+            share_typing: true,
+            group_add: "friends".to_string(),
+        }
+    }
+}
+
+/// A partial update of [`ChatPrivacy`], `PATCH /v1/chat/settings`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPrivacyPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_read_receipts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share_typing: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_add: Option<String>,
+}
+
+/// How much of the account's file allowance is used.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ChatQuota {
+    pub used_bytes: u64,
+    pub quota_bytes: u64,
+    /// When the oldest file expires and frees its bytes.
+    pub next_free_at: Option<String>,
+}
+
+/// The answer of `GET /v1/chat/conversations`: everything the launcher
+/// keeps about chat, in one document.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ChatSyncDoc {
+    pub conversations: Vec<Conversation>,
+    pub group_invites: Vec<GroupInvite>,
+    pub settings: ChatPrivacy,
+    pub quota: ChatQuota,
+}
+
+/// One page of history, oldest first.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct MessagePage {
+    pub messages: Vec<ChatMessage>,
+    pub has_before: bool,
+    pub has_after: bool,
+}
+
+/// One page of search results, newest first.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SearchPage {
+    pub results: Vec<SearchHit>,
+    /// Opaque: handed back as `before` for the next page.
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub message: ChatMessage,
+}
+
+/// The answer of `POST /v1/chat/files` and of the upload that follows.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRegistration {
+    pub file: FileRef,
+    /// `false` when the account already stored the same bytes: the launcher
+    /// skips the upload.
+    #[serde(default)]
+    pub needs_upload: bool,
+}
+
+/// A player the service did not add to a group, and why: `not_friend`,
+/// `member`, `full` or `cooldown`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Refusal {
+    pub user_id: String,
+    pub reason: String,
+}
+
+/// The answer of `POST /v1/chat/groups`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupResult {
+    pub conversation: Conversation,
+    #[serde(default, deserialize_with = "user_ids")]
+    pub added: Vec<String>,
+    #[serde(default, deserialize_with = "user_ids")]
+    pub invited: Vec<String>,
+    #[serde(default)]
+    pub refused: Vec<Refusal>,
+}
+
+/// The answer of `POST /v1/chat/groups/{id}/members`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct AddResult {
+    #[serde(deserialize_with = "user_ids")]
+    pub added: Vec<String>,
+    #[serde(deserialize_with = "user_ids")]
+    pub invited: Vec<String>,
+    pub refused: Vec<Refusal>,
+}
+
+/// Reads a list of players as ids, whether the service lists ids, users or
+/// members: the three shapes name the same people, and the frontend matches
+/// them against the friends list by id.
+fn user_ids<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let values = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(values
+        .iter()
+        .filter_map(|value| {
+            value
+                .as_str()
+                .or_else(|| value.get("id").and_then(serde_json::Value::as_str))
+                .or_else(|| value.pointer("/user/id").and_then(serde_json::Value::as_str))
+                .map(str::to_string)
+        })
+        .collect())
+}
+
+/// What `POST /v1/chat/conversations/{id}/messages` carries.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewMessage {
+    pub client_id: String,
+    pub body: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cards: Vec<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub file_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply_seq: Option<u64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn user(id: &str) -> serde_json::Value {
+        json!({
+            "id": id, "displayName": id, "avatarUrl": null, "provider": "dev",
+            "providerName": id, "createdAt": "2026-09-26T10:00:00Z"
+        })
+    }
+
+    /// A message the way the contract writes it, with everything a message
+    /// can carry.
+    fn wire_message() -> serde_json::Value {
+        json!({
+            "conversationId": "01JCONV", "seq": 42, "senderId": "01HKYLE",
+            "clientId": "01JCLIENT", "kind": "user", "body": "gg <@01HME>",
+            "cards": [{ "type": "map", "v": 1, "fallbackText": "mp/ffa3", "game": "ja", "name": "mp/ffa3" }],
+            "files": [{
+                "id": "01JFILE", "name": "shot.jpg", "size": 812345, "mediaType": "image/jpeg",
+                "class": "image", "danger": false,
+                "meta": { "width": 1920, "height": 1080, "durationMs": null, "origin": "media" }
+            }],
+            "mentions": ["01HME"],
+            "replyTo": { "seq": 40, "senderId": null, "excerpt": "who left?" },
+            "reactions": [{ "emoji": "👍", "userIds": ["01HME"] }],
+            "system": null,
+            "createdAt": "2026-09-26T10:42:00Z"
+        })
+    }
+
+    #[test]
+    fn a_conversation_of_the_contract_reads_and_writes_back_the_same() {
+        let wire = json!({
+            "id": "01JCONV", "kind": "group", "title": null, "ownerId": "01HKYLE",
+            "members": [
+                { "user": user("01HME"), "role": "member", "joinedAt": "2026-09-26T10:00:00Z", "readSeq": 40 },
+                { "user": user("01HKYLE"), "role": "owner", "joinedAt": "2026-09-26T10:00:00Z", "readSeq": null }
+            ],
+            "lastSeq": 42, "lastMessage": wire_message(),
+            "readSeq": 40, "visibleFromSeq": 0, "unread": 2, "unreadMentions": 1,
+            "notify": "mentions", "canSend": true, "historyForNewMembers": false,
+            "server": null, "createdAt": "2026-09-26T10:00:00Z"
+        });
+        let conversation: Conversation = serde_json::from_value(wire.clone()).expect("parses");
+        assert_eq!(conversation.members[1].read_seq, None, "a hidden marker stays hidden");
+        assert_eq!(conversation.members[0].read_seq, Some(40));
+        let message = conversation.last_message.as_ref().expect("a last message");
+        let reply = message.reply_to.as_ref().expect("a reply");
+        assert_eq!(reply.sender_id, None, "a deleted author stays unnamed");
+        assert!(!reply.missing);
+
+        // What reaches the frontend is what came off the wire, minus the
+        // `avatarUrl: null` and `admin` of `User`, which is not chat's.
+        let back = serde_json::to_value(&conversation).expect("writes");
+        for key in ["lastSeq", "readSeq", "unread", "unreadMentions", "notify", "canSend"] {
+            assert_eq!(back[key], wire[key], "{key}");
+        }
+        assert_eq!(back["lastMessage"]["replyTo"], wire["lastMessage"]["replyTo"]);
+        assert_eq!(back["lastMessage"]["files"][0]["meta"]["width"], 1920);
+        assert_eq!(back["lastMessage"]["cards"], wire["lastMessage"]["cards"]);
+        assert_eq!(back["members"][1]["readSeq"], serde_json::Value::Null);
+        let again: Conversation = serde_json::from_value(back).expect("parses again");
+        assert_eq!(again, conversation);
+    }
+
+    #[test]
+    fn a_reply_to_a_missing_message_keeps_its_own_shape() {
+        let missing: ReplyRef =
+            serde_json::from_value(json!({ "seq": 7, "missing": true })).expect("parses");
+        assert!(missing.missing);
+        assert_eq!(
+            serde_json::to_value(&missing).expect("writes"),
+            json!({ "seq": 7, "missing": true })
+        );
+        let present: ReplyRef = serde_json::from_value(
+            json!({ "seq": 8, "senderId": "01HKYLE", "excerpt": "duel?" }),
+        )
+        .expect("parses");
+        assert_eq!(
+            serde_json::to_value(&present).expect("writes"),
+            json!({ "seq": 8, "senderId": "01HKYLE", "excerpt": "duel?" })
+        );
+    }
+
+    #[test]
+    fn a_system_message_and_a_deleted_accounts_message_keep_their_nulls() {
+        let system: ChatMessage = serde_json::from_value(json!({
+            "conversationId": "c", "seq": 3, "senderId": null, "kind": "system",
+            "system": { "event": "memberLeft", "userId": null, "by": null },
+            "createdAt": "2026-09-26T10:00:00Z"
+        }))
+        .expect("parses");
+        assert!(!system.is_user());
+        let back = serde_json::to_value(&system).expect("writes");
+        assert_eq!(
+            back["system"],
+            json!({ "event": "memberLeft", "userId": null, "by": null })
+        );
+        assert_eq!(back["senderId"], serde_json::Value::Null);
+
+        let history: ChatMessage = serde_json::from_value(json!({
+            "conversationId": "c", "seq": 4, "senderId": null, "kind": "user",
+            "body": "hi <@deleted>", "system": { "event": "historyForNewMembers", "on": true, "by": "01HKYLE" }
+        }))
+        .expect("parses");
+        assert!(history.is_user());
+        assert_eq!(history.system.and_then(|event| event.on), Some(true));
+    }
+
+    #[test]
+    fn a_sync_document_reads_with_every_part_and_with_none() {
+        let doc: ChatSyncDoc = serde_json::from_value(json!({
+            "conversations": [{ "id": "c", "kind": "direct", "canSend": false, "members": [] }],
+            "groupInvites": [{
+                "conversationId": "g", "title": "Saber school", "invitedBy": user("01HMARA"),
+                "memberCount": 3, "createdAt": "2026-09-26T10:00:00Z", "expiresAt": "2026-10-03T10:00:00Z"
+            }],
+            "settings": { "shareReadReceipts": false, "shareTyping": true, "groupAdd": "ask" },
+            "quota": { "usedBytes": 1024, "quotaBytes": 1073741824, "nextFreeAt": null }
+        }))
+        .expect("parses");
+        assert_eq!(doc.conversations[0].notify, "all");
+        assert!(!doc.conversations[0].can_send);
+        assert_eq!(doc.group_invites[0].member_count, 3);
+        assert_eq!(doc.settings.group_add, "ask");
+        assert_eq!(doc.quota.quota_bytes, 1_073_741_824);
+
+        // An empty document is the defaults: sharing on, adding by friends.
+        let empty: ChatSyncDoc = serde_json::from_value(json!({})).expect("parses");
+        assert_eq!(empty.settings, ChatPrivacy::default());
+        assert!(empty.settings.share_read_receipts && empty.settings.share_typing);
+    }
+
+    #[test]
+    fn the_players_of_a_group_answer_read_as_ids_in_any_of_three_shapes() {
+        let result: GroupResult = serde_json::from_value(json!({
+            "conversation": { "id": "g", "kind": "group" },
+            "added": ["01HKYLE", { "id": "01HJAN" }, { "user": user("01HMARA") }],
+            "invited": [],
+            "refused": [{ "userId": "01HDASH", "reason": "not_friend" }]
+        }))
+        .expect("parses");
+        assert_eq!(result.added, ["01HKYLE", "01HJAN", "01HMARA"]);
+        assert_eq!(result.refused[0].reason, "not_friend");
+        let added: AddResult = serde_json::from_value(json!({ "invited": ["01HLUKE"] })).expect("parses");
+        assert_eq!((added.added.len(), added.invited.len()), (0, 1));
+    }
+
+    #[test]
+    fn a_new_message_leaves_out_what_it_does_not_carry() {
+        let plain = NewMessage {
+            client_id: "01JCLIENT".into(),
+            body: "gg".into(),
+            ..NewMessage::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&plain).expect("writes"),
+            json!({ "clientId": "01JCLIENT", "body": "gg" })
+        );
+        let full = NewMessage {
+            file_ids: vec!["01JFILE".into()],
+            reply_seq: Some(40),
+            ..plain
+        };
+        let value = serde_json::to_value(&full).expect("writes");
+        assert_eq!(value["fileIds"], json!(["01JFILE"]));
+        assert_eq!(value["replySeq"], 40);
+        let patch = ChatPrivacyPatch {
+            share_typing: Some(false),
+            ..ChatPrivacyPatch::default()
+        };
+        assert_eq!(
+            serde_json::to_value(&patch).expect("writes"),
+            json!({ "shareTyping": false })
+        );
+    }
+
+    #[test]
+    fn a_file_registration_reads_both_answers() {
+        let registered: FileRegistration = serde_json::from_value(json!({
+            "file": { "id": "01JFILE", "name": "demo.dm_26", "size": 10, "mediaType": "application/octet-stream",
+                      "class": "demo", "danger": false, "meta": null },
+            "needsUpload": true
+        }))
+        .expect("parses");
+        assert!(registered.needs_upload);
+        // The upload answers `{file}` alone.
+        let uploaded: FileRegistration = serde_json::from_value(json!({
+            "file": { "id": "01JFILE", "name": "x.exe", "class": "executable", "danger": true }
+        }))
+        .expect("parses");
+        assert!(!uploaded.needs_upload && uploaded.file.danger);
+    }
+}
