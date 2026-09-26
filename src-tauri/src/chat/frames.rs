@@ -292,6 +292,9 @@ pub fn apply(chat: &ChatState, me: Option<&str>, frame: Frame, now: Instant) -> 
             }
             chat.drafts().remove(&id);
             lock(&chat.read_pending).remove(&id);
+            // The chat of a server this launcher hosts opens again at the
+            // next heartbeat, unless the host left it.
+            chat.servers().removed(&id, &removal.reason);
             // Told even when the book did not have it: a window may hold the
             // thread from before the last sync document.
             effects.push(emit_effect(EVENT_REMOVED, &removal));
@@ -579,6 +582,29 @@ mod tests {
         assert!(chat.book().get("c").is_none());
         assert!(chat.outbox().all().is_empty());
         assert!(chat.drafts().is_empty());
+    }
+
+    #[test]
+    fn a_removed_server_chat_opens_again_unless_its_host_left_it() {
+        use super::super::server::OpenPlan;
+        const SESSION: &str = "5e0b7c1f9a2d4c38";
+        let chat = state_with(vec![conversation("c", 1, 1)]);
+        chat.servers().plan_open(SESSION, |_| false);
+        chat.servers().opened(SESSION, "c");
+        let removal = |reason: &str| {
+            Frame::Removed(Removal { conversation_id: "c".into(), reason: reason.into() })
+        };
+        // The service ended it while the server runs: the next heartbeat
+        // opens a new one.
+        apply(&chat, Some(ME), removal("ended"), Instant::now());
+        assert!(matches!(
+            chat.servers().plan_open(SESSION, |_| false),
+            OpenPlan::Open { .. }
+        ));
+        // The host left it: it stays ended.
+        chat.servers().opened(SESSION, "c");
+        apply(&chat, Some(ME), removal("left"), Instant::now());
+        assert_eq!(chat.servers().plan_open(SESSION, |_| false), OpenPlan::Nothing);
     }
 
     #[test]

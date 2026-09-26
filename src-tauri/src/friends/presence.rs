@@ -259,7 +259,16 @@ pub(crate) async fn push(app: &AppHandle) {
     }
     let update = PresenceUpdate::from(&presence);
     match app.state::<OnlineClient>().put_presence(&ctx, &update).await {
-        Ok(_) => log::debug!("presence: {}", update.status),
+        Ok(_) => {
+            log::debug!("presence: {}", update.status);
+            // --- slice: chat ---
+            // The service opens the chat of a private server only for the
+            // session a stored heartbeat carried, so this is the moment to
+            // ask. A refusal waits for the next heartbeat.
+            if let Some(hosting) = presence.hosting.as_ref() {
+                crate::chat::server::ensure_open(app, &hosting.session_id);
+            }
+        }
         Err(e) => log::debug!("cannot report presence: {e}"),
     }
 }

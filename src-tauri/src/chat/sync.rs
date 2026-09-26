@@ -136,7 +136,7 @@ pub(super) async fn resync(app: &AppHandle) {
 }
 
 /// Whether the settings still name the account `ctx` was made for.
-fn same_account(app: &AppHandle, ctx: &OnlineContext) -> bool {
+pub(super) fn same_account(app: &AppHandle, ctx: &OnlineContext) -> bool {
     app.state::<AppState>().settings().is_ok_and(|settings| {
         let now = OnlineContext::from_settings(&settings);
         now.base_url == ctx.base_url && now.token == ctx.token

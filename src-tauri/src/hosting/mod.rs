@@ -30,7 +30,9 @@
 //! server to answer with the label of the session, then polls it every 5 s:
 //! players, the auto-stop, the ticket of the relay. Every change goes out as
 //! `host:session` with the whole [`HostSession`]. While the session runs,
-//! the presence carries `hosting` (see `friends::presence::effective`).
+//! the presence carries `hosting` (see `friends::presence::effective`), and
+//! the first heartbeat that carried it opens the chat of the server
+//! (`chat::server`); the stop ends that chat.
 //!
 //! ## Auto-stop
 //!
@@ -2019,6 +2021,11 @@ impl Supervisor {
         }
         let exit_code = self.process.exit_code();
         self.close_relay().await;
+        // --- slice: chat --- the chat of the server ends with it: here at
+        // once, on the service within a few seconds, best effort. Without
+        // this the service ends it at the next heartbeat.
+        let session_id = self.live.snapshot().id;
+        crate::chat::server::close(&self.app, &session_id).await;
         if let Err(e) = std::fs::remove_file(&self.cfg_path) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 log::warn!("hosting: cannot delete {}: {e}", self.cfg_path.display());

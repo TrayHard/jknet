@@ -17,6 +17,9 @@
 //! 7. The game starts through `launch::start_client` with `+set password`
 //!    when there is a password; nothing is written to the server history,
 //!    because the addresses die with the session.
+//! 8. The guest joins the chat of the server in the background
+//!    (`chat::server::join`): a chat the host has not opened yet is asked for
+//!    again a few times, a server not open to the guest ends the attempt.
 
 use std::net::SocketAddrV4;
 use std::time::Duration;
@@ -133,12 +136,15 @@ pub async fn route(hosting: &HostingInfo) -> Result<Route> {
     })
 }
 
-/// Joins a private server with the default client of its game.
+/// Joins a private server with the default client of its game, and then its
+/// chat. `host_user_id` is the account that hosts it: the chat is found by
+/// the host and the session together.
 pub async fn join_private(
     app: &AppHandle,
     state: &AppState,
     launch: &LaunchState,
     hosting: &HostingInfo,
+    host_user_id: &str,
 ) -> Result<JoinResult> {
     let game = Game::from_id(&hosting.game).ok_or_else(|| {
         AppError::InvalidInput(format!("the private server plays an unknown game {:?}", hosting.game))
@@ -165,6 +171,9 @@ pub async fn join_private(
         crate::profiles::ProfileChoice::default(),
         crate::engines::LaunchMode::Multiplayer,
     )?;
+    // --- slice: chat --- in the background: the game is what the player
+    // waits for, and the chat may open only after the host's next heartbeat.
+    crate::chat::server::join(app, host_user_id, &hosting.session_id);
     Ok(JoinResult {
         game: running,
         path: route.path,

@@ -21,8 +21,8 @@ use crate::error::AppError;
 use crate::friends::live::upgrade_request;
 use crate::online::mock_tests::MockOnline;
 use crate::online::{
-    ChatMessage, Conversation, LiveFrame, NewMessage, OnlineClient, OnlineContext, OnlineUser,
-    PageAnchor, SearchQuery,
+    ChatMessage, Conversation, HostingInfo, LiveFrame, NewMessage, OnlineClient, OnlineContext,
+    OnlineUser, PageAnchor, PresenceUpdate, SearchQuery, ServerChatRef,
 };
 
 use super::files::{self, test_support::jpeg_with_gps, LocalStatus};
@@ -36,6 +36,7 @@ const PORT_OPT_IN: u16 = 8802;
 const PORT_ROUTES: u16 = 8803;
 const PORT_FILES: u16 = 8804;
 const PORT_CARDS: u16 = 8805;
+const PORT_SERVER: u16 = 8806;
 
 /// How long a frame the test waits for may take.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(10);
@@ -697,4 +698,167 @@ async fn every_card_kind_passes_the_checks_and_opens_in_its_editor() {
         .await
         .expect("stored");
     assert_eq!(sent.cards, built);
+}
+
+/// What a guest of the cast sees after `POST /v1/dev/chat/servers/:id/join`.
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GuestView {
+    visible_from_seq: u64,
+    seqs: Vec<u64>,
+}
+
+/// A friend of the cast joins the chat of the server the account hosts.
+async fn guest_joins(mock: &MockOnline, ctx: &OnlineContext, session: &str, user_id: &str) -> GuestView {
+    let text = reqwest::Client::new()
+        .post(format!("{}/v1/dev/chat/servers/{session}/join", mock.base_url()))
+        .bearer_auth(ctx.token.as_deref().unwrap_or_default())
+        .header("content-type", "application/json")
+        .body(serde_json::json!({ "userId": user_id }).to_string())
+        .send()
+        .await
+        .expect("the mock answers")
+        .text()
+        .await
+        .expect("a body");
+    serde_json::from_str(&text).unwrap_or_else(|e| panic!("{text}: {e}"))
+}
+
+/// The heartbeat of a launcher that hosts `hosting`, or nothing.
+async fn heartbeat(client: &OnlineClient, ctx: &OnlineContext, hosting: Option<HostingInfo>) {
+    let update = PresenceUpdate {
+        status: "online".into(),
+        hosting,
+        ..PresenceUpdate::default()
+    };
+    client.put_presence(ctx, &update).await.expect("the heartbeat is stored");
+}
+
+fn hosting_of(session: &str) -> HostingInfo {
+    HostingInfo {
+        session_id: session.into(),
+        game: "ja".into(),
+        map: Some("mp/ffa3".into()),
+        max_players: 8,
+        lan_addresses: vec!["192.168.1.23:29070".into()],
+        password: Some("k7m2q9xa".into()),
+        join_policy: "friends".into(),
+        join_user_ids: Some(Vec::new()),
+        ..HostingInfo::default()
+    }
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+async fn a_server_chat_opens_with_the_server_takes_its_guests_and_ends_with_it() {
+    use super::server::{self, OpenPlan, Opened, ServerChats};
+
+    let mock = MockOnline::start_with(PORT_SERVER, &[("MOCK_ONLINE_CHAT_REPLY_MS", "0")]);
+    let (ctx, me) = sign_in(&mock).await;
+    let client = OnlineClient::new();
+    let mut socket = open_socket(&ctx, true).await;
+    let friends = client.get_friends(&ctx).await.expect("the friends").friends;
+    let named = |name: &str| {
+        friends
+            .iter()
+            .find(|friend| friend.user.display_name.starts_with(name))
+            .map(|friend| friend.user.id.clone())
+            .expect("a seeded friend")
+    };
+    let (kyle, jan, mara) = (named("Kyle"), named("Jan"), named("Mara"));
+    let session = "0123456789abcdef";
+    let mut chats = ServerChats::default();
+
+    // -- The host: the chat opens once a heartbeat carried the server ---------
+    assert_eq!(code_of(client.chat_open_server(&ctx, session).await), "not_hosting");
+    heartbeat(&client, &ctx, Some(hosting_of(session))).await;
+    assert_eq!(chats.plan_open(session, |_| false), OpenPlan::Open { superseded: None });
+    let opened = client.chat_open_server(&ctx, session).await.expect("the chat opens");
+    assert_eq!(chats.opened(session, &opened.id), Opened::Keep);
+    assert_eq!(opened.kind, "server");
+    assert_eq!(
+        opened.server,
+        Some(ServerChatRef { host_id: me.id.clone(), session_id: session.into() })
+    );
+    assert!(!opened.history_for_new_members, "a new server chat starts with history off (D1)");
+    let again = client.chat_open_server(&ctx, session).await.expect("opened again");
+    assert_eq!(again.id, opened.id, "the open of an open chat answers it");
+    assert_eq!(chats.plan_open(session, |id| id == opened.id), OpenPlan::Nothing);
+
+    // -- Guests: history only from the join, until the host turns it on (D1) --
+    client
+        .chat_send(
+            &ctx,
+            &opened.id,
+            &NewMessage { client_id: new_client_id(), body: "warming up".into(), ..NewMessage::default() },
+        )
+        .await
+        .expect("the host writes");
+    let kyle_sees = guest_joins(&mock, &ctx, session, &kyle).await;
+    assert_eq!(kyle_sees.seqs.len(), 1, "Kyle sees his join message only: {kyle_sees:?}");
+    assert_eq!(kyle_sees.visible_from_seq, kyle_sees.seqs[0] - 1);
+    let on = client.chat_patch_server(&ctx, session, true).await.expect("the host switches");
+    assert!(on.history_for_new_members);
+    let mara_sees = guest_joins(&mock, &ctx, session, &mara).await;
+    assert_eq!(mara_sees.visible_from_seq, 0);
+    assert_eq!(mara_sees.seqs.first(), Some(&1), "Mara sees the chat from its start");
+    let kyle_again = guest_joins(&mock, &ctx, session, &kyle).await;
+    assert_eq!(kyle_again.visible_from_seq, kyle_sees.visible_from_seq, "Kyle keeps what he saw");
+
+    // -- A guest of a friend's server: joined, and the switch is not theirs ---
+    let jan_session = "5e0b7c1f9a2d4c38";
+    let guest = server::retry_join(&[Duration::from_millis(10); 3], || {
+        client.chat_join_server(&ctx, jan_session, &jan)
+    })
+    .await
+    .expect("joined Jan's server chat");
+    assert_eq!(guest.server.as_ref().map(|s| s.host_id.as_str()), Some(jan.as_str()));
+    assert_eq!(guest.visible_from_seq, guest.last_seq - 1, "a guest sees from the join");
+    assert_eq!(code_of(client.chat_patch_server(&ctx, jan_session, true).await), "owner_only");
+    // A host with no chat for that session: asked four times, then given up.
+    let mut asked = 0;
+    let missing = server::retry_join(&[Duration::from_millis(10); 3], || {
+        asked += 1;
+        client.chat_join_server(&ctx, "ffffffffffffffff", &jan)
+    })
+    .await;
+    assert_eq!((code_of(missing), asked), ("not_found".to_string(), 4));
+
+    // -- The guest leaves (D9) ------------------------------------------------
+    client
+        .chat_remove_member(&ctx, &guest.id, &me.id)
+        .await
+        .expect("left Jan's server chat");
+    assert_eq!(code_of(client.chat_conversation(&ctx, &guest.id).await), "not_found");
+
+    // -- The server stops: the chat ends for everybody --------------------------
+    assert_eq!(chats.closing(session), Some(opened.id.clone()));
+    server::close_on_service(&client, &ctx, session).await;
+    let (seen, ended) = read_until(&mut socket, FRAME_TIMEOUT, |frame| {
+        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == opened.id.as_str()
+    })
+    .await;
+    assert!(ended, "no chat.conversation.removed for the stopped server");
+    assert_eq!(seen.last().map(|frame| frame.payload["reason"].clone()), Some("ended".into()));
+    assert_eq!(code_of(client.chat_conversation(&ctx, &opened.id).await), "not_found");
+    client
+        .chat_close_server(&ctx, session)
+        .await
+        .expect("a second close is not an error");
+    // The answer of an open that was still out is ended again.
+    assert_eq!(chats.opened(session, &opened.id), Opened::Close);
+
+    // -- A heartbeat without the server ends a chat the stop did not ------------
+    let next = "fedcba9876543210";
+    heartbeat(&client, &ctx, Some(hosting_of(next))).await;
+    let reopened = client.chat_open_server(&ctx, next).await.expect("the next server's chat");
+    assert_ne!(reopened.id, opened.id);
+    heartbeat(&client, &ctx, None).await;
+    let (_, ended) = read_until(&mut socket, FRAME_TIMEOUT, |frame| {
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == reopened.id.as_str()
+            && frame.payload["reason"] == "ended"
+    })
+    .await;
+    assert!(ended, "a heartbeat without the server did not end its chat");
 }

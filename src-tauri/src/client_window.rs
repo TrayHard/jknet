@@ -196,7 +196,7 @@ pub fn close_for(app: &AppHandle, client_id: &str) {
     }
 }
 
-/// Destroys every client window.
+/// Destroys every client window, and the chat window.
 ///
 /// Called when `main` goes away.
 ///
@@ -219,9 +219,14 @@ pub fn close_for(app: &AppHandle, client_id: &str) {
 ///
 /// [`close_for`] keeps `close`, because a window closed one at a time is a
 /// window the player is looking at and can answer for.
+///
+/// --- slice: chat window ---
+/// The chat window goes the same way: without `main` it is one more window
+/// that cannot reach the rest of the launcher, and quitting must not leave
+/// it over a game. Its bounds are written by its own `Destroyed` event.
 pub fn close_all(app: &AppHandle) {
     for (label, window) in app.webview_windows() {
-        if !is_client_label(&label) {
+        if !is_client_label(&label) && label != crate::chat::window::LABEL {
             continue;
         }
         if let Err(e) = window.destroy() {

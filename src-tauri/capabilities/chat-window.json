@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "chat-window",
+  "description": "Permissions of the chat window: its own title bar, the events it listens to, the system locale and the log. Dialogs, links, files and always-on-top run in the core.",
+  "windows": ["chat"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-unminimize",
+    "core:window:allow-set-focus",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "log:default",
+    "os:allow-locale"
+  ]
+}

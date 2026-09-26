@@ -1277,8 +1277,7 @@ impl OnlineClient {
 }
 
 // The routes of server chats. Their callers are the server-chat hooks of
-// hosting and joining, which land after the plumbing that carries these.
-#[allow(dead_code)]
+// hosting and joining, in `crate::chat::server`.
 impl OnlineClient {
     /// `PUT /v1/chat/servers/{sessionId}`: the host opens the chat of the
     /// server it runs now. `409 not_hosting` until its presence says so.

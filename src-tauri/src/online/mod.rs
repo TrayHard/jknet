@@ -64,7 +64,7 @@ pub use client::{is_chat_unavailable, is_retryable, PageAnchor, SearchQuery};
 pub use types::{
     AddResult, ChatMessage, ChatPrivacy, ChatPrivacyPatch, ChatQuota, ChatSyncDoc, Conversation,
     FileMeta, FileRef, GroupInvite, GroupResult, MessagePage, NewMessage, ReactionGroup,
-    SearchPage,
+    SearchPage, ServerChatRef,
 };
 /// The member entry of a conversation, which the tests of `crate::chat` build
 /// summaries from.

@@ -28,7 +28,8 @@
  *     POST   /v1/friends/requests/:id/accept
  *     DELETE /v1/friends/requests/:id     declines one, cancels the other
  *     DELETE /v1/friends/:userId
- *     PUT    /v1/presence
+ *     PUT    /v1/presence                 a heartbeat of another session, or
+ *                                         of none, ends the account's server chat
  *     GET    /v1/invites  POST /v1/invites  DELETE /v1/invites/:id
  *     GET    /v1/ws                       the live socket; the token in
  *                                         Authorization or, as older
@@ -98,7 +99,7 @@
  * account in through the `selected` policy. An invite keeps its `hosting`
  * whole, password included: it goes to one friend.
  *
- * Five routes are deliberately outside the contract, all marked below:
+ * Six routes are deliberately outside the contract, all marked below:
  * `POST /v1/dev/token` hands out a token without the browser round trip, and
  * `POST /v1/dev/invite` makes an invitation arrive on demand; with
  * `?hosting=1` or `{ "hosting": true }` the invitation leads to a private
@@ -106,8 +107,11 @@
  * the cast post `{ conversationId?, body?, mention?, cards? }` (Kyle's direct
  * conversation by default; `cards: "all"` posts one message per card kind),
  * `GET /v1/dev/chat/typing` lists the typing
- * frames the launcher sent, and `POST /v1/dev/chat/files/:id/lose` drops the
- * bytes of a chat file, so its download answers `404 file_gone`.
+ * frames the launcher sent, `POST /v1/dev/chat/files/:id/lose` drops the
+ * bytes of a chat file, so its download answers `404 file_gone`, and
+ * `POST /v1/dev/chat/servers/:sessionId/join` `{ userId? }` makes a friend
+ * of the cast (Kyle by default) join the chat of the server this account
+ * hosts, answering what that guest sees: `{ userId, visibleFromSeq, seqs }`.
  *
  * Environment:
  *
@@ -407,6 +411,9 @@ function route(request, response, url, body) {
       };
       const hosted = hosting ? ` hosting ${hosting.map} (${hosting.joinPolicy})` : "";
       console.log(`  presence -> ${presence.status} ${presence.serverAddress ?? ""}${hosted}`);
+      // --- slice: chat --- a heartbeat of another session, or of none,
+      // ends the chat of the server this account hosted, as the service does.
+      endStaleServerChats(hosting?.sessionId ?? null);
       return send(response, 200, presence);
     });
   }
@@ -477,6 +484,12 @@ function route(request, response, url, body) {
   const lostFile = /^\/v1\/dev\/chat\/files\/([^/]+)\/lose$/.exec(path);
   if (lostFile && method === "POST") {
     return withAuth(request, response, () => devChatLoseFile(response, lostFile[1]));
+  }
+  // Not in the contract: a member of the cast joins the chat of the server
+  // this account hosts, the way a guest's launcher does after its game started.
+  const guestJoin = /^\/v1\/dev\/chat\/servers\/([0-9a-f]{16})\/join$/.exec(path);
+  if (guestJoin && method === "POST") {
+    return withAuth(request, response, () => devChatServerJoin(response, guestJoin[1], body));
   }
 
   return notFound(response);
@@ -2867,17 +2880,29 @@ function chatJoinServer(response, sessionId, body) {
   return send(response, 200, conversationWire(conversation));
 }
 
+/** Ends the chats this account hosts for any session but `sessionId`
+ *  (`null`: every one), the way the service reconciles a heartbeat. */
+function endStaleServerChats(sessionId) {
+  if (!account) return;
+  for (const conversation of [...chats.values()]) {
+    if (conversation.kind === "server" && conversation.ownerId === account.id && conversation.server.sessionId !== sessionId) {
+      endChat(conversation, "ended");
+    }
+  }
+}
+
 function chatPatchServer(response, sessionId, body) {
   const me = account.id;
   const conversation = [...chats.values()].find((entry) => entry.kind === "server" && entry.server.sessionId === sessionId && entry.members.has(me));
   if (!conversation) return noConversation(response);
   if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the host can change the chat of the server");
   if (typeof body?.historyForNewMembers !== "boolean") return fail(response, 400, "invalid", "historyForNewMembers must be true or false");
+  // A switch that changes nothing tells nobody, as on the service.
   if (body.historyForNewMembers !== conversation.historyForNewMembers) {
     conversation.historyForNewMembers = body.historyForNewMembers;
     announceMessage(conversation, systemPost(conversation, "historyForNewMembers", { on: body.historyForNewMembers, by: me }));
+    announceConversation(conversation);
   }
-  announceConversation(conversation);
   return send(response, 200, conversationWire(conversation));
 }
 
@@ -3046,6 +3071,26 @@ function devChatLoseFile(response, fileId) {
   if (!file) return fail(response, 404, "not_found", "No such file");
   file.bytes = null;
   return send(response, 200, { file: fileWire(file) });
+}
+
+/** Not in the contract: a friend of the cast (`userId`, Kyle by default)
+ *  joins the chat this account hosts for `sessionId`, with its join message
+ *  and what the history setting lets it see (D1). Answers what that guest
+ *  sees: `{ userId, visibleFromSeq, seqs }`. A guest already in answers the
+ *  same without a second join message. */
+function devChatServerJoin(response, sessionId, body) {
+  const me = account.id;
+  const conversation = [...chats.values()].find((entry) => entry.kind === "server" && entry.ownerId === me && entry.server.sessionId === sessionId);
+  if (!conversation) return noConversation(response);
+  const userId = String(body?.userId ?? cast.kyle.id);
+  if (!isFriend(userId)) return fail(response, 403, "forbidden", "Only a friend of the host joins the chat of its server");
+  if (!conversation.members.has(userId)) {
+    announceMessage(conversation, join(conversation, userId, "memberJoined", null));
+    announceConversation(conversation);
+  }
+  const member = conversation.members.get(userId);
+  const seqs = conversation.messages.filter((message) => message.seq > member.visibleFromSeq).map((message) => message.seq);
+  return send(response, 200, { userId, visibleFromSeq: member.visibleFromSeq, seqs });
 }
 
 /** Not in the contract: a member of the cast posts on demand, so a toast or

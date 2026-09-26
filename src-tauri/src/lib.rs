@@ -200,6 +200,12 @@ pub fn run() {
         // `close requested` line with the label of the window it came from.
         .on_window_event(|window, event| {
             let label = window.label();
+            // --- slice: chat window ---
+            // The chat window keeps its own bounds for each of its two
+            // modes, and writes them when it goes; see `chat::window`.
+            if label == chat::window::LABEL {
+                chat::window::track(window, event);
+            }
             match event {
                 tauri::WindowEvent::CloseRequested { api, .. } => {
                     log::info!("window {label}: close requested");
@@ -309,8 +315,14 @@ pub fn run() {
 
             #[cfg(desktop)]
             {
-                app.handle()
-                    .plugin(tauri_plugin_window_state::Builder::default().build())?;
+                // --- slice: chat window ---
+                // The plugin keeps one set of bounds per label; the chat
+                // window has two, one per mode, and keeps them itself.
+                app.handle().plugin(
+                    tauri_plugin_window_state::Builder::default()
+                        .with_denylist(&[chat::window::LABEL])
+                        .build(),
+                )?;
                 // --- slice: installer ---
                 // The updater is desktop only: it has no mobile backend.
                 app.handle()
@@ -404,6 +416,10 @@ pub fn run() {
         // The summaries, drafts, send queue and read markers of chat. Memory
         // only: the service keeps the history.
         .manage(chat::ChatState::default())
+        // --- slice: chat window ---
+        // The one chat window: its build lock and its mode, bounds and
+        // switches between writes of `settings.json`.
+        .manage(chat::window::ChatWindowState::default())
         // --- slice: servers browser ---
         // Which tabs of which game have a scan in flight. Two tabs may scan at
         // once, one tab may not scan twice: the guard lives here rather than in
@@ -588,6 +604,17 @@ pub fn run() {
             chat::cards::chat_card_to_config,
             chat::cards::chat_scan_commands,
             chat::links::chat_open_link,
+            // The chat of a private server: joined from a host invite card.
+            // The host opens and closes it from the hosting hooks, guests
+            // join it from `join_private`, without a command of their own.
+            chat::server::chat_join_host_card,
+            // --- slice: chat window ---
+            // The separate chat window and its compact mode over a game.
+            chat::window::open_chat_window,
+            chat::window::chat_window_state,
+            chat::window::chat_window_set_compact,
+            chat::window::chat_window_set_always_on_top,
+            chat::window::chat_window_set_opacity,
             // --- slice: jkhub ---
             jkhub::jkhub_categories,
             jkhub::jkhub_list,

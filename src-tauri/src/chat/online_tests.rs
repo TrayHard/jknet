@@ -19,6 +19,13 @@
 //! against the hash the service answers, and gets exactly the stripped copy;
 //! a stranger gets `404`.
 //!
+//! A third walks the chat of a private server: A hosts one and opens its
+//! chat once a heartbeat carried it; B, a friend, joins it only when the
+//! server is open to B, and sees it from the join until A turns history on
+//! (D1); a stranger is refused; the switch is A's; B leaves and joins again
+//! (D9); the stop ends the chat for B, and a heartbeat without the server
+//! ends the chat of the next one.
+//!
 //! Ignored because they need a service on `127.0.0.1:8787` started with the
 //! developer provider on (`JKNET_ONLINE_DEV_PROVIDER=1`) and the chat API.
 //! Run them by hand:
@@ -32,11 +39,15 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::error::AppError;
 use crate::friends::live::upgrade_request;
 use crate::friends::online_tests::{sign_in, Player};
-use crate::online::{ChatPrivacyPatch, LiveFrame, NewMessage, OnlineClient};
+use crate::online::{
+    ChatPrivacyPatch, HostingInfo, LiveFrame, NewMessage, OnlineClient, PageAnchor, PresenceUpdate,
+};
 
 use super::files::{self, test_support::jpeg_with_gps, LocalStatus};
+use super::server;
 use super::{new_client_id, typing_frame};
 
 /// How long a frame the scenario waits for may take.
@@ -300,6 +311,256 @@ async fn send_a_file(
         }
         other => Err(format!("a stranger downloaded the file: {other:?}")),
     }
+}
+
+#[tokio::test]
+#[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1 and chat"]
+async fn a_friend_joins_the_chat_of_a_private_server_until_it_stops() {
+    let client = OnlineClient::new();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the clock is after 1970")
+        .as_secs()
+        % 100_000;
+    let alpha = sign_in(&client, &format!("Host Alpha {stamp}")).await;
+    let beta = sign_in(&client, &format!("Host Beta {stamp}")).await;
+    let stranger = sign_in(&client, &format!("Host Gamma {stamp}")).await;
+
+    let outcome = host_a_server(&client, &alpha, &beta, &stranger).await;
+
+    for player in [&alpha, &beta, &stranger] {
+        match client.delete_me(&player.ctx).await {
+            Ok(()) => println!("DELETE /v1/me for {} -> 204", player.name),
+            Err(e) => println!("DELETE /v1/me for {} failed: {e}", player.name),
+        }
+    }
+    outcome.expect("the scenario");
+}
+
+/// The code of a refusal, or what came instead of one.
+fn code_of<T: std::fmt::Debug>(result: crate::error::Result<T>) -> String {
+    match result {
+        Err(AppError::Online { code, .. }) => code,
+        other => format!("{other:?}"),
+    }
+}
+
+/// The hosting a launcher reports for a server open to `policy`.
+fn hosting_of(session: &str, policy: &str) -> HostingInfo {
+    HostingInfo {
+        session_id: session.into(),
+        game: "ja".into(),
+        map: Some("mp/ffa3".into()),
+        max_players: 8,
+        lan_addresses: vec!["192.168.1.23:29070".into()],
+        password: Some("k7m2q9xa".into()),
+        join_policy: policy.into(),
+        join_user_ids: Some(Vec::new()),
+        ..HostingInfo::default()
+    }
+}
+
+async fn heartbeat(
+    client: &OnlineClient,
+    player: &Player,
+    hosting: Option<HostingInfo>,
+) -> Result<(), String> {
+    let update = PresenceUpdate {
+        status: "online".into(),
+        hosting,
+        ..PresenceUpdate::default()
+    };
+    client
+        .put_presence(&player.ctx, &update)
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("PUT /v1/presence as {}: {e}", player.name))
+}
+
+async fn host_a_server(
+    client: &OnlineClient,
+    alpha: &Player,
+    beta: &Player,
+    stranger: &Player,
+) -> Result<(), String> {
+    befriend(client, alpha, beta).await?;
+    let mut socket_a = open(alpha).await?;
+    let mut socket_b = open(beta).await?;
+    let session = crate::hosting::server::new_session_id();
+    let quick = [Duration::from_millis(200); 3];
+    let join_as = |player: &Player| {
+        let ctx = player.ctx.clone();
+        let (session, host) = (session.clone(), alpha.user.id.clone());
+        server::retry_join(&quick, move || {
+            let (ctx, session, host) = (ctx.clone(), session.clone(), host.clone());
+            async move { client.chat_join_server(&ctx, &session, &host).await }
+        })
+    };
+
+    // -- A: the chat opens once a heartbeat carried the server ---------------
+    let early = code_of(client.chat_open_server(&alpha.ctx, &session).await);
+    if early != "not_hosting" {
+        return Err(format!("an open before any heartbeat answered {early}"));
+    }
+    heartbeat(client, alpha, Some(hosting_of(&session, "invite"))).await?;
+    let chat = client
+        .chat_open_server(&alpha.ctx, &session)
+        .await
+        .map_err(|e| format!("PUT /v1/chat/servers as A: {e}"))?;
+    println!("PUT /v1/chat/servers/{{session}} -> {} ({})", chat.id, chat.kind);
+    let host = chat.server.as_ref().map(|server| server.host_id.as_str());
+    if chat.kind != "server" || host != Some(alpha.user.id.as_str()) || chat.history_for_new_members {
+        return Err(format!("the chat of the server came back as {chat:?}"));
+    }
+    let again = client
+        .chat_open_server(&alpha.ctx, &session)
+        .await
+        .map_err(|e| format!("PUT /v1/chat/servers again as A: {e}"))?;
+    if again.id != chat.id {
+        return Err("a second open made a second chat".into());
+    }
+    client
+        .chat_send(
+            &alpha.ctx,
+            &chat.id,
+            &NewMessage { client_id: new_client_id(), body: "warming up".into(), ..NewMessage::default() },
+        )
+        .await
+        .map_err(|e| format!("POST messages as A: {e}"))?;
+
+    // -- B: refused while the server is invite-only, then in -----------------
+    let refused = code_of(join_as(beta).await);
+    if refused != "forbidden" {
+        return Err(format!("B joined an invite-only server's chat without an invite: {refused}"));
+    }
+    println!("POST /v1/chat/servers/{{session}}/join as B, invite only -> {refused}");
+    heartbeat(client, alpha, Some(hosting_of(&session, "friends"))).await?;
+    let joined = join_as(beta)
+        .await
+        .map_err(|e| format!("POST /v1/chat/servers/{{session}}/join as B: {e}"))?;
+    if joined.id != chat.id || joined.visible_from_seq + 1 != joined.last_seq {
+        return Err(format!(
+            "B joined {} and sees from {} of {}",
+            joined.id, joined.visible_from_seq, joined.last_seq
+        ));
+    }
+    let page = client
+        .chat_messages(&beta.ctx, &chat.id, PageAnchor::Latest, None)
+        .await
+        .map_err(|e| format!("GET messages as B: {e}"))?;
+    let events: Vec<String> = page
+        .messages
+        .iter()
+        .map(|message| match message.system.as_ref() {
+            Some(system) => system.event.clone(),
+            None => message.body.clone(),
+        })
+        .collect();
+    if events != ["memberJoined"] {
+        return Err(format!("B sees history from before the join: {events:?}"));
+    }
+    println!("B sees {events:?}");
+    wait_for(&mut socket_a, FRAME_TIMEOUT, |frame| {
+        frame.kind == "chat.message" && frame.payload["message"]["system"]["event"] == "memberJoined"
+    })
+    .await?
+    .ok_or("A never heard B join")?;
+
+    // -- A stranger is refused -----------------------------------------------
+    let stranger_join = code_of(
+        client
+            .chat_join_server(&stranger.ctx, &session, &alpha.user.id)
+            .await,
+    );
+    if stranger_join != "forbidden" {
+        return Err(format!("a stranger's join answered {stranger_join}"));
+    }
+
+    // -- The history switch is A's (D1) --------------------------------------
+    let by_guest = code_of(client.chat_patch_server(&beta.ctx, &session, true).await);
+    let by_stranger = code_of(client.chat_patch_server(&stranger.ctx, &session, true).await);
+    if (by_guest.as_str(), by_stranger.as_str()) != ("owner_only", "not_found") {
+        return Err(format!("the switch by a guest: {by_guest}, by a stranger: {by_stranger}"));
+    }
+    let on = client
+        .chat_patch_server(&alpha.ctx, &session, true)
+        .await
+        .map_err(|e| format!("PATCH /v1/chat/servers as A: {e}"))?;
+    if !on.history_for_new_members {
+        return Err("the switch did not stay on".into());
+    }
+    let kept = client
+        .chat_conversation(&beta.ctx, &chat.id)
+        .await
+        .map_err(|e| format!("GET the chat as B: {e}"))?;
+    if kept.visible_from_seq != joined.visible_from_seq {
+        return Err("B's view moved with the switch".into());
+    }
+
+    // -- B leaves and joins again (D9), now with the history -----------------
+    client
+        .chat_remove_member(&beta.ctx, &chat.id, &beta.user.id)
+        .await
+        .map_err(|e| format!("DELETE members/{{B}} as B: {e}"))?;
+    let gone = code_of(client.chat_conversation(&beta.ctx, &chat.id).await);
+    if gone != "not_found" {
+        return Err(format!("B still reads the chat after leaving: {gone}"));
+    }
+    let left = wait_for(&mut socket_b, FRAME_TIMEOUT, |frame| {
+        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == chat.id.as_str()
+    })
+    .await?
+    .ok_or("B's devices never heard B leave")?;
+    if left.payload["reason"] != "left" {
+        return Err(format!("B's leave reached B as {}", left.payload["reason"]));
+    }
+    let rejoined = join_as(beta)
+        .await
+        .map_err(|e| format!("the second join as B: {e}"))?;
+    if rejoined.visible_from_seq != 0 {
+        return Err(format!("B joined again and sees from {}", rejoined.visible_from_seq));
+    }
+
+    // -- The stop ends it for B ----------------------------------------------
+    server::close_on_service(client, &alpha.ctx, &session).await;
+    let ended = wait_for(&mut socket_b, FRAME_TIMEOUT, |frame| {
+        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == chat.id.as_str()
+    })
+    .await?
+    .ok_or("B never heard the chat end")?;
+    println!("chat.conversation.removed on B's socket -> {}", ended.payload["reason"]);
+    if ended.payload["reason"] != "ended" {
+        return Err(format!("the stop ended the chat with {}", ended.payload["reason"]));
+    }
+    let after = code_of(client.chat_conversation(&beta.ctx, &chat.id).await);
+    if after != "not_found" {
+        return Err(format!("the chat outlived its server: {after}"));
+    }
+    client
+        .chat_close_server(&alpha.ctx, &session)
+        .await
+        .map_err(|e| format!("a second DELETE /v1/chat/servers: {e}"))?;
+
+    // -- The next server: a heartbeat without it ends its chat ---------------
+    let next = crate::hosting::server::new_session_id();
+    heartbeat(client, alpha, Some(hosting_of(&next, "friends"))).await?;
+    let second = client
+        .chat_open_server(&alpha.ctx, &next)
+        .await
+        .map_err(|e| format!("PUT /v1/chat/servers for the next server: {e}"))?;
+    heartbeat(client, alpha, None).await?;
+    wait_for(&mut socket_a, FRAME_TIMEOUT, |frame| {
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == second.id.as_str()
+            && frame.payload["reason"] == "ended"
+    })
+    .await?
+    .ok_or("a heartbeat without the server left its chat open")?;
+    println!("a heartbeat without the server ended its chat");
+
+    let _ = socket_a.close(None).await;
+    let _ = socket_b.close(None).await;
+    Ok(())
 }
 
 async fn open(player: &Player) -> Result<Socket, String> {

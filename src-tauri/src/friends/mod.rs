@@ -473,16 +473,53 @@ pub async fn accept_invite(
         .ok_or_else(|| AppError::NotFound(format!("invite {invite_id}")))?;
     match invite.hosting {
         Some(hosting) => {
-            let live = list
-                .friends
-                .iter()
-                .find(|friend| friend.user.id == invite.from.id)
-                .and_then(|friend| friend.presence.hosting.as_ref());
+            let live = live_hosting(&list.friends, &invite.from.id);
             let hosting = freshest(hosting, live);
-            host_join::join_private(&app, &state, &launch, &hosting).await
+            // --- slice: chat --- the host of the invite is the host of its chat.
+            host_join::join_private(&app, &state, &launch, &hosting, &invite.from.id).await
         }
         None => host_join::join_direct(&app, &state, &launch, invite.server_address.trim()),
     }
+}
+
+/// The hosting a friend's presence carries, when they host a private server.
+fn live_hosting<'a>(friends: &'a [Friend], user_id: &str) -> Option<&'a HostingInfo> {
+    friends
+        .iter()
+        .find(|friend| friend.user.id == user_id)
+        .and_then(|friend| friend.presence.hosting.as_ref())
+}
+
+// --- slice: chat ---
+/// **Join** on a host invite card of the chat: a live invite of the host to
+/// the session of the card joins the way [`accept_invite`] does; without one,
+/// the host's presence decides the way [`join_friend`] does, which refuses
+/// with `AppError::HostInviteOnly` when the server is not open to the player.
+pub(crate) async fn join_host_card(
+    app: &AppHandle,
+    state: &AppState,
+    online: &OnlineClient,
+    launch: &LaunchState,
+    host_id: &str,
+    session_id: &str,
+) -> Result<JoinResult> {
+    let ctx = require_account(state)?;
+    let (invites, list) = tokio::try_join!(online.list_invites(&ctx), online.get_friends(&ctx))?;
+    if let Some(hosting) = invited_hosting(invites, host_id, session_id) {
+        let hosting = freshest(hosting, live_hosting(&list.friends, host_id));
+        return host_join::join_private(app, state, launch, &hosting, host_id).await;
+    }
+    join_friend_in(app, state, launch, &list.friends, host_id).await
+}
+
+/// The hosting of a live invite from `host_id` to the private server of
+/// `session_id`, when the player holds one.
+fn invited_hosting(invites: Vec<Invite>, host_id: &str, session_id: &str) -> Option<HostingInfo> {
+    invites
+        .into_iter()
+        .filter(|invite| invite.from.id == host_id)
+        .filter_map(|invite| invite.hosting)
+        .find(|hosting| hosting.session_id.trim().eq_ignore_ascii_case(session_id.trim()))
 }
 
 /// The hosting of an invite with the addresses of the live presence of the
@@ -529,17 +566,29 @@ pub async fn join_friend(
 ) -> Result<JoinResult> {
     let ctx = require_account(&state)?;
     let list = online.get_friends(&ctx).await?;
-    if let Some(friend) = list.friends.iter().find(|friend| friend.user.id == user_id) {
+    join_friend_in(&app, &state, &launch, &list.friends, &user_id).await
+}
+
+/// [`join_friend`] over a friend list already fetched.
+async fn join_friend_in(
+    app: &AppHandle,
+    state: &AppState,
+    launch: &LaunchState,
+    friends: &[Friend],
+    user_id: &str,
+) -> Result<JoinResult> {
+    if let Some(friend) = friends.iter().find(|friend| friend.user.id == user_id) {
         if let Some(hosting) = friend.presence.hosting.as_ref() {
             if hosting.can_join == Some(false) {
                 return Err(AppError::HostInviteOnly {
                     name: friend.user.display_name.clone(),
                 });
             }
-            return host_join::join_private(&app, &state, &launch, hosting).await;
+            // --- slice: chat --- the friend is the host of the chat.
+            return host_join::join_private(app, state, launch, hosting, user_id).await;
         }
     }
-    let address = joinable_address(&list.friends, &user_id)?;
+    let address = joinable_address(friends, user_id)?;
     // --- slice: game switch ---
     // Presence carries no game, so the port answers for it: following a friend
     // onto a Jedi Outcast server with a Jedi Academy client would start a game
@@ -553,7 +602,7 @@ pub async fn join_friend(
     // No profile named, which means the default profile of that client: going
     // to a friend is the same game the Play button starts, under the same name
     // and the same skin.
-    host_join::join_direct(&app, &state, &launch, &address)
+    host_join::join_direct(app, state, launch, &address)
 }
 
 // ---------------------------------------------------------------------------
@@ -845,6 +894,45 @@ mod tests {
         let other = HostingInfo { session_id: "ffffffffffffffff".into(), ..live };
         assert_eq!(freshest(invited.clone(), Some(&other)), invited);
         assert_eq!(freshest(invited.clone(), None), invited);
+    }
+
+    // --- slice: chat ---
+    #[test]
+    fn a_host_card_joins_through_the_invite_of_its_host_and_session() {
+        let invite = |id: &str, from: &str, session: Option<&str>| Invite {
+            id: id.into(),
+            from: OnlineUser { id: from.into(), ..OnlineUser::default() },
+            hosting: session.map(|session| HostingInfo {
+                session_id: session.into(),
+                password: Some("k7m2q9xa".into()),
+                ..HostingInfo::default()
+            }),
+            ..Invite::default()
+        };
+        let invites = || {
+            vec![
+                invite("public", "jan", None),
+                invite("stranger", "kyle", Some("5e0b7c1f9a2d4c38")),
+                invite("older", "jan", Some("ffffffffffffffff")),
+                invite("card", "jan", Some("5E0B7C1F9A2D4C38")),
+            ]
+        };
+        let hosting = invited_hosting(invites(), "jan", "5e0b7c1f9a2d4c38").expect("Jan's invite");
+        assert_eq!(hosting.session_id, "5E0B7C1F9A2D4C38");
+        assert_eq!(hosting.password.as_deref(), Some("k7m2q9xa"));
+        // No invite of that host to that session: the presence decides.
+        assert_eq!(invited_hosting(invites(), "jan", "0123456789abcdef"), None);
+        assert_eq!(invited_hosting(invites(), "mara", "5e0b7c1f9a2d4c38"), None);
+    }
+
+    #[test]
+    fn the_live_hosting_is_the_one_of_that_friend() {
+        let hosting = HostingInfo { session_id: "5e0b7c1f9a2d4c38".into(), ..HostingInfo::default() };
+        let mut list = friends();
+        list[0].presence.hosting = Some(hosting.clone());
+        assert_eq!(live_hosting(&list, "in-game"), Some(&hosting));
+        assert_eq!(live_hosting(&list, "menu"), None);
+        assert_eq!(live_hosting(&list, "stranger"), None);
     }
 
     #[test]

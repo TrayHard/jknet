@@ -16,6 +16,8 @@
 //! | `files.rs`  | attachments: staging and metadata strip, upload, the download cache, save, import |
 //! | `cards.rs`  | cards: the rules of the service, building, a card as a profile form or a config document, the danger scan of binds and configs |
 //! | `links.rs`  | links: which open at once, which ask first, opening in the system browser |
+//! | `server.rs` | the chat of a private server: the host opens and closes it, guests join it |
+//! | `window.rs` | the separate chat window and its compact mode, where a notification opens a conversation |
 //!
 //! Live frames are hints and the REST answers are the truth: a reconnect, a
 //! `chat.resync` or a sign-in refetches the whole sync document, and a window
@@ -37,6 +39,8 @@
 //! | `chat:upload` | `{handle, sent, total}`                 | an attachment is going up    |
 //! | `chat:download` | `{fileId, received, total, path?, status}` | a file is coming down, arrived (`cached`), failed (`remote`) or is `gone` |
 //! | `chat:files-staged` | `{files, refused}`, to the drop window only | files dropped on a composer were staged |
+//! | `chat:open`   | `{conversationId}`, to `chat` or `main` | show this conversation, or the list for `null` |
+//! | `chat:window` | `{open, compact, alwaysOnTop, opacity}` | the chat window opened, closed or changed mode |
 //!
 //! A window that receives `chat:resync` drops the threads listed in `reset`
 //! (their `lastSeq` went back, which means the service database was
@@ -52,7 +56,9 @@ mod mock_tests;
 #[cfg(test)]
 mod online_tests;
 mod outbox;
+pub mod server;
 mod sync;
+pub mod window;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -142,6 +148,9 @@ pub struct ChatState {
     wake: Notify,
     /// When the sync document was last read.
     synced_at: Mutex<Option<Instant>>,
+    /// The chat of the private server this launcher hosts, and the joins of
+    /// friends' servers still trying.
+    servers: Mutex<server::ServerChats>,
 }
 
 impl Default for ChatState {
@@ -160,6 +169,7 @@ impl Default for ChatState {
             state_pending: AtomicBool::new(false),
             wake: Notify::new(),
             synced_at: Mutex::new(None),
+            servers: Mutex::new(server::ServerChats::default()),
         }
     }
 }
@@ -186,6 +196,10 @@ impl ChatState {
 
     fn files(&self) -> MutexGuard<'_, files::FileBook> {
         lock(&self.files)
+    }
+
+    pub(crate) fn servers(&self) -> MutexGuard<'_, server::ServerChats> {
+        lock(&self.servers)
     }
 
     /// Notes the files of messages on their way to a window, so a save or
@@ -244,6 +258,9 @@ impl ChatState {
         lock(&self.typing_sent).clear();
         lock(&self.read_pending).clear();
         *lock(&self.synced_at) = None;
+        // A server that keeps running opens a chat of the next account at
+        // its next heartbeat.
+        *self.servers() = server::ServerChats::default();
         self.available.store(true, Ordering::Relaxed);
         known
     }
@@ -796,6 +813,7 @@ fn drop_conversation(app: &AppHandle, conversation_id: &str, reason: &str) {
     let queued = chat.outbox().remove_conversation(conversation_id);
     chat.drafts().remove(conversation_id);
     lock(&chat.read_pending).remove(conversation_id);
+    chat.servers().removed(conversation_id, reason);
     if queued {
         emit_outbox(app, conversation_id);
     }
@@ -1103,7 +1121,8 @@ pub async fn chat_rename_group(
 }
 
 /// Whether members who join from now on see the history (D1): the owner of a
-/// group, or the host of a server chat. Anybody else gets `owner_only`.
+/// group, or the host of a server chat. Anybody else gets `owner_only`; a
+/// guest of a server chat gets it without a request (`server::set_history`).
 #[tauri::command]
 pub async fn chat_set_history_for_new_members(
     app: AppHandle,
@@ -1127,7 +1146,9 @@ pub async fn chat_set_history_for_new_members(
                 .chat_patch_group(&ctx, &conversation_id, None, Some(on))
                 .await
         }
-        ("server", Some(server)) => online.chat_patch_server(&ctx, &server.session_id, on).await,
+        ("server", Some(server)) => {
+            return server::set_history(&app, &online, &ctx, server, on).await;
+        }
         _ => {
             return Err(AppError::InvalidInput(
                 "only a group or a server chat has a history setting".into(),

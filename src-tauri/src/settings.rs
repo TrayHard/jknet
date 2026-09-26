@@ -265,6 +265,85 @@ pub struct Settings {
     /// True once a private server was started in a mode with the local
     /// network: the note about the Windows firewall has been seen by then.
     pub host_firewall_note_seen: bool,
+
+    // --- slice: chat ---
+    /// Whether the chat drawer of the main window is docked beside the page
+    /// (**Pin**) rather than laid over its right edge. Whether the drawer is
+    /// open is not kept: every launch starts with it closed.
+    pub chat_drawer_pinned: bool,
+    // --- slice: chat window ---
+    /// Where a click on a chat notification and **Open chats** of the tray
+    /// show a conversation: `main`, the chat drawer of the launcher window,
+    /// or `window`, the separate chat window. One of [`CHAT_OPEN_IN`]; a
+    /// value a newer launcher wrote reads as `main`.
+    pub chat_open_in: String,
+    /// The separate chat window as the player left it. Written by the core
+    /// alone (`chat::window`): [`SettingsPatch::apply`] drops it, and the
+    /// window's own commands change it.
+    pub chat_window: ChatWindowSettings,
+}
+
+// --- slice: chat window ---
+/// The places a chat can open in, the values of `chatOpenIn`.
+pub const CHAT_OPEN_IN: &[&str] = &[CHAT_OPEN_IN_MAIN, CHAT_OPEN_IN_WINDOW];
+/// The chat drawer of the launcher window, the default.
+pub const CHAT_OPEN_IN_MAIN: &str = "main";
+/// The separate chat window.
+pub const CHAT_OPEN_IN_WINDOW: &str = "window";
+
+/// The separate chat window between runs: its mode, where each mode was
+/// last, whether each mode stays on top, and how opaque the compact mode is.
+///
+/// Two sets of bounds because the modes are two windows to the player: a
+/// wide one with the list beside the thread, and a narrow one over the game.
+/// Switching back puts each where it was. Bounds are physical pixels, the
+/// unit the window reports them in, like `tauri-plugin-window-state` keeps
+/// them for `main`; that plugin leaves this window alone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct ChatWindowSettings {
+    /// Whether the window opens in its compact mode.
+    pub compact: bool,
+    /// Always on top in the full mode. Off by default.
+    pub always_on_top: bool,
+    /// Always on top in the compact mode, which exists to sit over a game.
+    /// On by default.
+    pub compact_always_on_top: bool,
+    /// Opacity of the compact mode in percent, 40 to 100. The full mode is
+    /// always opaque.
+    pub compact_opacity: u8,
+    /// Where the full mode was last, or `None` before it was ever moved.
+    pub bounds: Option<WindowBounds>,
+    /// Where the compact mode was last, or `None` before it was ever used.
+    pub compact_bounds: Option<WindowBounds>,
+}
+
+impl Default for ChatWindowSettings {
+    /// Written out rather than derived: the compact mode starts on top and
+    /// slightly see-through, the way the chat window over a game was drawn.
+    fn default() -> Self {
+        ChatWindowSettings {
+            compact: false,
+            always_on_top: false,
+            compact_always_on_top: true,
+            compact_opacity: DEFAULT_CHAT_WINDOW_OPACITY,
+            bounds: None,
+            compact_bounds: None,
+        }
+    }
+}
+
+/// Opacity of the compact chat window until the player moves the slider.
+pub const DEFAULT_CHAT_WINDOW_OPACITY: u8 = 90;
+
+/// A window's outer position and inner size, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 // --- slice: play with friends ---
@@ -325,6 +404,11 @@ impl Default for Settings {
             // --- slice: play with friends ---
             host_defaults: BTreeMap::new(),
             host_firewall_note_seen: false,
+            // --- slice: chat ---
+            chat_drawer_pinned: false,
+            // --- slice: chat window ---
+            chat_open_in: CHAT_OPEN_IN_MAIN.to_string(),
+            chat_window: ChatWindowSettings::default(),
         }
     }
 }
@@ -603,6 +687,17 @@ pub struct SettingsPatch {
     /// folders above: a game mapped to `null` loses its entry.
     pub host_defaults: Option<BTreeMap<Game, Option<HostDefaults>>>,
     pub host_firewall_note_seen: Option<bool>,
+
+    // --- slice: chat ---
+    pub chat_drawer_pinned: Option<bool>,
+    // --- slice: chat window ---
+    /// `main` or `window`; [`SettingsPatch::validate`] refuses anything else.
+    pub chat_open_in: Option<String>,
+    /// Read and thrown away, like the token: the chat window's bounds come
+    /// from the window and its switches from its own commands, and a stale
+    /// copy from a whole document must not move it. Declared so such a
+    /// document is still accepted.
+    pub chat_window: Option<ChatWindowSettings>,
 }
 
 /// Reads a field and remembers that it was there, `null` included.
@@ -634,6 +729,10 @@ impl SettingsPatch {
     /// crafted `invoke` says. The fields stay declared so that a caller who
     /// sends a whole settings document still gets it accepted rather than
     /// refused by `deny_unknown_fields`.
+    ///
+    /// --- slice: chat window ---
+    /// `chatWindow` is dropped the same way: the core writes it from the
+    /// chat window itself.
     pub fn apply(self, settings: &mut Settings) {
         // --- slice: game core ---
         if let Some(value) = self.active_game {
@@ -722,6 +821,14 @@ impl SettingsPatch {
         if let Some(value) = self.host_firewall_note_seen {
             settings.host_firewall_note_seen = value;
         }
+        // --- slice: chat ---
+        if let Some(value) = self.chat_drawer_pinned {
+            settings.chat_drawer_pinned = value;
+        }
+        // --- slice: chat window ---
+        if let Some(value) = self.chat_open_in {
+            settings.chat_open_in = value;
+        }
     }
 
     // --- slice: account ---
@@ -757,6 +864,14 @@ impl SettingsPatch {
             if !url.is_empty() && !online::is_http_url(url) {
                 return Err(AppError::InvalidInput(format!(
                     "the service address {url:?} has to start with http:// or https://"
+                )));
+            }
+        }
+        // --- slice: chat window ---
+        if let Some(place) = self.chat_open_in.as_deref() {
+            if !CHAT_OPEN_IN.contains(&place) {
+                return Err(AppError::InvalidInput(format!(
+                    "{place:?} is not a place chats open in; the places are {CHAT_OPEN_IN:?}"
                 )));
             }
         }
@@ -960,11 +1075,141 @@ mod tests {
                 },
             )]),
             host_firewall_note_seen: true,
+            // --- slice: chat ---
+            chat_drawer_pinned: true,
+            // --- slice: chat window ---
+            chat_open_in: CHAT_OPEN_IN_WINDOW.into(),
+            chat_window: ChatWindowSettings {
+                compact: true,
+                always_on_top: true,
+                compact_always_on_top: false,
+                compact_opacity: 60,
+                bounds: Some(WindowBounds {
+                    x: 100,
+                    y: 80,
+                    width: 1200,
+                    height: 800,
+                }),
+                compact_bounds: Some(WindowBounds {
+                    x: -1500,
+                    y: 20,
+                    width: 360,
+                    height: 520,
+                }),
+            },
         }
     }
 
     fn patch(json: &str) -> SettingsPatch {
         serde_json::from_str(json).expect("the patch parses")
+    }
+
+    // --- slice: chat window ---
+    #[test]
+    fn chats_open_in_the_launcher_until_the_player_picks_the_window() {
+        let mut settings = Settings::default();
+        assert_eq!(settings.chat_open_in, CHAT_OPEN_IN_MAIN);
+
+        let to_window = patch(r#"{"chatOpenIn":"window"}"#);
+        to_window.validate().expect("a known place");
+        to_window.apply(&mut settings);
+        assert_eq!(
+            settings,
+            Settings {
+                chat_open_in: CHAT_OPEN_IN_WINDOW.into(),
+                ..Settings::default()
+            },
+            "the place changes alone"
+        );
+
+        let error = patch(r#"{"chatOpenIn":"drawer"}"#)
+            .validate()
+            .expect_err("an unknown place is refused");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error:?}");
+
+        // A document written before the field opens chats in the launcher.
+        let older: Settings = serde_json::from_str("{}").expect("an empty document");
+        assert_eq!(older.chat_open_in, CHAT_OPEN_IN_MAIN);
+    }
+
+    #[test]
+    fn the_chat_window_is_not_a_field_a_patch_can_write() {
+        // The core owns it: its bounds come from the window, its switches
+        // from the window's own commands. A patch carrying it is accepted
+        // and the field dropped, like the token.
+        let mut settings = Settings::default();
+        patch(r#"{"chatWindow":{"compact":true,"compactOpacity":40},"chatOpenIn":"window"}"#)
+            .apply(&mut settings);
+        assert_eq!(settings.chat_window, ChatWindowSettings::default());
+        assert_eq!(settings.chat_open_in, CHAT_OPEN_IN_WINDOW, "the rest lands");
+    }
+
+    #[test]
+    fn the_chat_window_reads_back_and_fills_what_an_older_document_lacks() {
+        let defaults = ChatWindowSettings::default();
+        assert!(!defaults.compact && !defaults.always_on_top);
+        assert!(
+            defaults.compact_always_on_top,
+            "the compact mode sits over the game"
+        );
+        assert_eq!(defaults.compact_opacity, DEFAULT_CHAT_WINDOW_OPACITY);
+        assert_eq!((defaults.bounds, defaults.compact_bounds), (None, None));
+
+        let settings = filled();
+        let text = serde_json::to_string(&settings).expect("serializes");
+        assert!(text.contains(r#""chatWindow":{"compact":true,"alwaysOnTop":true,"compactAlwaysOnTop":false,"compactOpacity":60,"bounds":{"x":100,"y":80,"width":1200,"height":800}"#), "{text}");
+        let back: Settings = serde_json::from_str(&text).expect("reads back");
+        assert_eq!(back.chat_window, settings.chat_window);
+
+        // A window saved before the opacity existed keeps its bounds and
+        // gets the default for the rest.
+        let partial: Settings = serde_json::from_str(
+            r#"{"chatWindow":{"compact":true,"compactBounds":{"x":5,"y":6,"width":360,"height":520}}}"#,
+        )
+        .expect("a partial window");
+        assert!(partial.chat_window.compact);
+        assert_eq!(
+            partial.chat_window.compact_bounds,
+            Some(WindowBounds {
+                x: 5,
+                y: 6,
+                width: 360,
+                height: 520
+            })
+        );
+        assert!(partial.chat_window.compact_always_on_top);
+        assert_eq!(
+            partial.chat_window.compact_opacity,
+            DEFAULT_CHAT_WINDOW_OPACITY
+        );
+    }
+
+    // --- slice: chat ---
+    #[test]
+    fn pinning_the_chat_drawer_changes_only_its_preference() {
+        let mut settings = Settings::default();
+        assert!(!settings.chat_drawer_pinned, "the drawer starts unpinned");
+
+        patch(r#"{"chatDrawerPinned":true}"#).apply(&mut settings);
+        let expected = Settings {
+            chat_drawer_pinned: true,
+            ..Settings::default()
+        };
+        assert_eq!(settings, expected, "the pin changes only its preference");
+
+        // The pin survives a reload and an unrelated patch.
+        let saved = serde_json::to_string(&settings).expect("serializes");
+        assert!(saved.contains(r#""chatDrawerPinned":true"#));
+        let mut reloaded: Settings = serde_json::from_str(&saved).expect("reads back");
+        patch(r#"{"closeOnLaunch":true}"#).apply(&mut reloaded);
+        assert!(reloaded.chat_drawer_pinned);
+
+        patch(r#"{"chatDrawerPinned":false}"#).apply(&mut reloaded);
+        assert!(!reloaded.chat_drawer_pinned);
+
+        // A document written before the field reads as unpinned.
+        let older: Settings = serde_json::from_str("{}").expect("an empty document");
+        assert!(!older.chat_drawer_pinned);
     }
 
     // --- slice: play with friends ---
@@ -1332,12 +1577,14 @@ mod tests {
         let mut settings = Settings::default();
         patch(&text).apply(&mut settings);
 
-        // The two the sign-in owns stay behind; everything else lands.
+        // The two the sign-in owns stay behind, and so does the chat window
+        // the core owns; everything else lands.
         assert_eq!(
             settings,
             Settings {
                 online_token: None,
                 online_user: None,
+                chat_window: ChatWindowSettings::default(),
                 ..filled()
             }
         );
