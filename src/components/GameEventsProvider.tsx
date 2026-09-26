@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 
 import { useLaunchWarningText } from "../i18n/launchWarnings";
 import {
+  // --- slice: chat notifications ---
+  useChatNotificationEvents,
   useClientEvents,
   useDefaultClientEvents,
   useLevelshotEvents,
@@ -41,6 +43,10 @@ export function GameEventsProvider({ children }: { children: ReactNode }) {
   // moves it is in the client window, the badge that says so is on a card of
   // the main one.
   useDefaultClientEvents();
+  // --- slice: chat notifications ---
+  // And the notification switches, which the tray's **Do not disturb**
+  // writes behind every window's back.
+  useChatNotificationEvents();
   useLaunchWarningToast(events.warning);
   return <GameEventsContext value={events}>{children}</GameEventsContext>;
 }

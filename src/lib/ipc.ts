@@ -273,6 +273,81 @@ export interface Settings {
    * the automatic download off. Absent from a core that predates it: 10.
    */
   chatAutoDownloadMb?: number;
+  // --- slice: chat notifications ---
+  /**
+   * How a chat message reaches the player: the toast in the launcher, the
+   * Windows notification, the sound and the times all of them stay silent.
+   * The core alone decides what notifies (`chat::notify::decide`); the tray's
+   * **Do not disturb** writes this block too and announces it with
+   * `settings:chat-notifications`. Absent from a core that predates it:
+   * `DEFAULT_CHAT_NOTIFICATIONS` of `lib/chat/notifySettings.ts`.
+   */
+  chatNotifications?: ChatNotifications;
+  /** The close button of the launcher window hides it in the tray (D6). Absent: `true`. */
+  closeToTray?: boolean;
+  /** Written by the core after the first hide into the tray told the player where JKNet went. */
+  closeToTrayHintSeen?: boolean;
+  /** A launcher that Windows started stays in the tray. Absent: `true`. */
+  startMinimized?: boolean;
+  /**
+   * Where the tray's **Open chats** and a click on a Windows notification
+   * open a chat: the drawer of the launcher window, or the separate chat
+   * window. Absent, or a value this build does not know: `main`.
+   */
+  chatOpenIn?: ChatOpenIn;
+}
+
+// --- slice: chat notifications ---
+/** The sounds a chat message plays: folders of `src-tauri/resources/sounds/`. */
+export type ChatSoundName = "default" | "saber" | "comlink";
+
+/**
+ * A daily stretch of silence in local time, both ends `HH:MM`. A range whose
+ * `to` is earlier than its `from` runs across midnight; equal ends are never
+ * quiet.
+ */
+export interface QuietHours {
+  from: string;
+  to: string;
+}
+
+/** `src-tauri/src/settings.rs`: `ChatNotifications`. */
+export interface ChatNotifications {
+  /** A toast inside the launcher window while it is focused. */
+  inApp: boolean;
+  /** A Windows notification while no window of JKNet is focused. */
+  os: boolean;
+  sound: boolean;
+  /** One of `ChatSoundName`; a name a newer launcher wrote plays the default. */
+  soundName: string;
+  /** Off, the toast and the notification only say that a message came. */
+  showText: boolean;
+  /** **Do not disturb**: nothing notifies, the counters still grow. */
+  dnd: boolean;
+  /** Mentions and replies to me notify during DND and quiet hours all the same (D7). */
+  mentionsBreakDnd: boolean;
+  /** While a game started from JKNet runs, messages wait for one summary. */
+  dndInGame: boolean;
+  /** The one Windows notification after the game: how many messages in how many chats. */
+  summaryAfterGame: boolean;
+  /** `null`: no quiet hours. */
+  quietHours: QuietHours | null;
+}
+
+/**
+ * A partial update of `ChatNotifications`, merged one switch at a time by
+ * the core. `quietHours: null` turns quiet hours off, a range turns them on.
+ */
+export type ChatNotificationsPatch = Partial<Omit<ChatNotifications, "soundName">> & {
+  soundName?: ChatSoundName;
+};
+
+/** Where chats open from the tray and from a Windows notification. */
+export type ChatOpenIn = "main" | "window";
+
+/** Payload of `settings:chat-notifications`: the switches as they now stand. */
+export interface ChatNotificationsChanged {
+  chatNotifications: ChatNotifications;
 }
 
 /**
@@ -333,6 +408,14 @@ export interface SettingsPatch {
   hostFirewallNoteSeen?: boolean;
   // --- slice: chat ---
   chatDrawerPinned?: boolean;
+  // --- slice: chat notifications ---
+  /** The switches that changed, and only those: the core merges them one by one. */
+  chatNotifications?: ChatNotificationsPatch;
+  closeToTray?: boolean;
+  startMinimized?: boolean;
+  chatOpenIn?: ChatOpenIn;
+  /** 0 to 25; the core refuses more. */
+  chatAutoDownloadMb?: number;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
@@ -581,6 +664,19 @@ export interface DefaultClientsChanged {
  */
 export const settingsEvents = {
   defaultClients: "settings:default-clients",
+  // --- slice: chat notifications ---
+  /**
+   * `chatNotifications` changed, by a patch or by the tray's **Do not
+   * disturb**, which writes the document behind every window's back.
+   */
+  chatNotifications: "settings:chat-notifications",
+} as const;
+
+// --- slice: chat notifications ---
+/** Events of the launcher itself, `src-tauri/src/tray.rs`. */
+export const appEvents = {
+  /** The first hide into the tray ever: sent once, with no payload. */
+  trayHint: "app:tray-hint",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -4228,6 +4324,20 @@ export interface TrayLabels {
   dnd: string;
   quit: string;
   tooltip: string;
+  // --- slice: chat notifications ---
+  // The words of the notifications the core shows itself. Optional on the
+  // wire: a field left out stays English.
+  /** The text of a notification whose message text is hidden, or has nothing to show. */
+  newMessage?: string;
+  /** The sender of a message whose account was deleted. */
+  deletedAccount?: string;
+  /** The title of the one notification after a game. */
+  summaryTitle?: string;
+  /** Its text: the core replaces `{messages}` and `{chats}` with the counts. */
+  summary?: string;
+  /** The notification of the first hide into the tray. */
+  hintTitle?: string;
+  hint?: string;
 }
 
 /** Payload of `chat:read`. */
@@ -4499,6 +4609,10 @@ export const chatIpc = {
   setWindowOpacity: (opacity: number) =>
     callChat<ChatWindowView>("chat_window_set_opacity", { opacity }),
   setTrayLabels: (labels: TrayLabels) => callChat<void>("set_tray_labels", { labels }),
+  // --- slice: chat notifications ---
+  /** Plays a chat sound for **Preview**: the message tone, or the mention tone of the set. */
+  previewSound: (soundName: ChatSoundName, mention = false) =>
+    callChat<void>("chat_preview_sound", { soundName, mention }),
 };
 
 /**

@@ -5,6 +5,8 @@ import { Outlet } from "react-router";
 import { ChatLayoutContext } from "./chat/ChatLayoutContext";
 import { ChatDrawer } from "./chat/layout/ChatDrawer";
 import { useChatDrawerLayout } from "./chat/layout/useChatDrawerLayout";
+// --- slice: chat notifications ---
+import { TrayHint } from "./chat/settings/TrayHint";
 import { Sidebar } from "./Sidebar";
 import { TitleBar } from "./TitleBar";
 
@@ -45,6 +47,9 @@ export function AppShell({ withSidebar = true }: AppShellProps) {
 
   return (
     <ChatLayoutContext value={chat}>
+      {/* --- slice: chat notifications --- the toast after the first hide
+          into the tray; here, inside the router, so it can go to Settings. */}
+      <TrayHint />
       <div className="flex flex-col h-full bg-app text-fg">
         <TitleBar chat={withSidebar} />
         <div className="relative flex flex-1 min-h-0">

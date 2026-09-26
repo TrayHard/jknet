@@ -2,6 +2,8 @@ import { AtSign, MessageCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+// --- slice: chat notifications ---
+import { trayLabels, type ChatTranslate } from "../../lib/chat/tray";
 import type { ChatNotifyEvent, ChatRemovedEvent, Conversation } from "../../lib/ipc";
 import {
   useAnswerGroupInvite,
@@ -172,6 +174,11 @@ function GroupInviteToasts() {
  * The tray menu in the language on screen, with the unread count in
  * **Open chats (N)** and in the tooltip. Sent again when either changes. A
  * core that has no tray yet refuses the call, which changes nothing.
+ *
+ * --- slice: chat notifications ---
+ * The same call carries the words of the Windows notifications the core
+ * writes itself: a hidden message text, a deleted sender, the summary after
+ * a game and the hint of the first hide into the tray (`lib/chat/tray.ts`).
  */
 function TrayLabels() {
   const { t, i18n } = useTranslation("chat");
@@ -181,13 +188,7 @@ function TrayLabels() {
   useEffect(() => {
     if (!isTauri()) return;
     const timer = window.setTimeout(() => {
-      send({
-        open: t("tray.open"),
-        chat: unread > 0 ? t("tray.chatCount", { count: unread }) : t("tray.chat"),
-        dnd: t("tray.dnd"),
-        quit: t("tray.quit"),
-        tooltip: unread > 0 ? t("tray.tooltipUnread", { count: unread }) : t("tray.tooltip"),
-      });
+      send(trayLabels(t as unknown as ChatTranslate, unread));
     }, 300);
     return () => window.clearTimeout(timer);
   }, [t, i18n.language, unread, send]);

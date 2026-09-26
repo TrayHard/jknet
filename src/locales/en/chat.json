@@ -687,6 +687,129 @@
     "pending": "The chat opens once JKNet Online sees your server running. The switch works from then on.",
     "ended": "You ended the chat of this server. It stays closed until you start the server again."
   },
+  "settings": {
+    "title": "Chat",
+    "text": "Notifications, sounds, the tray, privacy and files of your chats. Changes apply at once.",
+    "failed": "Not saved: {{error}}",
+    "notifications": {
+      "title": "Notifications",
+      "text": "Where new messages reach you and what they show.",
+      "silenced": {
+        "dnd": "Do not disturb is on: notifications stay silent, the unread counters still grow.",
+        "quiet": "Quiet hours until {{to}}: notifications stay silent, the unread counters still grow.",
+        "both": "Do not disturb is on, and it is quiet hours: notifications stay silent, the unread counters still grow."
+      },
+      "inApp": "In-launcher toasts",
+      "inAppHint": "A pop-up in the corner of the launcher window while you are in it.",
+      "os": "Windows notifications",
+      "osHint": "A pop-up from Windows while no JKNet window is in front. A click on it opens the chat.",
+      "showText": "Show message text in notifications",
+      "showTextHint": "Off: a notification says only who wrote.",
+      "showTextNeedsChannel": "Turn on toasts or Windows notifications first.",
+      "silenceTitle": "Silence",
+      "dnd": "Do not disturb",
+      "dndHint": "Notifications stay silent, the unread counters still grow. The tray menu has the same switch.",
+      "quiet": "Quiet hours",
+      "quietHint": "Every day, notifications stay silent in these hours. The unread counters still grow.",
+      "quietFrom": "From",
+      "quietTo": "to",
+      "quietFromLabel": "Quiet hours start",
+      "quietToLabel": "Quiet hours end",
+      "quietOvernight": "Runs past midnight, until {{to}} the next day.",
+      "quietEmpty": "The start and the end are the same time, so it is never quiet.",
+      "quietInvalid": "Enter both times as hours and minutes.",
+      "mentionsBreak": "Mentions break through Do not disturb and quiet hours",
+      "mentionsBreakHint": "Mentions of you and replies to you notify anyway. Off: they stay silent too.",
+      "gameTitle": "While you play",
+      "dndInGame": "Do not disturb while I play",
+      "dndInGameHint": "While a game started from JKNet runs, notifications wait. The unread counters still grow.",
+      "summary": "Summary after the game",
+      "summaryHint": "One Windows notification when the game closes: how many messages came in how many chats.",
+      "summaryNeedsDnd": "Turn on Do not disturb while I play first."
+    },
+    "sounds": {
+      "title": "Sounds",
+      "text": "Played with a notification. Windows sets the volume.",
+      "sound": "Play a sound",
+      "soundHint": "For each message that notifies you.",
+      "pick": "Sound",
+      "pickHint": "Each set has one tone for messages and one for mentions and replies.",
+      "names": {
+        "default": "Holocron chime",
+        "saber": "Saber hum",
+        "comlink": "Comlink beep"
+      },
+      "preview": "Preview",
+      "previewHint": "Hear the two tones of the set.",
+      "previewMessage": "Message",
+      "previewMention": "Mention",
+      "previewMessageLabel": "Play the message tone of {{name}}",
+      "previewMentionLabel": "Play the mention tone of {{name}}",
+      "previewFailed": "The sound did not play: {{error}}"
+    },
+    "levels": {
+      "title": "Chats with their own notifications",
+      "text": "Set in the menu of a chat's header. They override the switches above.",
+      "empty": "Every chat notifies about all messages.",
+      "resetAll": "Reset all",
+      "open": "Open {{title}}",
+      "muteNote": "Muted. Mentions and replies still notify you.",
+      "mentionsNote": "Only mentions and replies notify you.",
+      "levelOf": "Notifications of {{title}}"
+    },
+    "tray": {
+      "title": "Tray and startup",
+      "text": "JKNet in the notification area, and how it starts.",
+      "close": "When I close the window",
+      "closeTrayHint": "JKNet stays in the tray: chats and your private server keep running. Quit it from the tray icon.",
+      "closeQuitHint": "JKNet quits, and asks first while your private server runs.",
+      "closeTray": "Keep running in the tray",
+      "closeQuit": "Quit JKNet",
+      "autostart": "Start JKNet when Windows starts",
+      "autostartHint": "Opens JKNet when you sign in to Windows.",
+      "autostartUnavailable": "Works only in the installed launcher.",
+      "autostartFailed": "Windows did not take the change: {{error}}",
+      "startMinimized": "Start minimized to the tray",
+      "startMinimizedHint": "When Windows starts JKNet, no window opens, only the tray icon. Starting JKNet yourself always opens the window.",
+      "startMinimizedNeedsAutostart": "Turn on Start JKNet when Windows starts first.",
+      "openIn": "Open chats in",
+      "openInHint": "Where Open chats of the tray menu and a click on a Windows notification show a chat.",
+      "openInMain": "Launcher window",
+      "openInWindow": "Separate window"
+    },
+    "privacy": {
+      "title": "Privacy",
+      "text": "Kept on JKNet Online, so they follow you to every computer you sign in on.",
+      "notConfigured": "This build of JKNet has no JKNet Online service to keep chats on.",
+      "signedOut": "Sign in to JKNet Online to change these.",
+      "unavailable": "JKNet Online does not have chats yet.",
+      "readReceipts": "Show others when I've read their messages",
+      "readReceiptsHint": "Works both ways: if you hide this, you also don't see when others have read your messages.",
+      "typing": "Show when I'm typing",
+      "typingHint": "Works both ways: if you hide this, you also don't see when others are typing.",
+      "groupAdd": "Who can add me to group chats",
+      "groupAddHint": "Ask me first: a friend sends an invitation, and you decide whether to join.",
+      "groupAddFriends": "Any friend",
+      "groupAddAsk": "Ask me first"
+    },
+    "files": {
+      "title": "Files",
+      "text": "Pictures, videos, demos and other files of your chats.",
+      "autoDownload": "Download pictures automatically",
+      "autoDownloadHint": "Bigger pictures and every other file wait for a click.",
+      "never": "Never",
+      "upTo": "Up to {{size}} MB",
+      "storage": "Your files on JKNet Online",
+      "storageOf": "{{used}} of {{quota}} used",
+      "nextFree": "Your oldest file expires {{date}} and frees its space.",
+      "retention": "Messages and files are kept on JKNet Online for 90 days, then deleted."
+    }
+  },
+  "trayHint": {
+    "title": "JKNet is still running",
+    "text": "Closing the window kept JKNet in the tray, so chats and your private server stay online. Quit it from the tray icon, or make the close button quit in Settings.",
+    "settings": "Settings"
+  },
   "tray": {
     "open": "Open JKNet",
     "chat": "Open chats",
@@ -696,6 +819,11 @@
     "quit": "Quit",
     "tooltip": "JKNet",
     "tooltipUnread_one": "JKNet: {{count}} unread message",
-    "tooltipUnread_other": "JKNet: {{count}} unread messages"
+    "tooltipUnread_other": "JKNet: {{count}} unread messages",
+    "newMessage": "New message",
+    "summaryTitle": "Messages while you played",
+    "summary": "Messages: {{messages}}, chats: {{chats}}",
+    "hintTitle": "JKNet is still running",
+    "hint": "Closing the window keeps JKNet in the tray, so chats and your private server stay online. Quit it from the tray icon."
   }
 }

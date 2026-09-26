@@ -514,6 +514,12 @@ export async function devChat<T>(command: string, args: Record<string, unknown> 
       return devConfigOf(args.card as ChatCard, (args.game as Game | null) ?? "ja") as T;
     case "set_tray_labels":
       return undefined as T;
+    // --- slice: chat notifications --- a browser has no sound of the core.
+    case "chat_preview_sound":
+      if (!["default", "saber", "comlink"].includes(String(args.soundName))) {
+        throw new Error(`${String(args.soundName)} is not a chat sound`);
+      }
+      return undefined as T;
     // --- slice: chat window ---
     case "open_chat_window":
       openWindowTab(typeof args.conversationId === "string" ? args.conversationId : null);

@@ -54,7 +54,14 @@ import {
   type ChatCard,
   type ChatCommandDanger,
   type ChatImportTarget,
+  // --- slice: chat notifications ---
+  appEvents,
+  appLifecycleIpc,
+  type ChatNotificationsChanged,
+  type ChatSoundName,
 } from "./ipc";
+// --- slice: chat notifications ---
+import { applyChatPatch } from "./chat/notifySettings";
 import {
   appendAfter,
   applyReaction,
@@ -4407,6 +4414,132 @@ export function useShareToChat() {
 /** The labels of the tray menu, sent by the main window in the language on screen. */
 export function useSetTrayLabels() {
   return useMutation({ mutationFn: (labels: TrayLabels) => chatIpc.setTrayLabels(labels) });
+}
+
+// --- slice: chat notifications ---
+
+export const appKeys = {
+  /** Whether Windows starts JKNet with the session: the registry, not `settings.json`. */
+  autostart: ["app", "autostart"] as const,
+};
+
+/**
+ * Saves a chat switch of the Settings screen: the notification block, the
+ * tray and startup switches, where chats open, the automatic download.
+ *
+ * Optimistic, unlike `useUpdateSettings`: the switch moves under the
+ * pointer, and the document the core answers with replaces the copy. A
+ * refusal puts the copy back and reads the document again. Send a patch of
+ * the switch that moved, never the block: the tray writes **Do not
+ * disturb** behind the screen's back.
+ */
+export function useUpdateChatSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: SettingsPatch) => ipc.updateSettings(patch),
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.settings });
+      const before = queryClient.getQueryData<Settings>(queryKeys.settings);
+      if (before !== undefined) {
+        queryClient.setQueryData<Settings>(queryKeys.settings, applyChatPatch(before, patch));
+      }
+      return { before };
+    },
+    onSuccess: (settings) => queryClient.setQueryData(queryKeys.settings, settings),
+    onError: (_error, _patch, context) => {
+      if (context?.before !== undefined) queryClient.setQueryData(queryKeys.settings, context.before);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+}
+
+/**
+ * Keeps the cached notification switches in step with the core.
+ *
+ * The tray's **Do not disturb** writes `settings.json` itself and announces
+ * the block with `settings:chat-notifications`; so does a patch from any
+ * window. Mounted once per window by `GameEventsProvider`.
+ */
+export function useChatNotificationEvents(): void {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen<ChatNotificationsChanged>(settingsEvents.chatNotifications, ({ payload }) => {
+      queryClient.setQueryData<Settings>(queryKeys.settings, (settings) =>
+        settings === undefined ? settings : { ...settings, chatNotifications: payload.chatNotifications },
+      );
+    }).then((unlisten) => {
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [queryClient]);
+}
+
+/**
+ * Whether Windows starts JKNet with the session. Asked of the core, which
+ * reads the registry entry `tauri-plugin-autostart` writes; idle outside
+ * Tauri, where there is no such thing.
+ */
+export function useAutostart(): UseQueryResult<boolean> {
+  return useQuery({
+    queryKey: appKeys.autostart,
+    queryFn: appLifecycleIpc.getAutostart,
+    enabled: isTauri(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** Turns the start with Windows on or off; the core answers the state in force after. */
+export function useSetAutostart() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) => appLifecycleIpc.setAutostart(enabled),
+    onSuccess: (enabled) => queryClient.setQueryData(appKeys.autostart, enabled),
+    onError: () => void queryClient.invalidateQueries({ queryKey: appKeys.autostart }),
+  });
+}
+
+/** **Preview** of a chat sound: the message tone of a set, or its mention tone. */
+export function usePreviewChatSound() {
+  return useMutation({
+    mutationFn: ({ soundName, mention }: { soundName: ChatSoundName; mention?: boolean }) =>
+      chatIpc.previewSound(soundName, mention),
+  });
+}
+
+/**
+ * Runs `onHint` when the core says the launcher window went into the tray
+ * for the first time ever (`app:tray-hint`, sent once).
+ */
+export function useTrayHintEvent(onHint: () => void): void {
+  const latest = useRef(onHint);
+  latest.current = onHint;
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    let stop: UnlistenFn | undefined;
+
+    void listen(appEvents.trayHint, () => latest.current()).then((unlisten) => {
+      if (cancelled) unlisten();
+      else stop = unlisten;
+    });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, []);
 }
 
 /** The separate chat window, raised when it is open already. */

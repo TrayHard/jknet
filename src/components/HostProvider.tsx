@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../i18n/errors";
+// --- slice: chat notifications ---
+import { cancelQuit } from "../lib/appLifecycle";
 import type { HostSession } from "../lib/ipc";
 import {
   hostKeys,
@@ -59,6 +61,14 @@ function QuitDialog({ session, onClose }: { session: HostSession | null; onClose
   const [error, setError] = useState<string | null>(null);
   const players = session === null ? 0 : humanCount(session.players);
 
+  // --- slice: chat notifications ---
+  // The server and the launcher stay: a **Quit** of the tray that led here
+  // lapses, and the close button hides into the tray again.
+  const cancel = () => {
+    cancelQuit();
+    onClose();
+  };
+
   const stopAndQuit = async () => {
     setError(null);
     try {
@@ -76,10 +86,10 @@ function QuitDialog({ session, onClose }: { session: HostSession | null; onClose
     <Dialog
       title={t("quit.title")}
       body={players > 0 ? t("quit.text", { count: players }) : t("quit.textEmpty")}
-      onClose={onClose}
+      onClose={cancel}
       actions={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={cancel}>
             {tCommon("actions.cancel")}
           </Button>
           <Button variant="danger" disabled={stop.isPending} onClick={() => void stopAndQuit()}>

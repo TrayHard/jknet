@@ -17,6 +17,9 @@ import { JkhubCatalogCard } from "../components/JkhubCatalogCard";
 import { MapPicturesCard } from "../components/MapPicturesCard";
 // --- slice: account ---
 import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
+// --- slice: chat notifications ---
+import { ChatSettings, CHAT_SETTINGS_SECTION_ID } from "../components/chat/settings/ChatSettings";
+import { TRAY_SECTION_ID } from "../components/chat/settings/TrayStartupCard";
 import { Page, PageHeader } from "../components/PageHeader";
 import { Button, EmptyState, Input, Select } from "../components/ui";
 // --- slice: i18n ---
@@ -62,9 +65,20 @@ export function SettingsPage() {
   const [search] = useSearchParams();
   const section = search.get("section");
   useEffect(() => {
-    if (section !== "account") return;
+    // --- slice: chat notifications --- `chat` is the chat group, `tray` its
+    // Tray and startup card: the hint of the first hide into the tray links
+    // there.
+    const anchor =
+      section === "account"
+        ? ACCOUNT_SECTION_ID
+        : section === "chat"
+          ? CHAT_SETTINGS_SECTION_ID
+          : section === "tray"
+            ? TRAY_SECTION_ID
+            : null;
+    if (anchor === null) return;
     document
-      .getElementById(ACCOUNT_SECTION_ID)
+      .getElementById(anchor)
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [section]);
 
@@ -141,6 +155,10 @@ export function SettingsPage() {
 
       {/* --- slice: account --- */}
       <AccountCard />
+
+      {/* --- slice: chat notifications --- notifications, sounds, the tray,
+          privacy and files of the chat, after the account they belong to. */}
+      <ChatSettings />
 
       <EmptyState
         icon={<SlidersHorizontal size={24} />}
