@@ -103,8 +103,9 @@
  * `POST /v1/dev/invite` makes an invitation arrive on demand; with
  * `?hosting=1` or `{ "hosting": true }` the invitation leads to a private
  * server and carries its `hosting`. `POST /v1/dev/chat` makes a member of
- * the cast post `{ conversationId?, body?, mention? }` (Kyle's direct
- * conversation by default), `GET /v1/dev/chat/typing` lists the typing
+ * the cast post `{ conversationId?, body?, mention?, cards? }` (Kyle's direct
+ * conversation by default; `cards: "all"` posts one message per card kind),
+ * `GET /v1/dev/chat/typing` lists the typing
  * frames the launcher sent, and `POST /v1/dev/chat/files/:id/lose` drops the
  * bytes of a chat file, so its download answers `404 file_gone`.
  *
@@ -3048,7 +3049,9 @@ function devChatLoseFile(response, fileId) {
 }
 
 /** Not in the contract: a member of the cast posts on demand, so a toast or
- *  a badge can be looked at without waiting for a scripted answer. */
+ *  a badge can be looked at without waiting for a scripted answer.
+ *  `cards` posts cards as they are, at most five with the message; `"all"`
+ *  posts one message per card kind (`showcaseCards`) and answers the list. */
 function devChatPost(response, body) {
   const me = account.id;
   const conversation = body?.conversationId
@@ -3057,11 +3060,60 @@ function devChatPost(response, body) {
   if (!conversation || !conversation.members.has(me)) return noConversation(response);
   const sender = [...conversation.members.keys()].find((userId) => userId !== me && userById(userId));
   if (!sender) return fail(response, 409, "conflict", "Nobody else is in that conversation");
-  let text = String(body?.body ?? "Anyone up for a duel?");
+  if (body?.cards === "all") {
+    const messages = showcaseCards().map((card) => {
+      const message = post(conversation, sender, "", { cards: [card] });
+      announceMessage(conversation, message);
+      return messageWire(conversation, message);
+    });
+    return send(response, 201, messages);
+  }
+  const cards = Array.isArray(body?.cards) ? body.cards.slice(0, CHAT_MAX_CARDS) : [];
+  let text = String(body?.body ?? (cards.length > 0 ? "" : "Anyone up for a duel?"));
   if (body?.mention) text = `<@${me}> ${text}`;
-  const message = post(conversation, sender, text);
+  const message = post(conversation, sender, text, { cards });
   announceMessage(conversation, message);
   return send(response, 201, messageWire(conversation, message));
+}
+
+/** One card of every kind but `hostInvite`, which needs a live server (Jan's
+ *  direct conversation carries one), as a launcher of the cast sends them.
+ *  The bundle is a published bundle of this mock; the bind and the config
+ *  hold lines the launcher's danger scan names. */
+function showcaseCards() {
+  const bundle = [...bundles.values()].find(
+    (entry) => !entry.hidden && entry.versions.some((version) => version.status === "published"),
+  );
+  return [
+    {
+      type: "server", v: 1, fallbackText: "Server: Duel Arena (203.0.113.10:29070)",
+      address: "203.0.113.10:29070", name: "Duel Arena", game: "ja", map: "mp/duel6", gametype: 3,
+    },
+    ...(bundle
+      ? [{ type: "bundle", v: 1, fallbackText: `Bundle: ${bundle.name}`, bundleId: bundle.id, slug: bundle.slug, name: bundle.name, game: bundle.game }]
+      : []),
+    {
+      type: "jkhubMod", v: 1, fallbackText: "JKHub: Trilogy Sabers : Episode 3",
+      fileId: 4391, slug: "trilogy-sabers-episode-3", title: "Trilogy Sabers : Episode 3", game: "ja",
+    },
+    { type: "map", v: 1, fallbackText: "Map: Bespin Streets (mp/ffa3)", game: "ja", name: "mp/ffa3", title: "Bespin Streets" },
+    {
+      type: "profile", v: 1, fallbackText: "Player profile: Kyle",
+      nickname: "^4Kyle", model: "kyle/default", saber1: "Kyle", color1: "4", color2: "1", charColor: "255 255 255",
+    },
+    {
+      type: "bind", v: 1, fallbackText: "3 key binds: F1, F2, F3",
+      binds: [
+        { key: "F1", command: "say gg" },
+        { key: "F2", command: "+attack; wait; -attack" },
+        { key: "F3", command: "quit" },
+      ],
+    },
+    {
+      type: "config", v: 1, fallbackText: "Config: duel.cfg", name: "duel.cfg",
+      text: "seta cg_fov 110\nset duel \"say duel?; exec duel2\"\nbind MOUSE3 vstr duel\nseta cl_allowDownload 1\n",
+    },
+  ];
 }
 
 
@@ -3145,8 +3197,13 @@ function argOrEnv(flag, variable, fallback) {
 
 /** A stand-in for a ULID: the launcher only needs it to be opaque and safe in
  *  a URL path. */
+/** A ULID-shaped id, as the service hands out: 26 characters of Crockford's
+ *  base 32 (hex is a subset) with the first at most 7, so a launcher that
+ *  checks the form, as the check of a bundle card does, accepts it. */
 function id() {
-  return randomBytes(13).toString("hex").toUpperCase();
+  const bytes = randomBytes(13);
+  bytes[0] &= 0x7f;
+  return bytes.toString("hex").toUpperCase();
 }
 
 function nowIso() {

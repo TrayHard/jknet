@@ -579,6 +579,15 @@ pub fn run() {
             chat::files::chat_file_local,
             chat::files::chat_file_save,
             chat::files::chat_file_import,
+            // Cards, built and checked by the rules of the service and turned
+            // into the input of the existing editors; links; the danger scan.
+            chat::cards::chat_build_card,
+            chat::cards::chat_check_card,
+            chat::cards::chat_card_from_profile,
+            chat::cards::chat_card_to_profile,
+            chat::cards::chat_card_to_config,
+            chat::cards::chat_scan_commands,
+            chat::links::chat_open_link,
             // --- slice: jkhub ---
             jkhub::jkhub_categories,
             jkhub::jkhub_list,

@@ -51,7 +51,10 @@ const PROFILES_FILE: &str = "profiles.json";
 ///
 /// Characters, not bytes, and on purpose: this name is read in the launcher
 /// and never reaches the engine, so nothing downstream counts its bytes.
-const MAX_NAME_LEN: usize = 48;
+///
+/// --- slice: chat --- A profile card names the new profile it becomes by the
+/// same limit.
+pub(crate) const MAX_NAME_LEN: usize = 48;
 
 /// Longest nickname the launcher accepts, **in bytes of UTF-8**.
 ///

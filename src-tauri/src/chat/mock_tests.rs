@@ -21,8 +21,8 @@ use crate::error::AppError;
 use crate::friends::live::upgrade_request;
 use crate::online::mock_tests::MockOnline;
 use crate::online::{
-    Conversation, LiveFrame, NewMessage, OnlineClient, OnlineContext, OnlineUser, PageAnchor,
-    SearchQuery,
+    ChatMessage, Conversation, LiveFrame, NewMessage, OnlineClient, OnlineContext, OnlineUser,
+    PageAnchor, SearchQuery,
 };
 
 use super::files::{self, test_support::jpeg_with_gps, LocalStatus};
@@ -35,6 +35,7 @@ const PORT_FRAMES: u16 = 8801;
 const PORT_OPT_IN: u16 = 8802;
 const PORT_ROUTES: u16 = 8803;
 const PORT_FILES: u16 = 8804;
+const PORT_CARDS: u16 = 8805;
 
 /// How long a frame the test waits for may take.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(10);
@@ -614,4 +615,86 @@ async fn a_file_goes_up_stripped_and_comes_back_resumed_and_checked() {
         .await
         .expect("registered again");
     assert!(registered.needs_upload);
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+async fn every_card_kind_passes_the_checks_and_opens_in_its_editor() {
+    use super::cards::{self, Card};
+    use crate::game::Game;
+
+    let mock = MockOnline::start_with(PORT_CARDS, &[("MOCK_ONLINE_CHAT_REPLY_MS", "0")]);
+    let (ctx, _me) = sign_in(&mock).await;
+    let client = OnlineClient::new();
+
+    // Kyle posts one message per card kind, as his launcher builds them.
+    let text = reqwest::Client::new()
+        .post(format!("{}/v1/dev/chat", mock.base_url()))
+        .bearer_auth(ctx.token.as_deref().unwrap_or_default())
+        .header("content-type", "application/json")
+        .body(r#"{"cards":"all"}"#)
+        .send()
+        .await
+        .expect("the mock answers")
+        .text()
+        .await
+        .expect("a body");
+    let posted: Vec<ChatMessage> = serde_json::from_str(&text).expect("the posted messages");
+    let mut kinds = Vec::new();
+    for message in &posted {
+        for raw in &message.cards {
+            let card = cards::check(raw).unwrap_or_else(|e| panic!("{raw} passes: {e}"));
+            kinds.push(raw["type"].as_str().unwrap_or_default().to_string());
+            match &card {
+                Card::Profile(profile) => {
+                    let form = cards::profile_from_card(profile);
+                    assert!(form.skipped.is_empty(), "{:?}", form.skipped);
+                    assert_eq!(form.profile.nickname.as_deref(), Some("^4Kyle"));
+                }
+                Card::Bind(_) | Card::Config(_) => {
+                    let opened = cards::config_from_card(&card, Game::JediAcademy).expect("opens");
+                    assert!(!opened.document.text.is_empty());
+                    assert!(!opened.dangers.is_empty(), "the showcase holds a dangerous line");
+                }
+                _ => {}
+            }
+        }
+    }
+    assert_eq!(
+        kinds,
+        ["server", "bundle", "jkhubMod", "map", "profile", "bind", "config"]
+    );
+
+    // The host invite of Jan's seeded conversation reads as a card too, with
+    // its host and no way into the server.
+    let doc = client.chat_sync(&ctx).await.expect("the sync document");
+    let friends = client.get_friends(&ctx).await.expect("the friends").friends;
+    let jan = friends
+        .iter()
+        .find(|friend| friend.user.display_name.starts_with("Jan"))
+        .map(|friend| friend.user.id.clone())
+        .expect("Jan");
+    let with_jan = direct_with(&doc.conversations, &jan);
+    let invite = with_jan
+        .last_message
+        .as_ref()
+        .and_then(|message| message.cards.first())
+        .expect("Jan's card");
+    match cards::check(invite).expect("passes") {
+        Card::HostInvite(card) => assert_eq!(card.host_id.as_deref(), Some(jan.as_str())),
+        other => panic!("a host invite, not {other:?}"),
+    }
+
+    // A card built here goes out and comes back as it was built.
+    let built = cards::prepare(&[serde_json::json!({ "type": "map", "game": "ja", "name": "mp/ffa3" })])
+        .expect("a map card");
+    let sent = client
+        .chat_send(
+            &ctx,
+            &with_jan.id,
+            &NewMessage { client_id: new_client_id(), cards: built.clone(), ..NewMessage::default() },
+        )
+        .await
+        .expect("stored");
+    assert_eq!(sent.cards, built);
 }

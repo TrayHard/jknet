@@ -14,6 +14,8 @@
 //! | `outbox.rs` | the send queue: uploads, sends, retries                     |
 //! | `frames.rs` | the `chat.*` frames of the live socket                      |
 //! | `files.rs`  | attachments: staging and metadata strip, upload, the download cache, save, import |
+//! | `cards.rs`  | cards: the rules of the service, building, a card as a profile form or a config document, the danger scan of binds and configs |
+//! | `links.rs`  | links: which open at once, which ask first, opening in the system browser |
 //!
 //! Live frames are hints and the REST answers are the truth: a reconnect, a
 //! `chat.resync` or a sign-in refetches the whole sync document, and a window
@@ -41,8 +43,10 @@
 //! restored) and fetches what is after the last message of every other
 //! thread it holds.
 
+pub mod cards;
 pub mod files;
 pub mod frames;
+pub mod links;
 #[cfg(test)]
 mod mock_tests;
 #[cfg(test)]
@@ -92,7 +96,7 @@ pub const EVENT_UPLOAD: &str = "chat:upload";
 const MAX_BODY_CHARS: usize = 4000;
 
 /// Cards and files one message may carry, as the service counts them.
-const MAX_CARDS: usize = 5;
+const MAX_CARDS: usize = cards::CARDS_MAX;
 const MAX_ATTACHMENTS: usize = 10;
 
 /// A draft longer than this is a paste accident, not a message.
@@ -886,7 +890,7 @@ pub async fn chat_send(
 ) -> Result<String> {
     account(&app)?;
     let conversation_id = path_segment(&conversation_id)?.to_string();
-    check_draft(&draft)?;
+    let draft = check_draft(draft)?;
     let client_id = new_client_id();
     let chat = app.state::<ChatState>();
     chat.outbox()
@@ -909,8 +913,10 @@ pub async fn chat_send(
 }
 
 /// The refusals a send would meet on the service, answered before it is
-/// queued.
-fn check_draft(draft: &SendDraft) -> Result<()> {
+/// queued. Answers the draft with its cards cleaned and completed the way
+/// the service reads them (`cards::prepare`); a card the service would
+/// refuse is refused here as `online` with `details.code` `card`.
+fn check_draft(mut draft: SendDraft) -> Result<SendDraft> {
     if draft.body.trim().is_empty() && draft.cards.is_empty() && draft.attachments.is_empty() {
         return Err(AppError::InvalidInput("an empty message".into()));
     }
@@ -930,7 +936,8 @@ fn check_draft(draft: &SendDraft) -> Result<()> {
             "a message carries at most {MAX_ATTACHMENTS} files"
         )));
     }
-    Ok(())
+    draft.cards = cards::prepare(&draft.cards)?;
+    Ok(draft)
 }
 
 /// Sends a failed message again, with the same client id.
@@ -1702,21 +1709,33 @@ mod tests {
     #[test]
     fn a_draft_is_checked_before_it_is_queued() {
         let draft = |body: &str| SendDraft { body: body.into(), ..SendDraft::default() };
-        assert!(check_draft(&draft("gg")).is_ok());
-        assert!(check_draft(&draft("   \n")).is_err());
-        assert!(check_draft(&draft(&"a".repeat(MAX_BODY_CHARS))).is_ok());
-        assert!(check_draft(&draft(&"a".repeat(MAX_BODY_CHARS + 1))).is_err());
-        // A card alone is a message.
+        assert!(check_draft(draft("gg")).is_ok());
+        assert!(check_draft(draft("   \n")).is_err());
+        assert!(check_draft(draft(&"a".repeat(MAX_BODY_CHARS))).is_ok());
+        assert!(check_draft(draft(&"a".repeat(MAX_BODY_CHARS + 1))).is_err());
+        // A card alone is a message, and it goes out complete.
         let card = SendDraft {
+            cards: vec![serde_json::json!({ "type": "map", "game": "ja", "name": "mp/ffa3" })],
+            ..SendDraft::default()
+        };
+        let checked = check_draft(card).expect("a card alone is a message");
+        assert_eq!(
+            checked.cards,
+            [serde_json::json!({ "type": "map", "v": 1, "fallbackText": "Map: mp/ffa3",
+                                 "game": "ja", "name": "mp/ffa3" })]
+        );
+        // A card the service would refuse never reaches the queue.
+        let broken = SendDraft {
             cards: vec![serde_json::json!({ "type": "map", "v": 1 })],
             ..SendDraft::default()
         };
-        assert!(check_draft(&card).is_ok());
+        let refusal = check_draft(broken).expect_err("a map card without a map");
+        assert_eq!(refusal.details()["code"], cards::CARD);
         let too_many = SendDraft {
             attachments: vec!["h".into(); MAX_ATTACHMENTS + 1],
             ..SendDraft::default()
         };
-        assert!(check_draft(&too_many).is_err());
+        assert!(check_draft(too_many).is_err());
     }
 
     #[test]
