@@ -25,6 +25,7 @@ use crate::online::{
     SearchQuery,
 };
 
+use super::files::{self, test_support::jpeg_with_gps, LocalStatus};
 use super::frames::{self, Frame};
 use super::outbox::OutboxEntry;
 use super::{new_client_id, typing_frame, ChatState, SendDraft};
@@ -33,6 +34,7 @@ use super::{new_client_id, typing_frame, ChatState, SendDraft};
 const PORT_FRAMES: u16 = 8801;
 const PORT_OPT_IN: u16 = 8802;
 const PORT_ROUTES: u16 = 8803;
+const PORT_FILES: u16 = 8804;
 
 /// How long a frame the test waits for may take.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(10);
@@ -514,4 +516,102 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         code_of(client.chat_conversation(&ctx, &created.conversation.id).await),
         "not_found"
     );
+}
+
+#[tokio::test]
+#[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+async fn a_file_goes_up_stripped_and_comes_back_resumed_and_checked() {
+    let mock = MockOnline::start_with(PORT_FILES, &[("MOCK_ONLINE_CHAT_REPLY_MS", "0")]);
+    let (ctx, _) = sign_in(&mock).await;
+    let client = OnlineClient::new();
+    let doc = client.chat_sync(&ctx).await.expect("the sync document");
+    let dm = doc
+        .conversations
+        .iter()
+        .find(|c| c.kind == "direct" && c.can_send)
+        .cloned()
+        .expect("a conversation to write in");
+    let temp = tempfile::tempdir().expect("a temp dir");
+
+    // Staged: the position is gone before a byte leaves.
+    let (staged, file) = files::stage_bytes(
+        &temp.path().join("staging"),
+        "IMG_0001.JPG",
+        jpeg_with_gps(),
+        "file",
+        None,
+    )
+    .expect("staged");
+    let sent_bytes = std::fs::read(&staged.path).expect("the staged copy");
+    let file_id = files::put_staged(&client, &ctx, &dm.id, &staged, |_| {})
+        .await
+        .expect("registered and uploaded");
+    let message = client
+        .chat_send(
+            &ctx,
+            &dm.id,
+            &NewMessage {
+                client_id: new_client_id(),
+                file_ids: vec![file_id.clone()],
+                ..NewMessage::default()
+            },
+        )
+        .await
+        .expect("a message with the file");
+    let sent = &message.files[0];
+    assert_eq!((sent.name.as_str(), sent.size, sent.class.as_str()), (file.name.as_str(), staged.size, "image"));
+
+    // Down, whole, checked against the ETag.
+    let mut quiet = |_: u64, _: u64| {};
+    let whole = files::fetch(&client, &ctx, &temp.path().join("whole"), &file_id, &mut quiet)
+        .await
+        .expect("downloaded");
+    assert_eq!(std::fs::read(&whole).expect("the cached copy"), sent_bytes);
+
+    // Resumed from a partial download.
+    let resumed_dir = temp.path().join("resumed");
+    std::fs::create_dir_all(&resumed_dir).expect("the folder");
+    std::fs::write(resumed_dir.join(format!("{file_id}.part")), &sent_bytes[..100]).expect("a partial file");
+    let mut seen: Vec<u64> = Vec::new();
+    let mut record = |received: u64, _: u64| seen.push(received);
+    let resumed = files::fetch(&client, &ctx, &resumed_dir, &file_id, &mut record)
+        .await
+        .expect("resumed");
+    assert_eq!(std::fs::read(&resumed).expect("the cached copy"), sent_bytes);
+    assert_eq!(seen.first(), Some(&100), "it went on from the partial file");
+
+    // A partial file that does not belong: the hash catches the splice, the
+    // partial file goes, and the next attempt starts over.
+    let spoiled_dir = temp.path().join("spoiled");
+    std::fs::create_dir_all(&spoiled_dir).expect("the folder");
+    let spoiled = spoiled_dir.join(format!("{file_id}.part"));
+    std::fs::write(&spoiled, vec![b'x'; 100]).expect("a partial file");
+    let refused = files::fetch(&client, &ctx, &spoiled_dir, &file_id, &mut quiet).await;
+    assert!(matches!(refused, Err(AppError::Network(ref reason)) if reason.contains("hash")), "{refused:?}");
+    assert!(!spoiled.exists());
+    let again = files::fetch(&client, &ctx, &spoiled_dir, &file_id, &mut quiet)
+        .await
+        .expect("started over");
+    assert_eq!(std::fs::read(&again).expect("the cached copy"), sent_bytes);
+
+    // The service lost the bytes: the file is gone, not merely remote.
+    let status = reqwest::Client::new()
+        .post(format!("{}/v1/dev/chat/files/{file_id}/lose", mock.base_url()))
+        .bearer_auth(ctx.token.as_deref().unwrap_or_default())
+        .send()
+        .await
+        .expect("the mock answers")
+        .status();
+    assert_eq!(status.as_u16(), 200);
+    let lost = files::fetch(&client, &ctx, &temp.path().join("lost"), &file_id, &mut quiet).await;
+    let error = lost.expect_err("the bytes are gone");
+    assert_eq!(files::status_after(&error), LocalStatus::Gone);
+    assert_eq!(code_of(Err::<(), _>(error)), "file_gone");
+    // And registering the same bytes again asks for them, since the lost
+    // copy cannot spare the upload.
+    let registered = client
+        .chat_register_file(&ctx, &dm.id, &staged.name, staged.size, &staged.sha256, staged.meta.as_ref())
+        .await
+        .expect("registered again");
+    assert!(registered.needs_upload);
 }

@@ -1248,6 +1248,18 @@ impl OnlineClient {
         response.json()
     }
 
+    /// `GET /v1/chat/files/{id}/content` from byte `start`: the bytes of a
+    /// file, with its SHA-256 as the `ETag`.
+    pub async fn chat_file_content(
+        &self,
+        ctx: &OnlineContext,
+        file_id: &str,
+        start: u64,
+    ) -> Result<reqwest::Response> {
+        let path = format!("/v1/chat/files/{}/content", path_segment(file_id)?);
+        self.get_range(ctx, &path, start).await
+    }
+
     pub async fn chat_settings(&self, ctx: &OnlineContext) -> Result<ChatPrivacy> {
         self.request(ctx, Method::GET, "/v1/chat/settings", None, Auth::Required)
             .await
@@ -1264,9 +1276,8 @@ impl OnlineClient {
     }
 }
 
-// The routes of server chats and the download of a chat file. Their callers
-// are the server-chat hooks of hosting and joining and the file cache, which
-// land after the plumbing that carries these.
+// The routes of server chats. Their callers are the server-chat hooks of
+// hosting and joining, which land after the plumbing that carries these.
 #[allow(dead_code)]
 impl OnlineClient {
     /// `PUT /v1/chat/servers/{sessionId}`: the host opens the chat of the
@@ -1297,17 +1308,6 @@ impl OnlineClient {
     pub async fn chat_close_server(&self, ctx: &OnlineContext, session_id: &str) -> Result<()> {
         let path = format!("/v1/chat/servers/{}", path_segment(session_id)?);
         self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
-    }
-
-    /// Opens the content of a chat file from byte `start`.
-    pub async fn chat_file_content(
-        &self,
-        ctx: &OnlineContext,
-        file_id: &str,
-        start: u64,
-    ) -> Result<reqwest::Response> {
-        let path = format!("/v1/chat/files/{}/content", path_segment(file_id)?);
-        self.get_range(ctx, &path, start).await
     }
 }
 

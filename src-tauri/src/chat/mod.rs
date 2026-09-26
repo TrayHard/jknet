@@ -13,6 +13,7 @@
 //! | `sync.rs`   | the sync document, the connection epoch, resync, the reset of a thread whose `lastSeq` went back, account changes, read markers |
 //! | `outbox.rs` | the send queue: uploads, sends, retries                     |
 //! | `frames.rs` | the `chat.*` frames of the live socket                      |
+//! | `files.rs`  | attachments: staging and metadata strip, upload, the download cache, save, import |
 //!
 //! Live frames are hints and the REST answers are the truth: a reconnect, a
 //! `chat.resync` or a sign-in refetches the whole sync document, and a window
@@ -32,12 +33,15 @@
 //! | `chat:resync` | `{reset: conversationId[]}`             | the sync document was read again |
 //! | `chat:draft`  | `{conversationId, text}`                | a draft changed              |
 //! | `chat:upload` | `{handle, sent, total}`                 | an attachment is going up    |
+//! | `chat:download` | `{fileId, received, total, path?, status}` | a file is coming down, arrived (`cached`), failed (`remote`) or is `gone` |
+//! | `chat:files-staged` | `{files, refused}`, to the drop window only | files dropped on a composer were staged |
 //!
 //! A window that receives `chat:resync` drops the threads listed in `reset`
 //! (their `lastSeq` went back, which means the service database was
 //! restored) and fetches what is after the last message of every other
 //! thread it holds.
 
+pub mod files;
 pub mod frames;
 #[cfg(test)]
 mod mock_tests;
@@ -122,6 +126,8 @@ pub struct ChatState {
     outbox: Mutex<outbox::Outbox>,
     /// Files picked for a message and not sent yet, by handle.
     staged: Mutex<HashMap<String, Staged>>,
+    /// What messages said about their files, and the downloads.
+    files: Mutex<files::FileBook>,
     /// When a typing hint last went out, by conversation.
     typing_sent: Mutex<HashMap<String, Instant>>,
     /// Read markers waiting for the debounce, by conversation.
@@ -143,6 +149,7 @@ impl Default for ChatState {
             drafts: Mutex::new(HashMap::new()),
             outbox: Mutex::new(outbox::Outbox::default()),
             staged: Mutex::new(HashMap::new()),
+            files: Mutex::new(files::FileBook::default()),
             typing_sent: Mutex::new(HashMap::new()),
             read_pending: Mutex::new(HashMap::new()),
             read_flush: AtomicBool::new(false),
@@ -171,6 +178,24 @@ impl ChatState {
 
     fn staged(&self) -> MutexGuard<'_, HashMap<String, Staged>> {
         lock(&self.staged)
+    }
+
+    fn files(&self) -> MutexGuard<'_, files::FileBook> {
+        lock(&self.files)
+    }
+
+    /// Notes the files of messages on their way to a window, so a save or
+    /// an import later knows the name and whether the bytes are a program.
+    pub(crate) fn remember_files<'a>(&self, messages: impl IntoIterator<Item = &'a ChatMessage>) {
+        self.files().remember_messages(messages);
+    }
+
+    /// Whether the window with this label has a composer open: that is
+    /// where a file dropped on it goes.
+    fn composer_open(&self, label: &str) -> bool {
+        lock(&self.viewing)
+            .get(label)
+            .is_some_and(|viewing| viewing.composer)
     }
 
     fn drafts(&self) -> MutexGuard<'_, HashMap<String, String>> {
@@ -211,6 +236,7 @@ impl ChatState {
         self.outbox().clear();
         self.drafts().clear();
         self.staged().clear();
+        *self.files() = files::FileBook::default();
         lock(&self.typing_sent).clear();
         lock(&self.read_pending).clear();
         *lock(&self.synced_at) = None;
@@ -244,8 +270,6 @@ struct Viewing {
     focused: bool,
     at_bottom: bool,
     /// Whether its composer is open, which is where a dropped file goes.
-    /// Read by the drag and drop of attachments.
-    #[allow(dead_code)]
     composer: bool,
 }
 
@@ -258,11 +282,9 @@ impl Viewing {
 /// A file picked for a message: the copy the launcher uploads, and what the
 /// service is told about it when it is registered.
 ///
-/// The staging commands of attachments fill the map; the outbox only reads
-/// it, so a message queued before its files finished staging still finds
-/// them when it gets to the upload.
+/// The staging commands of [`files`] fill the map; the outbox reads it, and
+/// once the message is sent the copy becomes the cached copy of the file.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct Staged {
     /// The stripped copy under `cache\chat\staging\`.
     pub path: PathBuf,
@@ -617,8 +639,10 @@ fn toggle_reaction(groups: &mut Vec<ReactionGroup>, user_id: &str, emoji: &str, 
 // Startup and shared pieces
 // ---------------------------------------------------------------------------
 
-/// Starts the sync task. Called once from `setup`, next to `friends::start`.
+/// Starts the sync task and opens the download cache to the asset protocol.
+/// Called once from `setup`, next to `friends::start`.
 pub fn start(app: &AppHandle) {
+    files::start(app);
     sync::start(app);
 }
 
@@ -813,12 +837,14 @@ pub async fn chat_get_messages(
         (None, None, Some(seq)) => PageAnchor::After(seq),
         (None, None, None) => PageAnchor::Latest,
     };
-    noted(
+    let page = noted(
         &app,
         online
             .chat_messages(&ctx, &conversation_id, anchor, limit)
             .await,
-    )
+    )?;
+    app.state::<ChatState>().remember_files(&page.messages);
+    Ok(page)
 }
 
 /// The direct conversation with a friend, made on first use.
@@ -925,6 +951,7 @@ pub async fn chat_retry(app: AppHandle, client_id: String) -> Result<()> {
 pub async fn chat_discard(app: AppHandle, client_id: String) -> Result<()> {
     let entry = app.state::<ChatState>().outbox().discard(&client_id);
     if let Some(entry) = entry {
+        files::drop_staged(&app, &entry.attachments);
         emit_outbox(&app, &entry.conversation_id);
         schedule_state(&app);
     }
@@ -1237,7 +1264,10 @@ pub async fn chat_search(
         before: cursor,
         limit: None,
     };
-    noted(&app, online.chat_search(&ctx, &query).await)
+    let page = noted(&app, online.chat_search(&ctx, &query).await)?;
+    app.state::<ChatState>()
+        .remember_files(page.results.iter().map(|hit| &hit.message));
+    Ok(page)
 }
 
 /// The chat settings of the account, read from the service.

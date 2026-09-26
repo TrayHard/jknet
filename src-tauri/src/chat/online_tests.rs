@@ -14,9 +14,14 @@
 //!    own socket still does;
 //! 7. both accounts are deleted, so the service is as it was.
 //!
-//! Ignored because it needs a service on `127.0.0.1:8787` started with the
+//! A second scenario sends a file: A stages a photo with a GPS position,
+//! uploads it and sends it to B; B downloads it into a cache folder, checked
+//! against the hash the service answers, and gets exactly the stripped copy;
+//! a stranger gets `404`.
+//!
+//! Ignored because they need a service on `127.0.0.1:8787` started with the
 //! developer provider on (`JKNET_ONLINE_DEV_PROVIDER=1`) and the chat API.
-//! Run it by hand:
+//! Run them by hand:
 //!
 //! ```text
 //! cargo test --lib -- --ignored --nocapture chat::online_tests
@@ -31,6 +36,7 @@ use crate::friends::live::upgrade_request;
 use crate::friends::online_tests::{sign_in, Player};
 use crate::online::{ChatPrivacyPatch, LiveFrame, NewMessage, OnlineClient};
 
+use super::files::{self, test_support::jpeg_with_gps, LocalStatus};
 use super::{new_client_id, typing_frame};
 
 /// How long a frame the scenario waits for may take.
@@ -68,8 +74,8 @@ async fn two_friends_write_read_and_type_in_a_direct_conversation() {
     outcome.expect("the scenario");
 }
 
-async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(), String> {
-    // -- Friends -------------------------------------------------------------
+/// A asks, B accepts.
+async fn befriend(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(), String> {
     client
         .send_friend_request(&alpha.ctx, &beta.name)
         .await
@@ -87,6 +93,12 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
         .accept_request(&beta.ctx, &request.id)
         .await
         .map_err(|e| format!("accept as B: {e}"))?;
+    Ok(())
+}
+
+async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(), String> {
+    // -- Friends -------------------------------------------------------------
+    befriend(client, alpha, beta).await?;
 
     // -- Sockets -------------------------------------------------------------
     let mut socket_a = open(alpha).await?;
@@ -201,6 +213,93 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
     let _ = socket_a.close(None).await;
     let _ = socket_b.close(None).await;
     Ok(())
+}
+
+#[tokio::test]
+#[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1 and chat"]
+async fn a_file_goes_from_one_friend_to_the_other_without_its_gps() {
+    let client = OnlineClient::new();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("the clock is after 1970")
+        .as_secs()
+        % 100_000;
+    let alpha = sign_in(&client, &format!("File Alpha {stamp}")).await;
+    let beta = sign_in(&client, &format!("File Beta {stamp}")).await;
+    let stranger = sign_in(&client, &format!("File Gamma {stamp}")).await;
+    let temp = tempfile::tempdir().expect("a temp dir");
+
+    let outcome = send_a_file(&client, &alpha, &beta, &stranger, temp.path()).await;
+
+    for player in [&alpha, &beta, &stranger] {
+        match client.delete_me(&player.ctx).await {
+            Ok(()) => println!("DELETE /v1/me for {} -> 204", player.name),
+            Err(e) => println!("DELETE /v1/me for {} failed: {e}", player.name),
+        }
+    }
+    outcome.expect("the scenario");
+}
+
+async fn send_a_file(
+    client: &OnlineClient,
+    alpha: &Player,
+    beta: &Player,
+    stranger: &Player,
+    temp: &std::path::Path,
+) -> Result<(), String> {
+    befriend(client, alpha, beta).await?;
+    let dm = client
+        .chat_open_direct(&alpha.ctx, &beta.user.id)
+        .await
+        .map_err(|e| format!("PUT /v1/chat/direct as A: {e}"))?;
+
+    let original = jpeg_with_gps();
+    let (staged, _) = files::stage_bytes(&temp.join("staging"), "IMG_0001.JPG", original, "file", None)
+        .map_err(|e| format!("staging: {e}"))?;
+    let stripped = std::fs::read(&staged.path).map_err(|e| format!("the staged copy: {e}"))?;
+    let file_id = files::put_staged(client, &alpha.ctx, &dm.id, &staged, |_| {})
+        .await
+        .map_err(|e| format!("POST /v1/chat/files and PUT its content as A: {e}"))?;
+    println!("POST /v1/chat/files -> {file_id}, {} bytes", staged.size);
+    let message = client
+        .chat_send(
+            &alpha.ctx,
+            &dm.id,
+            &NewMessage {
+                client_id: new_client_id(),
+                file_ids: vec![file_id.clone()],
+                ..NewMessage::default()
+            },
+        )
+        .await
+        .map_err(|e| format!("POST messages as A: {e}"))?;
+    let file = message.files.first().ok_or("the message carries no file")?;
+    println!("the service classified {} as {} ({})", file.name, file.class, file.media_type);
+    if file.class != "image" || file.danger {
+        return Err(format!("a photo came back as {} with danger {}", file.class, file.danger));
+    }
+
+    let mut quiet = |_: u64, _: u64| {};
+    let cached = files::fetch(client, &beta.ctx, &temp.join("beta"), &file_id, &mut quiet)
+        .await
+        .map_err(|e| format!("GET /v1/chat/files/{{id}}/content as B: {e}"))?;
+    let received = std::fs::read(&cached).map_err(|e| format!("B's copy: {e}"))?;
+    if received != stripped {
+        return Err("B's copy differs from the staged one".into());
+    }
+    if received.windows(files::test_support::GPS_RATIONALS.len()).any(|w| w == files::test_support::GPS_RATIONALS) {
+        return Err("the GPS position reached B".into());
+    }
+    println!("B downloaded {} bytes, the stripped copy, without the GPS position", received.len());
+
+    let refused = files::fetch(client, &stranger.ctx, &temp.join("stranger"), &file_id, &mut quiet).await;
+    match refused {
+        Err(e) if files::status_after(&e) == LocalStatus::Gone => {
+            println!("a stranger's download -> {e}");
+            Ok(())
+        }
+        other => Err(format!("a stranger downloaded the file: {other:?}")),
+    }
 }
 
 async fn open(player: &Player) -> Result<Socket, String> {

@@ -24,12 +24,12 @@ use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use crate::error::{AppError, Result};
-use crate::online::{is_retryable, ChatMessage, NewMessage, OnlineClient, OnlineContext};
+use crate::online::{is_retryable, ChatMessage, NewMessage, OnlineClient};
 use crate::timestamp;
 
 use super::{
-    account, emit, emit_outbox, my_id, noted, schedule_state, ChatState, SendDraft, Staged,
-    EVENT_MESSAGE, EVENT_UPLOAD,
+    account, emit, emit_outbox, files, my_id, noted, schedule_state, ChatState, SendDraft,
+    EVENT_MESSAGE,
 };
 
 /// The first wait after a failed attempt.
@@ -38,8 +38,6 @@ const MIN_BACKOFF: Duration = Duration::from_secs(1);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 /// How long an entry keeps trying before it is `failed`.
 const GIVE_UP_AFTER: Duration = Duration::from_secs(10 * 60);
-/// How often `chat:upload` goes out for one file.
-const UPLOAD_EVENT_EVERY: Duration = Duration::from_millis(250);
 
 /// Where an entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -116,6 +114,15 @@ impl OutboxEntry {
 
     fn uploads_left(&self) -> bool {
         self.file_ids.iter().any(Option::is_none)
+    }
+
+    /// Each attachment that is up, as `(handle, file id)`.
+    fn uploaded(&self) -> Vec<(String, String)> {
+        self.attachments
+            .iter()
+            .zip(&self.file_ids)
+            .filter_map(|(handle, id)| id.clone().map(|id| (handle.clone(), id)))
+            .collect()
     }
 }
 
@@ -327,6 +334,13 @@ impl Outbox {
         }
     }
 
+    /// Whether an entry still carries this staged file.
+    pub fn holds_attachment(&self, handle: &str) -> bool {
+        self.entries
+            .iter()
+            .any(|entry| entry.attachments.iter().any(|attached| attached == handle))
+    }
+
     /// Drops the entries of a conversation the player is no longer in.
     pub fn remove_conversation(&mut self, conversation_id: &str) -> bool {
         let before = self.entries.len();
@@ -386,8 +400,12 @@ async fn run(app: &AppHandle, client_id: &str) {
     let result = attempt(app, client_id).await;
     let chat = app.state::<ChatState>();
     match result {
-        Ok(message) => {
+        Ok((message, uploaded)) => {
             let conversation = chat.outbox().succeeded(client_id);
+            // The staged copies are the files now, whether the answer or
+            // the frame of the message settled the entry first.
+            chat.remember_files([&message]);
+            files::settle_sent(app, uploaded);
             // The frame of the message may be late or never come: the socket
             // may be down. The answer is the same message.
             let me = my_id(app);
@@ -439,7 +457,8 @@ fn is_file_lost(error: &AppError) -> bool {
 }
 
 /// Uploads what is left of the attachments of one entry, then sends it.
-async fn attempt(app: &AppHandle, client_id: &str) -> Result<ChatMessage> {
+/// Answers the message and each attachment as `(handle, file id)`.
+async fn attempt(app: &AppHandle, client_id: &str) -> Result<(ChatMessage, Vec<(String, String)>)> {
     let ctx = account(app)?;
     let chat = app.state::<ChatState>();
     let entry = chat
@@ -456,15 +475,17 @@ async fn attempt(app: &AppHandle, client_id: &str) -> Result<ChatMessage> {
         let staged = chat.staged().get(handle).cloned().ok_or_else(|| {
             AppError::InvalidInput(format!("the attachment {handle} is no longer staged"))
         })?;
-        let file_id = upload(app, &online, &ctx, &entry.conversation_id, handle, &staged).await?;
+        let file_id =
+            files::upload(app, &online, &ctx, &entry.conversation_id, handle, &staged).await?;
         chat.outbox().set_file_id(client_id, index, file_id);
     }
 
-    let file_ids: Vec<String> = chat
+    let uploaded: Vec<(String, String)> = chat
         .outbox()
         .get(client_id)
-        .map(|entry| entry.file_ids.iter().flatten().cloned().collect())
+        .map(OutboxEntry::uploaded)
         .unwrap_or_default();
+    let file_ids: Vec<String> = uploaded.iter().map(|(_, id)| id.clone()).collect();
     chat.outbox().set_status(client_id, OutboxStatus::Sending);
     emit_outbox(app, &entry.conversation_id);
 
@@ -475,75 +496,13 @@ async fn attempt(app: &AppHandle, client_id: &str) -> Result<ChatMessage> {
         file_ids,
         reply_seq: entry.reply_seq,
     };
-    noted(
+    let sent = noted(
         app,
         online
             .chat_send(&ctx, &entry.conversation_id, &message)
             .await,
-    )
-}
-
-/// The `chat:upload` event.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct UploadProgress {
-    handle: String,
-    sent: u64,
-    total: u64,
-}
-
-/// Registers one staged file for the conversation and uploads its bytes
-/// unless the account already stored the same ones. Answers the file id.
-async fn upload(
-    app: &AppHandle,
-    online: &OnlineClient,
-    ctx: &OnlineContext,
-    conversation_id: &str,
-    handle: &str,
-    staged: &Staged,
-) -> Result<String> {
-    let registration = noted(
-        app,
-        online
-            .chat_register_file(
-                ctx,
-                conversation_id,
-                &staged.name,
-                staged.size,
-                &staged.sha256,
-                staged.meta.as_ref(),
-            )
-            .await,
     )?;
-    let file_id = registration.file.id;
-    if !registration.needs_upload {
-        return Ok(file_id);
-    }
-
-    let progress_app = app.clone();
-    let progress_handle = handle.to_string();
-    let total = staged.size;
-    let mut sent = 0u64;
-    let mut last: Option<Instant> = None;
-    let body = crate::bundles::publish::file_body(&staged.path, move |read| {
-        sent += read;
-        let now = Instant::now();
-        if sent >= total || last.is_none_or(|at| now.duration_since(at) >= UPLOAD_EVENT_EVERY) {
-            last = Some(now);
-            emit(
-                &progress_app,
-                EVENT_UPLOAD,
-                UploadProgress {
-                    handle: progress_handle.clone(),
-                    sent,
-                    total,
-                },
-            );
-        }
-    })
-    .await?;
-    noted(app, online.chat_upload_file(ctx, &file_id, total, body).await)?;
-    Ok(file_id)
+    Ok((sent, uploaded))
 }
 
 #[cfg(test)]

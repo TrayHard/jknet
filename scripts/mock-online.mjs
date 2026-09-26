@@ -98,14 +98,15 @@
  * account in through the `selected` policy. An invite keeps its `hosting`
  * whole, password included: it goes to one friend.
  *
- * Four routes are deliberately outside the contract, all marked below:
+ * Five routes are deliberately outside the contract, all marked below:
  * `POST /v1/dev/token` hands out a token without the browser round trip, and
  * `POST /v1/dev/invite` makes an invitation arrive on demand; with
  * `?hosting=1` or `{ "hosting": true }` the invitation leads to a private
  * server and carries its `hosting`. `POST /v1/dev/chat` makes a member of
  * the cast post `{ conversationId?, body?, mention? }` (Kyle's direct
- * conversation by default), and `GET /v1/dev/chat/typing` lists the typing
- * frames the launcher sent.
+ * conversation by default), `GET /v1/dev/chat/typing` lists the typing
+ * frames the launcher sent, and `POST /v1/dev/chat/files/:id/lose` drops the
+ * bytes of a chat file, so its download answers `404 file_gone`.
  *
  * Environment:
  *
@@ -469,6 +470,12 @@ function route(request, response, url, body) {
   }
   if (path === "/v1/dev/chat/typing" && method === "GET") {
     return withAuth(request, response, () => send(response, 200, { frames: typingSeen }));
+  }
+  // Not in the contract: a chat file loses its bytes, the way a lost volume
+  // or a restored database leaves a ready row without a file on disk.
+  const lostFile = /^\/v1\/dev\/chat\/files\/([^/]+)\/lose$/.exec(path);
+  if (lostFile && method === "POST") {
+    return withAuth(request, response, () => devChatLoseFile(response, lostFile[1]));
   }
 
   return notFound(response);
@@ -2950,7 +2957,11 @@ function chatRegisterFile(response, body) {
   if (quota.usedBytes + size > quota.quotaBytes) {
     return refuse(response, 400, "invalid", "quota_account", "Your chat files are over the quota", { usedBytes: quota.usedBytes, quotaBytes: quota.quotaBytes });
   }
-  const own = [...chatFiles.values()].find((file) => file.uploaderId === me && file.sha256 === sha256 && file.status === "ready");
+  // Only a copy whose bytes are still there spares the upload, as the
+  // service checks that the file exists on disk.
+  const own = [...chatFiles.values()].find(
+    (file) => file.uploaderId === me && file.sha256 === sha256 && file.status === "ready" && file.bytes,
+  );
   const file = {
     id: id(),
     conversationId: conversation.id,
@@ -3024,6 +3035,16 @@ function chatDownloadFile(request, response, fileId, headOnly) {
   headers["content-length"] = slice.length;
   response.writeHead(status, headers);
   return response.end(headOnly ? undefined : slice);
+}
+
+/** Not in the contract: the bytes of a chat file go, its row stays ready, so
+ *  the download answers `404 file_gone` and a screen shows the file as
+ *  unavailable. */
+function devChatLoseFile(response, fileId) {
+  const file = chatFiles.get(fileId);
+  if (!file) return fail(response, 404, "not_found", "No such file");
+  file.bytes = null;
+  return send(response, 200, { file: fileWire(file) });
 }
 
 /** Not in the contract: a member of the cast posts on demand, so a toast or

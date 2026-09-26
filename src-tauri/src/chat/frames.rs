@@ -203,6 +203,7 @@ pub fn apply(chat: &ChatState, me: Option<&str>, frame: Frame, now: Instant) -> 
     match frame {
         Frame::Message(message) => {
             let conversation_id = message.conversation_id.clone();
+            chat.remember_files([message.as_ref()]);
             let viewed = chat.is_viewed(&conversation_id);
             let applied = chat.book().apply_message(me, &message, viewed);
             // The service sends a message to every device of its sender, and

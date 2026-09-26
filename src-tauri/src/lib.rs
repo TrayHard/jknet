@@ -31,7 +31,7 @@
 //! | `archive`        | one bounded walk over the entries of a pk3, for the modules that list one |
 //! | `pk3_editor`     | one pk3 archive open for editing, and the rewrite that saves it |
 //! | `hosting`        | a private server on this PC, its relay tunnel, and joining one |
-//! | `chat`           | friends chat: summaries, the send queue, the `chat.*` frames |
+//! | `chat`           | friends chat: summaries, the send queue, the `chat.*` frames, attachments |
 
 mod account;
 // --- slice: bundles ---
@@ -219,6 +219,14 @@ pub fn run() {
                     // A closed window no longer shows a conversation, so
                     // messages there count as unread again.
                     chat::forget_window(window.app_handle(), label);
+                }
+                // --- slice: chat ---
+                // Files dropped on `main` or `chat` while that window reports
+                // an open composer become attachments; the window hears
+                // `chat:files-staged`. Any other drop is the screen's own.
+                tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                    chat::files::dropped(window.app_handle(), label, paths);
+                    return;
                 }
                 _ => return,
             }
@@ -562,6 +570,15 @@ pub fn run() {
             chat::chat_update_privacy,
             chat::chat_get_draft,
             chat::chat_set_draft,
+            // Attachments: staged through the core, downloaded into its cache,
+            // saved and imported by it.
+            chat::files::chat_pick_files,
+            chat::files::chat_stage_media,
+            chat::files::chat_stage_clipboard_image,
+            chat::files::chat_unstage,
+            chat::files::chat_file_local,
+            chat::files::chat_file_save,
+            chat::files::chat_file_import,
             // --- slice: jkhub ---
             jkhub::jkhub_categories,
             jkhub::jkhub_list,

@@ -111,6 +111,11 @@ pub(super) async fn resync(app: &AppHandle) {
     match noted(app, answer) {
         Ok(doc) => {
             let chat = app.state::<ChatState>();
+            chat.remember_files(
+                doc.conversations
+                    .iter()
+                    .filter_map(|conversation| conversation.last_message.as_ref()),
+            );
             let reset = chat.book().replace(doc);
             *lock(&chat.synced_at) = Some(Instant::now());
             if !reset.is_empty() {
