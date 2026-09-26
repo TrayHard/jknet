@@ -216,6 +216,10 @@
     "cancelReply": "Válasz megszakítása",
     "attachments": "Küldendő fájlok",
     "removeFile": "{{name}} eltávolítása",
+    "cards": "Küldendő kártyák",
+    "removeCard": "{{name}} eltávolítása",
+    "tooManyCards": "Egy üzenetben legfeljebb {{max}} kártya lehet.",
+    "tooManyFiles": "Egy üzenetben legfeljebb {{max}} fájl lehet.",
     "counter": "{{used}} / {{max}}",
     "tooLong": "Egy üzenet legfeljebb {{max}} karakter lehet.",
     "notFriends": "Már nem barátok. A csevegés csak olvasható; ha újra barátok lesznek, ott folytatódik, ahol abbamaradt.",
@@ -247,11 +251,270 @@
       "archive": "Archívum",
       "executable": "Futtatható fájl",
       "other": "Fájl"
+    },
+    "save": "Mentés",
+    "saving": "Mentés…",
+    "saved": "Mentve ide: {{path}}",
+    "download": "Letöltés",
+    "downloadingLabel": "Letöltés állapota",
+    "downloading": "Letöltés… {{received}} / {{total}}",
+    "gone": "Ez a fájl már nem érhető el. A fájlokat 90 napig őrizzük.",
+    "danger": "Futtatható fájl. Csak akkor nyissa meg, ha megbízik a küldőben: {{name}}.",
+    "dangerExt": "Futtatható fájl (.{{ext}}). Csak akkor nyissa meg, ha megbízik a küldőben: {{name}}.",
+    "addToMedia": "Hozzáadás a „Media” képernyőhöz",
+    "adding": "Hozzáadás…",
+    "addedToMedia": "Hozzáadva a „Media” képernyőhöz",
+    "image": {
+      "screenshot": "Képernyőkép",
+      "open": "{{name}} kép megnyitása",
+      "show": "Kép megjelenítése ({{size}})",
+      "from": "Küldő: {{name}}",
+      "addToMediaHint": "Mentés {{client}} képernyőképei közé",
+      "close": "Bezárás"
+    },
+    "video": {
+      "fromMedia": "Videó a „Media” képernyőről",
+      "play": "Lejátszás",
+      "playName": "{{name}} lejátszása"
+    },
+    "demo": {
+      "addHint": "Mentés {{client}} demói közé",
+      "added": "Hozzáadva a „Media” képernyőhöz: a demó {{client}} demói között van."
     }
   },
   "cards": {
     "empty": "Szöveg nélküli kártya",
-    "unknown": "Frissítse a JKNet-et, hogy lássa ezt a kártyát."
+    "unknown": "Frissítse a JKNet-et, hogy lássa ezt a kártyát.",
+    "label": "{{kind}}: {{title}}",
+    "kinds": {
+      "server": "Szerver",
+      "hostInvite": "Meghívás privát szerverre",
+      "bundle": "Bundle",
+      "jkhubMod": "JKHub-mod",
+      "map": "Pálya",
+      "profile": "Játékosprofil",
+      "bind": "Billentyű-bindek",
+      "config": "Config"
+    },
+    "noClient": "Előbb adjon hozzá egy {{game}}-klienst a „Kliensek” képernyőn.",
+    "copied": "Másolva",
+    "server": {
+      "players": "{{players}}/{{max}} játékos",
+      "password": "Jelszó",
+      "join": "Csatlakozás",
+      "joining": "Indítás…",
+      "copy": "Cím másolása",
+      "checking": "A szerver lekérdezése…",
+      "offline": "A szerver most nem válaszol."
+    },
+    "hostInvite": {
+      "untitled": "Privát szerver",
+      "hostServer": "{{name}} privát szervere",
+      "host": "Házigazda: {{name}}",
+      "relay": "A JKNet továbbítón át, porttovábbítás nélkül",
+      "lan": "A házigazda helyi hálózatán",
+      "mine": "Az Ön privát szervere",
+      "join": "Csatlakozás",
+      "joined": "Csatlakozás a játékhoz…",
+      "stopped": "Ez a szerver már nem fut."
+    },
+    "bundle": {
+      "by": "Bundle · készítő: {{author}}",
+      "version": "{{label}} verzió",
+      "size": "{{size}} letöltendő",
+      "view": "Megtekintés és telepítés",
+      "unavailable": "Ez a bundle már nincs a katalógusban."
+    },
+    "jkhubMod": {
+      "by": "JKHub · készítő: {{author}}",
+      "install": "Telepítés ide: {{client}}",
+      "installPlain": "Telepítés",
+      "installing": "Telepítés…",
+      "installed": "Telepítve ide: {{client}}.",
+      "conflicts": "Ugyanilyen nevű fájlok már telepítve vannak. Cserélje le őket a Könyvtár JKHub lapján.",
+      "external": "A JKHub ezt a fájlt egy másik oldalon tárolja. Nyissa meg a JKHubon.",
+      "noPk3": "Az archívumban nincs pk3 fájl. Nyissa meg a JKHubon, hogy lássa, mi van benne.",
+      "unsupported": "A JKNet nem tud {{format}} archívumot megnyitni. Nyissa meg a fájlt a JKHubon.",
+      "open": "Megnyitás a JKHubon",
+      "downloads_one": "{{formatted}} letöltés",
+      "downloads_other": "{{formatted}} letöltés"
+    },
+    "map": {
+      "noPicture": "Nincs kép erről a pályáról",
+      "play": "Játék a szerveremen",
+      "host": "Szerver indítása ezen a pályán",
+      "copy": "Pályanév másolása",
+      "busy": "Az Ön privát szervere éppen indul vagy leáll.",
+      "otherGame": "Az Ön privát szervere a másik játékkal fut.",
+      "changed": "A szervere erre vált: {{map}}.",
+      "started": "Az Ön privát szervere elindul ezen: {{map}}.",
+      "changeTitle": "Átváltja a szervert erre: {{map}}?",
+      "changeBody": "A mód marad: {{mode}}. Mindenki a szerveren betölti az új pályát.",
+      "changeConfirm": "Pályaváltás",
+      "hostTitle": "Szervert indít ezen: {{map}}?",
+      "hostBody": "A privát szerver a „Play with friends” legutóbbi beállításaival, a(z) {{client}} klienssel és a(z) {{mode}} móddal indul.",
+      "hostConfirm": "Szerver indítása",
+      "hostLoading": "A kliens pályáinak beolvasása…",
+      "hostNoClient": "Előbb válasszon a „Play with friends” képernyőn egy klienst, amely szervert tud indítani.",
+      "notInstalled": "{{client}} nem rendelkezik ezzel a pályával. Előbb telepítse a kliensbe.",
+      "noMode": "Ez a pálya nem kínál olyan módot, amelyet a szervere futtatni tud."
+    },
+    "profile": {
+      "model": "Modell",
+      "hilts": "Markolatok",
+      "blades": "Pengék",
+      "tint": "Árnyalat",
+      "save": "Mentés saját profilként",
+      "saved": "Mentve a játékosprofiljai közé."
+    },
+    "bind": {
+      "unbind": "(bind törlése)",
+      "apply": "Hozzáadás egy confighoz",
+      "copy": "Másolás",
+      "title_one": "{{count}} billentyű-bind",
+      "title_other": "{{count}} billentyű-bind"
+    },
+    "config": {
+      "open": "Megnyitás a szerkesztőben",
+      "copy": "Szöveg másolása",
+      "lines_one": "Config · {{count}} sor · {{size}}",
+      "lines_other": "Config · {{count}} sor · {{size}}"
+    },
+    "more_one": "és még {{count}}",
+    "more_other": "és még {{count}}"
+  },
+  "dangers": {
+    "unchecked": "Nem mindent sikerült ellenőrizni",
+    "line": "{{line}}. sor",
+    "incomplete": "A szöveg túl bonyolult ahhoz, hogy végig ellenőrizzük. Mentés előtt olvassa el az egészet.",
+    "reasons": {
+      "quit": "bezárja a játékot",
+      "exec": "egy másik config fájlt futtat, amelyet a JKNet nem lát",
+      "writeConfig": "fájlba írja a beállításait",
+      "rcon": "egy szerver távoli konzolját használja",
+      "connect": "csatlakozik egy szerverhez",
+      "reconnect": "újra csatlakozik a legutóbbi szerverhez",
+      "unbindAll": "törli az összes bindjét",
+      "allowDownload": "engedi, hogy szerverek fájlokat tegyenek a játékmappájába",
+      "filesystem": "megváltoztatja, honnan olvas és hová ír a játék",
+      "serverCvar": "megváltoztat egy szerverbeállítást",
+      "nestedBind": "billentyűnyomásra megváltoztatja a bindjeit",
+      "tooComplex": "nem sikerült végig ellenőrizni",
+      "other": "olyasmit csinál, amit érdemes ellenőrizni"
+    },
+    "title_one": "{{count}} parancs, amelyet használat előtt érdemes ellenőrizni",
+    "title_other": "{{count}} parancs, amelyet használat előtt érdemes ellenőrizni",
+    "more_one": "és még {{count}} sor",
+    "more_other": "és még {{count}} sor"
+  },
+  "apply": {
+    "config": {
+      "title": "Új config a csevegésből",
+      "body": "Mentés előtt olvassa el a megjelölt sorokat. A config a „Configs” képernyőre kerül, ott kapcsolhatja be egy kliensnek.",
+      "name": "Név",
+      "editor": "A config szövege",
+      "save": "Mentés a „Configs” képernyőre",
+      "saved": "Mentve a „Configs” képernyőre ezen a néven: {{name}}.",
+      "skipped": "Ezeket a billentyűket nem lehet configba írni, ezért kimaradtak: {{keys}}"
+    },
+    "profile": {
+      "title": "{{name}} mentése játékosprofilként",
+      "body": "Ellenőrizze a profilt, és mentse az egyik kliensébe. Semmi sem változik, amíg meg nem nyomja a „Save profile” gombot.",
+      "client": "Kliens",
+      "skipped": "Néhány értéket nem lehetett átvenni, ezek üresen maradtak: {{fields}}"
+    }
+  },
+  "safety": {
+    "apply": {
+      "title": "Menti a(z) {{name}} fájlt ezekkel a parancsokkal?",
+      "body": "A configban még vannak olyan parancsok, amelyek többet tesznek egy beállítás módosításánál. Csak akkor mentse, ha megbízik a küldőben.",
+      "confirm": "Mentés mégis"
+    },
+    "save": {
+      "title": "Menti a(z) {{name}} fájlt?",
+      "body": "{{name}} fájlja futhat a számítógépén. A JKNet soha nem nyitja meg; csak akkor mentse, ha megbízik a küldőben.",
+      "program": "Ez a fájl egy program.",
+      "programExt": "Ez a fájl egy program (.{{ext}}).",
+      "archive": "Ez az archívum programokat tartalmaz, vagy a JKNet nem lát bele.",
+      "details": "Amit a JKNet talált",
+      "marked": "A mentett másolat internetről letöltöttként lesz megjelölve, ezért a Windows futtatás előtt újra rákérdez.",
+      "confirm": "Mentés mégis"
+    }
+  },
+  "pickers": {
+    "search": "Keresés",
+    "loading": "Betöltés…",
+    "noMatch": "Semmi sem felel meg ennek: „{{query}}”",
+    "noClient": "Előbb adjon hozzá egy klienst ehhez a játékhoz a „Kliensek” képernyőn.",
+    "media": {
+      "title": "Csatolás a „Media” képernyőről",
+      "empty": "A „Media” képernyőn még nincs demó, képernyőkép vagy videó ehhez a játékhoz.",
+      "kinds": {
+        "demos": "Demó",
+        "screenshots": "Képernyőkép",
+        "videos": "Videó"
+      }
+    },
+    "server": {
+      "title": "Szerver megosztása",
+      "empty": "Még nincsenek szerverek. Nyomja meg a „Get new list” gombot a „Szerverek” képernyőn."
+    },
+    "map": {
+      "title": "Pálya megosztása",
+      "body": "{{client}} pályái.",
+      "empty": "Ennek a kliensnek nincsenek pályái."
+    },
+    "profile": {
+      "title": "Játékosprofil megosztása",
+      "client": "Kliens",
+      "empty": "Ennek a kliensnek még nincs játékosprofilja."
+    },
+    "bind": {
+      "title": "Bindek megosztása",
+      "body": "Bindek a mentett configjaiból. Legfeljebb 50-et választhat; egy kártyaként mennek el.",
+      "empty": "A mentett configjaiban nincsenek bindek. Előbb állítson be néhányat a „Configs” képernyőn.",
+      "add_one": "{{count}} bind hozzáadása",
+      "add_other": "{{count}} bind hozzáadása"
+    },
+    "config": {
+      "title": "Config megosztása",
+      "empty": "Ehhez a játékhoz még nincs mentett config. Hozzon létre egyet a „Configs” képernyőn.",
+      "tooLarge": "Nagyobb 32 KiB-nál: küldje el inkább fájlként a .cfg-t."
+    },
+    "bundle": {
+      "title": "Bundle megosztása",
+      "empty": "Nincs találat a bundle-ök között."
+    },
+    "jkhubMod": {
+      "title": "JKHub-mod megosztása",
+      "search": "Keresés a JKHubon",
+      "empty": "Nincs találat a fájlok között."
+    },
+    "narrow_one": "Még {{count}}. Gépeljen a lista szűkítéséhez.",
+    "narrow_other": "Még {{count}}. Gépeljen a lista szűkítéséhez."
+  },
+  "share": {
+    "action": "Megosztás csevegésben",
+    "actionNamed": "{{name}} megosztása csevegésben",
+    "title": "Megosztás csevegésben",
+    "search": "Keresés csevegések és barátok között",
+    "targets": "Hová küldje",
+    "newChat": "Barát · új csevegés",
+    "kinds": {
+      "direct": "Csevegés",
+      "group": "Csoport",
+      "server": "Szervercsevegés"
+    },
+    "message": "Üzenet (nem kötelező)",
+    "send": "Küldés",
+    "sending": "Küldés…",
+    "sent": "Megosztva vele: {{name}}",
+    "open": "Csevegés megnyitása",
+    "unavailable": "Jelentkezzen be a „Beállítások” képernyőn, hogy megoszthasson a csevegéseiben.",
+    "empty": "Még nincsenek csevegések és barátok.",
+    "noMatch": "Semmi sem felel meg ennek: „{{query}}”",
+    "mediaFile": "Fájl a „Media” képernyőről",
+    "preparing": "A kártya előkészítése…"
   },
   "emoji": {
     "title": "Emoji",

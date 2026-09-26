@@ -27,7 +27,10 @@ export function CardFallback({ card, known }: CardProps & { known: boolean }) {
   );
 }
 
-/** Card kinds of this release: drawn by their own component once the cards slice registers it. */
+/**
+ * Card kinds of this release. Each has its own component; one of them that
+ * lacks a field its component needs still says nothing about updating.
+ */
 export const KNOWN_CARD_KINDS = new Set([
   "server",
   "hostInvite",

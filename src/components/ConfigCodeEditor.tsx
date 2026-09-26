@@ -38,17 +38,28 @@ export function ConfigCodeEditor({
   onChange,
   height = 420,
   ariaLabel,
+  marks,
 }: {
   value: string;
   onChange: (text: string) => void;
   height?: number;
   ariaLabel?: string;
+  // --- slice: chat cards ---
+  /**
+   * Lines to mark as errors in the gutter and under the text, 1-based, with
+   * the sentence the tooltip shows: the dangerous commands of a config that
+   * came in a chat. Read when the editor is created.
+   */
+  marks?: { line: number; message: string }[];
 }) {
   const { t } = useTranslation("common"),
     host = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
-    callback = useRef(onChange);
+    callback = useRef(onChange),
+    // --- slice: chat cards --- read by the linter on every pass.
+    marked = useRef(marks ?? []);
   callback.current = onChange;
+  marked.current = marks ?? [];
   useEffect(() => {
     if (!host.current) return;
     const language = StreamLanguage.define({
@@ -135,8 +146,8 @@ export function ConfigCodeEditor({
               },
             ],
           }),
-          linter((v) =>
-            scriptIssues(v.state.doc.toString()).map((issue) => {
+          linter((v) => [
+            ...scriptIssues(v.state.doc.toString()).map((issue) => {
               const line = v.state.doc.line(issue.line);
               return {
                 from: line.from,
@@ -150,7 +161,20 @@ export function ConfigCodeEditor({
                 }),
               };
             }),
-          ),
+            // --- slice: chat cards --- the lines a chat card asks the
+            // player to read, as long as the text still has them.
+            ...marked.current
+              .filter((mark) => mark.line >= 1 && mark.line <= v.state.doc.lines)
+              .map((mark) => {
+                const line = v.state.doc.line(mark.line);
+                return {
+                  from: line.from,
+                  to: line.to,
+                  severity: "error" as const,
+                  message: mark.message,
+                };
+              }),
+          ]),
           EditorView.theme(
             {
               "&": {

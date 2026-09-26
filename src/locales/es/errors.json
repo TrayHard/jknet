@@ -60,7 +60,9 @@
     "quotaStore": "JKNet Online no tiene espacio para archivos de chat ahora. Inténtelo más tarde.",
     "hashMismatch": "El archivo cambió mientras se subía. Envíelo de nuevo.",
     "sizeMismatch": "El archivo cambió mientras se subía. Envíelo de nuevo.",
-    "notHosting": "Su servidor privado aún no aparece en JKNet Online."
+    "notHosting": "Su servidor privado aún no aparece en JKNet Online.",
+    "confirmDanger": "Este archivo puede ejecutarse en su equipo. Confirme antes de guardarlo.",
+    "confirmLink": "Confirme antes de abrir un enlace a {{message}}."
   },
   "frontend": {
     "noRuntime": "El entorno de Tauri no está disponible",

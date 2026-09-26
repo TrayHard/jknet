@@ -53,10 +53,14 @@ export function ProfileForm({
   client,
   profile,
   onDone,
+  onSaved,
 }: {
   client: Client;
   profile: PlayerProfile;
   onDone: () => void;
+  // --- slice: chat cards ---
+  /** Runs after a save, instead of `onDone`: the chat says the profile was kept. */
+  onSaved?: () => void;
 }) {
   const { t } = useTranslation("clients");
   const errorText = useErrorText();
@@ -115,7 +119,7 @@ export function ProfileForm({
             // Saved edits are not unsaved ones, and `onDone` unmounts this
             // form before the effect above could say so.
             guard.setDirty(false);
-            onDone();
+            (onSaved ?? onDone)();
           },
         });
       }}

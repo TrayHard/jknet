@@ -49,7 +49,7 @@ export function PlayerProfilesPage() {
             className="w-full max-w-400"
           />
           <section className="rounded-lg border border-line bg-surface p-16">
-            <PlayerProfilesCard key={client.id} client={client} />
+            <PlayerProfilesCard key={client.id} client={client} shareable />
           </section>
         </div>
       ) : clients.isSuccess ? (

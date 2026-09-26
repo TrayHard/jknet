@@ -20,8 +20,9 @@ import {
   type MentionPick,
   type MentionQuery,
 } from "../../lib/chat/mentions";
+import { CARDS_MAX } from "../../lib/chat/cardDrafts";
 import { cn } from "../../lib/format";
-import type { ChatMessage, ChatStagedFile, Conversation, OnlineUser } from "../../lib/ipc";
+import type { ChatCard, ChatMessage, ChatStagedFile, Conversation, OnlineUser } from "../../lib/ipc";
 import {
   useChatDraft,
   useChatDroppedFiles,
@@ -30,8 +31,10 @@ import {
   useSetChatDraft,
   useStageChatFiles,
 } from "../../lib/queries";
-import { AttachMenu, type AttachKind } from "./AttachMenu";
+import { ATTACH_KINDS, AttachMenu, type AttachKind } from "./AttachMenu";
 import { AttachmentTray } from "./AttachmentTray";
+import { Layer } from "./Layer";
+import { AttachPicker } from "./pickers/AttachPicker";
 import { EmojiPopover } from "./EmojiPopover";
 import { MentionPopover } from "./MentionPopover";
 import { ReplyBar } from "./ReplyBar";
@@ -54,15 +57,13 @@ interface ComposerProps {
   onClearReply: () => void;
   /** After a send: the thread scrolls to the bottom. */
   onSent?: () => void;
-  /**
-   * The kinds of the attach menu this composer can act on, besides a file and
-   * a picture from the clipboard, and what to do with one. The pickers of the
-   * cards arrive with the cards slice.
-   */
-  extraKinds?: ReadonlySet<AttachKind>;
-  onAttachKind?: (kind: AttachKind) => void;
   dense?: boolean;
 }
+
+/** At most this many files go with one message: the service's limit. */
+const FILES_MAX = 10;
+/** Every kind of the attach menu: the cards slice gave each its picker. */
+const ALL_KINDS: ReadonlySet<AttachKind> = new Set(ATTACH_KINDS);
 
 /**
  * --- slice: chat ---
@@ -81,8 +82,6 @@ export function Composer({
   replyTo,
   onClearReply,
   onSent,
-  extraKinds,
-  onAttachKind,
   dense = false,
 }: ComposerProps) {
   const { t } = useTranslation("chat");
@@ -100,6 +99,10 @@ export function Composer({
   const [text, setText] = useState("");
   const [picks, setPicks] = useState<MentionPick[]>([]);
   const [staged, setStaged] = useState<ChatStagedFile[]>([]);
+  // --- slice: chat cards --- the cards picked for the next message, and
+  // the picker of the attach menu while one is open.
+  const [cards, setCards] = useState<ChatCard[]>([]);
+  const [picking, setPicking] = useState<AttachKind | null>(null);
   const [mention, setMention] = useState<MentionQuery | null>(null);
   const [active, setActive] = useState(0);
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -119,6 +122,8 @@ export function Composer({
     setText("");
     setPicks([]);
     setStaged([]);
+    setCards([]);
+    setPicking(null);
     setMention(null);
     setError(null);
   }, [conversationId]);
@@ -236,7 +241,27 @@ export function Composer({
 
   const chars = Array.from(body).length;
   const tooLong = chars > MAX_BODY_CHARS;
-  const empty = body.trim() === "" && staged.length === 0;
+  const empty = body.trim() === "" && staged.length === 0 && cards.length === 0;
+
+  // --- slice: chat cards ---
+  // Files and cards join the tray up to the service's limits; what does not
+  // fit is left out with a line saying why, and a file the core staged for
+  // nothing is let go at once.
+  const addFiles = (files: ChatStagedFile[]) => {
+    const room = FILES_MAX - staged.length;
+    const taken = files.slice(0, Math.max(0, room));
+    for (const file of files.slice(taken.length)) stage.unstage.mutate(file.handle);
+    if (taken.length < files.length) setError(t("composer.tooManyFiles", { max: FILES_MAX }));
+    if (taken.length > 0) setStaged((current) => [...current, ...taken]);
+  };
+  const addCard = (card: ChatCard) => {
+    if (cards.length >= CARDS_MAX) {
+      setError(t("composer.tooManyCards", { max: CARDS_MAX }));
+      return;
+    }
+    setError(null);
+    setCards((current) => [...current, card]);
+  };
 
   const updateMention = (value: string, caret: number) => {
     const next = mentionQueryAt(value, caret);
@@ -285,7 +310,7 @@ export function Composer({
         conversationId,
         draft: {
           body: message,
-          cards: [],
+          cards,
           attachments: staged.map((file) => file.handle),
           replySeq: replyTo?.seq ?? null,
         },
@@ -295,6 +320,7 @@ export function Composer({
           setText("");
           setPicks([]);
           setStaged([]);
+          setCards([]);
           setMention(null);
           lastSaved.current = "";
           setDraft.mutate({ conversationId, text: "" });
@@ -345,25 +371,24 @@ export function Composer({
     // The core reads the picture off the clipboard itself and strips it.
     event.preventDefault();
     stage.clipboard.mutate(undefined, {
-      onSuccess: (file) => setStaged((current) => [...current, file]),
+      onSuccess: (file) => addFiles([file]),
       onError: (failure) => setError(errorText(failure)),
     });
   };
 
-  const available = new Set<AttachKind>(["file", "clipboard", ...(extraKinds ?? [])]);
   const onAttach = (kind: AttachKind) => {
     if (kind === "file") {
       stage.pick.mutate(undefined, {
-        onSuccess: (files) => setStaged((current) => [...current, ...files]),
+        onSuccess: (files) => addFiles(files),
         onError: (failure) => setError(errorText(failure)),
       });
     } else if (kind === "clipboard") {
       stage.clipboard.mutate(undefined, {
-        onSuccess: (file) => setStaged((current) => [...current, file]),
+        onSuccess: (file) => addFiles([file]),
         onError: (failure) => setError(errorText(failure)),
       });
     } else {
-      onAttachKind?.(kind);
+      setPicking(kind);
     }
   };
 
@@ -381,10 +406,12 @@ export function Composer({
           setStaged((current) => current.filter((file) => file.handle !== handle));
           stage.unstage.mutate(handle);
         }}
+        cards={cards}
+        onRemoveCard={(index) => setCards((current) => current.filter((_, at) => at !== index))}
       />
       <MentionPopover candidates={candidates} active={active} onPick={pick} onHover={setActive} />
       <div className={cn("flex items-end gap-4", dense ? "p-6" : "p-8")}>
-        <AttachMenu available={available} onPick={onAttach} />
+        <AttachMenu available={ALL_KINDS} onPick={onAttach} />
         <textarea
           ref={field}
           rows={1}
@@ -448,6 +475,23 @@ export function Composer({
         onClose={() => setEmojiOpen(false)}
         onPick={(emoji) => insertText(emoji)}
       />
+      {picking !== null ? (
+        <Layer>
+          <AttachPicker
+            kind={picking}
+            onClose={() => {
+              setPicking(null);
+              field.current?.focus();
+            }}
+            onPick={(picked) => {
+              setPicking(null);
+              if ("card" in picked) addCard(picked.card);
+              else addFiles([picked.file]);
+              field.current?.focus();
+            }}
+          />
+        </Layer>
+      ) : null}
     </div>
   );
 }

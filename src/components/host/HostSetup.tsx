@@ -185,6 +185,7 @@ export function HostSetup({
             onChange={onMap}
             preferred={options.defaults.map}
             className="w-full"
+            shareGame={options.game}
           />
         </div>
       </div>

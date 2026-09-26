@@ -216,6 +216,10 @@
     "cancelReply": "Cancel the reply",
     "attachments": "Files to send",
     "removeFile": "Remove {{name}}",
+    "cards": "Cards to send",
+    "removeCard": "Remove {{name}}",
+    "tooManyCards": "A message can carry up to {{max}} cards.",
+    "tooManyFiles": "A message can carry up to {{max}} files.",
     "counter": "{{used}} / {{max}}",
     "tooLong": "A message can be up to {{max}} characters long.",
     "notFriends": "You are no longer friends. The chat is read-only; once you are friends again, it picks up where it left off.",
@@ -247,11 +251,270 @@
       "archive": "Archive",
       "executable": "Executable file",
       "other": "File"
+    },
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved to {{path}}",
+    "download": "Download",
+    "downloadingLabel": "Download progress",
+    "downloading": "Downloading… {{received}} of {{total}}",
+    "gone": "This file is no longer available. Files are kept for 90 days.",
+    "danger": "Executable file. Open it only if you trust {{name}}.",
+    "dangerExt": "Executable file (.{{ext}}). Open it only if you trust {{name}}.",
+    "addToMedia": "Add to Media",
+    "adding": "Adding…",
+    "addedToMedia": "Added to Media",
+    "image": {
+      "screenshot": "Screenshot",
+      "open": "Open the picture {{name}}",
+      "show": "Show picture ({{size}})",
+      "from": "From {{name}}",
+      "addToMediaHint": "Save it with the screenshots of {{client}}",
+      "close": "Close"
+    },
+    "video": {
+      "fromMedia": "Video from Media",
+      "play": "Play",
+      "playName": "Play {{name}}"
+    },
+    "demo": {
+      "addHint": "Put it into the demos of {{client}}",
+      "added": "Added to Media: it is in the demos of {{client}}."
     }
   },
   "cards": {
     "empty": "A card without text",
-    "unknown": "Update JKNet to see this card."
+    "unknown": "Update JKNet to see this card.",
+    "label": "{{kind}}: {{title}}",
+    "kinds": {
+      "server": "Server",
+      "hostInvite": "Private server invite",
+      "bundle": "Bundle",
+      "jkhubMod": "JKHub mod",
+      "map": "Map",
+      "profile": "Player profile",
+      "bind": "Key binds",
+      "config": "Config"
+    },
+    "noClient": "Add a {{game}} client on the Clients screen first.",
+    "copied": "Copied",
+    "more_one": "and {{count}} more",
+    "more_other": "and {{count}} more",
+    "server": {
+      "players": "{{players}}/{{max}} players",
+      "password": "Password",
+      "join": "Join",
+      "joining": "Starting…",
+      "copy": "Copy address",
+      "checking": "Asking the server…",
+      "offline": "The server does not answer right now."
+    },
+    "hostInvite": {
+      "untitled": "Private server",
+      "hostServer": "{{name}}'s private server",
+      "host": "Host {{name}}",
+      "relay": "Through the JKNet relay, no port forwarding",
+      "lan": "On the host's local network",
+      "mine": "Your private server",
+      "join": "Join",
+      "joined": "Joining the game…",
+      "stopped": "This server is not running any more."
+    },
+    "bundle": {
+      "by": "Bundle · by {{author}}",
+      "version": "version {{label}}",
+      "size": "{{size}} to download",
+      "view": "View and install",
+      "unavailable": "This bundle is no longer in the catalogue."
+    },
+    "jkhubMod": {
+      "by": "JKHub · by {{author}}",
+      "downloads_one": "{{formatted}} download",
+      "downloads_other": "{{formatted}} downloads",
+      "install": "Install into {{client}}",
+      "installPlain": "Install",
+      "installing": "Installing…",
+      "installed": "Installed into {{client}}.",
+      "conflicts": "Files with the same names are already installed. Replace them from the JKHub tab of the Library.",
+      "external": "JKHub hosts this file on another site. Open it on JKHub.",
+      "noPk3": "The archive holds no pk3 files. Open it on JKHub to see what it holds.",
+      "unsupported": "JKNet cannot open a {{format}} archive. Open it on JKHub.",
+      "open": "Open on JKHub"
+    },
+    "map": {
+      "noPicture": "No picture of this map",
+      "play": "Play on my server",
+      "host": "Host on this map",
+      "copy": "Copy map name",
+      "busy": "Your private server is starting or stopping.",
+      "otherGame": "Your private server runs the other game.",
+      "changed": "Your server is changing to {{map}}.",
+      "started": "Your private server is starting on {{map}}.",
+      "changeTitle": "Change your server to {{map}}?",
+      "changeBody": "The mode stays {{mode}}. Everybody on the server loads the new map.",
+      "changeConfirm": "Change map",
+      "hostTitle": "Host a server on {{map}}?",
+      "hostBody": "Your private server starts with the last settings of the Play with friends screen, the client {{client}} and the mode {{mode}}.",
+      "hostConfirm": "Start server",
+      "hostLoading": "Reading the maps of your client…",
+      "hostNoClient": "Pick a client that can host on the Play with friends screen first.",
+      "notInstalled": "{{client}} does not have this map. Install it into the client first.",
+      "noMode": "This map offers no mode your server can run."
+    },
+    "profile": {
+      "model": "Model",
+      "hilts": "Hilts",
+      "blades": "Blades",
+      "tint": "Tint",
+      "save": "Save as my profile",
+      "saved": "Saved to your player profiles."
+    },
+    "bind": {
+      "title_one": "{{count}} key bind",
+      "title_other": "{{count}} key binds",
+      "unbind": "(unbind)",
+      "apply": "Add to a config",
+      "copy": "Copy"
+    },
+    "config": {
+      "lines_one": "Config · {{count}} line · {{size}}",
+      "lines_other": "Config · {{count}} lines · {{size}}",
+      "open": "Open in the editor",
+      "copy": "Copy text"
+    }
+  },
+  "dangers": {
+    "title_one": "{{count}} command to check before you use it",
+    "title_other": "{{count}} commands to check before you use it",
+    "unchecked": "Not everything could be checked",
+    "line": "Line {{line}}",
+    "more_one": "and {{count}} more line",
+    "more_other": "and {{count}} more lines",
+    "incomplete": "The text is too complex to check to the end. Read all of it before you save it.",
+    "reasons": {
+      "quit": "closes the game",
+      "exec": "runs another config file, which JKNet cannot see",
+      "writeConfig": "writes your settings to a file",
+      "rcon": "uses the remote console of a server",
+      "connect": "connects to a server",
+      "reconnect": "connects to the last server again",
+      "unbindAll": "removes all your key binds",
+      "allowDownload": "lets servers put files into your game folder",
+      "filesystem": "changes where the game reads and writes files",
+      "serverCvar": "changes a server setting",
+      "nestedBind": "changes your key binds when a key is pressed",
+      "tooComplex": "could not be checked to the end",
+      "other": "does something you should check"
+    }
+  },
+  "apply": {
+    "config": {
+      "title": "New config from the chat",
+      "body": "Read the marked lines before you save. The config is saved on the Configs screen; turn it on for a client there.",
+      "name": "Name",
+      "editor": "Text of the config",
+      "save": "Save to Configs",
+      "saved": "Saved to Configs as {{name}}.",
+      "skipped": "These keys cannot be written to a config and were left out: {{keys}}"
+    },
+    "profile": {
+      "title": "Save {{name}} as a player profile",
+      "body": "Check the profile and save it into one of your clients. Nothing changes until you press Save profile.",
+      "client": "Client",
+      "skipped": "Some values could not be used and were left blank: {{fields}}"
+    }
+  },
+  "safety": {
+    "apply": {
+      "title": "Save {{name}} with these commands?",
+      "body": "The config still has commands that do more than change a setting. Save it only if you trust the player who sent it.",
+      "confirm": "Save anyway"
+    },
+    "save": {
+      "title": "Save {{name}}?",
+      "body": "{{name}} sent a file that can run on your computer. JKNet never opens it; save it only if you trust the sender.",
+      "program": "This file is a program.",
+      "programExt": "This file is a program (.{{ext}}).",
+      "archive": "This archive holds programs, or JKNet cannot look inside it.",
+      "details": "What JKNet found",
+      "marked": "The saved copy is marked as downloaded from the internet, so Windows asks again before it runs.",
+      "confirm": "Save anyway"
+    }
+  },
+  "pickers": {
+    "search": "Search",
+    "loading": "Loading…",
+    "noMatch": "Nothing matches “{{query}}”",
+    "narrow_one": "{{count}} more. Type to narrow the list.",
+    "narrow_other": "{{count}} more. Type to narrow the list.",
+    "noClient": "Add a client of this game on the Clients screen first.",
+    "media": {
+      "title": "Attach from Media",
+      "empty": "No demos, screenshots or videos of this game on the Media screen yet.",
+      "kinds": {
+        "demos": "Demo",
+        "screenshots": "Screenshot",
+        "videos": "Video"
+      }
+    },
+    "server": {
+      "title": "Share a server",
+      "empty": "No servers yet. Press Get new list on the Servers screen."
+    },
+    "map": {
+      "title": "Share a map",
+      "body": "Maps of {{client}}.",
+      "empty": "This client has no maps."
+    },
+    "profile": {
+      "title": "Share a player profile",
+      "client": "Client",
+      "empty": "This client has no player profiles yet."
+    },
+    "bind": {
+      "title": "Share key binds",
+      "body": "Binds of your saved configs. Pick up to 50; they go as one card.",
+      "empty": "Your saved configs have no key binds. Set some on the Configs screen first.",
+      "add_one": "Add {{count}} bind",
+      "add_other": "Add {{count}} binds"
+    },
+    "config": {
+      "title": "Share a config",
+      "empty": "No saved configs of this game yet. Make one on the Configs screen.",
+      "tooLarge": "Larger than 32 KiB: send the .cfg as a file instead."
+    },
+    "bundle": {
+      "title": "Share a bundle",
+      "empty": "No bundles found."
+    },
+    "jkhubMod": {
+      "title": "Share a JKHub mod",
+      "search": "Search JKHub",
+      "empty": "No files found."
+    }
+  },
+  "share": {
+    "action": "Share to chat",
+    "actionNamed": "Share {{name}} to chat",
+    "title": "Share to chat",
+    "search": "Search chats and friends",
+    "targets": "Where to send it",
+    "newChat": "Friend · starts a new chat",
+    "kinds": {
+      "direct": "Chat",
+      "group": "Group",
+      "server": "Server chat"
+    },
+    "message": "Message (optional)",
+    "send": "Send",
+    "sending": "Sending…",
+    "sent": "Shared with {{name}}",
+    "open": "Open chat",
+    "unavailable": "Sign in on the Settings screen to share to your chats.",
+    "empty": "No chats or friends yet.",
+    "noMatch": "Nothing matches “{{query}}”",
+    "mediaFile": "File from Media",
+    "preparing": "Preparing the card…"
   },
   "emoji": {
     "title": "Emoji",

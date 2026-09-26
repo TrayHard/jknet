@@ -1,9 +1,11 @@
-import { Clock, Globe, Map as MapIcon, Play, RefreshCw, Square } from "lucide-react";
+import { Clock, Globe, Map as MapIcon, Play, RefreshCw, Share2, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useFormat } from "../../i18n/useFormat";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
+import { hostInviteCard } from "../../lib/chat/cardDrafts";
 import type { HostSession } from "../../lib/ipc";
+import { useShareDialog } from "../chat/ShareToChatDialog";
 import { Badge, Button } from "../ui";
 import { AddressField, CopyButton } from "./CopyButton";
 import {
@@ -56,8 +58,12 @@ export function HostRunning({
 }: HostRunningProps) {
   const { t } = useTranslation("host");
   const { t: tCommon } = useTranslation("common");
+  const { t: tChat } = useTranslation("chat");
   const format = useFormat();
   const labels = useGametypeLabels();
+  // --- slice: chat cards --- **Share to chat**: an invitation card of this
+  // server, the session and the name alone; the service fills in the rest.
+  const share = useShareDialog();
   const { settings } = session;
   const humans = humanCount(session.players);
   const isStopping = stopping || session.status === "stopping";
@@ -170,6 +176,15 @@ export function HostRunning({
           <Button icon={<MapIcon size={16} />} disabled={isStopping} onClick={onChangeMap}>
             {t("running.changeMap")}
           </Button>
+          {share.available ? (
+            <Button
+              icon={<Share2 size={16} />}
+              disabled={isStopping}
+              onClick={() => share.open({ kind: "card", card: hostInviteCard(session.id, settings.serverName) })}
+            >
+              {tChat("share.action")}
+            </Button>
+          ) : null}
           <Button
             icon={<Square size={16} />}
             disabled={isStopping}
@@ -214,6 +229,7 @@ export function HostRunning({
           <p className="flex-1 min-w-0 text-body-sm text-fg-muted">{t("running.join.consoleHint")}</p>
         </div>
       </section>
+      {share.dialog}
     </>
   );
 }

@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Share2,
   Trash2,
 } from "lucide-react";
 import {
@@ -28,10 +29,16 @@ import { VideoJobCard } from "../components/VideoJobCard";
 // --- slice: chat layout ---
 import { FOLDED_HIDDEN, FOLDED_OVER_LIST, FoldedPanelBack } from "../components/FoldedPanel";
 import { cn } from "../lib/format";
+// --- slice: chat cards ---
+import { useShareDialog } from "../components/chat/ShareToChatDialog";
 
 export function MediaPage() {
   const { t, i18n } = useTranslation("common"),
     errorText = useErrorText();
+  // --- slice: chat cards --- **Share to chat**: the file itself goes, the
+  // core strips its metadata first.
+  const { t: tChat } = useTranslation("chat"),
+    share = useShareDialog();
   const media = useMedia(),
     actions = useMediaActions(),
     clients = useClients(),
@@ -428,6 +435,15 @@ export function MediaPage() {
                       {t("media.copy")}
                     </Button>
                   ) : null}
+                  {share.available ? (
+                    <Button
+                      size="sm"
+                      icon={<Share2 size={14} />}
+                      onClick={() => share.open({ kind: "media", mediaId: selected.id, name: selected.name })}
+                    >
+                      {tChat("share.action")}
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -610,6 +626,7 @@ export function MediaPage() {
           </div>
         </Dialog>
       ) : null}
+      {share.dialog}
     </Page>
   );
 }

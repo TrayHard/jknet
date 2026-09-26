@@ -244,6 +244,10 @@
     "cancelReply": "Anuluj odpowiedź",
     "attachments": "Pliki do wysłania",
     "removeFile": "Usuń {{name}}",
+    "cards": "Karty do wysłania",
+    "removeCard": "Usuń {{name}}",
+    "tooManyCards": "Wiadomość może zawierać do {{max}} kart.",
+    "tooManyFiles": "Wiadomość może zawierać do {{max}} plików.",
     "counter": "{{used}} / {{max}}",
     "tooLong": "Wiadomość może mieć najwyżej {{max}} znaków.",
     "notFriends": "Nie jesteście już znajomymi. Czat jest tylko do odczytu; gdy znów będziecie znajomymi, rozmowa potoczy się dalej.",
@@ -275,11 +279,286 @@
       "archive": "Archiwum",
       "executable": "Plik wykonywalny",
       "other": "Plik"
+    },
+    "save": "Zapisz",
+    "saving": "Zapisywanie…",
+    "saved": "Zapisano w {{path}}",
+    "download": "Pobierz",
+    "downloadingLabel": "Postęp pobierania",
+    "downloading": "Pobieranie… {{received}} z {{total}}",
+    "gone": "Ten plik nie jest już dostępny. Pliki są przechowywane przez 90 dni.",
+    "danger": "Plik wykonywalny. Otwórz go tylko, jeśli ufasz nadawcy: {{name}}.",
+    "dangerExt": "Plik wykonywalny (.{{ext}}). Otwórz go tylko, jeśli ufasz nadawcy: {{name}}.",
+    "addToMedia": "Dodaj do „Media”",
+    "adding": "Dodawanie…",
+    "addedToMedia": "Dodano do „Media”",
+    "image": {
+      "screenshot": "Zrzut ekranu",
+      "open": "Otwórz obraz {{name}}",
+      "show": "Pokaż obraz ({{size}})",
+      "from": "Od {{name}}",
+      "addToMediaHint": "Zapisz przy zrzutach ekranu klienta {{client}}",
+      "close": "Zamknij"
+    },
+    "video": {
+      "fromMedia": "Wideo z „Media”",
+      "play": "Odtwórz",
+      "playName": "Odtwórz {{name}}"
+    },
+    "demo": {
+      "addHint": "Umieść w demach klienta {{client}}",
+      "added": "Dodano do „Media”: demo jest w demach klienta {{client}}."
     }
   },
   "cards": {
     "empty": "Karta bez tekstu",
-    "unknown": "Zaktualizuj JKNet, aby zobaczyć tę kartę."
+    "unknown": "Zaktualizuj JKNet, aby zobaczyć tę kartę.",
+    "label": "{{kind}}: {{title}}",
+    "kinds": {
+      "server": "Serwer",
+      "hostInvite": "Zaproszenie na prywatny serwer",
+      "bundle": "Bundle",
+      "jkhubMod": "Mod z JKHub",
+      "map": "Mapa",
+      "profile": "Profil gracza",
+      "bind": "Bindy klawiszy",
+      "config": "Config"
+    },
+    "noClient": "Najpierw dodaj klienta {{game}} na ekranie „Klienci”.",
+    "copied": "Skopiowano",
+    "server": {
+      "players": "Graczy: {{players}}/{{max}}",
+      "password": "Hasło",
+      "join": "Dołącz",
+      "joining": "Uruchamianie…",
+      "copy": "Kopiuj adres",
+      "checking": "Odpytywanie serwera…",
+      "offline": "Serwer teraz nie odpowiada."
+    },
+    "hostInvite": {
+      "untitled": "Prywatny serwer",
+      "hostServer": "Prywatny serwer: {{name}}",
+      "host": "Gospodarz: {{name}}",
+      "relay": "Przez przekaźnik JKNet, bez przekierowania portów",
+      "lan": "W sieci lokalnej gospodarza",
+      "mine": "Twój prywatny serwer",
+      "join": "Dołącz",
+      "joined": "Łączenie z grą…",
+      "stopped": "Ten serwer już nie działa."
+    },
+    "bundle": {
+      "by": "Bundle · autor: {{author}}",
+      "version": "wersja {{label}}",
+      "size": "{{size}} do pobrania",
+      "view": "Zobacz i zainstaluj",
+      "unavailable": "Tego bundle’a nie ma już w katalogu."
+    },
+    "jkhubMod": {
+      "by": "JKHub · autor: {{author}}",
+      "install": "Zainstaluj w {{client}}",
+      "installPlain": "Zainstaluj",
+      "installing": "Instalowanie…",
+      "installed": "Zainstalowano w {{client}}.",
+      "conflicts": "Pliki o tych samych nazwach są już zainstalowane. Zastąp je na karcie JKHub w Bibliotece.",
+      "external": "JKHub trzyma ten plik na innej stronie. Otwórz go na JKHub.",
+      "noPk3": "W archiwum nie ma plików pk3. Otwórz je na JKHub, aby zobaczyć, co zawiera.",
+      "unsupported": "JKNet nie otwiera archiwów {{format}}. Otwórz plik na JKHub.",
+      "open": "Otwórz na JKHub",
+      "downloads_one": "{{formatted}} pobranie",
+      "downloads_few": "{{formatted}} pobrania",
+      "downloads_many": "{{formatted}} pobrań",
+      "downloads_other": "{{formatted}} pobrania"
+    },
+    "map": {
+      "noPicture": "Brak obrazu tej mapy",
+      "play": "Graj na moim serwerze",
+      "host": "Uruchom serwer na tej mapie",
+      "copy": "Kopiuj nazwę mapy",
+      "busy": "Twój prywatny serwer właśnie się uruchamia lub zatrzymuje.",
+      "otherGame": "Twój prywatny serwer działa w drugiej grze.",
+      "changed": "Twój serwer zmienia mapę na {{map}}.",
+      "started": "Twój prywatny serwer uruchamia się na {{map}}.",
+      "changeTitle": "Zmienić mapę serwera na {{map}}?",
+      "changeBody": "Tryb pozostaje: {{mode}}. Wszyscy na serwerze wczytają nową mapę.",
+      "changeConfirm": "Zmień mapę",
+      "hostTitle": "Uruchomić serwer na {{map}}?",
+      "hostBody": "Prywatny serwer uruchomi się z ostatnimi ustawieniami „Play with friends”, klientem {{client}} i trybem {{mode}}.",
+      "hostConfirm": "Uruchom serwer",
+      "hostLoading": "Wczytywanie map klienta…",
+      "hostNoClient": "Najpierw wybierz w „Play with friends” klienta, który może uruchomić serwer.",
+      "notInstalled": "Klient {{client}} nie ma tej mapy. Najpierw zainstaluj ją w kliencie.",
+      "noMode": "Ta mapa nie ma trybu, który twój serwer może uruchomić."
+    },
+    "profile": {
+      "model": "Model",
+      "hilts": "Rękojeści",
+      "blades": "Ostrza",
+      "tint": "Odcień",
+      "save": "Zapisz jako mój profil",
+      "saved": "Zapisano w twoich profilach gracza."
+    },
+    "bind": {
+      "unbind": "(usuń bind)",
+      "apply": "Dodaj do configu",
+      "copy": "Kopiuj",
+      "title_one": "{{count}} bind klawisza",
+      "title_few": "{{count}} bindy klawiszy",
+      "title_many": "{{count}} bindów klawiszy",
+      "title_other": "{{count}} bindu klawiszy"
+    },
+    "config": {
+      "open": "Otwórz w edytorze",
+      "copy": "Kopiuj tekst",
+      "lines_one": "Config · {{count}} linia · {{size}}",
+      "lines_few": "Config · {{count}} linie · {{size}}",
+      "lines_many": "Config · {{count}} linii · {{size}}",
+      "lines_other": "Config · {{count}} linii · {{size}}"
+    },
+    "more_one": "i jeszcze {{count}}",
+    "more_few": "i jeszcze {{count}}",
+    "more_many": "i jeszcze {{count}}",
+    "more_other": "i jeszcze {{count}}"
+  },
+  "dangers": {
+    "unchecked": "Nie wszystko udało się sprawdzić",
+    "line": "Linia {{line}}",
+    "incomplete": "Tekst jest zbyt złożony, by sprawdzić go do końca. Przeczytaj go w całości przed zapisaniem.",
+    "reasons": {
+      "quit": "zamyka grę",
+      "exec": "uruchamia inny plik configu, którego JKNet nie widzi",
+      "writeConfig": "zapisuje twoje ustawienia do pliku",
+      "rcon": "korzysta ze zdalnej konsoli serwera",
+      "connect": "łączy z serwerem",
+      "reconnect": "ponownie łączy z ostatnim serwerem",
+      "unbindAll": "usuwa wszystkie twoje bindy",
+      "allowDownload": "pozwala serwerom wgrywać pliki do folderu gry",
+      "filesystem": "zmienia, skąd gra czyta pliki i dokąd je zapisuje",
+      "serverCvar": "zmienia ustawienie serwera",
+      "nestedBind": "zmienia twoje bindy po naciśnięciu klawisza",
+      "tooComplex": "nie udało się sprawdzić do końca",
+      "other": "robi coś, co warto sprawdzić"
+    },
+    "title_one": "{{count}} polecenie do sprawdzenia przed użyciem",
+    "title_few": "{{count}} polecenia do sprawdzenia przed użyciem",
+    "title_many": "{{count}} poleceń do sprawdzenia przed użyciem",
+    "title_other": "{{count}} polecenia do sprawdzenia przed użyciem",
+    "more_one": "i jeszcze {{count}} linia",
+    "more_few": "i jeszcze {{count}} linie",
+    "more_many": "i jeszcze {{count}} linii",
+    "more_other": "i jeszcze {{count}} linii"
+  },
+  "apply": {
+    "config": {
+      "title": "Nowy config z czatu",
+      "body": "Przeczytaj zaznaczone linie przed zapisaniem. Config zapisze się na ekranie „Configs”; tam włączysz go dla klienta.",
+      "name": "Nazwa",
+      "editor": "Tekst configu",
+      "save": "Zapisz w „Configs”",
+      "saved": "Zapisano w „Configs” jako {{name}}.",
+      "skipped": "Tych klawiszy nie da się zapisać w configu, więc je pominięto: {{keys}}"
+    },
+    "profile": {
+      "title": "Zapisz {{name}} jako profil gracza",
+      "body": "Sprawdź profil i zapisz go w jednym ze swoich klientów. Nic się nie zmieni, dopóki nie naciśniesz „Save profile”.",
+      "client": "Klient",
+      "skipped": "Niektórych wartości nie dało się użyć, te pola zostały puste: {{fields}}"
+    }
+  },
+  "safety": {
+    "apply": {
+      "title": "Zapisać {{name}} z tymi poleceniami?",
+      "body": "Config wciąż zawiera polecenia, które robią więcej niż zmiana ustawienia. Zapisz go tylko, jeśli ufasz nadawcy.",
+      "confirm": "Zapisz mimo to"
+    },
+    "save": {
+      "title": "Zapisać {{name}}?",
+      "body": "Plik od {{name}} może uruchomić się na twoim komputerze. JKNet nigdy go nie otwiera; zapisz go tylko, jeśli ufasz nadawcy.",
+      "program": "Ten plik to program.",
+      "programExt": "Ten plik to program (.{{ext}}).",
+      "archive": "To archiwum zawiera programy albo JKNet nie może zajrzeć do środka.",
+      "details": "Co znalazł JKNet",
+      "marked": "Zapisana kopia jest oznaczana jako pobrana z internetu, więc Windows zapyta jeszcze raz przed uruchomieniem.",
+      "confirm": "Zapisz mimo to"
+    }
+  },
+  "pickers": {
+    "search": "Szukaj",
+    "loading": "Wczytywanie…",
+    "noMatch": "Nic nie pasuje do „{{query}}”",
+    "noClient": "Najpierw dodaj klienta tej gry na ekranie „Klienci”.",
+    "media": {
+      "title": "Dołącz z „Media”",
+      "empty": "Na ekranie „Media” nie ma jeszcze dem, zrzutów ekranu ani wideo tej gry.",
+      "kinds": {
+        "demos": "Demo",
+        "screenshots": "Zrzut ekranu",
+        "videos": "Wideo"
+      }
+    },
+    "server": {
+      "title": "Udostępnij serwer",
+      "empty": "Nie ma jeszcze serwerów. Kliknij „Get new list” na ekranie „Serwery”."
+    },
+    "map": {
+      "title": "Udostępnij mapę",
+      "body": "Mapy klienta {{client}}.",
+      "empty": "Ten klient nie ma map."
+    },
+    "profile": {
+      "title": "Udostępnij profil gracza",
+      "client": "Klient",
+      "empty": "Ten klient nie ma jeszcze profili gracza."
+    },
+    "bind": {
+      "title": "Udostępnij bindy",
+      "body": "Bindy z twoich zapisanych configów. Wybierz do 50; pójdą jako jedna karta.",
+      "empty": "Twoje zapisane configi nie mają bindów. Najpierw ustaw je na ekranie „Configs”.",
+      "add_one": "Dodaj {{count}} bind",
+      "add_few": "Dodaj {{count}} bindy",
+      "add_many": "Dodaj {{count}} bindów",
+      "add_other": "Dodaj {{count}} bindu"
+    },
+    "config": {
+      "title": "Udostępnij config",
+      "empty": "Nie ma jeszcze zapisanych configów tej gry. Utwórz config na ekranie „Configs”.",
+      "tooLarge": "Większy niż 32 KiB: wyślij .cfg jako plik."
+    },
+    "bundle": {
+      "title": "Udostępnij bundle",
+      "empty": "Nie znaleziono bundle’i."
+    },
+    "jkhubMod": {
+      "title": "Udostępnij mod z JKHub",
+      "search": "Szukaj na JKHub",
+      "empty": "Nie znaleziono plików."
+    },
+    "narrow_one": "Jeszcze {{count}}. Pisz, aby zawęzić listę.",
+    "narrow_few": "Jeszcze {{count}}. Pisz, aby zawęzić listę.",
+    "narrow_many": "Jeszcze {{count}}. Pisz, aby zawęzić listę.",
+    "narrow_other": "Jeszcze {{count}}. Pisz, aby zawęzić listę."
+  },
+  "share": {
+    "action": "Wyślij na czat",
+    "actionNamed": "Wyślij {{name}} na czat",
+    "title": "Wyślij na czat",
+    "search": "Szukaj czatów i znajomych",
+    "targets": "Dokąd wysłać",
+    "newChat": "Znajomy · nowy czat",
+    "kinds": {
+      "direct": "Czat",
+      "group": "Grupa",
+      "server": "Czat serwera"
+    },
+    "message": "Wiadomość (opcjonalnie)",
+    "send": "Wyślij",
+    "sending": "Wysyłanie…",
+    "sent": "Wysłano: {{name}}",
+    "open": "Otwórz czat",
+    "unavailable": "Zaloguj się na ekranie „Ustawienia”, aby wysyłać na czaty.",
+    "empty": "Nie ma jeszcze czatów ani znajomych.",
+    "noMatch": "Nic nie pasuje do „{{query}}”",
+    "mediaFile": "Plik z „Media”",
+    "preparing": "Przygotowywanie karty…"
   },
   "emoji": {
     "title": "Emoji",

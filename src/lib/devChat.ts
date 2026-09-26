@@ -26,6 +26,9 @@
  */
 
 import type {
+  ChatCard,
+  ChatCardConfig,
+  ChatCardProfile,
   ChatDraft,
   ChatGroupInvite,
   ChatMessage,
@@ -36,9 +39,12 @@ import type {
   ChatReactionGroup,
   ChatStateView,
   Conversation,
+  Game,
   OnlineUser,
+  PlayerProfile,
 } from "./ipc";
 import { unreadTotals } from "./chat/unread";
+import { bindLines, parseCharColor, profileCard, readCard, stripColors } from "./chat/cardDrafts";
 
 /** Where the stand-in listens; `?online=` points elsewhere, as in `devOnline.ts`. */
 const ONLINE =
@@ -282,6 +288,52 @@ function needsLauncher(command: string): never {
   throw new Error(`${command} needs the launcher; a browser cannot run it`);
 }
 
+// --- slice: chat cards ---
+// The two cards that open an editor, turned into what the editor takes the
+// way the core does it, minus the checks: a browser has no profile rules and
+// no danger scan, so nothing is skipped and nothing is marked.
+
+function devProfileOf(card: ChatCard): ChatCardProfile {
+  const parsed = readCard(card);
+  if (parsed?.type !== "profile") throw new Error("not a profile card");
+  const { fields } = parsed;
+  const color = (value: string | null) => (value !== null && /^[0-5]$/.test(value) ? Number(value) : null);
+  return {
+    profile: {
+      id: "",
+      name: stripColors(fields.nickname).trim(),
+      nickname: fields.nickname,
+      model: fields.model,
+      saber1: fields.saber1,
+      saber2: fields.saber2 ?? "none",
+      color1: color(fields.color1),
+      color2: color(fields.color2),
+      charColor: parseCharColor(fields.charColor),
+      tokensOverride: null,
+    },
+    skipped: [],
+  };
+}
+
+function devConfigOf(card: ChatCard, game: Game): ChatCardConfig {
+  const parsed = readCard(card);
+  if (parsed?.type === "config") {
+    return {
+      document: { id: "", name: parsed.fields.name, game, text: parsed.fields.text, sourceClient: null, sourceFile: null },
+      dangers: [],
+      skipped: [],
+    };
+  }
+  if (parsed?.type === "bind") {
+    return {
+      document: { id: "", name: card.fallbackText || "Key binds", game, text: bindLines(parsed.fields.binds), sourceClient: null, sourceFile: null },
+      dangers: [],
+      skipped: [],
+    };
+  }
+  throw new Error("not a bind or a config card");
+}
+
 /** Runs one chat command against the mock service. */
 export async function devChat<T>(command: string, args: Record<string, unknown> = {}): Promise<T> {
   const id = String(args.conversationId ?? "");
@@ -415,6 +467,20 @@ export async function devChat<T>(command: string, args: Record<string, unknown> 
       return { status: "remote", path: null } as T;
     case "chat_scan_commands":
       return [] as T;
+    // --- slice: chat cards --- the core cleans and checks cards; the mock
+    // service checks them again on send, so here they pass as they are.
+    case "chat_build_card":
+    case "chat_check_card":
+      return args.card as T;
+    case "chat_card_from_profile": {
+      const card = profileCard(args.profile as PlayerProfile);
+      if (card === null) throw new Error("a profile card needs a nickname and a model");
+      return card as T;
+    }
+    case "chat_card_to_profile":
+      return devProfileOf(args.card as ChatCard) as T;
+    case "chat_card_to_config":
+      return devConfigOf(args.card as ChatCard, (args.game as Game | null) ?? "ja") as T;
     case "set_tray_labels":
     case "chat_window_set_compact":
       return undefined as T;

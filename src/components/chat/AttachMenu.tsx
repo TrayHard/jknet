@@ -67,10 +67,10 @@ interface AttachMenuProps {
  *
  * The paperclip of the composer: every kind of thing a message can carry,
  * with the file limits under the list. A file and a picture from the
- * clipboard go through the core's staging; the cards — a server, a map, a
- * profile, a bind, a cfg, a bundle, a JKHub mod, a Media item — are picked
- * by the pickers of the cards slice, and stay switched off here until the
- * composer is given them.
+ * clipboard go through the core's staging; a Media item and the cards — a
+ * server, a map, a profile, a bind, a cfg, a bundle, a JKHub mod — open the
+ * pickers of `pickers/AttachPicker.tsx`. A kind left out of `available` is
+ * listed switched off.
  */
 export function AttachMenu({ available, onPick, disabled = false }: AttachMenuProps) {
   const { t } = useTranslation("chat");

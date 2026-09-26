@@ -1,4 +1,4 @@
-import { Check, Download, Globe, Heart, MessageCircle, ShieldAlert, Star } from "lucide-react";
+import { Check, Download, Globe, Heart, MessageCircle, Share2, ShieldAlert, Star } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -11,6 +11,7 @@ import {
   preferredBundleLanguage,
   useInterfaceLanguage,
 } from "../../lib/bundleText";
+import { bundleCard } from "../../lib/chat/cardDrafts";
 import { useOpenClientWindow } from "../../lib/clientWindow";
 import { cn } from "../../lib/format";
 import type { BundleVersion, BundleVersionSummary } from "../../lib/ipc";
@@ -22,6 +23,7 @@ import {
   useInstallBundle,
   useLikeBundle,
 } from "../../lib/queries";
+import { useShareDialog } from "../chat/ShareToChatDialog";
 import { Avatar, Badge, Button, Dialog } from "../ui";
 import { BundleInstallForm, type InstallableComponent } from "./BundleInstallForm";
 import { BundleManifestView } from "./BundleManifestView";
@@ -60,6 +62,9 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
   const like = useLikeBundle();
   const install = useInstallBundle();
   const openClientWindow = useOpenClientWindow();
+  // --- slice: chat cards --- **Share to chat**: the bundle as a card.
+  const share = useShareDialog();
+  const { t: tChat } = useTranslation("chat");
 
   // The version on screen. `null` is the latest one, which came with the
   // record; another one is fetched with its manifest when picked.
@@ -148,14 +153,31 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
   };
 
   return (
+    <>
     <Dialog
       title={title}
       wide
       onClose={onClose}
       actions={
-        <Button variant="ghost" onClick={onClose}>
-          {tCommon("actions.close")}
-        </Button>
+        <>
+          {share.available && details && text ? (
+            <Button
+              variant="ghost"
+              icon={<Share2 size={16} />}
+              onClick={() =>
+                share.open({
+                  kind: "card",
+                  card: bundleCard({ id: details.id, slug: details.slug, name: text.name, game: details.game }),
+                })
+              }
+            >
+              {tChat("share.action")}
+            </Button>
+          ) : null}
+          <Button variant="ghost" onClick={onClose}>
+            {tCommon("actions.close")}
+          </Button>
+        </>
       }
     >
       {record.error ? (
@@ -340,6 +362,8 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
         <p className="text-body-sm text-fg-muted pt-16">{tCommon("states.loading")}</p>
       ) : null}
     </Dialog>
+    {share.dialog}
+    </>
   );
 }
 

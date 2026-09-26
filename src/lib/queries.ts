@@ -48,6 +48,10 @@ import {
   type Conversation,
   type Presence,
   type TrayLabels,
+  // --- slice: chat cards ---
+  type ChatCard,
+  type ChatCommandDanger,
+  type ChatImportTarget,
 } from "./ipc";
 import {
   appendAfter,
@@ -58,7 +62,14 @@ import {
   placeIncoming,
 } from "./chat/mergeMessages";
 import { applyRead, unreadTotals, type UnreadTotals } from "./chat/unread";
-import { chatLive, useDroppedCount, useTypingIn, useTypingMap, useUploadProgress } from "./chatLive";
+import {
+  chatLive,
+  useDownloadProgress,
+  useDroppedCount,
+  useTypingIn,
+  useTypingMap,
+  useUploadProgress,
+} from "./chatLive";
 
 export function useMedia() { return useQuery({ queryKey: ["media"], queryFn: () => mediaIpc.list(true), enabled: isTauri(), staleTime: 15000 }); }
 export function useMediaActions() {
@@ -1160,8 +1171,11 @@ export function useLanServers(): ServerInfo[] {
  */
 export function useServerStatus(
   address: string | null,
+  // --- slice: chat cards --- a server card names its own game.
+  forGame?: Game,
 ): UseQueryResult<ServerStatus> {
-  const game = useActiveGame();
+  const active = useActiveGame();
+  const game = forGame ?? active;
   return useQuery({
     queryKey: serverKeys.status(game, address ?? ""),
     queryFn: () => serversIpc.getServerStatus(address ?? "", game),
@@ -4220,6 +4234,144 @@ export function useOpenChatLink() {
   });
 }
 
+// --- slice: chat cards ---
+
+/** How far a download has got, while the core fetches the file. */
+export function useChatDownload(fileId: string): ChatDownloadEvent | undefined {
+  return useDownloadProgress(fileId);
+}
+
+/**
+ * Asks the core to fetch a file, and reads where it is afterwards.
+ *
+ * The answer lands in both entries of `useChatFileLocal`, so every card of the
+ * same file — a picture in the thread and in the lightbox — moves together.
+ */
+export function useFetchChatFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (fileId: string) => chatIpc.fileLocal(fileId, true),
+    onSuccess: (local, fileId) => {
+      for (const download of [false, true]) {
+        queryClient.setQueryData<ChatFileLocal>([...chatKeys.file(fileId), download], (current) =>
+          // A `chat:download` that already said how it ended is newer.
+          current?.status === "cached" || current?.status === "gone" ? current : local,
+        );
+      }
+    },
+  });
+}
+
+/**
+ * **Save** of a file of a message: the core's save dialog. A program, or an
+ * archive with programs inside, is refused with `confirm_danger` until
+ * `confirmed`; `null` when the player cancelled the dialog.
+ */
+export function useSaveChatFile() {
+  return useMutation({
+    mutationFn: ({ fileId, confirmed }: { fileId: string; confirmed: boolean }) =>
+      chatIpc.fileSave(fileId, confirmed),
+  });
+}
+
+/** **Add to Media**: a demo or a screenshot of a message into a client's folders. */
+export function useImportChatFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ fileId, target }: { fileId: string; target: ChatImportTarget }) =>
+      chatIpc.fileImport(fileId, target),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["media"] }),
+  });
+}
+
+/**
+ * The dangerous commands of a bind or a config text, from the core's scan.
+ * Kept while the text is the same: a card never changes.
+ */
+export function useChatCommandScan(text: string | null): UseQueryResult<ChatCommandDanger[]> {
+  return useQuery({
+    queryKey: ["chat", "scan", text ?? ""],
+    queryFn: () => chatIpc.scanCommands(text ?? ""),
+    enabled: text !== null && text.trim() !== "",
+    staleTime: Infinity,
+    gcTime: THREAD_GC_MS,
+    retry: false,
+  });
+}
+
+/** The same scan, on demand: the text of an editor as the player left it. */
+export function useScanChatCommands() {
+  return useMutation({ mutationFn: (text: string) => chatIpc.scanCommands(text) });
+}
+
+/** Checks a card of a message before one of its buttons acts on it. */
+export function useCheckChatCard() {
+  return useMutation({ mutationFn: (card: ChatCard) => chatIpc.checkCard(card) });
+}
+
+/** A profile card of a stored player profile, for **Share to chat**. */
+export function useChatCardFromProfile() {
+  return useMutation({ mutationFn: (profile: PlayerProfile) => chatIpc.cardFromProfile(profile) });
+}
+
+/** A profile card as a new player profile for the profile form. */
+export function useChatCardToProfile() {
+  return useMutation({ mutationFn: (card: ChatCard) => chatIpc.cardToProfile(card) });
+}
+
+/** A bind or a config card as a new config document with its dangers. */
+export function useChatCardToConfig() {
+  return useMutation({
+    mutationFn: ({ card, game }: { card: ChatCard; game?: Game | null }) => chatIpc.cardToConfig(card, game),
+  });
+}
+
+/**
+ * **Join** of a private-server card: through a live invite of the host when
+ * there is one, else as a friend the server is open to.
+ */
+export function useJoinHostCard() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ hostId, sessionId }: { hostId: string; sessionId: string }) =>
+      chatIpc.joinHostCard(hostId, sessionId),
+    onSuccess: (result: JoinResult) => {
+      queryClient.setQueryData(launchKeys.runningGame, result.game);
+    },
+  });
+}
+
+/**
+ * **Share to chat**: the message goes to a conversation, or to the direct chat
+ * with a friend, which is created on the way. Answers the conversation it
+ * went to, so the toast can open it.
+ */
+export function useShareToChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      target,
+      draft,
+    }: {
+      target: { conversationId: string } | { friendId: string };
+      draft: ChatDraft;
+    }): Promise<Conversation> => {
+      let conversation: Conversation;
+      if ("conversationId" in target) {
+        const state = queryClient.getQueryData<ChatStateView>(chatKeys.state);
+        const known = state?.conversations.find((c) => c.id === target.conversationId);
+        if (known === undefined) throw new Error("the conversation is gone");
+        conversation = known;
+      } else {
+        conversation = await chatIpc.openDirect(target.friendId);
+        upsertConversation(queryClient, conversation);
+      }
+      await chatIpc.send(conversation.id, draft);
+      return conversation;
+    },
+  });
+}
+
 /** The labels of the tray menu, sent by the main window in the language on screen. */
 export function useSetTrayLabels() {
   return useMutation({ mutationFn: (labels: TrayLabels) => chatIpc.setTrayLabels(labels) });
@@ -4526,14 +4678,19 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
       listenChat<ChatUploadEvent>(chatEvents.upload, (event) => chatLive.setUpload(event)),
 
       listenChat<ChatDownloadEvent>(chatEvents.download, (event) => {
-        const done = event.path != null && event.path !== "";
+        // --- slice: chat cards --- the status says how a download ended; a
+        // core that predates it sends a path on the last event and nothing
+        // else, which reads as `cached`.
+        const hasPath = event.path != null && event.path !== "";
+        const status: ChatFileLocal["status"] = event.status ?? (hasPath ? "cached" : "downloading");
+        chatLive.setDownload({ ...event, status });
         for (const download of [false, true]) {
           queryClient.setQueryData<ChatFileLocal>([...chatKeys.file(event.fileId), download], (local) =>
-            done
-              ? { status: "cached", path: event.path }
-              : local === undefined
+            status === "cached"
+              ? { status, path: event.path }
+              : status === "downloading" && local === undefined
                 ? local
-                : { ...local, status: "downloading" },
+                : { status, path: null },
           );
         }
       }),

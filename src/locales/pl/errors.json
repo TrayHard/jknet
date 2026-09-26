@@ -60,7 +60,9 @@
     "quotaStore": "JKNet Online nie ma teraz miejsca na pliki czatu. Spróbuj później.",
     "hashMismatch": "Plik zmienił się podczas przesyłania. Wyślij go ponownie.",
     "sizeMismatch": "Plik zmienił się podczas przesyłania. Wyślij go ponownie.",
-    "notHosting": "Twój prywatny serwer nie pojawił się jeszcze w JKNet Online."
+    "notHosting": "Twój prywatny serwer nie pojawił się jeszcze w JKNet Online.",
+    "confirmDanger": "Ten plik może uruchomić się na twoim komputerze. Potwierdź przed zapisaniem.",
+    "confirmLink": "Potwierdź, zanim otworzysz link do {{message}}."
   },
   "frontend": {
     "noRuntime": "Środowisko Tauri jest niedostępne",

@@ -15,14 +15,19 @@ import { Badge, Button, Input, Select, Dialog } from "../components/ui";
 import { useUnsavedGuard } from "../components/client/UnsavedGuard";
 import { BindEditor } from "../components/BindEditor";
 import { ConfigStudio } from "../components/ConfigStudio";
-import { FileText, RefreshCw, Trash2 } from "lucide-react";
+import { FileText, RefreshCw, Share2, Trash2 } from "lucide-react";
 import { useErrorText } from "../i18n/errors";
 import { configCommands, type BindSource } from "../lib/quakeConfig";
+// --- slice: chat cards ---
+import { configCard, fitsConfigCard } from "../lib/chat/cardDrafts";
+import { useShareDialog } from "../components/chat/ShareToChatDialog";
 
 export function ConfigsPage() {
   const { t } = useTranslation("common"),
     errorText = useErrorText(),
     guard = useUnsavedGuard();
+  const { t: tChat } = useTranslation("chat"),
+    share = useShareDialog();
   const book = useConfigs(),
     actions = useConfigActions(),
     clients = useClients(),
@@ -331,7 +336,20 @@ export function ConfigsPage() {
                 {t("configs.importSource", { source: draft.sourceFile })}
               </p>
             ) : null}
-            <div className="flex items-center justify-end border-t border-line pt-12">
+            <div className="flex items-center justify-end gap-8 border-t border-line pt-12">
+              {/* --- slice: chat cards --- the config as it stands in the
+                  editor, saved or not, as a config card. */}
+              {share.available ? (
+                <Button
+                  variant="ghost"
+                  icon={<Share2 size={14} />}
+                  disabled={!draft.text.trim() || !fitsConfigCard(draft.text)}
+                  title={fitsConfigCard(draft.text) ? undefined : tChat("pickers.config.tooLarge")}
+                  onClick={() => share.open({ kind: "card", card: configCard({ name: draft.name, text: draft.text }) })}
+                >
+                  {tChat("share.action")}
+                </Button>
+              ) : null}
               <Button
                 disabled={!draft.name.trim() || actions.save.isPending}
                 onClick={() =>
@@ -497,6 +515,7 @@ export function ConfigsPage() {
           }
         />
       ) : null}
+      {share.dialog}
     </Page>
   );
 }

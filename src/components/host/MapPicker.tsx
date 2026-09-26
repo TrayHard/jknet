@@ -1,9 +1,12 @@
+import { Share2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
-import type { HostMap } from "../../lib/ipc";
+import { mapCard } from "../../lib/chat/cardDrafts";
+import type { Game, HostMap } from "../../lib/ipc";
 import { useHostMaps } from "../../lib/queries";
-import { Combobox, type ComboboxOption } from "../ui";
+import { useShareDialog } from "../chat/ShareToChatDialog";
+import { Button, Combobox, type ComboboxOption } from "../ui";
 import { pickMap } from "./hostModel";
 import { MapOption } from "./MapOption";
 
@@ -16,6 +19,12 @@ interface MapPickerProps {
   preferred: string | null;
   disabled?: boolean;
   className?: string;
+  // --- slice: chat cards ---
+  /**
+   * The game of the maps, to offer **Share to chat** of the chosen one beside
+   * the field. Left out, the field stands alone, as in the Change map dialog.
+   */
+  shareGame?: Game;
 }
 
 /**
@@ -34,8 +43,11 @@ export function MapPicker({
   preferred,
   disabled = false,
   className,
+  shareGame,
 }: MapPickerProps) {
   const { t } = useTranslation("host");
+  const { t: tChat } = useTranslation("chat");
+  const share = useShareDialog();
   const maps = useHostMaps(clientId, gametype);
   const list = useMemo<HostMap[]>(() => maps.data ?? [], [maps.data]);
 
@@ -68,7 +80,7 @@ export function MapPicker({
       ? t("setup.map.none")
       : undefined;
 
-  return (
+  const field = (
     <Combobox
       value={value}
       onChange={onChange}
@@ -78,12 +90,33 @@ export function MapPicker({
       emptyText={t("setup.map.noMatch")}
       placeholder={placeholder}
       disabled={disabled}
-      className={className}
+      className={shareGame === undefined ? className : "min-w-0 flex-1"}
       renderOption={(option, place) => {
         const map = byName.get(option.value);
         if (map === undefined) return option.label;
         return <MapOption map={map} selected={place === "list" && option.value === value} />;
       }}
     />
+  );
+
+  // --- slice: chat cards --- the chosen map, as a map card.
+  const chosen = byName.get(value);
+  if (shareGame === undefined || !share.available) return field;
+  return (
+    <div className={`flex items-center gap-8 ${className ?? ""}`}>
+      {field}
+      <Button
+        variant="ghost"
+        icon={<Share2 size={16} />}
+        disabled={chosen === undefined}
+        title={tChat("share.action")}
+        aria-label={tChat("share.actionNamed", { name: value })}
+        onClick={() => {
+          if (chosen !== undefined) share.open({ kind: "card", card: mapCard(chosen, shareGame) });
+        }}
+        className="shrink-0 px-8"
+      />
+      {share.dialog}
+    </div>
   );
 }

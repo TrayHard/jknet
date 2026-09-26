@@ -7,6 +7,8 @@ import { isTrustedLink, linkHost } from "../../lib/chat/linkify";
 import { useOpenChatLink } from "../../lib/queries";
 import { useToasts } from "../ToastsProvider";
 import { Button, Dialog } from "../ui";
+import { Layer } from "./Layer";
+import { chatRefusal, CONFIRM_LINK } from "./refusal";
 
 /**
  * --- slice: chat ---
@@ -17,6 +19,11 @@ import { Button, Dialog } from "../ui";
  * the host and showing the whole address: the words of a link and where it
  * goes are both written by another player. The core checks the address again
  * and opens it in the system browser; nothing opens inside the launcher.
+ *
+ * --- slice: chat cards ---
+ * The core applies the same rule and refuses an address it wants confirmed
+ * with `confirm_link`, naming the host. Should the two ever disagree, that
+ * refusal opens the same dialog rather than a toast.
  */
 export function useLinkOpener(): { open: (href: string) => void; dialog: ReactNode } {
   const [pending, setPending] = useState<string | null>(null);
@@ -30,7 +37,15 @@ export function useLinkOpener(): { open: (href: string) => void; dialog: ReactNo
     (url: string, confirmed: boolean) =>
       mutate(
         { url, confirmed },
-        { onError: (error) => show(`chat-link:${url}`, { variant: "error", title: errorText(error) }) },
+        {
+          onError: (error) => {
+            if (!confirmed && chatRefusal(error)?.code === CONFIRM_LINK) {
+              setPending(url);
+              return;
+            }
+            show(`chat-link:${url}`, { variant: "error", title: errorText(error) });
+          },
+        },
       ),
     [mutate, show, errorText],
   );
@@ -43,22 +58,38 @@ export function useLinkOpener(): { open: (href: string) => void; dialog: ReactNo
     [go],
   );
 
+  // --- slice: chat cards --- drawn into the body: a card asks for it from
+  // inside a message group, whose paint is contained (`Layer`).
   const dialog =
     pending === null ? null : (
-      <LinkConfirmDialog
-        href={pending}
-        onCancel={() => setPending(null)}
-        onConfirm={() => {
-          go(pending, true);
-          setPending(null);
-        }}
-      />
+      <Layer>
+        <LinkConfirmDialog
+          href={pending}
+          onCancel={() => setPending(null)}
+          onConfirm={() => {
+            go(pending, true);
+            setPending(null);
+          }}
+        />
+      </Layer>
     );
 
   return { open, dialog };
 }
 
-function LinkConfirmDialog({ href, onCancel, onConfirm }: { href: string; onCancel: () => void; onConfirm: () => void }) {
+/**
+ * **Open a link to {host}?** — the whole address, as it will open, and the
+ * reminder that another player wrote it.
+ */
+export function LinkConfirmDialog({
+  href,
+  onCancel,
+  onConfirm,
+}: {
+  href: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   const { t } = useTranslation("chat");
   const { t: tCommon } = useTranslation("common");
   return (
@@ -77,7 +108,9 @@ function LinkConfirmDialog({ href, onCancel, onConfirm }: { href: string; onCanc
         </>
       }
     >
-      <p className="rounded-md border border-line bg-input p-10 text-mono-xs text-fg-secondary break-all">{href}</p>
+      <p className="mt-12 rounded-md border border-line bg-input p-10 text-mono-xs text-fg-secondary break-all [unicode-bidi:isolate]">
+        {href}
+      </p>
     </Dialog>
   );
 }

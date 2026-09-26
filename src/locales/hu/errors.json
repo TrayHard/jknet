@@ -60,7 +60,9 @@
     "quotaStore": "A JKNet Online-nak most nincs helye csevegőfájlokra. Próbálja újra később.",
     "hashMismatch": "A fájl feltöltés közben megváltozott. Küldje el újra.",
     "sizeMismatch": "A fájl feltöltés közben megváltozott. Küldje el újra.",
-    "notHosting": "A privát szervere még nem jelent meg a JKNet Online-ban."
+    "notHosting": "A privát szervere még nem jelent meg a JKNet Online-ban.",
+    "confirmDanger": "Ez a fájl futhat a számítógépén. Mentés előtt erősítse meg.",
+    "confirmLink": "Erősítse meg, mielőtt megnyit egy hivatkozást ide: {{message}}."
   },
   "frontend": {
     "noRuntime": "A Tauri futtatókörnyezet nem érhető el",

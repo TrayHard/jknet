@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import type { ChatStagedFile, ChatUploadEvent } from "./ipc";
+import type { ChatDownloadEvent, ChatStagedFile, ChatUploadEvent } from "./ipc";
 
 /**
  * --- slice: chat ---
@@ -28,6 +28,8 @@ interface TypingEntry {
 
 let typing: Readonly<Record<string, TypingEntry>> = {};
 let uploads: Readonly<Record<string, ChatUploadEvent>> = {};
+// --- slice: chat cards --- how far each download has got, by file id.
+let downloads: Readonly<Record<string, ChatDownloadEvent>> = {};
 let dropped: readonly ChatStagedFile[] = [];
 const listeners = new Set<Listener>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -101,6 +103,20 @@ export const chatLive = {
     return uploads[handle];
   },
 
+  // --- slice: chat cards ---
+  /** The progress of a download; the last event of it ends the entry. */
+  setDownload(event: ChatDownloadEvent) {
+    const next = { ...downloads };
+    if (event.status === undefined || event.status === "downloading") next[event.fileId] = event;
+    else delete next[event.fileId];
+    downloads = next;
+    publish();
+  },
+
+  download(fileId: string): ChatDownloadEvent | undefined {
+    return downloads[fileId];
+  },
+
   /** Files the core staged from a drop on this window, for the composer to take. */
   addDropped(files: ChatStagedFile[]) {
     if (files.length === 0) return;
@@ -128,6 +144,7 @@ export const chatLive = {
     timers.clear();
     typing = {};
     uploads = {};
+    downloads = {};
     dropped = [];
     publish();
   },
@@ -146,6 +163,11 @@ export function useTypingMap(): Readonly<Record<string, TypingEntry>> {
 /** The progress of one staged file on its way up, or `undefined`. */
 export function useUploadProgress(handle: string): ChatUploadEvent | undefined {
   return useSyncExternalStore(subscribe, () => chatLive.upload(handle));
+}
+
+/** The progress of one file on its way down, or `undefined` while none comes. */
+export function useDownloadProgress(fileId: string): ChatDownloadEvent | undefined {
+  return useSyncExternalStore(subscribe, () => chatLive.download(fileId));
 }
 
 /** How many dropped files wait for a composer. */

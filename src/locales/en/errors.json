@@ -60,7 +60,9 @@
     "quotaStore": "JKNet Online has no room for chat files right now. Try again later.",
     "hashMismatch": "The file changed while it was uploading. Send it again.",
     "sizeMismatch": "The file changed while it was uploading. Send it again.",
-    "notHosting": "Your private server is not running on JKNet Online yet."
+    "notHosting": "Your private server is not running on JKNet Online yet.",
+    "confirmDanger": "This file can run on your computer. Confirm before you save it.",
+    "confirmLink": "Confirm before you open a link to {{message}}."
   },
   "frontend": {
     "noRuntime": "Tauri runtime is not available",

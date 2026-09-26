@@ -1,9 +1,11 @@
-import { EyeOff, Eye, Plug, Star, StarOff } from "lucide-react";
+import { EyeOff, Eye, Plug, Share2, Star, StarOff } from "lucide-react";
 import { useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { serverCard } from "../../lib/chat/cardDrafts";
 import type { ServerInfo } from "../../lib/ipc";
 import { useSetServerFavorite, useSetServerHidden } from "../../lib/queries";
+import { useShareDialog } from "../chat/ShareToChatDialog";
 import { Menu, useContextMenu, type MenuItem, type MenuSize } from "../ui";
 import { ConnectDialog } from "./ConnectDialog";
 
@@ -25,6 +27,10 @@ import { ConnectDialog } from "./ConnectDialog";
  * `items` and `onSelect` take the server rather than closing over one, because
  * a right click names its row at the moment it happens: one set of handlers
  * serves a table of two hundred.
+ *
+ * --- slice: chat cards ---
+ * **Share to chat** joins them while chats are on: the server goes to a chat
+ * as a server card, and its dialog hangs here with **Connect…**.
  */
 export function useServerMenu(): {
   /** Accessible name of the list, wherever it is opened from. */
@@ -35,8 +41,11 @@ export function useServerMenu(): {
   dialog: ReactNode;
 } {
   const { t } = useTranslation("servers");
+  const { t: tChat } = useTranslation("chat");
   const setFavorite = useSetServerFavorite();
   const setHidden = useSetServerHidden();
+  // --- slice: chat cards --- **Share to chat**, while chats are on.
+  const share = useShareDialog();
   /** The server the dialog is about, or `null` while it is closed. */
   const [dialog, setDialog] = useState<ServerInfo | null>(null);
 
@@ -57,6 +66,9 @@ export function useServerMenu(): {
           label: t("row.addFavorite"),
           icon: <Star size={14} />,
         },
+    ...(share.available
+      ? [{ id: "share", label: tChat("share.action"), icon: <Share2 size={14} /> }]
+      : []),
     server.hidden
       ? { id: "unhide", label: t("menu.unhide"), icon: <Eye size={14} /> }
       : {
@@ -74,6 +86,10 @@ export function useServerMenu(): {
       setDialog(server);
       return;
     }
+    if (id === "share") {
+      share.open({ kind: "card", card: serverCard(server) });
+      return;
+    }
     if (id === "favorite" || id === "unfavorite") {
       setFavorite.mutate({
         address: server.address,
@@ -88,10 +104,12 @@ export function useServerMenu(): {
     ariaLabel: t("menu.actions"),
     items,
     onSelect,
-    dialog:
-      dialog === null ? null : (
-        <ConnectDialog server={dialog} onClose={() => setDialog(null)} />
-      ),
+    dialog: (
+      <>
+        {dialog === null ? null : <ConnectDialog server={dialog} onClose={() => setDialog(null)} />}
+        {share.dialog}
+      </>
+    ),
   };
 }
 

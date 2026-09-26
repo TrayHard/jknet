@@ -60,7 +60,9 @@
     "quotaStore": "JKNet Online n’a plus de place pour les fichiers de discussion pour l’instant. Réessayez plus tard.",
     "hashMismatch": "Le fichier a changé pendant l’envoi. Renvoyez-le.",
     "sizeMismatch": "Le fichier a changé pendant l’envoi. Renvoyez-le.",
-    "notHosting": "Votre serveur privé n’apparaît pas encore sur JKNet Online."
+    "notHosting": "Votre serveur privé n’apparaît pas encore sur JKNet Online.",
+    "confirmDanger": "Ce fichier peut s’exécuter sur votre ordinateur. Confirmez avant de l’enregistrer.",
+    "confirmLink": "Confirmez avant d’ouvrir un lien vers {{message}}."
   },
   "frontend": {
     "noRuntime": "L’environnement Tauri n’est pas disponible",

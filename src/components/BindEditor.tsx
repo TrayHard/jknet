@@ -9,6 +9,10 @@ import { VstrChainPanel } from "./VstrChainPanel";
 import { ColoredNickname } from "./client/ColoredNickname";
 import { useErrorText } from "../i18n/errors";
 import { runsVstr } from "../lib/vstrChain";
+// --- slice: chat cards ---
+import { Share2 } from "lucide-react";
+import { bindCard } from "../lib/chat/cardDrafts";
+import { useShareDialog } from "./chat/ShareToChatDialog";
 
 export function BindEditor({
   text,
@@ -33,6 +37,8 @@ export function BindEditor({
 }) {
   const { t } = useTranslation("common"),
     errorText = useErrorText();
+  const { t: tChat } = useTranslation("chat"),
+    share = useShareDialog();
   const profiles = useProfiles(clientId),
     actions = useConfigActions();
   const [key, setKey] = useState("F1"),
@@ -86,7 +92,21 @@ export function BindEditor({
       <BindKeyboard value={key} bindings={bindings} onChange={pick} outlined={showChain ? outlined : []} />
       <div className="rounded-lg border border-line p-16 flex flex-col gap-12">
         <div className="flex flex-col gap-4 text-body-sm">
-          <span className="text-fg-secondary">{key}: <code className="text-fg">{existing?.command || t("configStudio.free")}</code></span>
+          <span className="flex flex-wrap items-center gap-x-8 text-fg-secondary">
+            <span>{key}: <code className="text-fg">{existing?.command || t("configStudio.free")}</code></span>
+            {/* --- slice: chat cards --- the binding of this key, as a bind card. */}
+            {share.available && existing?.command ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                icon={<Share2 size={14} />}
+                onClick={() => share.open({ kind: "card", card: bindCard([{ key, command: existing.command }]) })}
+              >
+                {tChat("share.action")}
+              </Button>
+            ) : null}
+          </span>
           {existing ? <span className="text-body-xs text-fg-muted break-all">{t("configs.bindingSource", { source: existing.source })}</span> : null}
           {existing?.kind === "layer" ? <span className="text-body-xs text-fg-warm">{t("configs.layerOverrideHint")}</span> : null}
         </div>
@@ -272,6 +292,7 @@ export function BindEditor({
         ))}
       </div>
       </details>
+      {share.dialog}
     </div>
   );
 }

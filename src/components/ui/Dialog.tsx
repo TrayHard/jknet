@@ -39,6 +39,12 @@ function focusableIn(card: HTMLElement): HTMLElement[] {
   );
 }
 
+/**
+ * --- slice: chat cards ---
+ * The dialogs on screen, the last one on top. Only the top one answers Escape.
+ */
+const openDialogs: object[] = [];
+
 interface DialogProps {
   title: string;
   // --- slice: preview modes ---
@@ -86,11 +92,27 @@ export function Dialog({
 }: DialogProps) {
   const cardRef = useRef<HTMLDivElement>(null);
 
+  // --- slice: chat cards ---
+  // Where this dialog stands among the open ones. A dialog may open another
+  // one over itself — **Share to chat** from the record of a bundle — and
+  // Escape then closes the one on top only.
+  const layer = useRef<object>({});
+  useEffect(() => {
+    const own = layer.current;
+    openDialogs.push(own);
+    return () => {
+      const at = openDialogs.lastIndexOf(own);
+      if (at >= 0) openDialogs.splice(at, 1);
+    };
+  }, []);
+
   // Escape closes from anywhere, including while the focus sits on a button
   // deep inside the content.
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      if (openDialogs[openDialogs.length - 1] !== layer.current) return;
+      onClose();
     };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);

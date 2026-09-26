@@ -7,6 +7,7 @@ import {
   ImageOff,
   Eye,
   MessageSquare,
+  Share2,
   Star,
 } from "lucide-react";
 import { useState } from "react";
@@ -14,8 +15,12 @@ import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
 import { useFormat } from "../../i18n/useFormat";
+// --- slice: chat cards ---
+import { jkhubModCard } from "../../lib/chat/cardDrafts";
+import { useActiveGame } from "../../lib/game";
 import { cn } from "../../lib/format";
 import type { JkhubFile, JkhubInstallResult } from "../../lib/ipc";
+import { useShareDialog } from "../chat/ShareToChatDialog";
 import { Badge, Button, Dialog } from "../ui";
 import { JkhubComments } from "./JkhubComments";
 import { JkhubGallery } from "./JkhubGallery";
@@ -91,6 +96,11 @@ export function JkhubDetails({
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
   const format = useFormat();
+  // --- slice: chat cards --- **Share to chat**: the file as a JKHub card,
+  // in the active game when JKHub files it under both.
+  const { t: tChat } = useTranslation("chat");
+  const game = useActiveGame();
+  const share = useShareDialog();
   const [zoomed, setZoomed] = useState<number | null>(null);
   // Addresses that answered with an error. A picture the site withdrew shows
   // its own placeholder instead of an empty frame, and the thumbnail failing
@@ -123,6 +133,15 @@ export function JkhubDetails({
             <Button variant="ghost" onClick={onClose}>
               {tCommon("actions.close")}
             </Button>
+            {share.available && file ? (
+              <Button
+                variant="ghost"
+                icon={<Share2 size={16} />}
+                onClick={() => share.open({ kind: "card", card: jkhubModCard(file, game) })}
+              >
+                {tChat("share.action")}
+              </Button>
+            ) : null}
             <Button icon={<ExternalLink size={16} />} onClick={onOpenSite}>
               {t("details.openOnSite")}
             </Button>
@@ -326,6 +345,7 @@ export function JkhubDetails({
       {galleryOpen && file ? (
         <JkhubGallery shots={file.screenshots} initialIndex={zoomed ?? 0} onClose={() => setZoomed(null)} />
       ) : null}
+      {share.dialog}
     </>
   );
 }

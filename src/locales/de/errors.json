@@ -60,7 +60,9 @@
     "quotaStore": "JKNet Online hat gerade keinen Platz für Chat-Dateien. Versuchen Sie es später erneut.",
     "hashMismatch": "Die Datei hat sich beim Hochladen geändert. Senden Sie sie erneut.",
     "sizeMismatch": "Die Datei hat sich beim Hochladen geändert. Senden Sie sie erneut.",
-    "notHosting": "Ihr privater Server ist bei JKNet Online noch nicht angekommen."
+    "notHosting": "Ihr privater Server ist bei JKNet Online noch nicht angekommen.",
+    "confirmDanger": "Diese Datei kann auf Ihrem Computer ausgeführt werden. Bestätigen Sie, bevor Sie sie speichern.",
+    "confirmLink": "Bestätigen Sie, bevor Sie einen Link zu {{message}} öffnen."
   },
   "frontend": {
     "noRuntime": "Die Tauri-Laufzeitumgebung ist nicht verfügbar",

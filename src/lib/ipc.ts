@@ -267,6 +267,12 @@ export interface Settings {
    * Absent from a core that predates the field, which reads as `false`.
    */
   chatDrawerPinned?: boolean;
+  /**
+   * Pictures of a chat up to this many MiB download by themselves when they
+   * are shown; larger ones, and every other file, wait for a click. 0 turns
+   * the automatic download off. Absent from a core that predates it: 10.
+   */
+  chatAutoDownloadMb?: number;
 }
 
 /**
@@ -4164,11 +4170,55 @@ export interface ChatImportTarget {
   clientId: string;
 }
 
+/**
+ * What a dangerous command of a bind or a config does, as `chat_scan_commands`
+ * names it. `too_complex` says the scan stopped early: read the whole text.
+ */
+export type ChatDangerReason =
+  | "quit"
+  | "exec"
+  | "write_config"
+  | "rcon"
+  | "connect"
+  | "reconnect"
+  | "unbind_all"
+  | "allow_download"
+  | "filesystem"
+  | "server_cvar"
+  | "nested_bind"
+  | "too_complex";
+
 /** One line of a config or a bind that would do something the player should see first. */
 export interface ChatCommandDanger {
+  /** The line of the text, from 1, of the command that leads to it. */
   line: number;
+  /** The command that does it, as written. */
   command: string;
-  reason: string;
+  reason: ChatDangerReason | string;
+  /**
+   * How the line reaches the command, outermost first: `bind KEY` for a key
+   * press and `vstr NAME` for a variable it runs. Empty when the line does
+   * it itself; absent from a core that predates it.
+   */
+  via?: string[];
+}
+
+/** The answer of `chat_card_to_profile`: a new player profile for the profile form. */
+export interface ChatCardProfile {
+  /** `id` empty and `name` the nickname without colour codes: the form saves it. */
+  profile: PlayerProfile;
+  /** Fields of the card the profile rules refused; the form leaves them blank. */
+  skipped: string[];
+}
+
+/** The answer of `chat_card_to_config`: a new config document for the editor. */
+export interface ChatCardConfig {
+  /** `id` empty: the editor opens it and the player saves it with `save_config`. */
+  document: ConfigDocument;
+  /** The lines of its text to read before saving it. */
+  dangers: ChatCommandDanger[];
+  /** Keys of a bind card no config line can hold; they are not in the text. */
+  skipped: string[];
 }
 
 /** The labels of the tray menu, in the language on screen: the core has no catalogs. */
@@ -4249,12 +4299,19 @@ export interface ChatUploadEvent {
   total: number;
 }
 
-/** Payload of `chat:download`; `path` once the file is complete. */
+/**
+ * Payload of `chat:download`. `downloading` while the bytes come, with
+ * `path` `null`; the last event of a download says how it ended: `cached`
+ * with the path, `remote` when it failed and may be asked for again, `gone`
+ * when the service no longer has the file.
+ */
 export interface ChatDownloadEvent {
   fileId: string;
   received: number;
   total: number;
   path?: string | null;
+  /** Absent from a core that predates it: a `path` then means `cached`. */
+  status?: ChatFileLocal["status"];
 }
 
 /** Payload of `chat:files-staged`: files dropped on the window, already staged. */
@@ -4378,6 +4435,25 @@ export const chatIpc = {
   fileImport: (fileId: string, target: ChatImportTarget) =>
     callChat<string>("chat_file_import", { fileId, target }),
   scanCommands: (text: string) => callChat<ChatCommandDanger[]>("chat_scan_commands", { text }),
+  /**
+   * A card exactly as `chat_send` would send it: cleaned, `v` and an English
+   * `fallbackText` filled in. Refused with `online`/`card` like the service.
+   */
+  buildCard: (card: ChatCard) => callChat<ChatCard>("chat_build_card", { card }),
+  /**
+   * A card of a message, checked before a window acts on it: the fields the
+   * launcher knows, their values checked as on the service. Refused with
+   * `online`/`card`.
+   */
+  checkCard: (card: ChatCard) => callChat<ChatCard>("chat_check_card", { card }),
+  /** A profile card of a stored player profile. */
+  cardFromProfile: (profile: PlayerProfile) =>
+    callChat<ChatCard>("chat_card_from_profile", { profile }),
+  /** A profile card as a new player profile for the profile form; nothing is saved. */
+  cardToProfile: (card: ChatCard) => callChat<ChatCardProfile>("chat_card_to_profile", { card }),
+  /** A bind or a config card as a new config document with its dangers; nothing is saved. */
+  cardToConfig: (card: ChatCard, game?: Game | null) =>
+    callChat<ChatCardConfig>("chat_card_to_config", { card, game: game ?? null }),
   /** Opens an http(s) link from the core; a host other than jknet.app and jkhub.org needs `confirmed`. */
   openLink: (url: string, confirmed: boolean) =>
     callChat<void>("chat_open_link", { url, confirmed }),
@@ -4395,6 +4471,17 @@ export const chatIpc = {
   setWindowCompact: (on: boolean) => callChat<void>("chat_window_set_compact", { on }),
   setTrayLabels: (labels: TrayLabels) => callChat<void>("set_tray_labels", { labels }),
 };
+
+/**
+ * --- slice: chat cards ---
+ * A file of the chat cache as a URL the webview may load: a picture or a
+ * video of a message. The core puts the cache folder, and only that, in the
+ * scope of the asset protocol. `null` outside Tauri, like `levelshotUrl`.
+ */
+export function chatFileUrl(path: string): string | null {
+  if (!isTauri()) return null;
+  return convertFileSrc(path);
+}
 
 /** What the close button of the main window does: hide it in the tray, or close it. */
 export type AppCloseAction = "hide" | "close";

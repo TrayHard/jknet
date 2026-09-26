@@ -1,4 +1,4 @@
-import { Pencil, Plus, Star, Trash2 } from "lucide-react";
+import { Pencil, Plus, Share2, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,12 +6,15 @@ import { useErrorText } from "../../i18n/errors";
 import { cn } from "../../lib/format";
 import type { Client, PlayerProfile } from "../../lib/ipc";
 import {
+  useChatCardFromProfile,
   useDeleteProfile,
   useProfiles,
   useSaberHilts,
   useGameInfo,
   useSetDefaultProfile,
 } from "../../lib/queries";
+// --- slice: chat cards ---
+import { useShareDialog } from "../chat/ShareToChatDialog";
 // --- slice: selection context menu ---
 import { Badge, Button, Dialog, useContextMenu, type MenuItem } from "../ui";
 import { ModelPreview } from "../ModelPreview";
@@ -31,13 +34,32 @@ import { blankProfile, ProfileForm } from "./ProfileForm";
  * alone is a third of the window — and a list underneath it would only be
  * something to scroll past.
  */
-export function PlayerProfilesCard({ client }: { client: Client }) {
+export function PlayerProfilesCard({
+  client,
+  shareable = false,
+}: {
+  client: Client;
+  // --- slice: chat cards ---
+  /**
+   * **Share to chat** on every profile: the Player profiles screen. The
+   * client window leaves it off, it has no chats.
+   */
+  shareable?: boolean;
+}) {
   const { t } = useTranslation("clients");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const book = useProfiles(client.id);
   const remove = useDeleteProfile(client.id);
   const setDefault = useSetDefaultProfile(client.id);
+  // --- slice: chat cards --- the core builds the card, the hand-written
+  // token line of a profile included.
+  const { t: tChat } = useTranslation("chat");
+  const share = useShareDialog();
+  const toCard = useChatCardFromProfile();
+  const canShare = shareable && share.available;
+  const shareProfile = (profile: PlayerProfile) =>
+    share.open({ kind: "build", build: () => toCard.mutateAsync(profile) });
 
   /** The profile being edited, or `null` while the list is on screen. */
   const [editing, setEditing] = useState<PlayerProfile | null>(null);
@@ -64,6 +86,7 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
         disabled: profile.id === defaultId || setDefault.isPending,
       },
       { id: "edit", label: tCommon("actions.edit"), icon: <Pencil size={14} /> },
+      ...(canShare ? [{ id: "share", label: tChat("share.action"), icon: <Share2 size={14} /> }] : []),
       {
         id: "remove",
         label: tCommon("actions.delete"),
@@ -74,6 +97,7 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
     onSelect: (id, profile) => {
       if (id === "default") setDefault.mutate(profile.id);
       else if (id === "edit") setEditing(profile);
+      else if (id === "share") shareProfile(profile);
       else setRemoving(profile);
     },
   });
@@ -150,6 +174,16 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
                 aria-label={t("clientWindow.profiles.edit", { profile: profile.name })}
                 onClick={() => setEditing(profile)}
               />
+              {canShare ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<Share2 size={14} />}
+                  title={tChat("share.actionNamed", { name: profile.name })}
+                  aria-label={tChat("share.actionNamed", { name: profile.name })}
+                  onClick={() => shareProfile(profile)}
+                />
+              ) : null}
               <Button
                 size="sm"
                 variant="ghost"
@@ -210,6 +244,7 @@ export function PlayerProfilesCard({ client }: { client: Client }) {
           }
         />
       ) : null}
+      {share.dialog}
     </div>
   );
 }
