@@ -65,13 +65,16 @@
   "row": {
     "join": "Приєднатися",
     "joining": "Запуск…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Написати",
+    "messageTo": "Написати {{name}}"
   },
   "panel": {
     "status": "Стан",
     "join": "Приєднатися до гри",
     "joining": "Запускаємо гру…",
     "invite": "Запросити у свою гру",
+    "message": "Написати",
     "inviteHint": "Запросити на {{server}}",
     "removeConfirm": "Прибрати {{name}} з друзів? Щоб знову стати друзями, вам обом доведеться надіслати новий запит.",
     "remove": "Прибрати з друзів"

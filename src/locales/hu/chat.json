@@ -1,0 +1,283 @@
+{
+  "people": {
+    "deleted": "Törölt fiók",
+    "former": "Korábbi tag"
+  },
+  "titleBar": {
+    "chats": "Csevegések",
+    "chatsUnread_one": "Csevegések: {{count}} olvasatlan",
+    "chatsUnread_other": "Csevegések: {{count}} olvasatlan",
+    "withMentions_one": "{{label}}, {{count}} említés",
+    "withMentions_other": "{{label}}, {{count}} említés"
+  },
+  "surface": {
+    "loading": "Csevegések betöltése…",
+    "pick": "Válasszon csevegést a bal oldalon, vagy kattintson az „Üzenet” gombra egy barátja mellett."
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "A csevegés nincs bekapcsolva",
+      "text": "A JKNet e változatához nem tartozik JKNet Online szolgáltatás, amely a csevegéseket tárolná."
+    },
+    "signedOut": {
+      "title": "Jelentkezzen be a csevegéshez",
+      "text": "A csevegések a JKNet Online szolgáltatásban vannak. Jelentkezzen be a „Beállítások” képernyőn, hogy írhasson a barátainak."
+    },
+    "noChat": {
+      "title": "A csevegés még nem érhető el",
+      "text": "A JKNet Online szolgáltatásban még nincs csevegés. Amint lesz, itt megjelenik."
+    },
+    "failed": {
+      "title": "Nem sikerült betölteni a csevegéseket",
+      "text": "Hiba történt a csevegések olvasása közben."
+    }
+  },
+  "list": {
+    "search": "Keresés a csevegésekben",
+    "clearSearch": "Keresés törlése",
+    "filter": "Megjelenítés",
+    "filters": {
+      "all": "Összes",
+      "direct": "Barátok",
+      "group": "Csoportok",
+      "server": "Szerver"
+    },
+    "offline": "Újracsatlakozás. Az üzenetek a kapcsolat helyreállása után mennek el.",
+    "noMessages": "Még nincs üzenet",
+    "youPrefix": "Ön: {{text}}",
+    "onlyYou": "Csak Ön",
+    "serverTitle": "{{name}} szervere",
+    "readOnly": "Csak olvasható",
+    "noMatch": "Nincs találat erre: „{{query}}”",
+    "noServerChat": "Most nincs szervercsevegés. Akkor jelenik meg, amikor a privát szervere fut, és törlődik, amikor leáll.",
+    "empty": "Még nincs csevegés. Indításhoz kattintson az „Üzenet” gombra egy barátja mellett a „Barátok” képernyőn.",
+    "emptyFilter": "Nincs ilyen csevegés.",
+    "namesAndMore_one": "{{names}} és még {{count}}",
+    "namesAndMore_other": "{{names}} és még {{count}}",
+    "unread_one": "{{count}} olvasatlan üzenet",
+    "unread_other": "{{count}} olvasatlan üzenet",
+    "mentionsUnread_one": "{{count}} olvasatlan említés",
+    "mentionsUnread_other": "{{count}} olvasatlan említés"
+  },
+  "invites": {
+    "title": "Csoportmeghívások",
+    "untitled": "Egy csoport",
+    "toast": "{{name}} meghívja ide: {{title}}",
+    "join": "Csatlakozás",
+    "decline": "Elutasítás",
+    "from_one": "Küldő: {{name}} · {{count}} tag",
+    "from_other": "Küldő: {{name}} · {{count}} tag",
+    "members_one": "{{count}} tag",
+    "members_other": "{{count}} tag"
+  },
+  "search": {
+    "title": "Üzenetek",
+    "searching": "Keresés…",
+    "more": "További találatok",
+    "count_one": "Üzenetek · {{count}}",
+    "count_other": "Üzenetek · {{count}}"
+  },
+  "time": {
+    "today": "Ma",
+    "yesterday": "Tegnap"
+  },
+  "summary": {
+    "file": "Fájl: {{name}}",
+    "card": "Kártya",
+    "files_one": "{{count}} fájl",
+    "files_other": "{{count}} fájl"
+  },
+  "system": {
+    "created": "{{by}} létrehozta a csoportot",
+    "memberAdded": "{{by}} hozzáadta: {{user}}",
+    "memberJoined": "{{user}} csatlakozott",
+    "memberLeft": "{{user}} kilépett a csevegésből",
+    "memberRemoved": "{{by}} eltávolította: {{user}}",
+    "renamed": "{{by}} átnevezte a csoportot erre: „{{title}}”",
+    "renamedEmpty": "{{by}} eltávolította a csoport nevét",
+    "ownerChanged": "{{user}} lett a csoport létrehozója",
+    "historyOn": "{{by}} bekapcsolta: „Az új tagok látják az előzményeket”",
+    "historyOff": "{{by}} kikapcsolta: „Az új tagok látják az előzményeket”",
+    "serverStarted": "Elindult a szervercsevegés. A szerver leállásakor törlődik.",
+    "unknown": "Valami megváltozott ebben a csevegésben"
+  },
+  "typing": {
+    "one": "{{name}} éppen ír…",
+    "two": "{{first}} és {{second}} éppen ír…",
+    "several_one": "{{count}} ember éppen ír…",
+    "several_other": "{{count}} ember éppen ír…"
+  },
+  "thread": {
+    "back": "Vissza a csevegésekhez",
+    "gone": "Ez a csevegés már nem érhető el.",
+    "loading": "Üzenetek betöltése…",
+    "loadingOlder": "Korábbi üzenetek betöltése…",
+    "loadingNewer": "Újabb üzenetek betöltése…",
+    "retry": "Újra",
+    "messages": "Üzenetek vele: {{name}}",
+    "newMessages": "Új üzenetek",
+    "toLatest": "Ugrás a legújabb üzenetekhez",
+    "emptyTitle": "Még nincs üzenet",
+    "emptyText": "Köszönjön neki: {{name}}. Az üzeneteket és a fájlokat 90 napig őrizzük.",
+    "emptyServer": "Írjon mindenkinek, aki a privát szerverén van. Ez a csevegés a szerver leállásakor törlődik.",
+    "retention": "Az üzeneteket és a fájlokat 90 napig őrizzük.",
+    "retentionServer": "Ez a csevegés a szerver leállásakor törlődik.",
+    "historyHidden": "Később csatlakozott. A korábbi üzenetek rejtve vannak.",
+    "historyHiddenGroup": "A csoport létrehozója bekapcsolhatja „Az új tagok látják az előzményeket” beállítást a később érkezőknek.",
+    "historyHiddenServer": "A házigazda bekapcsolhatja „Az új tagok látják az előzményeket” beállítást a később érkező vendégeknek.",
+    "readOnly": "Csak olvasható: már nem barátok",
+    "deletedPeer": "Ezt a fiókot törölték",
+    "search": "Keresés ebben a csevegésben",
+    "searchPlaceholder": "Keresés az üzenetekben: {{name}}",
+    "closeSearch": "Keresés bezárása",
+    "members_one": "{{count}} tag",
+    "members_other": "{{count}} tag",
+    "serverMembers_one": "Privát szerver csevegése · {{count}} tag",
+    "serverMembers_other": "Privát szerver csevegése · {{count}} tag"
+  },
+  "notify": {
+    "menu": "A csevegés értesítései",
+    "all": "Minden üzenet",
+    "allHint": "Értesítés minden új üzenetről",
+    "mentions": "Csak említések",
+    "mentionsHint": "Csak akkor értesítsen, ha megemlítenek vagy válaszolnak nekem",
+    "mute": "Némítás",
+    "muteHint": "Nincs értesítés; az említésekről továbbra is jön",
+    "muted": "Némítva"
+  },
+  "message": {
+    "react": "Reakció",
+    "reply": "Válasz",
+    "copy": "Szöveg másolása",
+    "showMore": "Több",
+    "showLess": "Kevesebb"
+  },
+  "reply": {
+    "jump": "Az eredeti üzenet megjelenítése",
+    "missing": "Az eredeti üzenet már nem érhető el",
+    "noText": "Melléklet"
+  },
+  "reactions": {
+    "pick": "Reakció választása",
+    "more": "További emojik",
+    "limit": "Egy üzenethez legfeljebb három reakciót adhat",
+    "who": "{{names}}: {{emoji}}"
+  },
+  "delivery": {
+    "sent": "Elküldve",
+    "read": "Elolvasva",
+    "readBy_one": "Elolvasta: {{count}}",
+    "readBy_other": "Elolvasta: {{count}}"
+  },
+  "outbox": {
+    "sending": "Küldés…",
+    "uploading": "Fájlok feltöltése…",
+    "failed": "Nem ment el",
+    "failedWhy": "Nem ment el: {{reason}}",
+    "retry": "Újra",
+    "discard": "Elvetés",
+    "reasons": {
+      "notFriends": "már nem barátok",
+      "tooLong": "az üzenet túl hosszú",
+      "empty": "az üzenet üres",
+      "card": "egy kártyát elutasítottak",
+      "fileNotReady": "egy fájl még nem töltődött fel",
+      "fileGone": "egy fájl már nem érhető el",
+      "fileTooLarge": "egy fájl nagyobb 25 MiB-nál",
+      "quotaAccount": "betelt az 1 GiB-os csevegőfájl-kerete",
+      "quotaStore": "a szolgáltatásnak most nincs helye fájlokra",
+      "hashMismatch": "egy fájl feltöltés közben megváltozott",
+      "sizeMismatch": "egy fájl feltöltés közben megváltozott",
+      "network": "a JKNet Online nem érhető el",
+      "rateLimited": "túl sok üzenet, várjon egy percet",
+      "signedOut": "nincs bejelentkezve",
+      "invalidInput": "az üzenetet elutasították",
+      "notFound": "a csevegés már nem érhető el",
+      "internal": "hiba van a JKNet Online oldalán, próbálja újra később"
+    },
+    "attachments_one": "{{count}} melléklet",
+    "attachments_other": "{{count}} melléklet"
+  },
+  "composer": {
+    "placeholderDirect": "Üzenet neki: {{name}}",
+    "placeholderGroup": "Üzenet ide: {{name}}",
+    "send": "Küldés",
+    "emoji": "Emoji",
+    "mentionList": "Tag megemlítése",
+    "replyingTo": "Válasz neki: {{name}}",
+    "cancelReply": "Válasz megszakítása",
+    "attachments": "Küldendő fájlok",
+    "removeFile": "{{name}} eltávolítása",
+    "counter": "{{used}} / {{max}}",
+    "tooLong": "Egy üzenet legfeljebb {{max}} karakter lehet.",
+    "notFriends": "Már nem barátok. A csevegés csak olvasható; ha újra barátok lesznek, ott folytatódik, ahol abbamaradt.",
+    "deletedPeer": "Ezt a fiókot törölték. A csevegés csak olvasható, és a 90 napos határig megmarad.",
+    "readOnly": "Ebbe a csevegésbe nem küldhet üzenetet."
+  },
+  "attach": {
+    "open": "Csatolás",
+    "limits": "Fájlonként legfeljebb 25 MiB. A fájlokat 90 napig őrizzük.",
+    "kinds": {
+      "file": "Bármilyen fájl",
+      "clipboard": "Kép a vágólapról",
+      "media": "Videó vagy képernyőkép a „Media” képernyőről",
+      "server": "Szerver",
+      "map": "Pálya",
+      "profile": "Játékosprofil",
+      "bind": "Bind",
+      "config": "Config",
+      "bundle": "Bundle",
+      "jkhubMod": "JKHub-mod"
+    }
+  },
+  "files": {
+    "class": {
+      "image": "Kép",
+      "video": "Videó",
+      "demo": "Demó",
+      "config": "Config",
+      "archive": "Archívum",
+      "executable": "Futtatható fájl",
+      "other": "Fájl"
+    }
+  },
+  "cards": {
+    "empty": "Szöveg nélküli kártya",
+    "unknown": "Frissítse a JKNet-et, hogy lássa ezt a kártyát."
+  },
+  "emoji": {
+    "title": "Emoji",
+    "search": "Emoji keresése",
+    "groups": "Emojicsoportok",
+    "recent": "Legutóbb használt",
+    "loading": "Emojik betöltése…",
+    "failed": "Nem sikerült betölteni az emojikat.",
+    "none": "Nincs ilyen emoji."
+  },
+  "link": {
+    "title": "Megnyitja a(z) {{host}} hivatkozást?",
+    "body": "Az üzenetekben lévő hivatkozásokat más játékosok írják. Ellenőrizze a címet, mielőtt megnyitja a böngészőben.",
+    "open": "Megnyitás böngészőben"
+  },
+  "toast": {
+    "open": "Megnyitás",
+    "aChat": "egy csevegés",
+    "removed": {
+      "left": "Kilépett innen: {{title}}",
+      "removed": "Eltávolították innen: {{title}}",
+      "ended": "{{title}} véget ért: a szerver leállt",
+      "account_deleted": "A törölt fiókkal folytatott csevegés megszűnt"
+    }
+  },
+  "tray": {
+    "open": "JKNet megnyitása",
+    "chat": "Csevegések megnyitása",
+    "dnd": "Ne zavarjanak",
+    "quit": "Kilépés",
+    "tooltip": "JKNet",
+    "chatCount_one": "Csevegések megnyitása ({{count}})",
+    "chatCount_other": "Csevegések megnyitása ({{count}})",
+    "tooltipUnread_one": "JKNet: {{count}} olvasatlan üzenet",
+    "tooltipUnread_other": "JKNet: {{count}} olvasatlan üzenet"
+  }
+}

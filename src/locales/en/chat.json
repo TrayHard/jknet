@@ -1,0 +1,283 @@
+{
+  "people": {
+    "deleted": "Deleted account",
+    "former": "Former member"
+  },
+  "titleBar": {
+    "chats": "Chats",
+    "chatsUnread_one": "Chats: {{count}} unread",
+    "chatsUnread_other": "Chats: {{count}} unread",
+    "withMentions_one": "{{label}}, {{count}} mention",
+    "withMentions_other": "{{label}}, {{count}} mentions"
+  },
+  "surface": {
+    "loading": "Loading your chats…",
+    "pick": "Pick a chat on the left, or press Message next to a friend."
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "Chats are not switched on",
+      "text": "This build of JKNet has no JKNet Online service to keep chats on."
+    },
+    "signedOut": {
+      "title": "Sign in to chat",
+      "text": "Chats live on JKNet Online. Sign in on the Settings screen to talk to your friends."
+    },
+    "noChat": {
+      "title": "Chats are not available yet",
+      "text": "The JKNet Online service does not have chats yet. They appear here as soon as it does."
+    },
+    "failed": {
+      "title": "Chats could not be loaded",
+      "text": "Something went wrong while reading your chats."
+    }
+  },
+  "list": {
+    "search": "Search chats and messages",
+    "clearSearch": "Clear search",
+    "filter": "Show",
+    "filters": {
+      "all": "All",
+      "direct": "Friends",
+      "group": "Groups",
+      "server": "Server"
+    },
+    "offline": "Reconnecting. Messages are sent once the connection is back.",
+    "noMessages": "No messages yet",
+    "youPrefix": "You: {{text}}",
+    "onlyYou": "Just you",
+    "namesAndMore_one": "{{names}} and {{count}} more",
+    "namesAndMore_other": "{{names}} and {{count}} more",
+    "serverTitle": "{{name}}'s server",
+    "readOnly": "Read-only",
+    "unread_one": "{{count}} unread message",
+    "unread_other": "{{count}} unread messages",
+    "mentionsUnread_one": "{{count}} unread mention",
+    "mentionsUnread_other": "{{count}} unread mentions",
+    "noMatch": "Nothing matches “{{query}}”",
+    "noServerChat": "No server chat right now. It appears while your private server runs and is deleted when it stops.",
+    "empty": "No chats yet. Press Message next to a friend on the Friends screen to start one.",
+    "emptyFilter": "No chats of this kind."
+  },
+  "invites": {
+    "title": "Group invitations",
+    "untitled": "A group",
+    "from_one": "From {{name}} · {{count}} member",
+    "from_other": "From {{name}} · {{count}} members",
+    "toast": "{{name}} invites you to {{title}}",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} members",
+    "join": "Join",
+    "decline": "Decline"
+  },
+  "search": {
+    "title": "Messages",
+    "searching": "Searching…",
+    "count_one": "Messages · {{count}}",
+    "count_other": "Messages · {{count}}",
+    "more": "Show more results"
+  },
+  "time": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "summary": {
+    "file": "File: {{name}}",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "card": "Card"
+  },
+  "system": {
+    "created": "{{by}} created the group",
+    "memberAdded": "{{by}} added {{user}}",
+    "memberJoined": "{{user}} joined",
+    "memberLeft": "{{user}} left",
+    "memberRemoved": "{{by}} removed {{user}}",
+    "renamed": "{{by}} renamed the group to “{{title}}”",
+    "renamedEmpty": "{{by}} removed the group name",
+    "ownerChanged": "{{user}} is now the group creator",
+    "historyOn": "{{by}} turned on “New members see history”",
+    "historyOff": "{{by}} turned off “New members see history”",
+    "serverStarted": "The server chat started. It is deleted when the server stops.",
+    "unknown": "Something changed in this chat"
+  },
+  "typing": {
+    "one": "{{name}} is typing…",
+    "two": "{{first}} and {{second}} are typing…",
+    "several_one": "{{count}} people are typing…",
+    "several_other": "{{count}} people are typing…"
+  },
+  "thread": {
+    "back": "Back to chats",
+    "gone": "This chat is no longer available.",
+    "loading": "Loading messages…",
+    "loadingOlder": "Loading earlier messages…",
+    "loadingNewer": "Loading newer messages…",
+    "retry": "Try again",
+    "messages": "Messages with {{name}}",
+    "newMessages": "New messages",
+    "toLatest": "Jump to the latest messages",
+    "emptyTitle": "No messages yet",
+    "emptyText": "Say hi to {{name}}. Messages and files are kept for 90 days.",
+    "emptyServer": "Talk to everybody on your private server. This chat is deleted when the server stops.",
+    "retention": "Messages and files are kept for 90 days.",
+    "retentionServer": "This chat is deleted when the server stops.",
+    "historyHidden": "You joined later. Earlier messages are hidden.",
+    "historyHiddenGroup": "The group creator can turn on “New members see history” for people who join after that.",
+    "historyHiddenServer": "The host can turn on “New members see history” for guests who join after that.",
+    "readOnly": "Read-only: you are no longer friends",
+    "deletedPeer": "This account was deleted",
+    "members_one": "{{count}} member",
+    "members_other": "{{count}} members",
+    "serverMembers_one": "Private server chat · {{count}} member",
+    "serverMembers_other": "Private server chat · {{count}} members",
+    "search": "Search in this chat",
+    "searchPlaceholder": "Search messages with {{name}}",
+    "closeSearch": "Close search"
+  },
+  "notify": {
+    "menu": "Notifications of this chat",
+    "all": "All messages",
+    "allHint": "Notify me about every new message",
+    "mentions": "Mentions only",
+    "mentionsHint": "Notify me only when somebody mentions me or replies to me",
+    "mute": "Mute",
+    "muteHint": "No notifications; mentions still notify you",
+    "muted": "Muted"
+  },
+  "message": {
+    "react": "React",
+    "reply": "Reply",
+    "copy": "Copy text",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
+  "reply": {
+    "jump": "Show the original message",
+    "missing": "The original message is no longer available",
+    "noText": "Attachment"
+  },
+  "reactions": {
+    "pick": "Pick a reaction",
+    "more": "More emoji",
+    "limit": "You can add up to three reactions to a message",
+    "who": "{{names}} reacted with {{emoji}}"
+  },
+  "delivery": {
+    "sent": "Sent",
+    "read": "Read",
+    "readBy_one": "Read by {{count}}",
+    "readBy_other": "Read by {{count}}"
+  },
+  "outbox": {
+    "sending": "Sending…",
+    "uploading": "Uploading files…",
+    "failed": "Not sent",
+    "failedWhy": "Not sent: {{reason}}",
+    "retry": "Retry",
+    "discard": "Discard",
+    "attachments_one": "{{count}} attachment",
+    "attachments_other": "{{count}} attachments",
+    "reasons": {
+      "notFriends": "you are no longer friends",
+      "tooLong": "the message is too long",
+      "empty": "the message is empty",
+      "card": "a card was refused",
+      "fileNotReady": "a file has not finished uploading",
+      "fileGone": "a file is no longer available",
+      "fileTooLarge": "a file is larger than 25 MiB",
+      "quotaAccount": "your 1 GiB of chat files is full",
+      "quotaStore": "the service has no room for files right now",
+      "hashMismatch": "a file changed while it was uploading",
+      "sizeMismatch": "a file changed while it was uploading",
+      "network": "JKNet Online could not be reached",
+      "rateLimited": "too many messages, wait a minute",
+      "signedOut": "you are signed out",
+      "invalidInput": "the message was refused",
+      "notFound": "the chat is no longer available",
+      "internal": "JKNet Online has a problem, try again later"
+    }
+  },
+  "composer": {
+    "placeholderDirect": "Message {{name}}",
+    "placeholderGroup": "Message {{name}}",
+    "send": "Send",
+    "emoji": "Emoji",
+    "mentionList": "Mention a member",
+    "replyingTo": "Replying to {{name}}",
+    "cancelReply": "Cancel the reply",
+    "attachments": "Files to send",
+    "removeFile": "Remove {{name}}",
+    "counter": "{{used}} / {{max}}",
+    "tooLong": "A message can be up to {{max}} characters long.",
+    "notFriends": "You are no longer friends. The chat is read-only; once you are friends again, it picks up where it left off.",
+    "deletedPeer": "This account was deleted. The chat is read-only and is kept until the 90-day limit.",
+    "readOnly": "You cannot send messages to this chat."
+  },
+  "attach": {
+    "open": "Attach",
+    "limits": "Up to 25 MiB per file. Files are kept for 90 days.",
+    "kinds": {
+      "file": "Any file",
+      "clipboard": "Image from the clipboard",
+      "media": "Video or screenshot from Media",
+      "server": "Server",
+      "map": "Map",
+      "profile": "Player profile",
+      "bind": "Bind",
+      "config": "Config",
+      "bundle": "Bundle",
+      "jkhubMod": "JKHub mod"
+    }
+  },
+  "files": {
+    "class": {
+      "image": "Image",
+      "video": "Video",
+      "demo": "Demo",
+      "config": "Config",
+      "archive": "Archive",
+      "executable": "Executable file",
+      "other": "File"
+    }
+  },
+  "cards": {
+    "empty": "A card without text",
+    "unknown": "Update JKNet to see this card."
+  },
+  "emoji": {
+    "title": "Emoji",
+    "search": "Search emoji",
+    "groups": "Emoji groups",
+    "recent": "Recently used",
+    "loading": "Loading emoji…",
+    "failed": "The emoji could not be loaded.",
+    "none": "No emoji found."
+  },
+  "link": {
+    "title": "Open a link to {{host}}?",
+    "body": "Links in messages are written by other players. Check the address before you open it in your browser.",
+    "open": "Open in browser"
+  },
+  "toast": {
+    "open": "Open",
+    "aChat": "a chat",
+    "removed": {
+      "left": "You left {{title}}",
+      "removed": "You were removed from {{title}}",
+      "ended": "{{title}} ended: the server stopped",
+      "account_deleted": "The chat with a deleted account was removed"
+    }
+  },
+  "tray": {
+    "open": "Open JKNet",
+    "chat": "Open chats",
+    "chatCount_one": "Open chats ({{count}})",
+    "chatCount_other": "Open chats ({{count}})",
+    "dnd": "Do not disturb",
+    "quit": "Quit",
+    "tooltip": "JKNet",
+    "tooltipUnread_one": "JKNet: {{count}} unread message",
+    "tooltipUnread_other": "JKNet: {{count}} unread messages"
+  }
+}

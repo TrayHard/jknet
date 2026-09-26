@@ -59,13 +59,16 @@
   "row": {
     "join": "Join",
     "joining": "Starting…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Message",
+    "messageTo": "Message {{name}}"
   },
   "panel": {
     "status": "Status",
     "join": "Join game",
     "joining": "Starting the game…",
     "invite": "Invite to my game",
+    "message": "Message",
     "inviteHint": "Invite to {{server}}",
     "removeConfirm": "Remove {{name}}? You will both have to send a new request to be friends again.",
     "remove": "Remove friend"

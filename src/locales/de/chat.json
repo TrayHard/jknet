@@ -1,0 +1,283 @@
+{
+  "people": {
+    "deleted": "Gelöschtes Konto",
+    "former": "Ehemaliges Mitglied"
+  },
+  "titleBar": {
+    "chats": "Chats",
+    "chatsUnread_one": "Chats: {{count}} ungelesen",
+    "chatsUnread_other": "Chats: {{count}} ungelesen",
+    "withMentions_one": "{{label}}, {{count}} Erwähnung",
+    "withMentions_other": "{{label}}, {{count}} Erwähnungen"
+  },
+  "surface": {
+    "loading": "Chats werden geladen…",
+    "pick": "Wählen Sie links einen Chat oder klicken Sie bei einem Freund auf „Nachricht“."
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "Chats sind nicht eingeschaltet",
+      "text": "Dieser Build von JKNet hat keinen JKNet-Online-Dienst, auf dem Chats liegen."
+    },
+    "signedOut": {
+      "title": "Melden Sie sich an, um zu chatten",
+      "text": "Chats liegen bei JKNet Online. Melden Sie sich unter „Einstellungen“ an, um Ihren Freunden zu schreiben."
+    },
+    "noChat": {
+      "title": "Chats sind noch nicht verfügbar",
+      "text": "Der JKNet-Online-Dienst hat noch keine Chats. Sie erscheinen hier, sobald er sie hat."
+    },
+    "failed": {
+      "title": "Chats konnten nicht geladen werden",
+      "text": "Beim Lesen Ihrer Chats ist etwas schiefgegangen."
+    }
+  },
+  "list": {
+    "search": "Chats durchsuchen",
+    "clearSearch": "Suche leeren",
+    "filter": "Anzeigen",
+    "filters": {
+      "all": "Alle",
+      "direct": "Freunde",
+      "group": "Gruppen",
+      "server": "Server"
+    },
+    "offline": "Verbindung wird wiederhergestellt. Nachrichten werden gesendet, sobald sie steht.",
+    "noMessages": "Noch keine Nachrichten",
+    "youPrefix": "Sie: {{text}}",
+    "onlyYou": "Nur Sie",
+    "serverTitle": "Server von {{name}}",
+    "readOnly": "Nur lesen",
+    "noMatch": "Nichts passt zu „{{query}}“",
+    "noServerChat": "Gerade gibt es keinen Server-Chat. Er erscheint, solange Ihr privater Server läuft, und wird gelöscht, wenn er stoppt.",
+    "empty": "Noch keine Chats. Klicken Sie unter „Freunde“ bei einem Freund auf „Nachricht“, um einen zu beginnen.",
+    "emptyFilter": "Keine Chats dieser Art.",
+    "namesAndMore_one": "{{names}} und {{count}} weitere",
+    "namesAndMore_other": "{{names}} und {{count}} weitere",
+    "unread_one": "{{count}} ungelesene Nachricht",
+    "unread_other": "{{count}} ungelesene Nachrichten",
+    "mentionsUnread_one": "{{count}} ungelesene Erwähnung",
+    "mentionsUnread_other": "{{count}} ungelesene Erwähnungen"
+  },
+  "invites": {
+    "title": "Gruppeneinladungen",
+    "untitled": "Eine Gruppe",
+    "toast": "{{name}} lädt Sie in {{title}} ein",
+    "join": "Beitreten",
+    "decline": "Ablehnen",
+    "from_one": "Von {{name}} · {{count}} Mitglied",
+    "from_other": "Von {{name}} · {{count}} Mitglieder",
+    "members_one": "{{count}} Mitglied",
+    "members_other": "{{count}} Mitglieder"
+  },
+  "search": {
+    "title": "Nachrichten",
+    "searching": "Suche läuft…",
+    "more": "Weitere Ergebnisse",
+    "count_one": "Nachrichten · {{count}}",
+    "count_other": "Nachrichten · {{count}}"
+  },
+  "time": {
+    "today": "Heute",
+    "yesterday": "Gestern"
+  },
+  "summary": {
+    "file": "Datei: {{name}}",
+    "card": "Karte",
+    "files_one": "{{count}} Datei",
+    "files_other": "{{count}} Dateien"
+  },
+  "system": {
+    "created": "{{by}} hat die Gruppe erstellt",
+    "memberAdded": "{{by}} hat {{user}} hinzugefügt",
+    "memberJoined": "{{user}} ist beigetreten",
+    "memberLeft": "{{user}} hat den Chat verlassen",
+    "memberRemoved": "{{by}} hat {{user}} entfernt",
+    "renamed": "{{by}} hat die Gruppe in „{{title}}“ umbenannt",
+    "renamedEmpty": "{{by}} hat den Gruppennamen entfernt",
+    "ownerChanged": "{{user}} ist jetzt Ersteller der Gruppe",
+    "historyOn": "{{by}} hat „Neue Mitglieder sehen den Verlauf“ eingeschaltet",
+    "historyOff": "{{by}} hat „Neue Mitglieder sehen den Verlauf“ ausgeschaltet",
+    "serverStarted": "Der Server-Chat hat begonnen. Er wird gelöscht, wenn der Server stoppt.",
+    "unknown": "In diesem Chat hat sich etwas geändert"
+  },
+  "typing": {
+    "one": "{{name}} schreibt…",
+    "two": "{{first}} und {{second}} schreiben…",
+    "several_one": "{{count}} Personen schreiben…",
+    "several_other": "{{count}} Personen schreiben…"
+  },
+  "thread": {
+    "back": "Zurück zu den Chats",
+    "gone": "Dieser Chat ist nicht mehr verfügbar.",
+    "loading": "Nachrichten werden geladen…",
+    "loadingOlder": "Ältere Nachrichten werden geladen…",
+    "loadingNewer": "Neuere Nachrichten werden geladen…",
+    "retry": "Erneut versuchen",
+    "messages": "Nachrichten mit {{name}}",
+    "newMessages": "Neue Nachrichten",
+    "toLatest": "Zu den neuesten Nachrichten",
+    "emptyTitle": "Noch keine Nachrichten",
+    "emptyText": "Sagen Sie {{name}} Hallo. Nachrichten und Dateien werden 90 Tage aufbewahrt.",
+    "emptyServer": "Schreiben Sie allen auf Ihrem privaten Server. Dieser Chat wird gelöscht, wenn der Server stoppt.",
+    "retention": "Nachrichten und Dateien werden 90 Tage aufbewahrt.",
+    "retentionServer": "Dieser Chat wird gelöscht, wenn der Server stoppt.",
+    "historyHidden": "Sie sind später beigetreten. Frühere Nachrichten sind ausgeblendet.",
+    "historyHiddenGroup": "Der Ersteller der Gruppe kann „Neue Mitglieder sehen den Verlauf“ für alle einschalten, die danach beitreten.",
+    "historyHiddenServer": "Der Host kann „Neue Mitglieder sehen den Verlauf“ für Gäste einschalten, die danach beitreten.",
+    "readOnly": "Nur lesen: Sie sind keine Freunde mehr",
+    "deletedPeer": "Dieses Konto wurde gelöscht",
+    "search": "In diesem Chat suchen",
+    "searchPlaceholder": "Nachrichten mit {{name}} durchsuchen",
+    "closeSearch": "Suche schließen",
+    "members_one": "{{count}} Mitglied",
+    "members_other": "{{count}} Mitglieder",
+    "serverMembers_one": "Chat des privaten Servers · {{count}} Mitglied",
+    "serverMembers_other": "Chat des privaten Servers · {{count}} Mitglieder"
+  },
+  "notify": {
+    "menu": "Benachrichtigungen dieses Chats",
+    "all": "Alle Nachrichten",
+    "allHint": "Bei jeder neuen Nachricht benachrichtigen",
+    "mentions": "Nur Erwähnungen",
+    "mentionsHint": "Nur benachrichtigen, wenn mich jemand erwähnt oder mir antwortet",
+    "mute": "Stumm",
+    "muteHint": "Keine Benachrichtigungen; Erwähnungen benachrichtigen trotzdem",
+    "muted": "Stumm"
+  },
+  "message": {
+    "react": "Reagieren",
+    "reply": "Antworten",
+    "copy": "Text kopieren",
+    "showMore": "Mehr anzeigen",
+    "showLess": "Weniger anzeigen"
+  },
+  "reply": {
+    "jump": "Ursprüngliche Nachricht anzeigen",
+    "missing": "Die ursprüngliche Nachricht ist nicht mehr verfügbar",
+    "noText": "Anhang"
+  },
+  "reactions": {
+    "pick": "Reaktion wählen",
+    "more": "Weitere Emoji",
+    "limit": "Eine Nachricht kann bis zu drei Reaktionen von Ihnen haben",
+    "who": "{{names}}: {{emoji}}"
+  },
+  "delivery": {
+    "sent": "Gesendet",
+    "read": "Gelesen",
+    "readBy_one": "Gelesen von {{count}}",
+    "readBy_other": "Gelesen von {{count}}"
+  },
+  "outbox": {
+    "sending": "Wird gesendet…",
+    "uploading": "Dateien werden hochgeladen…",
+    "failed": "Nicht gesendet",
+    "failedWhy": "Nicht gesendet: {{reason}}",
+    "retry": "Erneut senden",
+    "discard": "Verwerfen",
+    "reasons": {
+      "notFriends": "Sie sind keine Freunde mehr",
+      "tooLong": "die Nachricht ist zu lang",
+      "empty": "die Nachricht ist leer",
+      "card": "eine Karte wurde abgelehnt",
+      "fileNotReady": "eine Datei ist noch nicht hochgeladen",
+      "fileGone": "eine Datei ist nicht mehr verfügbar",
+      "fileTooLarge": "eine Datei ist größer als 25 MiB",
+      "quotaAccount": "Ihr 1 GiB für Chat-Dateien ist voll",
+      "quotaStore": "der Dienst hat gerade keinen Platz für Dateien",
+      "hashMismatch": "eine Datei hat sich beim Hochladen geändert",
+      "sizeMismatch": "eine Datei hat sich beim Hochladen geändert",
+      "network": "JKNet Online ist nicht erreichbar",
+      "rateLimited": "zu viele Nachrichten, warten Sie eine Minute",
+      "signedOut": "Sie sind abgemeldet",
+      "invalidInput": "die Nachricht wurde abgelehnt",
+      "notFound": "der Chat ist nicht mehr verfügbar",
+      "internal": "JKNet Online hat ein Problem, versuchen Sie es später erneut"
+    },
+    "attachments_one": "{{count}} Anhang",
+    "attachments_other": "{{count}} Anhänge"
+  },
+  "composer": {
+    "placeholderDirect": "Nachricht an {{name}}",
+    "placeholderGroup": "Nachricht an {{name}}",
+    "send": "Senden",
+    "emoji": "Emoji",
+    "mentionList": "Ein Mitglied erwähnen",
+    "replyingTo": "Antwort an {{name}}",
+    "cancelReply": "Antwort abbrechen",
+    "attachments": "Zu sendende Dateien",
+    "removeFile": "{{name}} entfernen",
+    "counter": "{{used}} / {{max}}",
+    "tooLong": "Eine Nachricht darf bis zu {{max}} Zeichen lang sein.",
+    "notFriends": "Sie sind keine Freunde mehr. Der Chat ist schreibgeschützt; sobald Sie wieder Freunde sind, geht es weiter.",
+    "deletedPeer": "Dieses Konto wurde gelöscht. Der Chat ist schreibgeschützt und bleibt bis zum Ablauf der 90 Tage erhalten.",
+    "readOnly": "In diesen Chat können Sie keine Nachrichten senden."
+  },
+  "attach": {
+    "open": "Anhängen",
+    "limits": "Bis zu 25 MiB pro Datei. Dateien werden 90 Tage aufbewahrt.",
+    "kinds": {
+      "file": "Beliebige Datei",
+      "clipboard": "Bild aus der Zwischenablage",
+      "media": "Video oder Screenshot aus „Media“",
+      "server": "Server",
+      "map": "Karte",
+      "profile": "Spielerprofil",
+      "bind": "Bind",
+      "config": "Config",
+      "bundle": "Bundle",
+      "jkhubMod": "JKHub-Mod"
+    }
+  },
+  "files": {
+    "class": {
+      "image": "Bild",
+      "video": "Video",
+      "demo": "Demo",
+      "config": "Config",
+      "archive": "Archiv",
+      "executable": "Ausführbare Datei",
+      "other": "Datei"
+    }
+  },
+  "cards": {
+    "empty": "Eine Karte ohne Text",
+    "unknown": "Aktualisieren Sie JKNet, um diese Karte zu sehen."
+  },
+  "emoji": {
+    "title": "Emoji",
+    "search": "Emoji suchen",
+    "groups": "Emoji-Gruppen",
+    "recent": "Zuletzt verwendet",
+    "loading": "Emoji werden geladen…",
+    "failed": "Die Emoji konnten nicht geladen werden.",
+    "none": "Keine Emoji gefunden."
+  },
+  "link": {
+    "title": "Link zu {{host}} öffnen?",
+    "body": "Links in Nachrichten schreiben andere Spieler. Prüfen Sie die Adresse, bevor Sie sie im Browser öffnen.",
+    "open": "Im Browser öffnen"
+  },
+  "toast": {
+    "open": "Öffnen",
+    "aChat": "einem Chat",
+    "removed": {
+      "left": "Sie haben {{title}} verlassen",
+      "removed": "Sie wurden aus {{title}} entfernt",
+      "ended": "{{title}} ist beendet: der Server wurde gestoppt",
+      "account_deleted": "Der Chat mit einem gelöschten Konto wurde entfernt"
+    }
+  },
+  "tray": {
+    "open": "JKNet öffnen",
+    "chat": "Chats öffnen",
+    "dnd": "Nicht stören",
+    "quit": "Beenden",
+    "tooltip": "JKNet",
+    "chatCount_one": "Chats öffnen ({{count}})",
+    "chatCount_other": "Chats öffnen ({{count}})",
+    "tooltipUnread_one": "JKNet: {{count}} ungelesene Nachricht",
+    "tooltipUnread_other": "JKNet: {{count}} ungelesene Nachrichten"
+  }
+}

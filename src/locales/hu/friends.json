@@ -59,13 +59,16 @@
   "row": {
     "join": "Csatlakozás",
     "joining": "Indítás…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Üzenet",
+    "messageTo": "Üzenet neki: {{name}}"
   },
   "panel": {
     "status": "Állapot",
     "join": "Csatlakozás a játékához",
     "joining": "A játék indítása…",
     "invite": "Meghívás a saját játékba",
+    "message": "Üzenet",
     "inviteHint": "Meghívás ide: {{server}}",
     "removeConfirm": "Eltávolítja őt: {{name}}? Ahhoz, hogy újra barátok legyenek, mindkettőjüknek új kérelmet kell küldenie.",
     "remove": "Barát eltávolítása"

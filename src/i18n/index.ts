@@ -77,6 +77,8 @@ export const NAMESPACES = [
   "pk3",
   // --- slice: play with friends ---
   "host",
+  // --- slice: chat ---
+  "chat",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

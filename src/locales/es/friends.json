@@ -62,13 +62,16 @@
   "row": {
     "join": "Unirse",
     "joining": "Iniciando…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Mensaje",
+    "messageTo": "Mensaje para {{name}}"
   },
   "panel": {
     "status": "Estado",
     "join": "Unirse a la partida",
     "joining": "Iniciando la partida…",
     "invite": "Invitar a mi partida",
+    "message": "Mensaje",
     "inviteHint": "Invitar a {{server}}",
     "removeConfirm": "¿Quitar a {{name}}? Los dos tendrán que enviar una solicitud nueva para volver a ser amigos.",
     "remove": "Quitar amigo"

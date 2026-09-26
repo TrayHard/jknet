@@ -16,7 +16,9 @@ interface AppShellProps {
 export function AppShell({ withSidebar = true }: AppShellProps) {
   return (
     <div className="flex flex-col h-full bg-app text-fg">
-      <TitleBar />
+      {/* --- slice: chat --- the chat button needs somebody signed in, which
+          the first run has not got to yet. */}
+      <TitleBar chat={withSidebar} />
       <div className="flex flex-1 min-h-0">
         {withSidebar ? <Sidebar /> : null}
         <main className="flex-1 min-w-0 overflow-y-auto">

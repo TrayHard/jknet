@@ -1,4 +1,4 @@
-import { Gamepad2 } from "lucide-react";
+import { Gamepad2, MessageCircle } from "lucide-react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -26,6 +26,9 @@ interface FriendRowProps {
    * and remove, and one layer serves the whole list.
    */
   onContextMenu?: (event: ReactMouseEvent) => void;
+  // --- slice: chat ---
+  /** **Message**: the direct chat with this friend, on hover like **Join**. */
+  onMessage?: () => void;
 }
 
 /**
@@ -44,6 +47,7 @@ export function FriendRow({
   onJoin,
   joining = false,
   onContextMenu,
+  onMessage,
 }: FriendRowProps) {
   const { t } = useTranslation("friends");
   const { t: tHost } = useTranslation("host");
@@ -99,6 +103,29 @@ export function FriendRow({
           {statusLine(friend.presence)}
         </span>
       </span>
+
+      {/* --- slice: chat --- beside **Join**, and like it only on hover,
+          focus or selection: twenty rows of chat bubbles would be a wall. */}
+      {onMessage ? (
+        <button
+          type="button"
+          aria-label={t("row.messageTo", { name: friend.user.displayName })}
+          title={t("row.messageTo", { name: friend.user.displayName })}
+          onClick={(event) => {
+            event.stopPropagation();
+            onMessage();
+          }}
+          className={cn(
+            "flex size-28 shrink-0 items-center justify-center rounded-sm cursor-pointer select-none",
+            "text-fg-secondary hover:bg-hover-overlay hover:text-fg transition-opacity duration-100",
+            selected
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+          )}
+        >
+          <MessageCircle size={14} />
+        </button>
+      ) : null}
 
       {joinable ? (
         <Button

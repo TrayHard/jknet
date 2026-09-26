@@ -59,13 +59,16 @@
   "row": {
     "join": "Beitreten",
     "joining": "Startet…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Nachricht",
+    "messageTo": "Nachricht an {{name}}"
   },
   "panel": {
     "status": "Status",
     "join": "Spiel beitreten",
     "joining": "Das Spiel startet…",
     "invite": "In mein Spiel einladen",
+    "message": "Nachricht",
     "inviteHint": "Zu {{server}} einladen",
     "removeConfirm": "{{name}} entfernen? Sie müssen beide eine neue Anfrage senden, um wieder Freunde zu sein.",
     "remove": "Freund entfernen"

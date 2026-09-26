@@ -6,14 +6,59 @@
  */
 
 import {
+  // --- slice: chat ---
+  useInfiniteQuery,
   useMutation,
   useMutationState,
   useQuery,
   useQueryClient,
+  type InfiniteData,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { filePreviewIpc, modelPreviewIpc, type FilePreviewSource } from "./ipc";
 import { mediaIpc, configsIpc } from "./ipc";
+// --- slice: chat ---
+import {
+  chatEvents,
+  chatIpc,
+  type ChatDownloadEvent,
+  type ChatDraft,
+  type ChatDraftEvent,
+  type ChatFileLocal,
+  type ChatFilesStagedEvent,
+  type ChatMessage,
+  type ChatMessagePage,
+  type ChatNotifyEvent,
+  type ChatNotifyLevel,
+  type ChatOpenEvent,
+  type ChatOutboxEntry,
+  type ChatOutboxEvent,
+  type ChatPageQuery,
+  type ChatPrivacy,
+  type ChatReactionEvent,
+  type ChatReadEvent,
+  type ChatRemovedEvent,
+  type ChatResyncEvent,
+  type ChatSearchFilters,
+  type ChatSearchPage,
+  type ChatStagedFile,
+  type ChatStateView,
+  type ChatTypingEvent,
+  type ChatUploadEvent,
+  type Conversation,
+  type Presence,
+  type TrayLabels,
+} from "./ipc";
+import {
+  appendAfter,
+  applyReaction,
+  flattenPages,
+  lastLoadedSeq,
+  patchMessage,
+  placeIncoming,
+} from "./chat/mergeMessages";
+import { applyRead, unreadTotals, type UnreadTotals } from "./chat/unread";
+import { chatLive, useDroppedCount, useTypingIn, useTypingMap, useUploadProgress } from "./chatLive";
 
 export function useMedia() { return useQuery({ queryKey: ["media"], queryFn: () => mediaIpc.list(true), enabled: isTauri(), staleTime: 15000 }); }
 export function useMediaActions() {
@@ -120,7 +165,7 @@ export function useFilePreviewText(source: FilePreviewSource, name: string, enab
   });
 }
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // --- slice: i18n ---
 import { useTranslation } from "react-i18next";
 
@@ -3660,3 +3705,839 @@ export function usePk3EditorActions(target: Pk3EditorTarget, sessionId: string |
 
 /** The mutations of `usePk3EditorActions`, for a panel that takes them as a prop. */
 export type Pk3EditorActions = ReturnType<typeof usePk3EditorActions>;
+
+// ---------------------------------------------------------------------------
+// --- slice: chat ---
+//
+// The chat surface reads three things: the state the core keeps (one
+// document, replaced by `chat:state`), the pages of each open thread (an
+// infinite query by `seq`), and a few stores of live hints in `chatLive.ts`.
+// `useChatEvents` is the one writer of all three and is mounted once per
+// window, by `ChatProvider`. Live events are hints: a gap, a lag or a
+// reconnect makes a thread fetch what it missed instead of trusting them.
+// ---------------------------------------------------------------------------
+
+export const chatKeys = {
+  all: ["chat"] as const,
+  state: ["chat", "state"] as const,
+  threads: ["chat", "thread"] as const,
+  thread: (conversationId: string) => ["chat", "thread", conversationId] as const,
+  search: (q: string, filters: ChatSearchFilters) => ["chat", "search", q, filters] as const,
+  draft: (conversationId: string) => ["chat", "draft", conversationId] as const,
+  file: (fileId: string) => ["chat", "file", fileId] as const,
+  /** My account id where there is no account state: a browser under `npm run dev`. */
+  devMe: ["chat", "dev-me"] as const,
+};
+
+/** Which page of a thread a page of the infinite query is. `null`: the newest. */
+export type ChatThreadParam = ChatPageQuery | null;
+export type ChatThreadData = InfiniteData<ChatMessagePage, ChatThreadParam>;
+
+/** A thread nobody looks at stays in memory this long: switching back is instant. */
+const THREAD_GC_MS = 30 * 60_000;
+/**
+ * The most pages a thread keeps: 600 messages at the default page size. The
+ * thread drops pages at the far end as the player scrolls, and loads them
+ * again when they come back, so a long history never sits in the DOM whole.
+ */
+const THREAD_MAX_PAGES = 12;
+/** How far a resync catches a thread up before it reloads it from the newest page. */
+const RESYNC_CAP = 1000;
+/** Page size of a catch-up after a gap. */
+const CATCH_UP_LIMIT = 200;
+
+/**
+ * The chat state of the core.
+ *
+ * No polling: the core pushes `chat:state` on every change and the query only
+ * reads the first copy. Off while this build has no service, like the friends.
+ */
+export function useChatState(): UseQueryResult<ChatStateView> {
+  const configured = useOnlineConfigured();
+  return useQuery({
+    queryKey: chatKeys.state,
+    queryFn: chatIpc.getState,
+    staleTime: Infinity,
+    enabled: configured !== false,
+  });
+}
+
+/** One conversation out of the state, or `null`. */
+export function useChatConversation(conversationId: string | null): Conversation | null {
+  const state = useChatState().data;
+  if (conversationId === null || state === undefined) return null;
+  return state.conversations.find((conversation) => conversation.id === conversationId) ?? null;
+}
+
+/** The counters of the title bar and the tray: unread without muted chats, mentions with them. */
+export function useChatUnread(): UnreadTotals {
+  const configured = useOnlineConfigured();
+  const state = useChatState().data;
+  return useMemo(() => {
+    if (configured === false || state === undefined || !state.signedIn || !state.available) {
+      return { unread: 0, mentions: 0 };
+    }
+    return unreadTotals(state.conversations);
+  }, [configured, state]);
+}
+
+/** The messages of the outbox of one conversation, oldest first. */
+export function useChatOutbox(conversationId: string | null): ChatOutboxEntry[] {
+  const outbox = useChatState().data?.outbox;
+  return useMemo(
+    () =>
+      (outbox ?? [])
+        .filter((entry) => entry.conversationId === conversationId)
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+    [outbox, conversationId],
+  );
+}
+
+/**
+ * My account id, or `null` while it is not known.
+ *
+ * From the account state in the launcher; in a browser under `npm run dev`
+ * there is no account state, and the mock service says who the dev token is.
+ * The constant condition keeps the dev branch out of a production bundle.
+ */
+export function useChatMeId(): string | null {
+  const account = useAccountState().data?.onlineUser?.id ?? null;
+  const dev = useQuery({
+    queryKey: chatKeys.devMe,
+    queryFn: import.meta.env.DEV
+      ? () => import("./devChat").then((module) => module.devMe())
+      : () => Promise.resolve(null),
+    enabled: import.meta.env.DEV && !isTauri(),
+    staleTime: Infinity,
+    retry: false,
+  });
+  return account ?? dev.data ?? null;
+}
+
+/**
+ * Everybody the chat can name: me, my friends, the members of every
+ * conversation and the players who invited me into a group.
+ *
+ * The service sends ids, not names, and a message outlives its sender's
+ * membership: the author of an old message in a group they left is found here
+ * only if they are a friend. `null` for anybody else, and the component says
+ * «Former member».
+ */
+export function useChatPeople(): (userId: string | null) => OnlineUser | null {
+  const me = useAccountState().data?.onlineUser ?? null;
+  const friends = useFriendsState().data?.friends;
+  const state = useChatState().data;
+  return useMemo(() => {
+    const people = new Map<string, OnlineUser>();
+    for (const conversation of state?.conversations ?? []) {
+      for (const member of conversation.members) people.set(member.user.id, member.user);
+    }
+    for (const invite of state?.groupInvites ?? []) people.set(invite.invitedBy.id, invite.invitedBy);
+    for (const friend of friends ?? []) people.set(friend.user.id, friend.user);
+    if (me !== null) people.set(me.id, me);
+    return (userId: string | null) => (userId === null ? null : (people.get(userId) ?? null));
+  }, [me, friends, state]);
+}
+
+/** The presence of a friend, for the dot on a direct chat. `undefined` for anybody else. */
+export function useFriendPresence(userId: string | null): Presence | undefined {
+  const friends = useFriendsState().data?.friends;
+  if (userId === null) return undefined;
+  return friends?.find((friend) => friend.user.id === userId)?.presence;
+}
+
+/**
+ * The pages of one thread, newest last.
+ *
+ * The first read is the newest page; `fetchPreviousPage` reads older ones as
+ * the player scrolls up, and `fetchNextPage` newer ones after a jump into the
+ * past. Live messages are merged in by `useChatEvents`, so nothing here polls.
+ */
+export function useChatThread(conversationId: string | null) {
+  return useInfiniteQuery({
+    queryKey: chatKeys.thread(conversationId ?? ""),
+    queryFn: ({ pageParam }: { pageParam: ChatThreadParam }) =>
+      chatIpc.getMessages(conversationId as string, pageParam ?? {}),
+    initialPageParam: null as ChatThreadParam,
+    getPreviousPageParam: (first: ChatMessagePage): ChatThreadParam | undefined =>
+      first.hasBefore && first.messages.length > 0 ? { before: first.messages[0].seq } : undefined,
+    getNextPageParam: (last: ChatMessagePage): ChatThreadParam | undefined =>
+      last.hasAfter && last.messages.length > 0
+        ? { after: last.messages[last.messages.length - 1].seq }
+        : undefined,
+    enabled: conversationId !== null,
+    staleTime: Infinity,
+    gcTime: THREAD_GC_MS,
+    maxPages: THREAD_MAX_PAGES,
+  });
+}
+
+/**
+ * Jumps of a thread: to one message (a reply quote, a search hit) and back to
+ * the present.
+ */
+export function useChatThreadJumps(conversationId: string | null) {
+  const queryClient = useQueryClient();
+  return useMemo(
+    () => ({
+      /**
+       * Makes sure the message is loaded: the pages around it replace the
+       * thread when it is not. Answers whether it is there now.
+       */
+      jumpTo: async (seq: number): Promise<boolean> => {
+        if (conversationId === null) return false;
+        const key = chatKeys.thread(conversationId);
+        const data = queryClient.getQueryData<ChatThreadData>(key);
+        if (data !== undefined && flattenPages(data.pages).some((message) => message.seq === seq)) {
+          return true;
+        }
+        const page = await chatIpc.getMessages(conversationId, { around: seq });
+        // A read of the newest page still in flight — the thread was opened
+        // on a search hit — would land after this one and replace it.
+        await queryClient.cancelQueries({ queryKey: key, exact: true });
+        queryClient.setQueryData<ChatThreadData>(key, { pages: [page], pageParams: [{ around: seq }] });
+        return page.messages.some((message) => message.seq === seq);
+      },
+      /** Back to the newest page, after a jump left the thread in the past. */
+      toPresent: async (): Promise<void> => {
+        if (conversationId === null) return;
+        await queryClient.resetQueries({ queryKey: chatKeys.thread(conversationId), exact: true });
+      },
+    }),
+    [conversationId, queryClient],
+  );
+}
+
+/** Puts a conversation the core answered with into the state, in place or new. */
+function upsertConversation(queryClient: ReturnType<typeof useQueryClient>, conversation: Conversation) {
+  queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) => {
+    if (state === undefined) return state;
+    const known = state.conversations.some((c) => c.id === conversation.id);
+    return {
+      ...state,
+      conversations: known
+        ? state.conversations.map((c) => (c.id === conversation.id ? conversation : c))
+        : [conversation, ...state.conversations],
+    };
+  });
+}
+
+/** The direct chat with a friend, created on first use and put into the state. */
+export function useOpenDirectChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => chatIpc.openDirect(userId),
+    onSuccess: (conversation) => upsertConversation(queryClient, conversation),
+  });
+}
+
+/** **Send**: the core queues the message; `chat:outbox` and `chat:message` follow. */
+export function useSendChatMessage() {
+  return useMutation({
+    mutationFn: ({ conversationId, draft }: { conversationId: string; draft: ChatDraft }) =>
+      chatIpc.send(conversationId, draft),
+  });
+}
+
+/** **Retry** of a message that failed. */
+export function useRetryChatMessage() {
+  return useMutation({ mutationFn: (clientId: string) => chatIpc.retry(clientId) });
+}
+
+/** **Discard** of a message that failed. */
+export function useDiscardChatMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (clientId: string) => chatIpc.discard(clientId),
+    onSuccess: (_, clientId) =>
+      queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) =>
+        state === undefined
+          ? state
+          : { ...state, outbox: state.outbox.filter((entry) => entry.clientId !== clientId) },
+      ),
+  });
+}
+
+/**
+ * Switches my reaction on or off.
+ *
+ * The thread changes at once and takes the service's answer when it comes;
+ * a refusal puts the reactions back as they were.
+ */
+export function useReactToChatMessage() {
+  const queryClient = useQueryClient();
+  const meId = useChatMeId();
+  return useMutation({
+    mutationFn: ({ conversationId, seq, emoji, on }: { conversationId: string; seq: number; emoji: string; on: boolean }) =>
+      chatIpc.react(conversationId, seq, emoji, on),
+    onMutate: ({ conversationId, seq, emoji, on }) => {
+      const key = chatKeys.thread(conversationId);
+      const before = queryClient.getQueryData<ChatThreadData>(key);
+      if (before !== undefined && meId !== null) {
+        queryClient.setQueryData<ChatThreadData>(key, {
+          ...before,
+          pages: patchMessage(before.pages, seq, (message) => ({
+            ...message,
+            reactions: applyReaction(message.reactions, meId, emoji, on),
+          })),
+        });
+      }
+      return { before };
+    },
+    onSuccess: (reactions, { conversationId, seq }) => {
+      queryClient.setQueryData<ChatThreadData>(chatKeys.thread(conversationId), (data) =>
+        data === undefined
+          ? data
+          : { ...data, pages: patchMessage(data.pages, seq, (message) => ({ ...message, reactions })) },
+      );
+    },
+    onError: (_, { conversationId }, context) => {
+      if (context?.before !== undefined) {
+        queryClient.setQueryData(chatKeys.thread(conversationId), context.before);
+      }
+    },
+  });
+}
+
+/** The notification level of one conversation. */
+export function useSetChatNotify() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, notify }: { conversationId: string; notify: ChatNotifyLevel }) =>
+      chatIpc.setNotify(conversationId, notify),
+    onSuccess: (conversation) => upsertConversation(queryClient, conversation),
+  });
+}
+
+/** **Join** or **Decline** of a group invitation. */
+export function useAnswerGroupInvite() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, accept }: { conversationId: string; accept: boolean }) =>
+      chatIpc.answerGroupInvite(conversationId, accept),
+    onSuccess: (conversation, { conversationId }) => {
+      queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) =>
+        state === undefined
+          ? state
+          : { ...state, groupInvites: state.groupInvites.filter((i) => i.conversationId !== conversationId) },
+      );
+      if (conversation !== null) upsertConversation(queryClient, conversation);
+    },
+  });
+}
+
+/** A new group of friends. Players who ask first get an invitation instead. */
+export function useCreateChatGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ title, memberIds }: { title: string; memberIds: string[] }) =>
+      chatIpc.createGroup(title, memberIds),
+    onSuccess: (result) => upsertConversation(queryClient, result.conversation),
+  });
+}
+
+/** **Rename** of a group: its owner only. */
+export function useRenameChatGroup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, title }: { conversationId: string; title: string }) =>
+      chatIpc.renameGroup(conversationId, title),
+    onSuccess: (conversation) => upsertConversation(queryClient, conversation),
+  });
+}
+
+/** **New members see history**: the owner of a group or the host of a server chat. */
+export function useSetHistoryForNewMembers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, on }: { conversationId: string; on: boolean }) =>
+      chatIpc.setHistoryForNewMembers(conversationId, on),
+    onSuccess: (conversation) => upsertConversation(queryClient, conversation),
+  });
+}
+
+/** **Add friends** to a group. */
+export function useAddChatMembers() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, userIds }: { conversationId: string; userIds: string[] }) =>
+      chatIpc.addMembers(conversationId, userIds),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: chatKeys.state }),
+  });
+}
+
+/** **Remove from group**: the owner, or the host of a server chat. */
+export function useRemoveChatMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, userId }: { conversationId: string; userId: string }) =>
+      chatIpc.removeMember(conversationId, userId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: chatKeys.state }),
+  });
+}
+
+/** **Leave** a group or a server chat. */
+export function useLeaveChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) => chatIpc.leave(conversationId),
+    onSuccess: (_, conversationId) => {
+      queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) =>
+        state === undefined
+          ? state
+          : { ...state, conversations: state.conversations.filter((c) => c.id !== conversationId) },
+      );
+      queryClient.removeQueries({ queryKey: chatKeys.thread(conversationId) });
+    },
+  });
+}
+
+/**
+ * My chat privacy, out of the state.
+ *
+ * `null` while it is not known. The thread reads it to hide read marks and
+ * typing lines the moment the player switches them off, without waiting for
+ * the service to stop sending them.
+ */
+export function useChatPrivacy(): ChatPrivacy | null {
+  return useChatState().data?.privacy ?? null;
+}
+
+/** The privacy switches: the state changes at once, the service's answer replaces it. */
+export function useUpdateChatPrivacy() {
+  const queryClient = useQueryClient();
+  const patchState = (privacy: ChatPrivacy | null) =>
+    queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) =>
+      state === undefined ? state : { ...state, privacy },
+    );
+  return useMutation({
+    mutationFn: (patch: Partial<ChatPrivacy>) => chatIpc.updatePrivacy(patch),
+    onMutate: (patch) => {
+      const before = queryClient.getQueryData<ChatStateView>(chatKeys.state)?.privacy ?? null;
+      if (before !== null) patchState({ ...before, ...patch });
+      return { before };
+    },
+    onSuccess: (privacy) => patchState(privacy),
+    onError: (_, __, context) => {
+      if (context?.before != null) patchState(context.before);
+    },
+  });
+}
+
+/**
+ * The draft of one conversation, as the core keeps it. Drafts live in the
+ * core, so a draft typed in the drawer is there in the chat window.
+ */
+export function useChatDraft(conversationId: string | null): UseQueryResult<string> {
+  return useQuery({
+    queryKey: chatKeys.draft(conversationId ?? ""),
+    queryFn: () => chatIpc.getDraft(conversationId as string),
+    enabled: conversationId !== null,
+    staleTime: Infinity,
+    gcTime: THREAD_GC_MS,
+  });
+}
+
+/** Writes a draft to the core; the other windows hear it as `chat:draft`. */
+export function useSetChatDraft() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, text }: { conversationId: string; text: string }) =>
+      chatIpc.setDraft(conversationId, text),
+    onMutate: ({ conversationId, text }) => queryClient.setQueryData(chatKeys.draft(conversationId), text),
+  });
+}
+
+/** Tells the core the player is typing. The core throttles and respects privacy. */
+export function useChatTypingPing(conversationId: string | null): () => void {
+  const last = useRef(0);
+  return useCallback(() => {
+    if (conversationId === null) return;
+    const now = Date.now();
+    // The core throttles to one frame in 3 s; the same here spares the IPC.
+    if (now - last.current < 3_000) return;
+    last.current = now;
+    chatIpc.typing(conversationId).catch(() => undefined);
+  }, [conversationId]);
+}
+
+/** Who is typing in a conversation now, my own typing never included. */
+export function useChatTyping(conversationId: string | null): readonly string[] {
+  return useTypingIn(conversationId);
+}
+
+/** Every conversation somebody types in, for the list rows. */
+export function useChatTypingMap() {
+  return useTypingMap();
+}
+
+/** Files dropped on this window that no composer has taken yet. */
+export function useChatDroppedFiles(): { count: number; take: () => ChatStagedFile[] } {
+  const count = useDroppedCount();
+  return { count, take: chatLive.takeDropped };
+}
+
+/** The progress of one staged file on its way up. */
+export function useChatUpload(handle: string): ChatUploadEvent | undefined {
+  return useUploadProgress(handle);
+}
+
+/**
+ * Staging files for the next message: the system dialog, the clipboard, and
+ * taking one back. The core copies, strips and hashes; the composer only
+ * keeps the handles.
+ */
+export function useStageChatFiles() {
+  return {
+    pick: useMutation({ mutationFn: () => chatIpc.pickFiles() }),
+    clipboard: useMutation({ mutationFn: () => chatIpc.stageClipboardImage() }),
+    media: useMutation({ mutationFn: (mediaId: string) => chatIpc.stageMedia(mediaId) }),
+    unstage: useMutation({
+      mutationFn: (handle: string) => chatIpc.unstage(handle),
+      onSettled: (_, __, handle) => chatLive.clearUpload(handle),
+    }),
+  };
+}
+
+/**
+ * Where the bytes of a file are here. `download` asks the core to fetch a file
+ * that is not cached; the progress arrives as `chat:download` and lands in the
+ * same cache entry.
+ */
+export function useChatFileLocal(fileId: string, download: boolean): UseQueryResult<ChatFileLocal> {
+  return useQuery({
+    queryKey: [...chatKeys.file(fileId), download],
+    queryFn: () => chatIpc.fileLocal(fileId, download),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** Opens a link of a message from the core. */
+export function useOpenChatLink() {
+  return useMutation({
+    mutationFn: ({ url, confirmed }: { url: string; confirmed: boolean }) => chatIpc.openLink(url, confirmed),
+  });
+}
+
+/** The labels of the tray menu, sent by the main window in the language on screen. */
+export function useSetTrayLabels() {
+  return useMutation({ mutationFn: (labels: TrayLabels) => chatIpc.setTrayLabels(labels) });
+}
+
+/** The separate chat window, raised when it is open already. */
+export function useOpenChatWindow() {
+  return useMutation({
+    mutationFn: ({ conversationId, compact }: { conversationId?: string | null; compact?: boolean }) =>
+      chatIpc.openWindow(conversationId, compact),
+  });
+}
+
+/**
+ * Searching the messages of every chat, or of one.
+ *
+ * Three characters at least across all chats, one within a chat: the
+ * service answers shorter queries only inside one conversation.
+ */
+export function useChatSearch(q: string, filters: ChatSearchFilters = {}) {
+  const trimmed = q.trim();
+  const enough = trimmed.length >= 3 || (trimmed.length >= 1 && Boolean(filters.conversationId));
+  return useInfiniteQuery({
+    queryKey: chatKeys.search(trimmed, filters),
+    queryFn: ({ pageParam }: { pageParam: string | null }) => chatIpc.search(trimmed, filters, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: ChatSearchPage) => last.nextCursor ?? undefined,
+    enabled: enough,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Reports what this window shows, for the read markers and the notifications.
+ *
+ * On every change of the conversation, of the bottom of the thread and of
+ * the composer, and when the window gains or loses the focus. Leaving clears
+ * it: a thread that is not on screen is not being read.
+ */
+export function useReportChatViewing(
+  conversationId: string | null,
+  atBottom: boolean,
+  composer: boolean,
+): void {
+  const [focused, setFocused] = useState(() => typeof document !== "undefined" && document.hasFocus());
+
+  useEffect(() => {
+    const onFocus = () => setFocused(true);
+    const onBlur = () => setFocused(false);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (conversationId === null) return;
+    chatIpc.setViewing({ conversationId, focused, atBottom, composer }).catch(() => undefined);
+  }, [conversationId, focused, atBottom, composer]);
+
+  useEffect(() => {
+    if (conversationId === null) return;
+    return () => {
+      chatIpc
+        .setViewing({ conversationId: null, focused: false, atBottom: false, composer: false })
+        .catch(() => undefined);
+    };
+  }, [conversationId]);
+}
+
+/** What `useChatEvents` hands to the provider of the window. */
+export interface ChatEventHandlers {
+  /** `chat:notify`: a toast in the main window. */
+  onNotify?: (event: ChatNotifyEvent) => void;
+  /** `chat:removed`, with the conversation as it was. */
+  onRemoved?: (event: ChatRemovedEvent, conversation: Conversation | null) => void;
+  /** `chat:open`: the core asks this window to show a conversation. */
+  onOpen?: (event: ChatOpenEvent) => void;
+}
+
+/** Subscribes to a chat event in Tauri, or to the stand-in bus of `devChat.ts` in a browser. */
+function listenChat<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
+  if (import.meta.env.DEV && !isTauri()) {
+    return import("./devChat").then((module) => module.devListen<T>(event, handler));
+  }
+  return listen<T>(event, (e) => handler(e.payload));
+}
+
+/** Catch-ups in flight, per conversation: a burst of gaps asks once. */
+const catchingUp = new Map<string, boolean>();
+
+/**
+ * Reads what a loaded thread missed: every page after its newest message.
+ *
+ * A thread that would take more than `RESYNC_CAP` messages is reset to its
+ * newest page instead, which is cheaper than walking the whole gap. A thread
+ * that is not loaded, or whose newest page is not loaded, has nothing to do.
+ */
+async function catchUp(queryClient: ReturnType<typeof useQueryClient>, conversationId: string): Promise<void> {
+  if (catchingUp.has(conversationId)) {
+    catchingUp.set(conversationId, true);
+    return;
+  }
+  catchingUp.set(conversationId, false);
+  const key = chatKeys.thread(conversationId);
+  try {
+    let fetched = 0;
+    for (;;) {
+      const data = queryClient.getQueryData<ChatThreadData>(key);
+      if (data === undefined || data.pages.length === 0) return;
+      if (data.pages[data.pages.length - 1].hasAfter && fetched === 0) return;
+      const after = lastLoadedSeq(data.pages);
+      const page = await chatIpc.getMessages(
+        conversationId,
+        after === null ? {} : { after, limit: CATCH_UP_LIMIT },
+      );
+      const current = queryClient.getQueryData<ChatThreadData>(key);
+      if (current === undefined) return;
+      queryClient.setQueryData<ChatThreadData>(key, { ...current, pages: appendAfter(current.pages, page) });
+      fetched += page.messages.length;
+      if (!page.hasAfter || page.messages.length === 0) {
+        if (catchingUp.get(conversationId) === true) {
+          catchingUp.set(conversationId, false);
+          continue;
+        }
+        return;
+      }
+      if (fetched >= RESYNC_CAP) {
+        await queryClient.resetQueries({ queryKey: key, exact: true });
+        return;
+      }
+    }
+  } catch {
+    // A failed catch-up leaves the thread as it was; the next event or the
+    // next reconnect asks again.
+  } finally {
+    catchingUp.delete(conversationId);
+  }
+}
+
+/**
+ * The one subscription of a window to the `chat:*` events.
+ *
+ * Mounted by `ChatProvider`. It patches the state, merges live messages
+ * into the loaded threads, keeps the typing lines and the upload bars, and
+ * hands the three things only a provider can act on — a notification, a
+ * conversation that went away, a request to open one — to `handlers`.
+ */
+export function useChatEvents(handlers: ChatEventHandlers = {}): void {
+  const queryClient = useQueryClient();
+  const configured = useOnlineConfigured();
+  const meId = useChatMeId();
+  const latest = useRef(handlers);
+  latest.current = handlers;
+  const me = useRef(meId);
+  me.current = meId;
+
+  useEffect(() => {
+    if (!isTauri() && !import.meta.env.DEV) return;
+    if (configured === false) return;
+    let disposed = false;
+    const stops: UnlistenFn[] = [];
+
+    const patchState = (change: (state: ChatStateView) => ChatStateView) =>
+      queryClient.setQueryData<ChatStateView>(chatKeys.state, (state) =>
+        state === undefined ? state : change(state),
+      );
+
+    const subscriptions: Array<Promise<UnlistenFn>> = [
+      listenChat<ChatStateView>(chatEvents.state, (state) => {
+        queryClient.setQueryData(chatKeys.state, state);
+        if (!state.signedIn) {
+          chatLive.reset();
+          queryClient.removeQueries({ queryKey: chatKeys.threads });
+          queryClient.removeQueries({ queryKey: ["chat", "draft"] });
+        }
+      }),
+
+      listenChat<ChatMessage>(chatEvents.message, (message) => {
+        const key = chatKeys.thread(message.conversationId);
+        const data = queryClient.getQueryData<ChatThreadData>(key);
+        if (data !== undefined) {
+          const placed = placeIncoming(data.pages, message);
+          if (placed.outcome === "appended" || placed.outcome === "inserted") {
+            queryClient.setQueryData<ChatThreadData>(key, { ...data, pages: placed.pages });
+          } else if (placed.outcome === "gap") {
+            void catchUp(queryClient, message.conversationId);
+          }
+        }
+        chatLive.stopTyping(message.conversationId, message.senderId);
+        let known = true;
+        patchState((state) => {
+          known = state.conversations.some((c) => c.id === message.conversationId);
+          return {
+            ...state,
+            // Delivered: the outbox entry of this client id is done.
+            outbox:
+              message.clientId === null
+                ? state.outbox
+                : state.outbox.filter((entry) => entry.clientId !== message.clientId),
+            conversations: state.conversations.map((conversation) =>
+              conversation.id !== message.conversationId || message.seq <= conversation.lastSeq
+                ? conversation
+                : { ...conversation, lastSeq: message.seq, lastMessage: message },
+            ),
+          };
+        });
+        // A conversation this window has never seen: somebody opened a chat
+        // with me. The core sends the state as well; this does not wait for it.
+        if (!known) void queryClient.invalidateQueries({ queryKey: chatKeys.state });
+      }),
+
+      listenChat<ChatReadEvent>(chatEvents.read, (event) => {
+        patchState((state) => ({
+          ...state,
+          conversations: state.conversations.map((conversation) =>
+            conversation.id === event.conversationId
+              ? applyRead(conversation, event.userId, event.seq, me.current)
+              : conversation,
+          ),
+        }));
+      }),
+
+      listenChat<ChatReactionEvent>(chatEvents.reaction, (event) => {
+        queryClient.setQueryData<ChatThreadData>(chatKeys.thread(event.conversationId), (data) =>
+          data === undefined
+            ? data
+            : {
+                ...data,
+                pages: patchMessage(data.pages, event.seq, (message) => ({
+                  ...message,
+                  reactions: applyReaction(message.reactions, event.userId, event.emoji, event.on),
+                })),
+              },
+        );
+      }),
+
+      listenChat<ChatTypingEvent>(chatEvents.typing, (event) => {
+        chatLive.setTyping(
+          event.conversationId,
+          event.userIds.filter((id) => id !== me.current),
+        );
+      }),
+
+      listenChat<ChatOutboxEvent>(chatEvents.outbox, (event) => {
+        patchState((state) => ({
+          ...state,
+          outbox: [
+            ...state.outbox.filter((entry) => entry.conversationId !== event.conversationId),
+            ...event.entries,
+          ],
+        }));
+      }),
+
+      listenChat<ChatRemovedEvent>(chatEvents.removed, (event) => {
+        const state = queryClient.getQueryData<ChatStateView>(chatKeys.state);
+        const gone = state?.conversations.find((c) => c.id === event.conversationId) ?? null;
+        patchState((current) => ({
+          ...current,
+          conversations: current.conversations.filter((c) => c.id !== event.conversationId),
+          outbox: current.outbox.filter((entry) => entry.conversationId !== event.conversationId),
+        }));
+        queryClient.removeQueries({ queryKey: chatKeys.thread(event.conversationId) });
+        chatLive.setTyping(event.conversationId, []);
+        latest.current.onRemoved?.(event, gone);
+      }),
+
+      listenChat<ChatResyncEvent>(chatEvents.resync, (event) => {
+        const reset = new Set(event.reset);
+        for (const id of reset) {
+          void queryClient.resetQueries({ queryKey: chatKeys.thread(id), exact: true });
+        }
+        for (const query of queryClient.getQueryCache().findAll({ queryKey: chatKeys.threads })) {
+          const id = query.queryKey[2];
+          if (typeof id !== "string" || id === "" || reset.has(id)) continue;
+          void catchUp(queryClient, id);
+        }
+      }),
+
+      listenChat<ChatDraftEvent>(chatEvents.draft, (event) => {
+        queryClient.setQueryData(chatKeys.draft(event.conversationId), event.text);
+      }),
+
+      listenChat<ChatNotifyEvent>(chatEvents.notify, (event) => latest.current.onNotify?.(event)),
+
+      listenChat<ChatOpenEvent>(chatEvents.open, (event) => latest.current.onOpen?.(event)),
+
+      listenChat<ChatUploadEvent>(chatEvents.upload, (event) => chatLive.setUpload(event)),
+
+      listenChat<ChatDownloadEvent>(chatEvents.download, (event) => {
+        const done = event.path != null && event.path !== "";
+        for (const download of [false, true]) {
+          queryClient.setQueryData<ChatFileLocal>([...chatKeys.file(event.fileId), download], (local) =>
+            done
+              ? { status: "cached", path: event.path }
+              : local === undefined
+                ? local
+                : { ...local, status: "downloading" },
+          );
+        }
+      }),
+
+      listenChat<ChatFilesStagedEvent>(chatEvents.filesStaged, (event) => chatLive.addDropped(event.files)),
+    ];
+
+    void Promise.all(subscriptions).then((unlisteners) => {
+      if (disposed) {
+        for (const stop of unlisteners) stop();
+        return;
+      }
+      stops.push(...unlisteners);
+    });
+
+    return () => {
+      disposed = true;
+      for (const stop of stops) stop();
+    };
+  }, [queryClient, configured]);
+}

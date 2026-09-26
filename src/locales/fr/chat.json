@@ -1,0 +1,299 @@
+{
+  "people": {
+    "deleted": "Compte supprimé",
+    "former": "Ancien membre"
+  },
+  "titleBar": {
+    "chats": "Discussions",
+    "chatsUnread_one": "Discussions : {{count}} non lu",
+    "chatsUnread_many": "Discussions : {{count}} non lus",
+    "chatsUnread_other": "Discussions : {{count}} non lus",
+    "withMentions_one": "{{label}}, {{count}} mention",
+    "withMentions_many": "{{label}}, {{count}} mentions",
+    "withMentions_other": "{{label}}, {{count}} mentions"
+  },
+  "surface": {
+    "loading": "Chargement de vos discussions…",
+    "pick": "Choisissez une discussion à gauche ou cliquez sur « Message » à côté d’un ami."
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "Les discussions ne sont pas activées",
+      "text": "Cette version de JKNet n’a pas de service JKNet Online où conserver les discussions."
+    },
+    "signedOut": {
+      "title": "Connectez-vous pour discuter",
+      "text": "Les discussions sont conservées sur JKNet Online. Connectez-vous dans l’écran « Paramètres » pour écrire à vos amis."
+    },
+    "noChat": {
+      "title": "Les discussions ne sont pas encore disponibles",
+      "text": "Le service JKNet Online n’a pas encore de discussions. Elles apparaîtront ici dès qu’il les aura."
+    },
+    "failed": {
+      "title": "Impossible de charger les discussions",
+      "text": "Un problème est survenu en lisant vos discussions."
+    }
+  },
+  "list": {
+    "search": "Rechercher dans les discussions",
+    "clearSearch": "Effacer la recherche",
+    "filter": "Afficher",
+    "filters": {
+      "all": "Toutes",
+      "direct": "Amis",
+      "group": "Groupes",
+      "server": "Serveur"
+    },
+    "offline": "Reconnexion. Les messages partiront dès le retour de la connexion.",
+    "noMessages": "Aucun message pour l’instant",
+    "youPrefix": "Vous : {{text}}",
+    "onlyYou": "Vous seul",
+    "serverTitle": "Serveur de {{name}}",
+    "readOnly": "Lecture seule",
+    "noMatch": "Aucun résultat pour « {{query}} »",
+    "noServerChat": "Pas de discussion de serveur pour l’instant. Elle apparaît tant que votre serveur privé tourne et est supprimée quand il s’arrête.",
+    "empty": "Aucune discussion pour l’instant. Cliquez sur « Message » à côté d’un ami dans l’écran « Amis » pour en commencer une.",
+    "emptyFilter": "Aucune discussion de ce type.",
+    "namesAndMore_one": "{{names}} et {{count}} autre",
+    "namesAndMore_many": "{{names}} et {{count}} autres",
+    "namesAndMore_other": "{{names}} et {{count}} autres",
+    "unread_one": "{{count}} message non lu",
+    "unread_many": "{{count}} messages non lus",
+    "unread_other": "{{count}} messages non lus",
+    "mentionsUnread_one": "{{count}} mention non lue",
+    "mentionsUnread_many": "{{count}} mentions non lues",
+    "mentionsUnread_other": "{{count}} mentions non lues"
+  },
+  "invites": {
+    "title": "Invitations dans des groupes",
+    "untitled": "Un groupe",
+    "toast": "{{name}} vous invite dans {{title}}",
+    "join": "Rejoindre",
+    "decline": "Refuser",
+    "from_one": "De {{name}} · {{count}} membre",
+    "from_many": "De {{name}} · {{count}} membres",
+    "from_other": "De {{name}} · {{count}} membres",
+    "members_one": "{{count}} membre",
+    "members_many": "{{count}} membres",
+    "members_other": "{{count}} membres"
+  },
+  "search": {
+    "title": "Messages",
+    "searching": "Recherche…",
+    "more": "Afficher plus de résultats",
+    "count_one": "Messages · {{count}}",
+    "count_many": "Messages · {{count}}",
+    "count_other": "Messages · {{count}}"
+  },
+  "time": {
+    "today": "Aujourd’hui",
+    "yesterday": "Hier"
+  },
+  "summary": {
+    "file": "Fichier : {{name}}",
+    "card": "Carte",
+    "files_one": "{{count}} fichier",
+    "files_many": "{{count}} fichiers",
+    "files_other": "{{count}} fichiers"
+  },
+  "system": {
+    "created": "{{by}} a créé le groupe",
+    "memberAdded": "{{by}} a ajouté {{user}}",
+    "memberJoined": "{{user}} a rejoint la discussion",
+    "memberLeft": "{{user}} a quitté la discussion",
+    "memberRemoved": "{{by}} a retiré {{user}}",
+    "renamed": "{{by}} a renommé le groupe en « {{title}} »",
+    "renamedEmpty": "{{by}} a retiré le nom du groupe",
+    "ownerChanged": "{{user}} est maintenant le créateur du groupe",
+    "historyOn": "{{by}} a activé « Les nouveaux membres voient l’historique »",
+    "historyOff": "{{by}} a désactivé « Les nouveaux membres voient l’historique »",
+    "serverStarted": "La discussion du serveur a commencé. Elle sera supprimée à l’arrêt du serveur.",
+    "unknown": "Quelque chose a changé dans cette discussion"
+  },
+  "typing": {
+    "one": "{{name}} écrit…",
+    "two": "{{first}} et {{second}} écrivent…",
+    "several_one": "{{count}} personne écrit…",
+    "several_many": "{{count}} personnes écrivent…",
+    "several_other": "{{count}} personnes écrivent…"
+  },
+  "thread": {
+    "back": "Retour aux discussions",
+    "gone": "Cette discussion n’est plus disponible.",
+    "loading": "Chargement des messages…",
+    "loadingOlder": "Chargement des messages précédents…",
+    "loadingNewer": "Chargement des messages plus récents…",
+    "retry": "Réessayer",
+    "messages": "Messages avec {{name}}",
+    "newMessages": "Nouveaux messages",
+    "toLatest": "Aller aux derniers messages",
+    "emptyTitle": "Aucun message pour l’instant",
+    "emptyText": "Dites bonjour à {{name}}. Les messages et les fichiers sont conservés 90 jours.",
+    "emptyServer": "Parlez à tous ceux qui sont sur votre serveur privé. Cette discussion est supprimée à l’arrêt du serveur.",
+    "retention": "Les messages et les fichiers sont conservés 90 jours.",
+    "retentionServer": "Cette discussion est supprimée à l’arrêt du serveur.",
+    "historyHidden": "Vous êtes arrivé plus tard. Les messages précédents sont masqués.",
+    "historyHiddenGroup": "Le créateur du groupe peut activer « Les nouveaux membres voient l’historique » pour ceux qui arrivent ensuite.",
+    "historyHiddenServer": "L’hôte peut activer « Les nouveaux membres voient l’historique » pour les invités qui arrivent ensuite.",
+    "readOnly": "Lecture seule : vous n’êtes plus amis",
+    "deletedPeer": "Ce compte a été supprimé",
+    "search": "Rechercher dans cette discussion",
+    "searchPlaceholder": "Rechercher les messages avec {{name}}",
+    "closeSearch": "Fermer la recherche",
+    "members_one": "{{count}} membre",
+    "members_many": "{{count}} membres",
+    "members_other": "{{count}} membres",
+    "serverMembers_one": "Discussion du serveur privé · {{count}} membre",
+    "serverMembers_many": "Discussion du serveur privé · {{count}} membres",
+    "serverMembers_other": "Discussion du serveur privé · {{count}} membres"
+  },
+  "notify": {
+    "menu": "Notifications de cette discussion",
+    "all": "Tous les messages",
+    "allHint": "Me prévenir à chaque nouveau message",
+    "mentions": "Mentions seulement",
+    "mentionsHint": "Me prévenir seulement quand on me mentionne ou me répond",
+    "mute": "Muet",
+    "muteHint": "Aucune notification ; les mentions préviennent quand même",
+    "muted": "En sourdine"
+  },
+  "message": {
+    "react": "Réagir",
+    "reply": "Répondre",
+    "copy": "Copier le texte",
+    "showMore": "Afficher plus",
+    "showLess": "Afficher moins"
+  },
+  "reply": {
+    "jump": "Afficher le message d’origine",
+    "missing": "Le message d’origine n’est plus disponible",
+    "noText": "Pièce jointe"
+  },
+  "reactions": {
+    "pick": "Choisir une réaction",
+    "more": "Plus d’emoji",
+    "limit": "Vous pouvez ajouter jusqu’à trois réactions à un message",
+    "who": "{{names}} : {{emoji}}"
+  },
+  "delivery": {
+    "sent": "Envoyé",
+    "read": "Lu",
+    "readBy_one": "Lu par {{count}}",
+    "readBy_many": "Lu par {{count}}",
+    "readBy_other": "Lu par {{count}}"
+  },
+  "outbox": {
+    "sending": "Envoi…",
+    "uploading": "Envoi des fichiers…",
+    "failed": "Non envoyé",
+    "failedWhy": "Non envoyé : {{reason}}",
+    "retry": "Réessayer",
+    "discard": "Abandonner",
+    "reasons": {
+      "notFriends": "vous n’êtes plus amis",
+      "tooLong": "le message est trop long",
+      "empty": "le message est vide",
+      "card": "une carte a été refusée",
+      "fileNotReady": "un fichier n’a pas fini d’être envoyé",
+      "fileGone": "un fichier n’est plus disponible",
+      "fileTooLarge": "un fichier dépasse 25 Mio",
+      "quotaAccount": "votre 1 Gio de fichiers de discussion est plein",
+      "quotaStore": "le service n’a plus de place pour les fichiers pour l’instant",
+      "hashMismatch": "un fichier a changé pendant l’envoi",
+      "sizeMismatch": "un fichier a changé pendant l’envoi",
+      "network": "JKNet Online est injoignable",
+      "rateLimited": "trop de messages, attendez une minute",
+      "signedOut": "vous êtes déconnecté",
+      "invalidInput": "le message a été refusé",
+      "notFound": "la discussion n’est plus disponible",
+      "internal": "JKNet Online rencontre un problème, réessayez plus tard"
+    },
+    "attachments_one": "{{count}} pièce jointe",
+    "attachments_many": "{{count}} pièces jointes",
+    "attachments_other": "{{count}} pièces jointes"
+  },
+  "composer": {
+    "placeholderDirect": "Message à {{name}}",
+    "placeholderGroup": "Message à {{name}}",
+    "send": "Envoyer",
+    "emoji": "Emoji",
+    "mentionList": "Mentionner un membre",
+    "replyingTo": "Réponse à {{name}}",
+    "cancelReply": "Annuler la réponse",
+    "attachments": "Fichiers à envoyer",
+    "removeFile": "Retirer {{name}}",
+    "counter": "{{used}} / {{max}}",
+    "tooLong": "Un message peut compter jusqu’à {{max}} caractères.",
+    "notFriends": "Vous n’êtes plus amis. La discussion est en lecture seule ; si vous redevenez amis, elle reprendra là où elle s’est arrêtée.",
+    "deletedPeer": "Ce compte a été supprimé. La discussion est en lecture seule et conservée jusqu’à la limite de 90 jours.",
+    "readOnly": "Vous ne pouvez pas envoyer de messages dans cette discussion."
+  },
+  "attach": {
+    "open": "Joindre",
+    "limits": "Jusqu’à 25 Mio par fichier. Les fichiers sont conservés 90 jours.",
+    "kinds": {
+      "file": "N’importe quel fichier",
+      "clipboard": "Image du presse-papiers",
+      "media": "Vidéo ou capture de « Media »",
+      "server": "Serveur",
+      "map": "Carte",
+      "profile": "Profil de joueur",
+      "bind": "Bind",
+      "config": "Config",
+      "bundle": "Bundle",
+      "jkhubMod": "Mod JKHub"
+    }
+  },
+  "files": {
+    "class": {
+      "image": "Image",
+      "video": "Vidéo",
+      "demo": "Démo",
+      "config": "Config",
+      "archive": "Archive",
+      "executable": "Fichier exécutable",
+      "other": "Fichier"
+    }
+  },
+  "cards": {
+    "empty": "Une carte sans texte",
+    "unknown": "Mettez JKNet à jour pour voir cette carte."
+  },
+  "emoji": {
+    "title": "Emoji",
+    "search": "Rechercher un emoji",
+    "groups": "Groupes d’emoji",
+    "recent": "Utilisés récemment",
+    "loading": "Chargement des emoji…",
+    "failed": "Impossible de charger les emoji.",
+    "none": "Aucun emoji trouvé."
+  },
+  "link": {
+    "title": "Ouvrir un lien vers {{host}} ?",
+    "body": "Les liens des messages sont écrits par d’autres joueurs. Vérifiez l’adresse avant de l’ouvrir dans votre navigateur.",
+    "open": "Ouvrir dans le navigateur"
+  },
+  "toast": {
+    "open": "Ouvrir",
+    "aChat": "une discussion",
+    "removed": {
+      "left": "Vous avez quitté {{title}}",
+      "removed": "Vous avez été retiré de {{title}}",
+      "ended": "{{title}} est terminée : le serveur s’est arrêté",
+      "account_deleted": "La discussion avec un compte supprimé a été retirée"
+    }
+  },
+  "tray": {
+    "open": "Ouvrir JKNet",
+    "chat": "Ouvrir les discussions",
+    "dnd": "Ne pas déranger",
+    "quit": "Quitter",
+    "tooltip": "JKNet",
+    "chatCount_one": "Ouvrir les discussions ({{count}})",
+    "chatCount_many": "Ouvrir les discussions ({{count}})",
+    "chatCount_other": "Ouvrir les discussions ({{count}})",
+    "tooltipUnread_one": "JKNet : {{count}} message non lu",
+    "tooltipUnread_many": "JKNet : {{count}} messages non lus",
+    "tooltipUnread_other": "JKNet : {{count}} messages non lus"
+  }
+}

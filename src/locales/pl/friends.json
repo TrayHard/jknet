@@ -65,13 +65,16 @@
   "row": {
     "join": "Dołącz",
     "joining": "Uruchamianie…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Wiadomość",
+    "messageTo": "Napisz do: {{name}}"
   },
   "panel": {
     "status": "Status",
     "join": "Dołącz do gry",
     "joining": "Uruchamianie gry…",
     "invite": "Zaproś do mojej gry",
+    "message": "Wiadomość",
     "inviteHint": "Zaproś na {{server}}",
     "removeConfirm": "Usunąć {{name}}? Aby znów zostać znajomymi, trzeba będzie wysłać nowe zaproszenie.",
     "remove": "Usuń znajomego"

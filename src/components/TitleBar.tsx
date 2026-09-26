@@ -8,6 +8,8 @@ import { cn } from "../lib/format";
 import { isTauri } from "../lib/runtime";
 // --- slice: client window ---
 import { logWindowFailure } from "../lib/windowLog";
+// --- slice: chat ---
+import { ChatTitleButton } from "./chat/ChatTitleButton";
 import { Logo } from "./Logo";
 
 /**
@@ -35,12 +37,16 @@ interface TitleBarProps {
   subtitle?: string;
   /** False hides the maximise button and the double-click that does the same. */
   maximizable?: boolean;
+  // --- slice: chat ---
+  /** Draws **Chats** with its unread badge before the window buttons: the main window only. */
+  chat?: boolean;
 }
 
 export function TitleBar({
   title,
   subtitle,
   maximizable = true,
+  chat = false,
 }: TitleBarProps = {}) {
   const { t } = useTranslation("common");
   const [version, setVersion] = useState("");
@@ -124,6 +130,9 @@ export function TitleBar({
       </div>
 
       <div data-tauri-drag-region className="flex-1 h-full" />
+
+      {/* --- slice: chat --- */}
+      {chat ? <ChatTitleButton /> : null}
 
       <div className="flex items-center h-full">
         <WindowButton

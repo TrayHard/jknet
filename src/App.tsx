@@ -12,6 +12,8 @@ import {
 import { AccountProvider } from "./components/AccountProvider";
 import { AppShell } from "./components/AppShell";
 import { AppUpdateProvider } from "./components/AppUpdateProvider";
+// --- slice: chat ---
+import { ChatProvider } from "./components/chat/ChatProvider";
 // --- slice: friends ---
 import { FriendsProvider } from "./components/FriendsProvider";
 import { GameEventsProvider } from "./components/GameEventsProvider";
@@ -107,13 +109,19 @@ export default function App() {
               {/* An invitation arrives on any screen, and answering it
                   navigates away from the one it arrived on. */}
               <FriendsProvider>
-                {/* --- slice: play with friends --- */}
-                {/* The private server outlives every screen: the sidebar
-                    counter and the Home card follow it, and closing the
-                    window over it asks first. */}
-                <HostProvider>
-                  <RouterProvider router={getMainRouter()} />
-                </HostProvider>
+                {/* --- slice: chat --- */}
+                {/* A message arrives on any screen, like an invitation: the
+                    one subscription to `chat:*`, the notification toasts and
+                    the tray labels live above the router. */}
+                <ChatProvider role="main">
+                  {/* --- slice: play with friends --- */}
+                  {/* The private server outlives every screen: the sidebar
+                      counter and the Home card follow it, and closing the
+                      window over it asks first. */}
+                  <HostProvider>
+                    <RouterProvider router={getMainRouter()} />
+                  </HostProvider>
+                </ChatProvider>
               </FriendsProvider>
             </AccountProvider>
           </AppUpdateProvider>

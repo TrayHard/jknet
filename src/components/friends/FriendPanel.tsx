@@ -1,4 +1,4 @@
-import { Gamepad2, Send, Swords, UserMinus } from "lucide-react";
+import { Gamepad2, MessageCircle, Send, Swords, UserMinus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -28,6 +28,10 @@ interface FriendPanelProps {
   onHostInvite: () => void;
   /** **Host and invite**: the screen of the private server, this friend marked. */
   onHostAndInvite: () => void;
+  // --- slice: chat ---
+  /** **Message**: the direct chat with this friend. Absent: no button. */
+  onMessage?: () => void;
+  messaging?: boolean;
 }
 
 /**
@@ -53,6 +57,8 @@ export function FriendPanel({
   hostSession,
   onHostInvite,
   onHostAndInvite,
+  onMessage,
+  messaging = false,
 }: FriendPanelProps) {
   const { t } = useTranslation("friends");
   const { t: tCommon } = useTranslation("common");
@@ -123,6 +129,12 @@ export function FriendPanel({
         >
           {joining ? t("panel.joining") : t("panel.join")}
         </Button>
+        {/* --- slice: chat --- */}
+        {onMessage ? (
+          <Button block icon={<MessageCircle size={16} />} disabled={messaging} onClick={onMessage}>
+            {t("panel.message")}
+          </Button>
+        ) : null}
         {/* --- slice: play with friends --- the host kept this server to
             invites: the button is off, and the line says whose door it is. */}
         {locked ? (

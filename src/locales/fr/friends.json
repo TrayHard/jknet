@@ -62,13 +62,16 @@
   "row": {
     "join": "Rejoindre",
     "joining": "Démarrage…",
-    "actions": "Friend actions"
+    "actions": "Friend actions",
+    "message": "Message",
+    "messageTo": "Écrire à {{name}}"
   },
   "panel": {
     "status": "Statut",
     "join": "Rejoindre la partie",
     "joining": "Démarrage du jeu…",
     "invite": "Inviter dans ma partie",
+    "message": "Message",
     "inviteHint": "Inviter sur {{server}}",
     "removeConfirm": "Retirer {{name}} ? Vous devrez tous les deux envoyer une nouvelle demande pour redevenir amis.",
     "remove": "Retirer l’ami"

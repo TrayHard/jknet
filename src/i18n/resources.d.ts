@@ -14,6 +14,8 @@
 
 import type account from "../locales/en/account.json";
 import type bundles from "../locales/en/bundles.json";
+// --- slice: chat ---
+import type chat from "../locales/en/chat.json";
 import type clients from "../locales/en/clients.json";
 import type common from "../locales/en/common.json";
 import type errors from "../locales/en/errors.json";
@@ -57,6 +59,8 @@ declare module "i18next" {
       pk3: typeof pk3;
       // --- slice: play with friends ---
       host: typeof host;
+      // --- slice: chat ---
+      chat: typeof chat;
     };
   }
 }

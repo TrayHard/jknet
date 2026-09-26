@@ -3838,3 +3838,563 @@ export const pk3EditorIpc = {
   /** Ends the session and deletes what it kept beside the archive. */
   close: (sessionId: string) => call<void>("pk3_editor_close", { sessionId }),
 };
+
+// ---------------------------------------------------------------------------
+// --- slice: chat ---
+//
+// Friends chat, `src-tauri/src/chat/`. The types mirror the wire shapes of the
+// service (the `Conversation`, `Message` and friends of `online/types.rs`) and
+// the views the core builds on top of them. The core is the only writer: it
+// holds the connection, the outbox, the drafts and the read markers, and every
+// window only shows what it is told and reports what it looks at. Nothing here
+// talks to the service, and no type carries a token or a host's address.
+// ---------------------------------------------------------------------------
+
+/** `direct`: two friends. `group`: up to 20 friends. `server`: the chat of a private server. */
+export type ChatKind = "direct" | "group" | "server";
+
+/** How a conversation notifies: every message, only mentions and replies, or never. */
+export type ChatNotifyLevel = "all" | "mentions" | "mute";
+
+/** One member of a conversation, as the service shows it to me. */
+export interface ChatMember {
+  user: OnlineUser;
+  /** `owner`: the creator of a group or the host of a server chat. */
+  role: "owner" | "member";
+  joinedAt: string;
+  /**
+   * The last message this member has read. `null` for another member when
+   * either of us hides read receipts; my own is always a number.
+   */
+  readSeq: number | null;
+}
+
+/** What a file of a message is, decided by the service from its bytes and its name. */
+export type ChatFileClass =
+  | "image"
+  | "video"
+  | "demo"
+  | "config"
+  | "archive"
+  | "executable"
+  | "other";
+
+/** Where an attachment came from: the file picker, the Media screen or the clipboard. */
+export type ChatFileOrigin = "media" | "file" | "clipboard";
+
+export interface ChatFileMeta {
+  width?: number | null;
+  height?: number | null;
+  durationMs?: number | null;
+  origin?: ChatFileOrigin | null;
+}
+
+/** One file of a message. The bytes stay on the service until the core fetches them. */
+export interface ChatFileRef {
+  id: string;
+  name: string;
+  size: number;
+  mediaType: string;
+  class: ChatFileClass;
+  /** An executable, whatever its name says: the save asks first. */
+  danger: boolean;
+  meta: ChatFileMeta | null;
+}
+
+/**
+ * The quote of a reply.
+ *
+ * `missing` when the original is out of my reach: it expired, or it is older
+ * than the moment I joined. `senderId: null` is a deleted account.
+ */
+export interface ChatReplyRef {
+  seq: number;
+  senderId?: string | null;
+  /** Up to 140 characters, mention tokens included. */
+  excerpt?: string;
+  missing?: boolean;
+}
+
+/** Who reacted with one emoji, in the order they did. */
+export interface ChatReactionGroup {
+  emoji: string;
+  userIds: string[];
+}
+
+/** What a system line records. The ids may name an account that is gone: `null`. */
+export type ChatSystemEvent =
+  | "created"
+  | "memberAdded"
+  | "memberJoined"
+  | "memberLeft"
+  | "memberRemoved"
+  | "renamed"
+  | "ownerChanged"
+  | "historyForNewMembers"
+  | "serverStarted";
+
+export interface ChatSystem {
+  event: ChatSystemEvent;
+  userId?: string | null;
+  by?: string | null;
+  title?: string | null;
+  /** `historyForNewMembers`: whether it was turned on. */
+  on?: boolean | null;
+}
+
+/**
+ * A card of a message: a server, a bundle, a map, a bind… Each kind has its
+ * own fields, validated by the service; `fallbackText` is what a launcher that
+ * does not know the kind shows instead.
+ */
+export interface ChatCard {
+  type: string;
+  v: number;
+  fallbackText: string;
+  [field: string]: unknown;
+}
+
+/** One message. Immutable once sent: no edits, no deletions. */
+export interface ChatMessage {
+  conversationId: string;
+  /** Gap-free per conversation: the address of the message together with the conversation. */
+  seq: number;
+  /** `null` on a system line, and on a user message of a deleted account. */
+  senderId: string | null;
+  /** The id the sending launcher gave it, which is how the outbox recognises its own message. */
+  clientId: string | null;
+  kind: "user" | "system";
+  /** Plain text with `<@id>` mention tokens; `<@deleted>` names a deleted account. */
+  body: string;
+  cards: ChatCard[];
+  files: ChatFileRef[];
+  /** Who the message mentions, a reply's author included. */
+  mentions: string[];
+  replyTo: ChatReplyRef | null;
+  reactions: ChatReactionGroup[];
+  system: ChatSystem | null;
+  createdAt: string;
+}
+
+/** The server a server chat belongs to. Nothing about how to reach it. */
+export interface ChatServerRef {
+  hostId: string;
+  sessionId: string;
+}
+
+/** One conversation as the service computes it for me. */
+export interface Conversation {
+  id: string;
+  kind: ChatKind;
+  /** A group's own name; empty or `null` shows the member names. */
+  title: string | null;
+  ownerId: string | null;
+  members: ChatMember[];
+  lastSeq: number;
+  lastMessage: ChatMessage | null;
+  readSeq: number;
+  /** I see only the messages after this one: the history before I joined is hidden. */
+  visibleFromSeq: number;
+  /** Unread messages of other senders, capped at 100. */
+  unread: number;
+  unreadMentions: number;
+  notify: ChatNotifyLevel;
+  /** `false` for a direct chat with somebody who is no longer a friend, or whose account is gone. */
+  canSend: boolean;
+  /** Whether people who join later see the history. Always `false` for a direct chat. */
+  historyForNewMembers: boolean;
+  server: ChatServerRef | null;
+  createdAt: string;
+}
+
+/** An invitation into a group of a player who asks before being added. */
+export interface ChatGroupInvite {
+  conversationId: string;
+  title: string | null;
+  invitedBy: OnlineUser;
+  memberCount: number;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** My chat privacy, kept on the service. Both switches work both ways. */
+export interface ChatPrivacy {
+  shareReadReceipts: boolean;
+  shareTyping: boolean;
+  /** `ask`: friends invite me into groups instead of adding me. */
+  groupAdd: "friends" | "ask";
+}
+
+export interface ChatQuota {
+  usedBytes: number;
+  quotaBytes: number;
+  /** When the oldest of my files expires and frees its space. */
+  nextFreeAt: string | null;
+}
+
+/** Where a message waiting in the outbox is. */
+export type ChatOutboxStatus = "queued" | "uploading" | "sending" | "failed";
+
+/** A message the core has not delivered yet. Lives in the core's memory only. */
+export interface ChatOutboxEntry {
+  clientId: string;
+  conversationId: string;
+  body: string;
+  cards: ChatCard[];
+  /** Handles of the staged files that go with it. */
+  attachments: string[];
+  replySeq: number | null;
+  status: ChatOutboxStatus;
+  /** Why it failed: the reason code of the service, or a short English line. */
+  error: string | null;
+  createdAt: string;
+}
+
+/** Everything the chat surface draws from, kept by the core and pushed as `chat:state`. */
+export interface ChatStateView {
+  /** `false` when the service has no chat yet: the surface says so instead of failing. */
+  available: boolean;
+  signedIn: boolean;
+  /** Whether the live socket is up. Messages still queue while it is not. */
+  connected: boolean;
+  conversations: Conversation[];
+  groupInvites: ChatGroupInvite[];
+  privacy: ChatPrivacy | null;
+  quota: ChatQuota | null;
+  /** Unread messages of chats that are not muted. */
+  unreadTotal: number;
+  /** Unread mentions of every chat, muted ones included. */
+  mentionTotal: number;
+  outbox: ChatOutboxEntry[];
+}
+
+/** One page of a thread, in ascending `seq`. */
+export interface ChatMessagePage {
+  messages: ChatMessage[];
+  hasBefore: boolean;
+  hasAfter: boolean;
+}
+
+/** Which page of a thread to read. At most one of the three; none reads the newest page. */
+export interface ChatPageQuery {
+  before?: number;
+  after?: number;
+  around?: number;
+  limit?: number;
+}
+
+/** What `chat_send` takes: the text, the cards, the staged files and the quoted message. */
+export interface ChatDraft {
+  body: string;
+  cards: ChatCard[];
+  attachments: string[];
+  replySeq?: number | null;
+}
+
+/** Why the service did not add somebody to a group. */
+export type ChatRefusalReason = "not_friend" | "member" | "full" | "cooldown";
+
+export interface ChatRefusal {
+  userId: string;
+  reason: ChatRefusalReason;
+}
+
+/** The answer of `chat_create_group`. */
+export interface ChatGroupResult {
+  conversation: Conversation;
+  added: string[];
+  /** Players who ask first: they got an invitation instead. */
+  invited: string[];
+  refused: ChatRefusal[];
+}
+
+/** The answer of `chat_add_members`. */
+export interface ChatAddResult {
+  added: string[];
+  invited: string[];
+  refused: ChatRefusal[];
+}
+
+/** What a search can be narrowed to besides the words. */
+export type ChatSearchHas = "file" | "image" | "video" | "card" | "link";
+
+export interface ChatSearchFilters {
+  conversationId?: string | null;
+  senderId?: string | null;
+  has?: ChatSearchHas | null;
+}
+
+export interface ChatSearchPage {
+  results: { message: ChatMessage }[];
+  nextCursor: string | null;
+}
+
+/** A file the core has copied, stripped and hashed, ready to go with the next message. */
+export interface ChatStagedFile {
+  handle: string;
+  name: string;
+  size: number;
+  classGuess: ChatFileClass;
+  width?: number | null;
+  height?: number | null;
+  origin: ChatFileOrigin;
+}
+
+/** Where the bytes of a file are on this machine. */
+export interface ChatFileLocal {
+  status: "cached" | "downloading" | "remote" | "gone";
+  /** The cached copy, for `convertFileSrc`, once `cached`. */
+  path?: string | null;
+}
+
+/** Where `chat_file_import` puts a file: the demos or the screenshots of a client. */
+export interface ChatImportTarget {
+  kind: "demo" | "screenshot";
+  clientId: string;
+}
+
+/** One line of a config or a bind that would do something the player should see first. */
+export interface ChatCommandDanger {
+  line: number;
+  command: string;
+  reason: string;
+}
+
+/** The labels of the tray menu, in the language on screen: the core has no catalogs. */
+export interface TrayLabels {
+  open: string;
+  chat: string;
+  dnd: string;
+  quit: string;
+  tooltip: string;
+}
+
+/** Payload of `chat:read`. */
+export interface ChatReadEvent {
+  conversationId: string;
+  userId: string;
+  seq: number;
+}
+
+/** Payload of `chat:reaction`. */
+export interface ChatReactionEvent {
+  conversationId: string;
+  seq: number;
+  userId: string;
+  emoji: string;
+  on: boolean;
+}
+
+/** Payload of `chat:typing`: who is typing in one conversation now; an empty list clears it. */
+export interface ChatTypingEvent {
+  conversationId: string;
+  userIds: string[];
+}
+
+/** Payload of `chat:outbox`: the whole outbox of one conversation. */
+export interface ChatOutboxEvent {
+  conversationId: string;
+  entries: ChatOutboxEntry[];
+}
+
+/** Why a conversation went away. */
+export type ChatRemovedReason = "left" | "removed" | "ended" | "account_deleted";
+
+/** Payload of `chat:removed`. */
+export interface ChatRemovedEvent {
+  conversationId: string;
+  reason: ChatRemovedReason;
+}
+
+/** Payload of `chat:resync`: threads to drop and load again, the service went back in time. */
+export interface ChatResyncEvent {
+  reset: string[];
+}
+
+/** Payload of `chat:draft`: another window edited the draft of a conversation. */
+export interface ChatDraftEvent {
+  conversationId: string;
+  text: string;
+}
+
+/** Payload of `chat:notify`, sent to the main window only. */
+export interface ChatNotifyEvent {
+  conversationId: string;
+  seq: number;
+  title: string;
+  text: string;
+  mention: boolean;
+}
+
+/** Payload of `chat:open`: show this conversation, or the list when `null`. */
+export interface ChatOpenEvent {
+  conversationId: string | null;
+}
+
+/** Payload of `chat:upload`, at most every 250 ms per file. */
+export interface ChatUploadEvent {
+  handle: string;
+  sent: number;
+  total: number;
+}
+
+/** Payload of `chat:download`; `path` once the file is complete. */
+export interface ChatDownloadEvent {
+  fileId: string;
+  received: number;
+  total: number;
+  path?: string | null;
+}
+
+/** Payload of `chat:files-staged`: files dropped on the window, already staged. */
+export interface ChatFilesStagedEvent {
+  files: ChatStagedFile[];
+}
+
+/** Event names of the chat slice. */
+export const chatEvents = {
+  state: "chat:state",
+  message: "chat:message",
+  read: "chat:read",
+  reaction: "chat:reaction",
+  typing: "chat:typing",
+  outbox: "chat:outbox",
+  removed: "chat:removed",
+  resync: "chat:resync",
+  draft: "chat:draft",
+  notify: "chat:notify",
+  open: "chat:open",
+  upload: "chat:upload",
+  download: "chat:download",
+  filesStaged: "chat:files-staged",
+} as const;
+
+/**
+ * Calls a chat command, or `devChat.ts` in a browser.
+ *
+ * The same arrangement as `callFriends`: in a development build outside Tauri
+ * the commands go to `scripts/mock-online.mjs` over `fetch`, and
+ * `import.meta.env.DEV` keeps both the branch and the module out of a
+ * production bundle.
+ */
+function callChat<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  if (import.meta.env.DEV && !isTauri()) {
+    return import("./devChat").then((module) => module.devChat<T>(command, args));
+  }
+  return call<T>(command, args);
+}
+
+export const chatIpc = {
+  /** The whole state the core keeps: conversations, invitations, privacy, quota, outbox. */
+  getState: () => callChat<ChatStateView>("chat_get_state"),
+  /** One page of a thread; the newest page without a cursor. */
+  getMessages: (conversationId: string, query: ChatPageQuery = {}) =>
+    callChat<ChatMessagePage>("chat_get_messages", {
+      conversationId,
+      before: query.before ?? null,
+      after: query.after ?? null,
+      around: query.around ?? null,
+      limit: query.limit ?? null,
+    }),
+  /** The direct chat with a friend, created on the first call. */
+  openDirect: (userId: string) => callChat<Conversation>("chat_open_direct", { userId }),
+  /** Queues a message and answers with its client id; the rest arrives as `chat:outbox` and `chat:message`. */
+  send: (conversationId: string, draft: ChatDraft) =>
+    callChat<string>("chat_send", {
+      conversationId,
+      draft: { ...draft, replySeq: draft.replySeq ?? null },
+    }),
+  retry: (clientId: string) => callChat<void>("chat_retry", { clientId }),
+  discard: (clientId: string) => callChat<void>("chat_discard", { clientId }),
+  /**
+   * What this window shows: the conversation, whether the window has the
+   * focus, whether the thread is scrolled to the bottom and whether a composer
+   * is there to take dropped files. The core reads messages as read and holds
+   * back notifications by it.
+   */
+  setViewing: (viewing: {
+    conversationId: string | null;
+    focused: boolean;
+    atBottom: boolean;
+    composer: boolean;
+  }) => callChat<void>("chat_set_viewing", viewing),
+  markRead: (conversationId: string) => callChat<void>("chat_mark_read", { conversationId }),
+  /** Throttled by the core, and dropped when I hide my typing. */
+  typing: (conversationId: string) => callChat<void>("chat_typing", { conversationId }),
+  react: (conversationId: string, seq: number, emoji: string, on: boolean) =>
+    callChat<ChatReactionGroup[]>("chat_react", { conversationId, seq, emoji, on }),
+  createGroup: (title: string, memberIds: string[]) =>
+    callChat<ChatGroupResult>("chat_create_group", { title, memberIds }),
+  /** Owner only; anybody else is refused with `owner_only`. */
+  renameGroup: (conversationId: string, title: string) =>
+    callChat<Conversation>("chat_rename_group", { conversationId, title }),
+  /** The owner of a group or the host of a server chat only. */
+  setHistoryForNewMembers: (conversationId: string, on: boolean) =>
+    callChat<Conversation>("chat_set_history_for_new_members", { conversationId, on }),
+  addMembers: (conversationId: string, userIds: string[]) =>
+    callChat<ChatAddResult>("chat_add_members", { conversationId, userIds }),
+  removeMember: (conversationId: string, userId: string) =>
+    callChat<void>("chat_remove_member", { conversationId, userId }),
+  leave: (conversationId: string) => callChat<void>("chat_leave", { conversationId }),
+  /** Joins the group, or declines: `null` then. */
+  answerGroupInvite: (conversationId: string, accept: boolean) =>
+    callChat<Conversation | null>("chat_answer_group_invite", { conversationId, accept }),
+  setNotify: (conversationId: string, notify: ChatNotifyLevel) =>
+    callChat<Conversation>("chat_set_notify", { conversationId, notify }),
+  search: (q: string, filters: ChatSearchFilters = {}, cursor?: string | null) =>
+    callChat<ChatSearchPage>("chat_search", {
+      q,
+      conversationId: filters.conversationId ?? null,
+      senderId: filters.senderId ?? null,
+      has: filters.has ?? null,
+      cursor: cursor ?? null,
+    }),
+  getPrivacy: () => callChat<ChatPrivacy>("chat_get_privacy"),
+  /** Only the fields that change. */
+  updatePrivacy: (patch: Partial<ChatPrivacy>) =>
+    callChat<ChatPrivacy>("chat_update_privacy", { patch }),
+  /** The system file dialog, from the core. */
+  pickFiles: () => callChat<ChatStagedFile[]>("chat_pick_files"),
+  stageMedia: (mediaId: string) => callChat<ChatStagedFile>("chat_stage_media", { mediaId }),
+  stageClipboardImage: () => callChat<ChatStagedFile>("chat_stage_clipboard_image"),
+  unstage: (handle: string) => callChat<void>("chat_unstage", { handle }),
+  /** Where a file is here; `download` starts fetching one that is not. */
+  fileLocal: (fileId: string, download: boolean) =>
+    callChat<ChatFileLocal>("chat_file_local", { fileId, download }),
+  /** The system save dialog; a dangerous file needs `confirmed`. `null`: the dialog was cancelled. */
+  fileSave: (fileId: string, confirmed: boolean) =>
+    callChat<string | null>("chat_file_save", { fileId, confirmed }),
+  fileImport: (fileId: string, target: ChatImportTarget) =>
+    callChat<string>("chat_file_import", { fileId, target }),
+  scanCommands: (text: string) => callChat<ChatCommandDanger[]>("chat_scan_commands", { text }),
+  /** Opens an http(s) link from the core; a host other than jknet.app and jkhub.org needs `confirmed`. */
+  openLink: (url: string, confirmed: boolean) =>
+    callChat<void>("chat_open_link", { url, confirmed }),
+  joinHostCard: (hostId: string, sessionId: string) =>
+    callChat<JoinResult>("chat_join_host_card", { hostId, sessionId }),
+  getDraft: (conversationId: string) => callChat<string>("chat_get_draft", { conversationId }),
+  setDraft: (conversationId: string, text: string) =>
+    callChat<void>("chat_set_draft", { conversationId, text }),
+  /** The separate chat window, raised when it is open already. */
+  openWindow: (conversationId?: string | null, compact?: boolean) =>
+    callChat<void>("open_chat_window", {
+      conversationId: conversationId ?? null,
+      compact: compact ?? null,
+    }),
+  setWindowCompact: (on: boolean) => callChat<void>("chat_window_set_compact", { on }),
+  setTrayLabels: (labels: TrayLabels) => callChat<void>("set_tray_labels", { labels }),
+};
+
+/** What the close button of the main window does: hide it in the tray, or close it. */
+export type AppCloseAction = "hide" | "close";
+
+/** Closing, quitting and starting with Windows: `src-tauri/src/tray.rs` and `lib.rs`. */
+export const appLifecycleIpc = {
+  closeAction: () => call<AppCloseAction>("app_close_action"),
+  /** **Quit** of the tray: the usual close guards still ask. */
+  quit: () => call<void>("app_quit"),
+  /** A guard dialog was cancelled: the next close hides to the tray again. */
+  quitCancelled: () => call<void>("app_quit_cancelled"),
+  getAutostart: () => call<boolean>("get_autostart"),
+  setAutostart: (enabled: boolean) => call<boolean>("set_autostart", { enabled }),
+};

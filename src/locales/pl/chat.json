@@ -1,0 +1,315 @@
+{
+  "people": {
+    "deleted": "Usunięte konto",
+    "former": "Były członek"
+  },
+  "titleBar": {
+    "chats": "Czaty",
+    "chatsUnread_one": "Czaty: {{count}} nieprzeczytana",
+    "chatsUnread_few": "Czaty: {{count}} nieprzeczytane",
+    "chatsUnread_many": "Czaty: {{count}} nieprzeczytanych",
+    "chatsUnread_other": "Czaty: {{count}} nieprzeczytanej",
+    "withMentions_one": "{{label}}, {{count}} wzmianka",
+    "withMentions_few": "{{label}}, {{count}} wzmianki",
+    "withMentions_many": "{{label}}, {{count}} wzmianek",
+    "withMentions_other": "{{label}}, {{count}} wzmianki"
+  },
+  "surface": {
+    "loading": "Wczytywanie czatów…",
+    "pick": "Wybierz czat po lewej albo kliknij „Wiadomość” przy znajomym."
+  },
+  "unavailable": {
+    "notConfigured": {
+      "title": "Czaty nie są włączone",
+      "text": "Ta wersja JKNet nie ma usługi JKNet Online, na której przechowywane są czaty."
+    },
+    "signedOut": {
+      "title": "Zaloguj się, aby czatować",
+      "text": "Czaty są przechowywane w JKNet Online. Zaloguj się na ekranie „Ustawienia”, aby pisać do znajomych."
+    },
+    "noChat": {
+      "title": "Czaty nie są jeszcze dostępne",
+      "text": "Usługa JKNet Online nie ma jeszcze czatów. Pojawią się tutaj, gdy tylko je dostanie."
+    },
+    "failed": {
+      "title": "Nie udało się wczytać czatów",
+      "text": "Coś poszło nie tak podczas odczytu czatów."
+    }
+  },
+  "list": {
+    "search": "Szukaj w czatach",
+    "clearSearch": "Wyczyść wyszukiwanie",
+    "filter": "Pokaż",
+    "filters": {
+      "all": "Wszystkie",
+      "direct": "Znajomi",
+      "group": "Grupy",
+      "server": "Serwer"
+    },
+    "offline": "Ponowne łączenie. Wiadomości zostaną wysłane, gdy połączenie wróci.",
+    "noMessages": "Jeszcze nie ma wiadomości",
+    "youPrefix": "Ty: {{text}}",
+    "onlyYou": "Tylko ty",
+    "serverTitle": "Serwer: {{name}}",
+    "readOnly": "Tylko do odczytu",
+    "noMatch": "Nic nie pasuje do „{{query}}”",
+    "noServerChat": "Teraz nie ma czatu serwera. Pojawia się, gdy działa twój prywatny serwer, i jest usuwany, gdy serwer się zatrzyma.",
+    "empty": "Jeszcze nie masz czatów. Kliknij „Wiadomość” przy znajomym na ekranie „Znajomi”, aby zacząć.",
+    "emptyFilter": "Brak czatów tego rodzaju.",
+    "namesAndMore_one": "{{names}} i {{count}} inna osoba",
+    "namesAndMore_few": "{{names}} i {{count}} inne osoby",
+    "namesAndMore_many": "{{names}} i {{count}} innych osób",
+    "namesAndMore_other": "{{names}} i {{count}} innej osoby",
+    "unread_one": "{{count}} nieprzeczytana wiadomość",
+    "unread_few": "{{count}} nieprzeczytane wiadomości",
+    "unread_many": "{{count}} nieprzeczytanych wiadomości",
+    "unread_other": "{{count}} nieprzeczytanej wiadomości",
+    "mentionsUnread_one": "{{count}} nieprzeczytana wzmianka",
+    "mentionsUnread_few": "{{count}} nieprzeczytane wzmianki",
+    "mentionsUnread_many": "{{count}} nieprzeczytanych wzmianek",
+    "mentionsUnread_other": "{{count}} nieprzeczytanej wzmianki"
+  },
+  "invites": {
+    "title": "Zaproszenia do grup",
+    "untitled": "Grupa",
+    "toast": "{{name}} zaprasza cię do grupy {{title}}",
+    "join": "Dołącz",
+    "decline": "Odrzuć",
+    "from_one": "Od {{name}} · {{count}} członek",
+    "from_few": "Od {{name}} · {{count}} członków",
+    "from_many": "Od {{name}} · {{count}} członków",
+    "from_other": "Od {{name}} · {{count}} członka",
+    "members_one": "{{count}} członek",
+    "members_few": "{{count}} członków",
+    "members_many": "{{count}} członków",
+    "members_other": "{{count}} członka"
+  },
+  "search": {
+    "title": "Wiadomości",
+    "searching": "Szukanie…",
+    "more": "Pokaż więcej wyników",
+    "count_one": "Wiadomości · {{count}}",
+    "count_few": "Wiadomości · {{count}}",
+    "count_many": "Wiadomości · {{count}}",
+    "count_other": "Wiadomości · {{count}}"
+  },
+  "time": {
+    "today": "Dzisiaj",
+    "yesterday": "Wczoraj"
+  },
+  "summary": {
+    "file": "Plik: {{name}}",
+    "card": "Karta",
+    "files_one": "{{count}} plik",
+    "files_few": "{{count}} pliki",
+    "files_many": "{{count}} plików",
+    "files_other": "{{count}} pliku"
+  },
+  "system": {
+    "created": "{{by}} tworzy grupę",
+    "memberAdded": "{{by}} dodaje: {{user}}",
+    "memberJoined": "{{user}} dołącza do czatu",
+    "memberLeft": "{{user}} opuszcza czat",
+    "memberRemoved": "{{by}} usuwa z czatu: {{user}}",
+    "renamed": "{{by}} zmienia nazwę grupy na „{{title}}”",
+    "renamedEmpty": "{{by}} usuwa nazwę grupy",
+    "ownerChanged": "{{user}} jest teraz twórcą grupy",
+    "historyOn": "{{by}} włącza „Nowi członkowie widzą historię”",
+    "historyOff": "{{by}} wyłącza „Nowi członkowie widzą historię”",
+    "serverStarted": "Czat serwera się rozpoczął. Zostanie usunięty, gdy serwer się zatrzyma.",
+    "unknown": "Coś się zmieniło w tym czacie"
+  },
+  "typing": {
+    "one": "{{name}} pisze…",
+    "two": "{{first}} i {{second}} piszą…",
+    "several_one": "{{count}} osoba pisze…",
+    "several_few": "{{count}} osoby piszą…",
+    "several_many": "{{count}} osób pisze…",
+    "several_other": "{{count}} osoby pisze…"
+  },
+  "thread": {
+    "back": "Wróć do czatów",
+    "gone": "Ten czat nie jest już dostępny.",
+    "loading": "Wczytywanie wiadomości…",
+    "loadingOlder": "Wczytywanie wcześniejszych wiadomości…",
+    "loadingNewer": "Wczytywanie nowszych wiadomości…",
+    "retry": "Spróbuj ponownie",
+    "messages": "Wiadomości: {{name}}",
+    "newMessages": "Nowe wiadomości",
+    "toLatest": "Przejdź do najnowszych wiadomości",
+    "emptyTitle": "Jeszcze nie ma wiadomości",
+    "emptyText": "Przywitaj się: {{name}}. Wiadomości i pliki są przechowywane przez 90 dni.",
+    "emptyServer": "Pisz do wszystkich na swoim prywatnym serwerze. Ten czat zostanie usunięty, gdy serwer się zatrzyma.",
+    "retention": "Wiadomości i pliki są przechowywane przez 90 dni.",
+    "retentionServer": "Ten czat zostanie usunięty, gdy serwer się zatrzyma.",
+    "historyHidden": "Dołączasz później. Wcześniejsze wiadomości są ukryte.",
+    "historyHiddenGroup": "Twórca grupy może włączyć „Nowi członkowie widzą historię” dla osób, które dołączą później.",
+    "historyHiddenServer": "Gospodarz może włączyć „Nowi członkowie widzą historię” dla gości, którzy dołączą później.",
+    "readOnly": "Tylko do odczytu: nie jesteście już znajomymi",
+    "deletedPeer": "To konto zostało usunięte",
+    "search": "Szukaj w tym czacie",
+    "searchPlaceholder": "Szukaj w wiadomościach: {{name}}",
+    "closeSearch": "Zamknij wyszukiwanie",
+    "members_one": "{{count}} członek",
+    "members_few": "{{count}} członków",
+    "members_many": "{{count}} członków",
+    "members_other": "{{count}} członka",
+    "serverMembers_one": "Czat prywatnego serwera · {{count}} członek",
+    "serverMembers_few": "Czat prywatnego serwera · {{count}} członków",
+    "serverMembers_many": "Czat prywatnego serwera · {{count}} członków",
+    "serverMembers_other": "Czat prywatnego serwera · {{count}} członka"
+  },
+  "notify": {
+    "menu": "Powiadomienia tego czatu",
+    "all": "Wszystkie wiadomości",
+    "allHint": "Powiadamiaj o każdej nowej wiadomości",
+    "mentions": "Tylko wzmianki",
+    "mentionsHint": "Powiadamiaj tylko, gdy ktoś mnie wspomni lub mi odpowie",
+    "mute": "Wycisz",
+    "muteHint": "Bez powiadomień; wzmianki nadal powiadamiają",
+    "muted": "Wyciszony"
+  },
+  "message": {
+    "react": "Zareaguj",
+    "reply": "Odpowiedz",
+    "copy": "Kopiuj tekst",
+    "showMore": "Pokaż więcej",
+    "showLess": "Pokaż mniej"
+  },
+  "reply": {
+    "jump": "Pokaż oryginalną wiadomość",
+    "missing": "Oryginalna wiadomość nie jest już dostępna",
+    "noText": "Załącznik"
+  },
+  "reactions": {
+    "pick": "Wybierz reakcję",
+    "more": "Więcej emoji",
+    "limit": "Do jednej wiadomości możesz dodać najwyżej trzy reakcje",
+    "who": "{{names}}: {{emoji}}"
+  },
+  "delivery": {
+    "sent": "Wysłano",
+    "read": "Przeczytano",
+    "readBy_one": "Przeczytało: {{count}}",
+    "readBy_few": "Przeczytały: {{count}}",
+    "readBy_many": "Przeczytało: {{count}}",
+    "readBy_other": "Przeczytało: {{count}}"
+  },
+  "outbox": {
+    "sending": "Wysyłanie…",
+    "uploading": "Przesyłanie plików…",
+    "failed": "Nie wysłano",
+    "failedWhy": "Nie wysłano: {{reason}}",
+    "retry": "Ponów",
+    "discard": "Odrzuć",
+    "reasons": {
+      "notFriends": "nie jesteście już znajomymi",
+      "tooLong": "wiadomość jest za długa",
+      "empty": "wiadomość jest pusta",
+      "card": "karta została odrzucona",
+      "fileNotReady": "plik jeszcze się nie przesłał",
+      "fileGone": "plik nie jest już dostępny",
+      "fileTooLarge": "plik jest większy niż 25 MiB",
+      "quotaAccount": "twój 1 GiB na pliki czatu jest pełny",
+      "quotaStore": "usługa nie ma teraz miejsca na pliki",
+      "hashMismatch": "plik zmienił się podczas przesyłania",
+      "sizeMismatch": "plik zmienił się podczas przesyłania",
+      "network": "brak połączenia z JKNet Online",
+      "rateLimited": "za dużo wiadomości, poczekaj minutę",
+      "signedOut": "nie jesteś zalogowany",
+      "invalidInput": "wiadomość została odrzucona",
+      "notFound": "czat nie jest już dostępny",
+      "internal": "JKNet Online ma problem, spróbuj później"
+    },
+    "attachments_one": "{{count}} załącznik",
+    "attachments_few": "{{count}} załączniki",
+    "attachments_many": "{{count}} załączników",
+    "attachments_other": "{{count}} załącznika"
+  },
+  "composer": {
+    "placeholderDirect": "Wiadomość do: {{name}}",
+    "placeholderGroup": "Wiadomość do: {{name}}",
+    "send": "Wyślij",
+    "emoji": "Emoji",
+    "mentionList": "Wspomnij członka",
+    "replyingTo": "Odpowiedź dla: {{name}}",
+    "cancelReply": "Anuluj odpowiedź",
+    "attachments": "Pliki do wysłania",
+    "removeFile": "Usuń {{name}}",
+    "counter": "{{used}} / {{max}}",
+    "tooLong": "Wiadomość może mieć najwyżej {{max}} znaków.",
+    "notFriends": "Nie jesteście już znajomymi. Czat jest tylko do odczytu; gdy znów będziecie znajomymi, rozmowa potoczy się dalej.",
+    "deletedPeer": "To konto zostało usunięte. Czat jest tylko do odczytu i zostanie zachowany do limitu 90 dni.",
+    "readOnly": "Nie możesz wysyłać wiadomości na ten czat."
+  },
+  "attach": {
+    "open": "Załącz",
+    "limits": "Do 25 MiB na plik. Pliki są przechowywane przez 90 dni.",
+    "kinds": {
+      "file": "Dowolny plik",
+      "clipboard": "Obraz ze schowka",
+      "media": "Wideo lub zrzut ekranu z „Media”",
+      "server": "Serwer",
+      "map": "Mapa",
+      "profile": "Profil gracza",
+      "bind": "Bind",
+      "config": "Config",
+      "bundle": "Bundle",
+      "jkhubMod": "Mod z JKHub"
+    }
+  },
+  "files": {
+    "class": {
+      "image": "Obraz",
+      "video": "Wideo",
+      "demo": "Demo",
+      "config": "Config",
+      "archive": "Archiwum",
+      "executable": "Plik wykonywalny",
+      "other": "Plik"
+    }
+  },
+  "cards": {
+    "empty": "Karta bez tekstu",
+    "unknown": "Zaktualizuj JKNet, aby zobaczyć tę kartę."
+  },
+  "emoji": {
+    "title": "Emoji",
+    "search": "Szukaj emoji",
+    "groups": "Grupy emoji",
+    "recent": "Ostatnio używane",
+    "loading": "Wczytywanie emoji…",
+    "failed": "Nie udało się wczytać emoji.",
+    "none": "Nie znaleziono emoji."
+  },
+  "link": {
+    "title": "Otworzyć link do {{host}}?",
+    "body": "Linki w wiadomościach piszą inni gracze. Sprawdź adres, zanim otworzysz go w przeglądarce.",
+    "open": "Otwórz w przeglądarce"
+  },
+  "toast": {
+    "open": "Otwórz",
+    "aChat": "czat",
+    "removed": {
+      "left": "Opuszczasz czat {{title}}",
+      "removed": "Usunięto cię z czatu {{title}}",
+      "ended": "Czat {{title}} zakończony: serwer się zatrzymał",
+      "account_deleted": "Czat z usuniętym kontem został usunięty"
+    }
+  },
+  "tray": {
+    "open": "Otwórz JKNet",
+    "chat": "Otwórz czaty",
+    "dnd": "Nie przeszkadzać",
+    "quit": "Zakończ",
+    "tooltip": "JKNet",
+    "chatCount_one": "Otwórz czaty ({{count}})",
+    "chatCount_few": "Otwórz czaty ({{count}})",
+    "chatCount_many": "Otwórz czaty ({{count}})",
+    "chatCount_other": "Otwórz czaty ({{count}})",
+    "tooltipUnread_one": "JKNet: {{count}} nieprzeczytana wiadomość",
+    "tooltipUnread_few": "JKNet: {{count}} nieprzeczytane wiadomości",
+    "tooltipUnread_many": "JKNet: {{count}} nieprzeczytanych wiadomości",
+    "tooltipUnread_other": "JKNet: {{count}} nieprzeczytanej wiadomości"
+  }
+}

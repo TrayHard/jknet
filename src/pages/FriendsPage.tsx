@@ -1,6 +1,8 @@
 import {
   AlertTriangle,
   Gamepad2,
+  // --- slice: chat ---
+  MessageCircle,
   Search,
   Send,
   UserMinus,
@@ -13,6 +15,8 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
+// --- slice: chat ---
+import { useMessageFriend } from "../components/chat/useOpenChat";
 import { FriendPanel } from "../components/friends/FriendPanel";
 import { FriendRow } from "../components/friends/FriendRow";
 // --- slice: play with friends ---
@@ -107,6 +111,8 @@ export function FriendsPage() {
   const hostInvite = useHostInvite();
   const hostRunning = isHostLive(hostSession) && hostSession.status === "running";
   const joinToast = useJoinToast();
+  // --- slice: chat --- **Message**: the direct chat with a friend.
+  const message = useMessageFriend();
 
   // --- slice: game switch ---
   // Presence names a server, not a game, so the port of the address answers
@@ -181,6 +187,13 @@ export function FriendsPage() {
         icon: <Gamepad2 size={14} />,
         disabled: !canLaunch || !canJoin(friend) || join.isPending,
       },
+      // --- slice: chat ---
+      {
+        id: "message",
+        label: t("row.message"),
+        icon: <MessageCircle size={14} />,
+        disabled: message.pending,
+      },
       {
         id: "invite",
         label: t("panel.invite"),
@@ -201,6 +214,11 @@ export function FriendsPage() {
     onSelect: (id, friend) => {
       if (id === "join") {
         joinFriend(friend);
+        return;
+      }
+      // --- slice: chat ---
+      if (id === "message") {
+        message.open(friend.user.id);
         return;
       }
       if (id === "invite") {
@@ -372,6 +390,8 @@ export function FriendsPage() {
                       onSelect={() => setSelectedId(friend.user.id)}
                       onJoin={canLaunch ? () => joinFriend(friend) : undefined}
                       joining={join.isPending && join.variables === friend.user.id}
+                      // --- slice: chat ---
+                      onMessage={() => message.open(friend.user.id)}
                       // --- slice: selection context menu ---
                       onContextMenu={(event) => rowMenu.open(event, friend)}
                     />
@@ -432,6 +452,9 @@ export function FriendsPage() {
               void navigate(`/host?${HOST_INVITE_PARAM}=${encodeURIComponent(selected.user.id)}`)
             }
             onJoin={() => joinFriend(selected)}
+            // --- slice: chat ---
+            onMessage={() => message.open(selected.user.id)}
+            messaging={message.pending}
             onInvite={() => {
               const server = myServer(view?.presence ?? NO_PRESENCE);
               if (server === null) return;
