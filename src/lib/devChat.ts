@@ -19,8 +19,9 @@
  *   bus (`devListen`). A browser cannot open the live socket with the chat
  *   header, so instead of `chat.*` frames the state is read again every few
  *   seconds and a thread that moved asks for what it missed.
- * - Files, the clipboard, links and the windows need the launcher: those
- *   commands refuse, like `join_friend` does in `devOnline.ts`.
+ * - Files, the clipboard and links need the launcher: those commands
+ *   refuse, like `join_friend` does in `devOnline.ts`. The chat window is a
+ *   tab at `#/chat` whose mode lives in this module.
  *
  * Start the mock first: `node scripts/mock-online.mjs`.
  */
@@ -38,6 +39,7 @@ import type {
   ChatQuota,
   ChatReactionGroup,
   ChatStateView,
+  ChatWindowView,
   Conversation,
   Game,
   OnlineUser,
@@ -288,6 +290,35 @@ function needsLauncher(command: string): never {
   throw new Error(`${command} needs the launcher; a browser cannot run it`);
 }
 
+// --- slice: chat window ---
+// The chat window in a browser is a tab at `#/chat`. Its mode and switches
+// are kept here, per tab, the way the core keeps them per launcher, and each
+// change goes out as `chat:window` on the bus; `?compact=1` opens the tab in
+// the compact mode. Nothing floats over anything: that part needs Windows.
+
+const devWindow: ChatWindowView = (() => {
+  const compact = new URLSearchParams(window.location.search).get("compact") === "1";
+  return { open: true, compact, alwaysOnTop: compact, opacity: 90 };
+})();
+
+/** Changes the stand-in window and says so, as the core does after every switch. */
+function changeWindow(change: Partial<ChatWindowView>): ChatWindowView {
+  Object.assign(devWindow, change);
+  const view = { ...devWindow };
+  emit("chat:window", view);
+  return view;
+}
+
+/**
+ * **Pop out** and **Message** outside the launcher: the chat window's route
+ * in a tab of its own, reused on the next click. A browser may block a tab
+ * opened after the click has been answered; the tab then does not open.
+ */
+function openWindowTab(conversationId: string | null): void {
+  const route = conversationId === null || conversationId === "" ? "/chat" : `/chat/${conversationId}`;
+  window.open(`${window.location.pathname}${window.location.search}#${route}`, "jknet-chat");
+}
+
 // --- slice: chat cards ---
 // The two cards that open an editor, turned into what the editor takes the
 // way the core does it, minus the checks: a browser has no profile rules and
@@ -482,10 +513,26 @@ export async function devChat<T>(command: string, args: Record<string, unknown> 
     case "chat_card_to_config":
       return devConfigOf(args.card as ChatCard, (args.game as Game | null) ?? "ja") as T;
     case "set_tray_labels":
-    case "chat_window_set_compact":
       return undefined as T;
+    // --- slice: chat window ---
+    case "open_chat_window":
+      openWindowTab(typeof args.conversationId === "string" ? args.conversationId : null);
+      return null as T;
+    case "chat_window_state":
+      return { ...devWindow } as T;
+    case "chat_window_set_compact":
+      return changeWindow({ compact: args.on === true, alwaysOnTop: args.on === true }) as T;
+    case "chat_window_set_always_on_top":
+      return changeWindow({ alwaysOnTop: args.on === true }) as T;
+    case "chat_window_set_opacity": {
+      const opacity = Number(args.opacity);
+      if (!Number.isInteger(opacity) || opacity < 40 || opacity > 100) {
+        throw new Error(`opacity ${String(args.opacity)} is outside 40..=100`);
+      }
+      return changeWindow({ opacity }) as T;
+    }
     default:
-      // The files, the clipboard, links, the chat window and the host card:
+      // The files, the clipboard, links and the host card:
       // each of them needs something only the launcher has.
       return needsLauncher(command);
   }

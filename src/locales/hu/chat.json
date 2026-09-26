@@ -18,6 +18,24 @@
     "unpin": "Rögzítés feloldása: lebegés az oldal fölött",
     "close": "Csevegések bezárása"
   },
+  "window": {
+    "title": "JKNet Chat",
+    "withOnTop": "{{line}} · mindig felül",
+    "alwaysOnTop": "Mindig felül",
+    "alwaysOnTopOn": "Mindig felül: be",
+    "alwaysOnTopOff": "Mindig felül: ki",
+    "compact": "Kompakt mód",
+    "full": "A teljes csevegőablak megnyitása",
+    "options": "Ablakbeállítások",
+    "optionsTitle": "Ablak",
+    "opacity": "Átlátszatlanság",
+    "openInLauncher": "Megnyitás a JKNet ablakában",
+    "onTopNote": "Ablakos és keret nélküli ablakos módban a játék fölött marad. A kizárólagos teljes képernyős mód eltakarja.",
+    "close": "A csevegőablak bezárása",
+    "strip": "Csevegés váltása",
+    "friendsOnline_one": "{{count}} barát online",
+    "friendsOnline_other": "{{count}} barát online"
+  },
   "surface": {
     "loading": "Csevegések betöltése…",
     "pick": "Válasszon csevegést a bal oldalon, vagy kattintson az „Üzenet” gombra egy barátja mellett."

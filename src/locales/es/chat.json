@@ -20,6 +20,25 @@
     "unpin": "Soltar: flotar sobre la página",
     "close": "Cerrar los chats"
   },
+  "window": {
+    "title": "JKNet Chat",
+    "withOnTop": "{{line}} · siempre visible",
+    "alwaysOnTop": "Siempre visible",
+    "alwaysOnTopOn": "Siempre visible: activado",
+    "alwaysOnTopOff": "Siempre visible: desactivado",
+    "compact": "Modo compacto",
+    "full": "Abrir la ventana completa del chat",
+    "options": "Opciones de la ventana",
+    "optionsTitle": "Ventana",
+    "opacity": "Opacidad",
+    "openInLauncher": "Abrir en el lanzador",
+    "onTopNote": "Se mantiene sobre el juego en modo ventana o ventana sin bordes. La pantalla completa exclusiva la oculta.",
+    "close": "Cerrar la ventana del chat",
+    "strip": "Cambiar de chat",
+    "friendsOnline_one": "{{count}} amigo en línea",
+    "friendsOnline_many": "{{count}} de amigos en línea",
+    "friendsOnline_other": "{{count}} amigos en línea"
+  },
   "surface": {
     "loading": "Cargando sus chats…",
     "pick": "Elija un chat a la izquierda o pulse «Mensaje» junto a un amigo."

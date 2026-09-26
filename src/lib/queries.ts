@@ -45,6 +45,8 @@ import {
   type ChatStateView,
   type ChatTypingEvent,
   type ChatUploadEvent,
+  // --- slice: chat window ---
+  type ChatWindowView,
   type Conversation,
   type Presence,
   type TrayLabels,
@@ -178,7 +180,10 @@ export function useFilePreviewText(source: FilePreviewSource, name: string, enab
     enabled: enabled && isTauri(), staleTime: Infinity, gcTime: 60_000, retry: false,
   });
 }
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
+// --- slice: chat window ---
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { Window as TauriWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // --- slice: i18n ---
 import { useTranslation } from "react-i18next";
@@ -3742,6 +3747,8 @@ export const chatKeys = {
   search: (q: string, filters: ChatSearchFilters) => ["chat", "search", q, filters] as const,
   draft: (conversationId: string) => ["chat", "draft", conversationId] as const,
   file: (fileId: string) => ["chat", "file", fileId] as const,
+  /** --- slice: chat window --- the mode, the switches and the opacity of the chat window. */
+  window: ["chat", "window"] as const,
   /** My account id where there is no account state: a browser under `npm run dev`. */
   devMe: ["chat", "dev-me"] as const,
 };
@@ -4407,6 +4414,144 @@ export function useOpenChatWindow() {
   return useMutation({
     mutationFn: ({ conversationId, compact }: { conversationId?: string | null; compact?: boolean }) =>
       chatIpc.openWindow(conversationId, compact),
+    onError: (error: unknown) => console.warn(`Opening the chat window failed: ${errorMessage(error)}`),
+  });
+}
+
+// --- slice: chat window ---
+
+/**
+ * The mode, the switches and the opacity of the chat window.
+ *
+ * Read once and kept by `chat:window`, which the core sends to every window
+ * after each change, whoever made it: the toggle of the title bar, a
+ * **Pop out** that reopened the window in the other mode, a second click on
+ * the slider. `undefined` until the first answer.
+ */
+export function useChatWindowView(): UseQueryResult<ChatWindowView> {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isTauri() && !import.meta.env.DEV) return;
+    let disposed = false;
+    let stop: UnlistenFn | undefined;
+    void listenChat<ChatWindowView>(chatEvents.window, (view) => {
+      // A switch of this window on its way: its own answer says the rest.
+      if (queryClient.isMutating({ mutationKey: chatKeys.window }) > 0) return;
+      queryClient.setQueryData(chatKeys.window, view);
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [queryClient]);
+
+  return useQuery({
+    queryKey: chatKeys.window,
+    queryFn: chatIpc.windowState,
+    staleTime: Infinity,
+    retry: false,
+  });
+}
+
+/** The switches of the chat window, one after another: see `useChatWindowSwitch`. */
+let chatWindowQueue: Promise<unknown> = Promise.resolve();
+/** Grows with every switch; only the answer to the newest one is shown. */
+let chatWindowTicket = 0;
+
+/**
+ * One switch of the chat window.
+ *
+ * The page follows the click at once — a slider that waits for the core
+ * lags behind the pointer — and the answer to the newest switch, the whole
+ * view, replaces the guess. A refusal reads the state again.
+ *
+ * A drag across the opacity slider is a dozen calls in a row. They go to
+ * the core one at a time, in order, so the window ends at the value the
+ * pointer stopped on; the answers and the `chat:window` events of the steps
+ * in between would drag the thumb back behind the pointer, so neither is
+ * shown while a switch is on its way (`useChatWindowView`).
+ */
+function useChatWindowSwitch<T>(
+  change: (value: T) => Promise<ChatWindowView>,
+  guess: (view: ChatWindowView, value: T) => ChatWindowView,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: chatKeys.window,
+    mutationFn: (value: T) => {
+      const run = chatWindowQueue.then(() => change(value));
+      chatWindowQueue = run.catch(() => undefined);
+      return run;
+    },
+    onMutate: (value: T) => {
+      chatWindowTicket += 1;
+      queryClient.setQueryData<ChatWindowView>(chatKeys.window, (view) =>
+        view === undefined ? view : guess(view, value),
+      );
+      return chatWindowTicket;
+    },
+    onSuccess: (view, _value, ticket) => {
+      if (ticket === chatWindowTicket) queryClient.setQueryData(chatKeys.window, view);
+    },
+    onError: (error: unknown) => {
+      console.warn(`Chat window: ${errorMessage(error)}`);
+      void queryClient.invalidateQueries({ queryKey: chatKeys.window });
+    },
+  });
+}
+
+/** The compact mode of the chat window, on or off. The core resizes and moves the window. */
+export function useSetChatWindowCompact() {
+  return useChatWindowSwitch(
+    (on: boolean) => chatIpc.setWindowCompact(on),
+    (view, on) => ({ ...view, compact: on }),
+  );
+}
+
+/** «Always on top» of the mode the chat window is in. */
+export function useSetChatWindowAlwaysOnTop() {
+  return useChatWindowSwitch(
+    (on: boolean) => chatIpc.setWindowAlwaysOnTop(on),
+    (view, on) => ({ ...view, alwaysOnTop: on }),
+  );
+}
+
+/** The opacity of the compact mode, in percent. */
+export function useSetChatWindowOpacity() {
+  return useChatWindowSwitch(
+    (opacity: number) => chatIpc.setWindowOpacity(opacity),
+    (view, opacity) => ({ ...view, opacity }),
+  );
+}
+
+/** The label of the launcher window, where the chat drawer lives. */
+const MAIN_WINDOW_LABEL = "main";
+
+/**
+ * **Open in launcher** of the chat window: the launcher window comes forward
+ * — out of the tray too — and its drawer opens on the conversation.
+ *
+ * No command of the core does this; it needs none. Raising a window is a
+ * permission of the chat window's capability, and the drawer already opens
+ * on `chat:open`: the chat window sends it to `main` itself. Nothing outside
+ * Tauri, where there is no other window to raise.
+ */
+export function useOpenChatInLauncher() {
+  return useMutation({
+    mutationFn: async (conversationId: string | null) => {
+      if (!isTauri()) return;
+      const main = await TauriWindow.getByLabel(MAIN_WINDOW_LABEL);
+      if (main === null) throw new Error("the launcher window is not there");
+      await main.show();
+      await main.unminimize();
+      await main.setFocus();
+      await emitTo(MAIN_WINDOW_LABEL, chatEvents.open, { conversationId } satisfies ChatOpenEvent);
+    },
+    onError: (error: unknown) => console.warn(`Opening the chat in the launcher failed: ${errorMessage(error)}`),
   });
 }
 
@@ -4495,11 +4640,22 @@ export interface ChatEventHandlers {
   onOpen?: (event: ChatOpenEvent) => void;
 }
 
-/** Subscribes to a chat event in Tauri, or to the stand-in bus of `devChat.ts` in a browser. */
-function listenChat<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {
+/**
+ * Subscribes to a chat event in Tauri, or to the stand-in bus of `devChat.ts` in a browser.
+ *
+ * --- slice: chat window ---
+ * `own` is for the three events the core sends to one window with `emit_to`:
+ * `chat:open`, `chat:notify` and `chat:files-staged`. A plain `listen` hears
+ * every target — Tauri delivers an `emit_to("chat", …)` to a listener of any
+ * target too — so the launcher window would open its drawer on the chat
+ * window's `chat:open`, and a file dropped on one window would land in the
+ * composers of both. Those three listen on this window only.
+ */
+function listenChat<T>(event: string, handler: (payload: T) => void, own = false): Promise<UnlistenFn> {
   if (import.meta.env.DEV && !isTauri()) {
     return import("./devChat").then((module) => module.devListen<T>(event, handler));
   }
+  if (own) return getCurrentWebviewWindow().listen<T>(event, (e) => handler(e.payload));
   return listen<T>(event, (e) => handler(e.payload));
 }
 
@@ -4701,9 +4857,9 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
         queryClient.setQueryData(chatKeys.draft(event.conversationId), event.text);
       }),
 
-      listenChat<ChatNotifyEvent>(chatEvents.notify, (event) => latest.current.onNotify?.(event)),
+      listenChat<ChatNotifyEvent>(chatEvents.notify, (event) => latest.current.onNotify?.(event), true),
 
-      listenChat<ChatOpenEvent>(chatEvents.open, (event) => latest.current.onOpen?.(event)),
+      listenChat<ChatOpenEvent>(chatEvents.open, (event) => latest.current.onOpen?.(event), true),
 
       listenChat<ChatUploadEvent>(chatEvents.upload, (event) => chatLive.setUpload(event)),
 
@@ -4725,7 +4881,11 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
         }
       }),
 
-      listenChat<ChatFilesStagedEvent>(chatEvents.filesStaged, (event) => chatLive.addDropped(event.files)),
+      listenChat<ChatFilesStagedEvent>(
+        chatEvents.filesStaged,
+        (event) => chatLive.addDropped(event.files),
+        true,
+      ),
     ];
 
     void Promise.all(subscriptions).then((unlisteners) => {

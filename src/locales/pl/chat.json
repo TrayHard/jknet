@@ -22,6 +22,26 @@
     "unpin": "Odepnij: nad stroną",
     "close": "Zamknij czaty"
   },
+  "window": {
+    "title": "JKNet Chat",
+    "withOnTop": "{{line}} · zawsze na wierzchu",
+    "alwaysOnTop": "Zawsze na wierzchu",
+    "alwaysOnTopOn": "Zawsze na wierzchu: włączone",
+    "alwaysOnTopOff": "Zawsze na wierzchu: wyłączone",
+    "compact": "Tryb kompaktowy",
+    "full": "Otwórz pełne okno czatu",
+    "options": "Opcje okna",
+    "optionsTitle": "Okno",
+    "opacity": "Nieprzezroczystość",
+    "openInLauncher": "Otwórz w launcherze",
+    "onTopNote": "Zostaje nad grą w trybie okienkowym i w oknie bez ramki. Wyłączny tryb pełnoekranowy je zasłania.",
+    "close": "Zamknij okno czatu",
+    "strip": "Przełącz czat",
+    "friendsOnline_one": "znajomych w sieci: {{count}}",
+    "friendsOnline_few": "znajomych w sieci: {{count}}",
+    "friendsOnline_many": "znajomych w sieci: {{count}}",
+    "friendsOnline_other": "znajomych w sieci: {{count}}"
+  },
   "surface": {
     "loading": "Wczytywanie czatów…",
     "pick": "Wybierz czat po lewej albo kliknij „Wiadomość” przy znajomym."

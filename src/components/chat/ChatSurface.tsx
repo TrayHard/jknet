@@ -7,6 +7,7 @@ import { cn } from "../../lib/format";
 import { useChatState, useOnlineConfigured } from "../../lib/queries";
 import { ChatUnavailable } from "./ChatUnavailable";
 import { ConversationList } from "./ConversationList";
+import { ConversationStrip } from "./ConversationStrip";
 import { GroupInviteBanner } from "./GroupInviteBanner";
 import { Thread, type ChatSurfaceVariant, type ThreadJump } from "./Thread";
 
@@ -16,7 +17,8 @@ interface ChatSurfaceProps {
   /**
    * `split`: the list and the thread side by side, the chat window.
    * `stacked`: the list, then the thread with a back arrow, the drawer.
-   * `compact`: `stacked` in tighter rows, the chat window over a game.
+   * `compact`: `stacked` in tighter rows, the chat window over a game; a
+   * row of every chat stands above the thread.
    */
   variant: ChatSurfaceVariant;
   /** The open conversation; `null` shows the list alone, or an empty pane beside it. */
@@ -131,7 +133,7 @@ export function ChatSurface({
   if (variant === "split") {
     return (
       <div className={cn("flex h-full min-h-0", className)}>
-        <div className="flex w-[300px] min-h-0 shrink-0 flex-col border-r border-line-subtle">
+        <div className="flex w-[300px] min-h-0 shrink-0 flex-col border-r border-line-subtle bg-sidebar">
           {listHeader}
           {list}
         </div>
@@ -143,6 +145,21 @@ export function ChatSurface({
             </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  // --- slice: chat window --- the compact window keeps a row of every chat
+  // above the thread, so switching over a game takes one click.
+  if (variant === "compact" && thread !== null) {
+    return (
+      <div className={cn("flex h-full min-h-0 flex-col", className)}>
+        <ConversationStrip
+          conversations={view.conversations}
+          selectedId={conversationId}
+          onSelect={(id) => onSelect(id)}
+        />
+        <div className="min-h-0 flex-1">{thread}</div>
       </div>
     );
   }

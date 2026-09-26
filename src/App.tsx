@@ -24,6 +24,10 @@ import { JkhubDownloadToasts } from "./components/library/JkhubDownloadToasts";
 import { ToastsProvider } from "./components/ToastsProvider";
 // --- slice: i18n ---
 import { LanguageSync } from "./i18n/LanguageSync";
+// --- slice: chat window ---
+import { isChatWindowHash } from "./lib/chatWindow";
+import { useFriendsEvents } from "./lib/queries";
+import { ChatWindowPage } from "./pages/ChatWindowPage";
 // --- slice: client window ---
 import { isClientWindowHash } from "./lib/clientWindow";
 import { PlayerProfilesPage } from "./pages/PlayerProfilesPage";
@@ -66,6 +70,12 @@ const queryClient = new QueryClient({
  * that does not exist; `#/servers` never leaves `index.html`.
  */
 export default function App() {
+  // --- slice: chat window ---
+  // A document opened at `#/chat` or `#/chat/<id>` is the separate chat
+  // window. Decided before the client window, and by the initial hash once,
+  // for the same reasons: the window never becomes the launcher.
+  if (isChatWindowHash(window.location.hash)) return <ChatWindowApp />;
+
   // --- slice: client window ---
   // A document opened at `#/client/<id>` is the editing window of one client,
   // and it is a narrower application than the launcher: the query cache, the
@@ -156,6 +166,45 @@ function ClientWindowApp() {
       </ToastsProvider>
     </QueryClientProvider>
   );
+}
+
+// --- slice: chat window ---
+
+/**
+ * The application the chat window runs.
+ *
+ * The query cache, the language and the toast column, like a client window,
+ * then what a chat needs to read: the friends' names and presence, kept by
+ * `friends:*` without the invitation toasts, which belong to the launcher
+ * window alone, and the chat's own `chat:*` subscription in its `window`
+ * role — no notification toasts and no tray labels either. No provider that
+ * owns a connection or a schedule: the core keeps the one live socket.
+ *
+ * The router is there for the route of the open conversation and for the
+ * dialogs a card opens, some of which navigate.
+ */
+function ChatWindowApp() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <LanguageSync />
+      <ToastsProvider>
+        <FriendsEvents />
+        <ChatProvider role="window">
+          <HashRouter>
+            <Routes>
+              <Route path="*" element={<ChatWindowPage />} />
+            </Routes>
+          </HashRouter>
+        </ChatProvider>
+      </ToastsProvider>
+    </QueryClientProvider>
+  );
+}
+
+/** The `friends:*` subscription of `FriendsProvider`, without its invitation toasts. */
+function FriendsEvents() {
+  useFriendsEvents();
+  return null;
 }
 
 // Created only in the main app, including under StrictMode. Client windows

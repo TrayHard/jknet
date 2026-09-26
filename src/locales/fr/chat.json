@@ -20,6 +20,25 @@
     "unpin": "Détacher : flotter au-dessus de la page",
     "close": "Fermer les discussions"
   },
+  "window": {
+    "title": "JKNet Chat",
+    "withOnTop": "{{line}} · toujours au premier plan",
+    "alwaysOnTop": "Toujours au premier plan",
+    "alwaysOnTopOn": "Toujours au premier plan : activé",
+    "alwaysOnTopOff": "Toujours au premier plan : désactivé",
+    "compact": "Mode compact",
+    "full": "Ouvrir la fenêtre de discussion complète",
+    "options": "Options de la fenêtre",
+    "optionsTitle": "Fenêtre",
+    "opacity": "Opacité",
+    "openInLauncher": "Ouvrir dans le lanceur",
+    "onTopNote": "Reste au-dessus du jeu en mode fenêtré ou fenêtré sans bordure. Le plein écran exclusif la masque.",
+    "close": "Fermer la fenêtre de discussion",
+    "strip": "Changer de discussion",
+    "friendsOnline_one": "{{count}} ami en ligne",
+    "friendsOnline_many": "{{count}} d’amis en ligne",
+    "friendsOnline_other": "{{count}} amis en ligne"
+  },
   "surface": {
     "loading": "Chargement de vos discussions…",
     "pick": "Choisissez une discussion à gauche ou cliquez sur « Message » à côté d’un ami."

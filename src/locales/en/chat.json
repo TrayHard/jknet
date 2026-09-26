@@ -18,6 +18,24 @@
     "unpin": "Unpin: float over the page",
     "close": "Close chats"
   },
+  "window": {
+    "title": "JKNet Chat",
+    "friendsOnline_one": "{{count}} friend online",
+    "friendsOnline_other": "{{count}} friends online",
+    "withOnTop": "{{line}} · always on top",
+    "alwaysOnTop": "Always on top",
+    "alwaysOnTopOn": "Always on top: on",
+    "alwaysOnTopOff": "Always on top: off",
+    "compact": "Compact mode",
+    "full": "Open the full chat window",
+    "options": "Window options",
+    "optionsTitle": "Window",
+    "opacity": "Opacity",
+    "openInLauncher": "Open in launcher",
+    "onTopNote": "Stays on top of the game in windowed or borderless mode. Exclusive fullscreen hides it.",
+    "close": "Close the chat window",
+    "strip": "Switch chats"
+  },
   "surface": {
     "loading": "Loading your chats…",
     "pick": "Pick a chat on the left, or press Message next to a friend."

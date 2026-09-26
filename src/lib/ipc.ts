@@ -4292,6 +4292,23 @@ export interface ChatOpenEvent {
   conversationId: string | null;
 }
 
+/**
+ * --- slice: chat window ---
+ * The separate chat window as the core keeps it: the answer of
+ * `chat_window_state` and of its three switches, and the payload of
+ * `chat:window`.
+ */
+export interface ChatWindowView {
+  /** Whether the chat window exists right now. */
+  open: boolean;
+  /** The narrow mode over a game, one conversation at a time. */
+  compact: boolean;
+  /** «Always on top» of the mode the window is in: each mode keeps its own. */
+  alwaysOnTop: boolean;
+  /** Opacity of the compact mode in percent, 40 to 100. The full mode is always opaque. */
+  opacity: number;
+}
+
 /** Payload of `chat:upload`, at most every 250 ms per file. */
 export interface ChatUploadEvent {
   handle: string;
@@ -4332,6 +4349,8 @@ export const chatEvents = {
   draft: "chat:draft",
   notify: "chat:notify",
   open: "chat:open",
+  /** --- slice: chat window --- the mode, the switches or the opacity of the chat window changed. */
+  window: "chat:window",
   upload: "chat:upload",
   download: "chat:download",
   filesStaged: "chat:files-staged",
@@ -4468,7 +4487,17 @@ export const chatIpc = {
       conversationId: conversationId ?? null,
       compact: compact ?? null,
     }),
-  setWindowCompact: (on: boolean) => callChat<void>("chat_window_set_compact", { on }),
+  // --- slice: chat window ---
+  /** The mode, the switches and the opacity of the chat window. */
+  windowState: () => callChat<ChatWindowView>("chat_window_state"),
+  /** The compact mode on or off; with no window open, the mode the next one opens in. */
+  setWindowCompact: (on: boolean) => callChat<ChatWindowView>("chat_window_set_compact", { on }),
+  /** «Always on top» of the mode the window is in. */
+  setWindowAlwaysOnTop: (on: boolean) =>
+    callChat<ChatWindowView>("chat_window_set_always_on_top", { on }),
+  /** The opacity of the compact mode, 40 to 100 percent; anything else is refused. */
+  setWindowOpacity: (opacity: number) =>
+    callChat<ChatWindowView>("chat_window_set_opacity", { opacity }),
   setTrayLabels: (labels: TrayLabels) => callChat<void>("set_tray_labels", { labels }),
 };
 

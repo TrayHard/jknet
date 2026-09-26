@@ -18,6 +18,24 @@
     "unpin": "Lösen: über der Seite schweben",
     "close": "Chats schließen"
   },
+  "window": {
+    "title": "JKNet Chat",
+    "withOnTop": "{{line}} · immer im Vordergrund",
+    "alwaysOnTop": "Immer im Vordergrund",
+    "alwaysOnTopOn": "Immer im Vordergrund: an",
+    "alwaysOnTopOff": "Immer im Vordergrund: aus",
+    "compact": "Kompaktmodus",
+    "full": "Vollständiges Chatfenster öffnen",
+    "options": "Fensteroptionen",
+    "optionsTitle": "Fenster",
+    "opacity": "Deckkraft",
+    "openInLauncher": "Im Launcher öffnen",
+    "onTopNote": "Bleibt im Fenstermodus und im randlosen Fenster über dem Spiel. Exklusiver Vollbildmodus verdeckt es.",
+    "close": "Chatfenster schließen",
+    "strip": "Chat wechseln",
+    "friendsOnline_one": "{{count}} Freund online",
+    "friendsOnline_other": "{{count}} Freunde online"
+  },
   "surface": {
     "loading": "Chats werden geladen…",
     "pick": "Wählen Sie links einen Chat oder klicken Sie bei einem Freund auf „Nachricht“."
