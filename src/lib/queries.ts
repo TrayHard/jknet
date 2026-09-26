@@ -54,6 +54,7 @@ import {
   type ChatCard,
   type ChatCommandDanger,
   type ChatImportTarget,
+  type AppErrorEnvelope,
   // --- slice: chat notifications ---
   appEvents,
   appLifecycleIpc,
@@ -75,6 +76,8 @@ import { applyRead, unreadTotals, type UnreadTotals } from "./chat/unread";
 import { searchReady } from "./chat/search";
 import {
   chatLive,
+  type DownloadEnd,
+  useDownloadEnd,
   useDownloadProgress,
   useDroppedCount,
   useServerChatEnded,
@@ -4260,10 +4263,34 @@ export function useStageChatFiles() {
 export function useChatFileLocal(fileId: string, download: boolean): UseQueryResult<ChatFileLocal> {
   return useQuery({
     queryKey: [...chatKeys.file(fileId), download],
-    queryFn: () => chatIpc.fileLocal(fileId, download),
+    queryFn: () => fileLocalAfterEvents(fileId, download),
     staleTime: Infinity,
     retry: false,
   });
+}
+
+/**
+ * --- slice: chat cards --- asks the core where a file is, and keeps a
+ * `chat:download` that ended the download while the call was out.
+ *
+ * With `download` the core answers `downloading` as soon as it starts; a
+ * download that fails or finishes at once can send its last event before
+ * that answer arrives, and the answer would then leave the file downloading
+ * for good. The end is newer, so it wins.
+ */
+async function fileLocalAfterEvents(fileId: string, download: boolean): Promise<ChatFileLocal> {
+  const mark = chatLive.downloadMark();
+  const local = await chatIpc.fileLocal(fileId, download);
+  const end = chatLive.downloadEndedSince(fileId, mark);
+  return end === null ? local : { status: end.status, path: end.path };
+}
+
+/**
+ * How the last download of a file in this window ended: `remote` after one
+ * started means it failed and may be asked for again.
+ */
+export function useChatDownloadEnd(fileId: string): DownloadEnd | undefined {
+  return useDownloadEnd(fileId);
 }
 
 /** Opens a link of a message from the core. */
@@ -4289,7 +4316,7 @@ export function useChatDownload(fileId: string): ChatDownloadEvent | undefined {
 export function useFetchChatFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (fileId: string) => chatIpc.fileLocal(fileId, true),
+    mutationFn: (fileId: string) => fileLocalAfterEvents(fileId, true),
     onSuccess: (local, fileId) => {
       for (const download of [false, true]) {
         queryClient.setQueryData<ChatFileLocal>([...chatKeys.file(fileId), download], (current) =>
@@ -4542,12 +4569,21 @@ export function useTrayHintEvent(onHint: () => void): void {
   }, []);
 }
 
-/** The separate chat window, raised when it is open already. */
-export function useOpenChatWindow() {
+/**
+ * The separate chat window, raised when it is open already.
+ *
+ * `onError` runs on the mutation rather than on one `mutate`, so it still
+ * runs when the caller is gone by then: **Pop out** closes the drawer at
+ * once, before the core answers.
+ */
+export function useOpenChatWindow(onError?: (error: unknown) => void) {
   return useMutation({
     mutationFn: ({ conversationId, compact }: { conversationId?: string | null; compact?: boolean }) =>
       chatIpc.openWindow(conversationId, compact),
-    onError: (error: unknown) => console.warn(`Opening the chat window failed: ${errorMessage(error)}`),
+    onError: (error: unknown) => {
+      console.warn(`Opening the chat window failed: ${errorMessage(error)}`);
+      onError?.(error);
+    },
   });
 }
 
@@ -4771,7 +4807,23 @@ export interface ChatEventHandlers {
   onRemoved?: (event: ChatRemovedEvent, conversation: Conversation | null) => void;
   /** `chat:open`: the core asks this window to show a conversation. */
   onOpen?: (event: ChatOpenEvent) => void;
+  /** `chat:files-staged`: files dropped on this window that the core did not stage. */
+  onRefused?: (refused: ChatStageRefusal[]) => void;
 }
+
+/** A file dropped on the window that the core refused to stage, and why. */
+export interface ChatStageRefusal {
+  name: string;
+  error: AppErrorEnvelope;
+}
+
+/**
+ * `chat:files-staged` as the core sends it: besides the staged files it
+ * names every dropped file that did not stage (a settings file, bytes holding
+ * the session token, more than 25 MiB, an empty file, a folder, an 11th file).
+ * A core that predates `refused` leaves it out.
+ */
+type ChatFilesStagedPayload = ChatFilesStagedEvent & { refused?: ChatStageRefusal[] };
 
 /**
  * Subscribes to a chat event in Tauri, or to the stand-in bus of `devChat.ts` in a browser.
@@ -5014,9 +5066,15 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
         }
       }),
 
-      listenChat<ChatFilesStagedEvent>(
+      listenChat<ChatFilesStagedPayload>(
         chatEvents.filesStaged,
-        (event) => chatLive.addDropped(event.files),
+        (event) => {
+          chatLive.addDropped(event.files);
+          // --- slice: chat cards --- a file that did not stage is named
+          // with its reason rather than left out without a word.
+          const refused = Array.isArray(event.refused) ? event.refused : [];
+          if (refused.length > 0) latest.current.onRefused?.(refused);
+        },
         true,
       ),
     ];

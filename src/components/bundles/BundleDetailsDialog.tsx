@@ -154,215 +154,215 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
 
   return (
     <>
-    <Dialog
-      title={title}
-      wide
-      onClose={onClose}
-      actions={
-        <>
-          {share.available && details && text ? (
-            <Button
-              variant="ghost"
-              icon={<Share2 size={16} />}
-              onClick={() =>
-                share.open({
-                  kind: "card",
-                  card: bundleCard({ id: details.id, slug: details.slug, name: text.name, game: details.game }),
-                })
-              }
-            >
-              {tChat("share.action")}
-            </Button>
-          ) : null}
-          <Button variant="ghost" onClick={onClose}>
-            {tCommon("actions.close")}
-          </Button>
-        </>
-      }
-    >
-      {record.error ? (
-        <p role="alert" className="text-body-sm text-fg-danger pt-12">
-          {errorText(record.error)}
-        </p>
-      ) : null}
-      {failure ? (
-        <p role="alert" className="text-body-sm text-fg-danger pt-12">
-          {failure}
-        </p>
-      ) : null}
-
-      {details && text ? (
-        <div className="flex flex-col gap-16 pt-16 max-h-[60vh] overflow-y-auto pr-4">
-          {/* Head: who, which version, when; the languages; the engines; the counters; the tags; the links. */}
-          <div className="flex flex-col gap-8">
-            <div className="flex flex-wrap items-center gap-8 text-body-sm text-fg-muted">
-              <Avatar name={details.owner?.displayName ?? null} src={details.owner?.avatarUrl} size="sm" />
-              <span className="text-fg-secondary">
-                {details.owner?.displayName ?? t("card.ownerUnknown")}
-              </span>
-              {version ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>{t("details.version", { label: version.label })}</span>
-                </>
-              ) : null}
-              {version?.publishedAt ? (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span>{t("details.published", { date: format.date(version.publishedAt) })}</span>
-                </>
-              ) : null}
-              {/* The switch stands only on a bundle with a translation. */}
-              <LanguageSwitch languages={languages} value={language} onChange={setPickedLanguage} className="ml-auto" />
-            </div>
-            {version && version.components.length > 0 ? (
-              <p className="text-body-sm text-fg-secondary">
-                {t("card.basedOn", { engines: basedOn(version.components) })}
-              </p>
-            ) : null}
-
-            <div className="flex flex-wrap items-center gap-8">
-              <button
-                type="button"
-                onClick={toggleLike}
-                disabled={!signedIn || like.isPending}
-                aria-pressed={details.likedByMe}
-                aria-label={details.likedByMe ? t("details.unlike") : t("details.like")}
-                title={signedIn ? (details.likedByMe ? t("details.unlike") : t("details.like")) : t("details.likeSignIn")}
-                className={cn(
-                  "inline-flex items-center gap-6 h-28 px-10 rounded-sm border select-none",
-                  "text-body-sm-medium transition-colors duration-150",
-                  "disabled:cursor-not-allowed disabled:text-fg-disabled",
-                  details.likedByMe
-                    ? "border-line-accent bg-accent-subtle text-fg-accent"
-                    : "border-line text-fg-secondary hover:bg-surface-hover cursor-pointer",
-                )}
+      <Dialog
+        title={title}
+        wide
+        onClose={onClose}
+        actions={
+          <>
+            {share.available && details && text ? (
+              <Button
+                variant="ghost"
+                icon={<Share2 size={16} />}
+                onClick={() =>
+                  share.open({
+                    kind: "card",
+                    card: bundleCard({ id: details.id, slug: details.slug, name: text.name, game: details.game }),
+                  })
+                }
               >
-                <Heart size={14} fill={details.likedByMe ? "currentColor" : "none"} aria-hidden />
-                {t("details.likes", { count: details.likes })}
-              </button>
-              <span className="inline-flex items-center gap-4 text-body-sm text-fg-muted">
-                <Download size={14} aria-hidden />
-                {t("details.installs", { count: details.installs })}
-              </span>
-              {installedClients.length > 0 ? (
-                <Badge tone="success" icon={<Check size={12} />}>
-                  {t("card.installed")}
-                </Badge>
+                {tChat("share.action")}
+              </Button>
+            ) : null}
+            <Button variant="ghost" onClick={onClose}>
+              {tCommon("actions.close")}
+            </Button>
+          </>
+        }
+      >
+        {record.error ? (
+          <p role="alert" className="text-body-sm text-fg-danger pt-12">
+            {errorText(record.error)}
+          </p>
+        ) : null}
+        {failure ? (
+          <p role="alert" className="text-body-sm text-fg-danger pt-12">
+            {failure}
+          </p>
+        ) : null}
+
+        {details && text ? (
+          <div className="flex flex-col gap-16 pt-16 max-h-[60vh] overflow-y-auto pr-4">
+            {/* Head: who, which version, when; the languages; the engines; the counters; the tags; the links. */}
+            <div className="flex flex-col gap-8">
+              <div className="flex flex-wrap items-center gap-8 text-body-sm text-fg-muted">
+                <Avatar name={details.owner?.displayName ?? null} src={details.owner?.avatarUrl} size="sm" />
+                <span className="text-fg-secondary">
+                  {details.owner?.displayName ?? t("card.ownerUnknown")}
+                </span>
+                {version ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{t("details.version", { label: version.label })}</span>
+                  </>
+                ) : null}
+                {version?.publishedAt ? (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{t("details.published", { date: format.date(version.publishedAt) })}</span>
+                  </>
+                ) : null}
+                {/* The switch stands only on a bundle with a translation. */}
+                <LanguageSwitch languages={languages} value={language} onChange={setPickedLanguage} className="ml-auto" />
+              </div>
+              {version && version.components.length > 0 ? (
+                <p className="text-body-sm text-fg-secondary">
+                  {t("card.basedOn", { engines: basedOn(version.components) })}
+                </p>
               ) : null}
-              {details.featured ? (
-                <Badge tone="accent" icon={<Star size={12} />}>
-                  {t("card.featured")}
-                </Badge>
+
+              <div className="flex flex-wrap items-center gap-8">
+                <button
+                  type="button"
+                  onClick={toggleLike}
+                  disabled={!signedIn || like.isPending}
+                  aria-pressed={details.likedByMe}
+                  aria-label={details.likedByMe ? t("details.unlike") : t("details.like")}
+                  title={signedIn ? (details.likedByMe ? t("details.unlike") : t("details.like")) : t("details.likeSignIn")}
+                  className={cn(
+                    "inline-flex items-center gap-6 h-28 px-10 rounded-sm border select-none",
+                    "text-body-sm-medium transition-colors duration-150",
+                    "disabled:cursor-not-allowed disabled:text-fg-disabled",
+                    details.likedByMe
+                      ? "border-line-accent bg-accent-subtle text-fg-accent"
+                      : "border-line text-fg-secondary hover:bg-surface-hover cursor-pointer",
+                  )}
+                >
+                  <Heart size={14} fill={details.likedByMe ? "currentColor" : "none"} aria-hidden />
+                  {t("details.likes", { count: details.likes })}
+                </button>
+                <span className="inline-flex items-center gap-4 text-body-sm text-fg-muted">
+                  <Download size={14} aria-hidden />
+                  {t("details.installs", { count: details.installs })}
+                </span>
+                {installedClients.length > 0 ? (
+                  <Badge tone="success" icon={<Check size={12} />}>
+                    {t("card.installed")}
+                  </Badge>
+                ) : null}
+                {details.featured ? (
+                  <Badge tone="accent" icon={<Star size={12} />}>
+                    {t("card.featured")}
+                  </Badge>
+                ) : null}
+                {hasExecutables ? (
+                  <Badge tone="warm" icon={<ShieldAlert size={12} />}>
+                    {t("card.executables")}
+                  </Badge>
+                ) : null}
+              </div>
+
+              {details.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-6">
+                  {details.tags.map((tag) => (
+                    <Badge key={tag} tone="neutral">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
               ) : null}
-              {hasExecutables ? (
-                <Badge tone="warm" icon={<ShieldAlert size={12} />}>
-                  {t("card.executables")}
-                </Badge>
+
+              {details.website || details.discord ? (
+                <div className="flex flex-wrap items-center gap-16 text-body-sm">
+                  {details.website ? (
+                    <ExternalAnchor href={details.website} className="text-fg-accent">
+                      <Globe size={14} aria-hidden />
+                      {t("details.website")}
+                    </ExternalAnchor>
+                  ) : null}
+                  {details.discord ? (
+                    <ExternalAnchor href={details.discord} className="text-fg-accent">
+                      <MessageCircle size={14} aria-hidden />
+                      {t("details.discord")}
+                    </ExternalAnchor>
+                  ) : null}
+                </div>
               ) : null}
             </div>
 
-            {details.tags.length > 0 ? (
-              <div className="flex flex-wrap gap-6">
-                {details.tags.map((tag) => (
-                  <Badge key={tag} tone="neutral">
-                    {tag}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
-
-            {details.website || details.discord ? (
-              <div className="flex flex-wrap items-center gap-16 text-body-sm">
-                {details.website ? (
-                  <ExternalAnchor href={details.website} className="text-fg-accent">
-                    <Globe size={14} aria-hidden />
-                    {t("details.website")}
-                  </ExternalAnchor>
-                ) : null}
-                {details.discord ? (
-                  <ExternalAnchor href={details.discord} className="text-fg-accent">
-                    <MessageCircle size={14} aria-hidden />
-                    {t("details.discord")}
-                  </ExternalAnchor>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          {/* The description in the language picked, as the author wrote it in
-              Markdown; the summary stands in for an empty one. Keyed by the
-              language so a switch draws the other text from the top. */}
-          <MarkdownView
-            key={language}
-            markdown={text.description}
-            empty={
-              text.summary.trim() !== "" ? (
-                <p className="text-body-sm text-fg-secondary">{text.summary}</p>
-              ) : (
-                <p className="text-body-sm text-fg-muted">{t("details.noDescription")}</p>
-              )
-            }
-          />
-
-          {/* Components, shared files, shared configs. */}
-          {version === null ? (
-            <p className="text-body-sm text-fg-muted">
-              {picked.error ? errorText(picked.error) : tCommon("states.loading")}
-            </p>
-          ) : (
-            <BundleManifestView
-              manifest={version.manifest}
-              engineKnown={engineKnown}
-              source={{ kind: "bundle", bundleId, versionId: version.id }}
+            {/* The description in the language picked, as the author wrote it in
+                Markdown; the summary stands in for an empty one. Keyed by the
+                language so a switch draws the other text from the top. */}
+            <MarkdownView
+              key={language}
+              markdown={text.description}
+              empty={
+                text.summary.trim() !== "" ? (
+                  <p className="text-body-sm text-fg-secondary">{text.summary}</p>
+                ) : (
+                  <p className="text-body-sm text-fg-muted">{t("details.noDescription")}</p>
+                )
+              }
             />
-          )}
 
-          {/* Versions */}
-          {details.versions.length > 0 ? (
-            <Section heading={t("details.versions")}>
-              <ul className="flex flex-col divide-y divide-line-subtle rounded-md border border-line-subtle">
-                {details.versions.map((entry) => (
-                  <VersionRow
-                    key={entry.id}
-                    version={entry}
-                    selected={entry.id === (version?.id ?? latest?.id)}
-                    onSelect={() => setPickedVersionId(entry.id)}
-                  />
-                ))}
-              </ul>
-              {picked.error ? (
-                <p className="text-body-sm text-fg-danger">{errorText(picked.error)}</p>
-              ) : null}
-            </Section>
-          ) : null}
-
-          {/* Install */}
-          <Section heading={t("details.install.heading")}>
+            {/* Components, shared files, shared configs. */}
             {version === null ? (
-              <p className="text-body-sm text-fg-muted">{t("details.install.noVersion")}</p>
+              <p className="text-body-sm text-fg-muted">
+                {picked.error ? errorText(picked.error) : tCommon("states.loading")}
+              </p>
             ) : (
-              <BundleInstallForm
-                key={version.id}
-                components={components}
-                defaultName={text.name}
-                hasExecutables={hasExecutables}
-                job={job}
-                installedClients={installedClients}
-                onInstall={runInstall}
-                onOpenClient={(clientId) => {
-                  setFailure(null);
-                  openClientWindow(clientId).catch((e: unknown) => setFailure(errorText(e)));
-                }}
+              <BundleManifestView
+                manifest={version.manifest}
+                engineKnown={engineKnown}
+                source={{ kind: "bundle", bundleId, versionId: version.id }}
               />
             )}
-          </Section>
-        </div>
-      ) : record.isLoading ? (
-        <p className="text-body-sm text-fg-muted pt-16">{tCommon("states.loading")}</p>
-      ) : null}
-    </Dialog>
-    {share.dialog}
+
+            {/* Versions */}
+            {details.versions.length > 0 ? (
+              <Section heading={t("details.versions")}>
+                <ul className="flex flex-col divide-y divide-line-subtle rounded-md border border-line-subtle">
+                  {details.versions.map((entry) => (
+                    <VersionRow
+                      key={entry.id}
+                      version={entry}
+                      selected={entry.id === (version?.id ?? latest?.id)}
+                      onSelect={() => setPickedVersionId(entry.id)}
+                    />
+                  ))}
+                </ul>
+                {picked.error ? (
+                  <p className="text-body-sm text-fg-danger">{errorText(picked.error)}</p>
+                ) : null}
+              </Section>
+            ) : null}
+
+            {/* Install */}
+            <Section heading={t("details.install.heading")}>
+              {version === null ? (
+                <p className="text-body-sm text-fg-muted">{t("details.install.noVersion")}</p>
+              ) : (
+                <BundleInstallForm
+                  key={version.id}
+                  components={components}
+                  defaultName={text.name}
+                  hasExecutables={hasExecutables}
+                  job={job}
+                  installedClients={installedClients}
+                  onInstall={runInstall}
+                  onOpenClient={(clientId) => {
+                    setFailure(null);
+                    openClientWindow(clientId).catch((e: unknown) => setFailure(errorText(e)));
+                  }}
+                />
+              )}
+            </Section>
+          </div>
+        ) : record.isLoading ? (
+          <p className="text-body-sm text-fg-muted pt-16">{tCommon("states.loading")}</p>
+        ) : null}
+      </Dialog>
+      {share.dialog}
     </>
   );
 }

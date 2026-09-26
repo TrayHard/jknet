@@ -143,8 +143,8 @@ pub struct ChatState {
     files: Mutex<files::FileBook>,
     /// When a typing hint last went out, by conversation.
     typing_sent: Mutex<HashMap<String, Instant>>,
-    /// Read markers waiting for the debounce, by conversation.
-    read_pending: Mutex<HashMap<String, u64>>,
+    /// Read markers on their way to the service.
+    read_pending: Mutex<sync::ReadMarks>,
     read_flush: AtomicBool,
     state_pending: AtomicBool,
     /// Wakes the sync task for a resync outside the connection epoch.
@@ -170,7 +170,7 @@ impl Default for ChatState {
             staged: Mutex::new(HashMap::new()),
             files: Mutex::new(files::FileBook::default()),
             typing_sent: Mutex::new(HashMap::new()),
-            read_pending: Mutex::new(HashMap::new()),
+            read_pending: Mutex::new(sync::ReadMarks::default()),
             read_flush: AtomicBool::new(false),
             state_pending: AtomicBool::new(false),
             wake: Notify::new(),
@@ -583,6 +583,17 @@ impl Book {
     /// defaults, which share.
     pub fn shares_typing(&self) -> bool {
         self.privacy.as_ref().is_none_or(|privacy| privacy.share_typing)
+    }
+
+    /// Whether a typing hint for this conversation may go out: the player
+    /// shares typing and may write there. The composer of a read-only
+    /// conversation is gone, and this holds when a call comes anyway.
+    pub fn may_type(&self, conversation_id: &str) -> bool {
+        self.shares_typing()
+            && self
+                .summaries
+                .get(conversation_id)
+                .is_some_and(|summary| summary.can_send)
     }
 
     /// The summaries, newest activity first.
@@ -1040,8 +1051,9 @@ pub async fn chat_mark_read(app: AppHandle, conversation_id: String) -> Result<(
 }
 
 /// Tells the other members the player is typing: at most once every 3 s per
-/// conversation, and never while the player hides typing (D8). A hint with
-/// no socket to carry it is dropped.
+/// conversation, never while the player hides typing (D8), and never where
+/// the player cannot write (a direct conversation with a former friend, D2).
+/// A hint with no socket to carry it is dropped.
 #[tauri::command]
 pub async fn chat_typing(
     app: AppHandle,
@@ -1050,7 +1062,7 @@ pub async fn chat_typing(
 ) -> Result<()> {
     let conversation_id = path_segment(&conversation_id)?.to_string();
     let chat = app.state::<ChatState>();
-    if !chat.book().shares_typing() {
+    if !chat.book().may_type(&conversation_id) {
         return Ok(());
     }
     let now = Instant::now();
@@ -1683,6 +1695,24 @@ mod tests {
             ..ChatPrivacy::default()
         }));
         assert!(!book.shares_typing());
+    }
+
+    #[test]
+    fn a_typing_hint_goes_only_where_the_player_may_write() {
+        let mut read_only = conversation("unfriended", 3, 3);
+        read_only.can_send = false;
+        let mut book = book_with(vec![conversation("dm", 3, 3), read_only]);
+        assert!(book.may_type("dm"));
+        // The friendship ended: the direct conversation is read-only (D2).
+        assert!(!book.may_type("unfriended"));
+        // Nothing is known of this one yet.
+        assert!(!book.may_type("unknown"));
+        // Hiding typing silences every conversation (D8).
+        book.set_privacy(ChatPrivacy {
+            share_typing: false,
+            ..ChatPrivacy::default()
+        });
+        assert!(!book.may_type("dm"));
     }
 
     #[test]

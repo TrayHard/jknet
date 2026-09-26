@@ -226,34 +226,65 @@ where
     }
 }
 
+/// How long a sign-in waits before it tries again after the service said it
+/// signed in too many players from this address (30 requests a minute, three
+/// per sign-in), and how many times it tries.
+const SIGN_IN_RETRY: Duration = Duration::from_secs(10);
+const SIGN_IN_ATTEMPTS: u32 = 9;
+
 /// Signs in through the `dev` provider, browser step and all.
 ///
 /// The launcher opens `session.url` in the system browser and lets the player
 /// type a name; this does the same two requests with `reqwest`, because that
 /// form is the whole of the `dev` provider.
+///
+/// The service lets ten sign-ins a minute through from one address, and the
+/// chat scenarios sign in more players than that, so a sign-in the service
+/// refused as too many is tried again a little later.
 pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player {
     let anonymous = OnlineContext {
         base_url: DEV_ONLINE_URL.into(),
         token: None,
     };
-    let session = client
-        .create_login_session(&anonymous, "dev", Some("cargo test"))
-        .await
-        .expect("the service is running with JKNET_ONLINE_DEV_PROVIDER=1");
-    println!("POST /v1/auth/login-sessions -> {} {}", session.id, session.status);
-
     let browser = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .expect("a client");
+    for attempt in 1..=SIGN_IN_ATTEMPTS {
+        if let Some(player) = try_sign_in(client, &browser, &anonymous, display_name).await {
+            return player;
+        }
+        println!("sign-in of {display_name} refused as too many, attempt {attempt}; waiting");
+        tokio::time::sleep(SIGN_IN_RETRY).await;
+    }
+    panic!("the service kept refusing the sign-in of {display_name} as too many");
+}
+
+/// One sign-in; `None` when the service refused a step as too many.
+async fn try_sign_in(
+    client: &OnlineClient,
+    browser: &reqwest::Client,
+    anonymous: &OnlineContext,
+    display_name: &str,
+) -> Option<Player> {
+    let session = match client
+        .create_login_session(anonymous, "dev", Some("cargo test"))
+        .await
+    {
+        Err(crate::error::AppError::Online { code, .. }) if code == "rate_limited" => return None,
+        other => other.expect("the service is running with JKNET_ONLINE_DEV_PROVIDER=1"),
+    };
+    println!("POST /v1/auth/login-sessions -> {} {}", session.id, session.status);
+
     let form = browser
         .get(&session.url)
         .send()
         .await
-        .expect("the dev form answers")
-        .text()
-        .await
-        .expect("the dev form is text");
+        .expect("the dev form answers");
+    if form.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return None;
+    }
+    let form = form.text().await.expect("the dev form is text");
     let state = hidden_state(&form).expect("the dev form carries a state");
 
     // The contract puts a `code` here; the `dev` provider has no authorization
@@ -267,9 +298,12 @@ pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player
         .await
         .expect("the callback answers");
     println!("GET /v1/auth/dev/callback -> {}", done.status().as_u16());
+    if done.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        return None;
+    }
 
     let polled = client
-        .poll_login_session(&anonymous, &session.id)
+        .poll_login_session(anonymous, &session.id)
         .await
         .expect("the session reads back");
     let token = polled.token.expect("the first read after done carries a token");
@@ -285,7 +319,7 @@ pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player
     // Both fields are absent rather than null while the session is pending,
     // which is the shape `LoginSession` is written for.
     let again = client
-        .poll_login_session(&anonymous, &session.id)
+        .poll_login_session(anonymous, &session.id)
         .await
         .expect("a second read works");
     assert!(again.token.is_none(), "the token was handed out twice");
@@ -297,14 +331,14 @@ pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player
         if again.user.is_some() { "present" } else { "absent" },
     );
 
-    Player {
+    Some(Player {
         name: user.display_name.clone(),
         user,
         ctx: OnlineContext {
             base_url: DEV_ONLINE_URL.into(),
             token: Some(token),
         },
-    }
+    })
 }
 
 /// Pulls `value` out of `<input type="hidden" name="state" value="…">`.

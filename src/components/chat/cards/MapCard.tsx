@@ -42,7 +42,8 @@ export function MapCardView({ card, fields }: CardViewProps<"map">) {
   const session = useHostSession().data ?? null;
   const check = useCheckedCard();
   const [copied, flashCopied] = useFlash();
-  const [asking, setAsking] = useState<"change" | "host" | null>(null);
+  // The dialogs act on the card as the core checked it, not as it was drawn.
+  const [asking, setAsking] = useState<{ kind: "change" | "host"; fields: MapCardFields } | null>(null);
   const [broken, setBroken] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
@@ -90,7 +91,7 @@ export function MapCardView({ card, fields }: CardViewProps<"map">) {
               disabled={check.checking || blocked}
               onClick={() =>
                 check.run(card, (clean) => {
-                  if (clean.type === "map") setAsking(running ? "change" : "host");
+                  if (clean.type === "map") setAsking({ kind: running ? "change" : "host", fields: clean.fields });
                 })
               }
             >
@@ -116,24 +117,24 @@ export function MapCardView({ card, fields }: CardViewProps<"map">) {
           ) : null
         }
       />
-      {asking === "change" && session !== null ? (
+      {asking?.kind === "change" && session !== null ? (
         <ChangeMapDialog
-          fields={fields}
+          fields={asking.fields}
           gametype={session.settings.gametype}
           onClose={() => setAsking(null)}
           onDone={() => {
             setAsking(null);
-            setDone(t("cards.map.changed", { map: fields.name }));
+            setDone(t("cards.map.changed", { map: asking.fields.name }));
           }}
         />
       ) : null}
-      {asking === "host" ? (
+      {asking?.kind === "host" ? (
         <HostMapDialog
-          fields={fields}
+          fields={asking.fields}
           onClose={() => setAsking(null)}
           onDone={() => {
             setAsking(null);
-            setDone(t("cards.map.started", { map: fields.name }));
+            setDone(t("cards.map.started", { map: asking.fields.name }));
           }}
         />
       ) : null}

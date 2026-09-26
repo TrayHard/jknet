@@ -2081,6 +2081,8 @@ const chats = new Map();
 const chatFiles = new Map();
 /** Group invites addressed to this account. */
 let groupInvites = [];
+/** Groups whose invite this account declined: they may not ask again yet. */
+const declinedInvites = new Set();
 /** The account's chat settings: both privacy switches are reciprocal. */
 let chatSettings = defaultChatSettings();
 /** A global counter standing in for `chat_messages.pk`: the search cursor. */
@@ -2180,6 +2182,7 @@ function seedChat() {
   chats.clear();
   chatFiles.clear();
   groupInvites = [];
+  declinedInvites.clear();
   chatSettings = defaultChatSettings();
   chatPk = 0;
   typingSeen.length = 0;
@@ -2219,7 +2222,7 @@ function seedChat() {
   for (const userId of [cast.kyle.id, me, cast.jan.id, cast.mara.id]) {
     addMember(school, userId, { role: userId === cast.kyle.id ? "owner" : "member", joinedAt: minutesAgo(240) });
   }
-  systemPost(school, "created", { by: cast.kyle.id });
+  systemPost(school, "created", { by: cast.kyle.id, title: "Saber school" });
   post(school, cast.kyle.id, "Welcome to saber school!", { at: minutesAgo(230) });
   const farewell = post(school, null, "I'm off for a while, thanks <@" + me + ">", { at: minutesAgo(200) });
   systemPost(school, "memberLeft", { userId: deletedId });
@@ -2246,7 +2249,7 @@ function seedChat() {
   const raid = newConversation("group", { ownerId: cast.mara.id, title: "Night raid", createdAt: minutesAgo(20) });
   addMember(raid, cast.mara.id, { role: "owner" });
   addMember(raid, cast.kyle.id);
-  systemPost(raid, "created", { by: cast.mara.id });
+  systemPost(raid, "created", { by: cast.mara.id, title: "Night raid" });
   groupInvites = [{ conversationId: raid.id, invitedBy: cast.mara.id, createdAt: minutesAgo(15), expiresAt: later(7 * 24 * 60 * 60_000) }];
 }
 
@@ -2272,13 +2275,15 @@ function messageWire(conversation, message) {
           excerpt: chatText(replied.body).slice(0, 140),
         };
   }
-  const system = message.system
-    ? {
-        ...message.system,
-        userId: message.system.userId && userById(message.system.userId) ? message.system.userId : null,
-        by: message.system.by && userById(message.system.by) ? message.system.by : null,
-      }
-    : null;
+  // Only the ids a system message names are rewritten; one it does not name
+  // stays out, as in the service's rows.
+  let system = null;
+  if (message.system) {
+    system = { ...message.system };
+    for (const key of ["userId", "by"]) {
+      if (key in system) system[key] = system[key] && userById(system[key]) ? system[key] : null;
+    }
+  }
   return {
     conversationId: conversation.id,
     seq: message.seq,
@@ -2374,11 +2379,25 @@ function myConversations() {
     .sort((a, b) => String(b.lastMessageAt ?? b.createdAt).localeCompare(String(a.lastMessageAt ?? a.createdAt)));
 }
 
+/** The account's files as the service counts them: ready ones, and pending
+ *  ones registered within the hour. `nextFreeAt` is when the first of them
+ *  stops counting: a sent one with its message after the 90 days, an unsent
+ *  one an hour after it was registered. */
 function chatQuota() {
-  const usedBytes = [...chatFiles.values()]
-    .filter((file) => file.uploaderId === account.id)
-    .reduce((sum, file) => sum + file.size, 0);
-  return { usedBytes, quotaBytes: CHAT_QUOTA_BYTES, nextFreeAt: null };
+  const hour = 60 * 60_000;
+  const counted = [...chatFiles.values()].filter(
+    (file) => file.uploaderId === account.id && (file.status === "ready" || Date.parse(file.createdAt) > Date.now() - hour),
+  );
+  const frees = counted.map((file) => {
+    if (file.messageSeq == null) return Date.parse(file.createdAt) + hour;
+    const message = chats.get(file.conversationId)?.messages.find((entry) => entry.seq === file.messageSeq);
+    return Date.parse(message?.createdAt ?? file.createdAt) + 90 * 24 * hour;
+  });
+  return {
+    usedBytes: counted.reduce((sum, file) => sum + file.size, 0),
+    quotaBytes: CHAT_QUOTA_BYTES,
+    nextFreeAt: frees.length > 0 ? new Date(Math.min(...frees)).toISOString().replace(/\.\d{3}Z$/, "Z") : null,
+  };
 }
 
 function syncDoc() {
@@ -2456,6 +2475,33 @@ function noConversation(response) {
   return fail(response, 404, "not_found", "No such conversation");
 }
 
+/** The paths of the chat routes, whatever the method. */
+const CHAT_ROUTES = [
+  /^\/v1\/chat\/conversations$/,
+  /^\/v1\/chat\/conversations\/[^/]+(?:\/(?:messages|read|reactions|notify))?$/,
+  /^\/v1\/chat\/conversations\/[^/]+\/members\/[^/]+$/,
+  /^\/v1\/chat\/direct\/[^/]+$/,
+  /^\/v1\/chat\/groups$/,
+  /^\/v1\/chat\/groups\/[^/]+(?:\/(?:members|join))?$/,
+  /^\/v1\/chat\/groups\/[^/]+\/invites\/[^/]+$/,
+  /^\/v1\/chat\/servers\/[^/]+(?:\/join)?$/,
+  /^\/v1\/chat\/search$/,
+  /^\/v1\/chat\/files$/,
+  /^\/v1\/chat\/files\/[^/]+\/content$/,
+  /^\/v1\/chat\/settings$/,
+];
+
+/** What the service's router answers a request it has no route for: `405`
+ *  for a chat path asked with a method it does not take, and the `404 No
+ *  such endpoint` of a service without chat only for a path it does not
+ *  know, since that `404` is what turns the launcher's chat off. */
+function noChatRoute(response, path) {
+  if (CHAT_ROUTES.some((route) => route.test(path))) {
+    return fail(response, 405, "invalid", "Method Not Allowed");
+  }
+  return notFound(response);
+}
+
 function routeChat(request, response, url, path, method, body) {
   const me = account.id;
   if (path === "/v1/chat/conversations" && method === "GET") return send(response, 200, syncDoc());
@@ -2471,7 +2517,7 @@ function routeChat(request, response, url, path, method, body) {
     if (action === "read" && method === "POST") return chatRead(response, conversation, body);
     if (action === "reactions" && method === "PUT") return chatReact(response, conversation, body);
     if (action === "notify" && method === "PUT") return chatNotify(response, conversation, body);
-    return notFound(response);
+    return noChatRoute(response, path);
   }
 
   const memberMatch = path.match(/^\/v1\/chat\/conversations\/([^/]+)\/members\/([^/]+)$/);
@@ -2489,24 +2535,33 @@ function routeChat(request, response, url, path, method, body) {
     if (!conversation.members.has(me)) return noConversation(response);
     if (!groupMatch[2] && method === "PATCH") return chatPatchGroup(response, conversation, body);
     if (groupMatch[2] === "members" && method === "POST") return chatAddMembers(response, conversation, body);
-    return notFound(response);
+    return noChatRoute(response, path);
   }
   const inviteMatch = path.match(/^\/v1\/chat\/groups\/([^/]+)\/invites\/([^/]+)$/);
   if (inviteMatch && method === "DELETE") {
-    const before = groupInvites.length;
+    const conversationId = inviteMatch[1];
     if (inviteMatch[2] === me) {
-      groupInvites = groupInvites.filter((invite) => invite.conversationId !== inviteMatch[1]);
-      if (groupInvites.length !== before) broadcastChat("chat.groupInvite.removed", { conversationId: inviteMatch[1] });
-      return send(response, 204, null);
+      // Declining keeps the group from asking again for a day; declining
+      // twice is answered like declining once, as on the service.
+      const invite = groupInvites.find((entry) => entry.conversationId === conversationId);
+      if (invite) {
+        groupInvites = groupInvites.filter((entry) => entry !== invite);
+        declinedInvites.add(conversationId);
+        broadcastChat("chat.groupInvite.removed", { conversationId });
+        return send(response, 204, null);
+      }
+      if (declinedInvites.has(conversationId)) return send(response, 204, null);
+      return fail(response, 404, "not_found", "That invite is gone");
     }
-    const conversation = chats.get(inviteMatch[1]);
-    if (!conversation || !conversation.members.has(me)) return noConversation(response);
-    return send(response, 204, null);
+    const conversation = chats.get(conversationId);
+    if (!conversation || !conversation.members.has(me) || conversation.kind !== "group") return noConversation(response);
+    // The cast keeps no invites the account sent: there is none to cancel.
+    return fail(response, 404, "not_found", "No pending invite for that player");
   }
 
-  const serverMatch = path.match(/^\/v1\/chat\/servers\/([0-9a-f]{16})(\/join)?$/);
+  const serverMatch = path.match(/^\/v1\/chat\/servers\/([^/]+)(\/join)?$/);
   if (serverMatch) {
-    const sessionId = serverMatch[1];
+    const sessionId = decodeURIComponent(serverMatch[1]).trim().toLowerCase();
     if (serverMatch[2] && method === "POST") return chatJoinServer(response, sessionId, body);
     if (!serverMatch[2] && method === "PUT") return chatOpenServer(response, sessionId);
     if (!serverMatch[2] && method === "PATCH") return chatPatchServer(response, sessionId, body);
@@ -2518,7 +2573,7 @@ function routeChat(request, response, url, path, method, body) {
       }
       return send(response, 204, null);
     }
-    return notFound(response);
+    return noChatRoute(response, path);
   }
 
   if (path === "/v1/chat/search" && method === "GET") return chatSearch(response, url);
@@ -2540,7 +2595,7 @@ function routeChat(request, response, url, path, method, body) {
       }
     }
     if (body?.groupAdd !== undefined) {
-      if (!["friends", "ask"].includes(body.groupAdd)) return fail(response, 400, "invalid", "groupAdd must be friends or ask");
+      if (!["friends", "ask"].includes(body.groupAdd)) return refuse(response, 400, "invalid", "invalid", "groupAdd must be 'friends' or 'ask'");
       next.groupAdd = body.groupAdd;
     }
     chatSettings = next;
@@ -2548,7 +2603,7 @@ function routeChat(request, response, url, path, method, body) {
     return send(response, 200, chatSettings);
   }
 
-  return notFound(response);
+  return noChatRoute(response, path);
 }
 
 function chatHistory(response, conversation, url) {
@@ -2558,11 +2613,16 @@ function chatHistory(response, conversation, url) {
   const before = number("before");
   const after = number("after");
   const around = number("around");
+  if ([before, after, around].filter((anchor) => anchor !== null).length > 1) {
+    return fail(response, 400, "invalid", "Pass at most one of before, after and around");
+  }
   let page;
   if (around !== null) {
+    // Half of the page before the anchor and the rest from it on, however
+    // many of either there are, as the service cuts it.
     const half = Math.floor(limit / 2);
-    const older = visible.filter((message) => message.seq < around).slice(-half);
-    const newer = visible.filter((message) => message.seq >= around).slice(0, limit - older.length);
+    const older = half > 0 ? visible.filter((message) => message.seq < around).slice(-half) : [];
+    const newer = visible.filter((message) => message.seq >= around).slice(0, limit - half);
     page = [...older, ...newer];
   } else if (before !== null) {
     page = visible.filter((message) => message.seq < before).slice(-limit);
@@ -2593,30 +2653,43 @@ function checkCard(card) {
   if (JSON.stringify(card).length > 8 * 1024 && card.type !== "config") return null;
   if (card.type !== "hostInvite") return card;
   const hosting = presence.hosting;
-  if (!hosting || hosting.sessionId !== card.sessionId) return null;
+  const sessionId = String(card.sessionId ?? "").trim().toLowerCase();
+  if (!hosting || hosting.sessionId !== sessionId) return null;
   // The service fills what the card may say about the server from the live
-  // hosting; the password and the addresses never reach it.
-  return {
+  // hosting; the password and the addresses never reach it. What the
+  // hosting does not name stays out of the card rather than `null`.
+  const filled = {
     type: "hostInvite",
     v: 1,
     fallbackText: String(card.fallbackText ?? "").slice(0, 200),
-    sessionId: hosting.sessionId,
-    name: card.name ?? null,
+    sessionId,
+    name: card.name,
     hostId: account.id,
     game: hosting.game,
-    mod: hosting.mod ?? null,
-    map: hosting.map ?? null,
-    gametype: hosting.gametype ?? null,
+    mod: hosting.mod,
+    map: hosting.map,
+    gametype: hosting.gametype,
   };
+  return Object.fromEntries(Object.entries(filled).filter(([, value]) => value != null));
+}
+
+/** The service's rule for a `clientId`: 1 to 64 of `A-Z a-z 0-9 - _`. */
+function isClientId(clientId) {
+  return /^[0-9A-Za-z_-]{1,64}$/.test(clientId);
 }
 
 function chatSend(response, conversation, body) {
   const me = account.id;
-  const clientId = String(body?.clientId ?? "");
-  if (!/^[0-9A-Za-z]{10,32}$/.test(clientId)) return fail(response, 400, "invalid", "clientId must be a ULID");
+  const clientId = String(body?.clientId ?? "").trim();
+  if (!isClientId(clientId)) return fail(response, 400, "invalid", "clientId must be the ULID the launcher made");
   for (const other of chats.values()) {
     const stored = other.messages.find((message) => message.senderId === me && message.clientId === clientId);
-    if (stored) return send(response, 200, messageWire(other, stored));
+    if (!stored) continue;
+    // A replay answers the stored message, and only in its own conversation.
+    if (other !== conversation) {
+      return fail(response, 409, "conflict", "This clientId belongs to a message of another conversation");
+    }
+    return send(response, 200, messageWire(other, stored));
   }
   if (!canSend(conversation)) return refuse(response, 403, "forbidden", "not_friends", "You can only read this conversation");
   const text = cleanBody(body?.body);
@@ -2628,7 +2701,12 @@ function chatSend(response, conversation, body) {
   const cards = rawCards.map(checkCard);
   if (cards.some((card) => card === null)) return refuse(response, 400, "invalid", "card", "A card is not one this service knows");
   const fileIds = Array.isArray(body?.fileIds) ? body.fileIds.map(String) : [];
-  if (fileIds.length > CHAT_MAX_FILES) return fail(response, 400, "invalid", `A message carries at most ${CHAT_MAX_FILES} files`);
+  if (fileIds.length > CHAT_MAX_FILES) {
+    return refuse(response, 400, "invalid", "files", `A message carries at most ${CHAT_MAX_FILES} files`);
+  }
+  if (new Set(fileIds).size !== fileIds.length) {
+    return refuse(response, 400, "invalid", "files", "A file appears twice in the message");
+  }
   for (const fileId of fileIds) {
     const file = chatFiles.get(fileId);
     if (!file) return refuse(response, 404, "not_found", "file_gone", "That file is gone; upload it again");
@@ -2636,17 +2714,20 @@ function chatSend(response, conversation, body) {
       return refuse(response, 409, "conflict", "file_not_ready", "That file is not ready to be sent");
     }
   }
-  if (!text.trim() && cards.length === 0 && fileIds.length === 0) {
-    return refuse(response, 400, "invalid", "empty", "A message needs text, a card or a file");
-  }
   const visible = visibleMessages(conversation);
   const replySeq = visible.some((message) => message.seq === body?.replySeq && message.kind === "user") ? body.replySeq : null;
-  // Tokens of people who are not members become plain names.
-  const cleaned = text.replace(/<@([0-9A-Za-z]+)>/g, (token, userId) => {
-    if (conversation.members.has(userId)) return token;
-    const user = userById(userId);
-    return user ? `@${user.displayName}` : "";
-  });
+  // Tokens of people who are not members become plain names, and the text
+  // is stored trimmed, so a body of a gone account's token alone is empty.
+  const cleaned = text
+    .replace(/<@([0-9A-Za-z]+)>/g, (token, userId) => {
+      if (conversation.members.has(userId)) return token;
+      const user = userById(userId);
+      return user ? `@${user.displayName}` : "";
+    })
+    .trim();
+  if (!cleaned && cards.length === 0 && fileIds.length === 0) {
+    return refuse(response, 400, "invalid", "empty", "The message is empty");
+  }
   const message = post(conversation, me, cleaned, { cards, fileIds, replySeq, clientId });
   announceMessage(conversation, message);
   scriptReply(conversation, message);
@@ -2657,8 +2738,12 @@ function chatRead(response, conversation, body) {
   const member = conversation.members.get(account.id);
   const seq = Number(body?.seq);
   if (!Number.isInteger(seq) || seq < 0) return fail(response, 400, "invalid", "seq must be a whole number");
+  const before = member.readSeq;
   member.readSeq = Math.max(member.readSeq, Math.min(seq, conversation.lastSeq));
-  broadcastChat("chat.read", { conversationId: conversation.id, userId: account.id, seq: member.readSeq });
+  // Only a marker that moved is told, as on the service.
+  if (member.readSeq > before) {
+    broadcastChat("chat.read", { conversationId: conversation.id, userId: account.id, seq: member.readSeq });
+  }
   return send(response, 200, { readSeq: member.readSeq });
 }
 
@@ -2669,28 +2754,38 @@ function isEmoji(text) {
   return !/[ -~]/.test(value.replace(/[0-9#*](?=[️⃣])/g, ""));
 }
 
+/** The service's checks, in its order: a readable conversation, one emoji
+ *  (`emoji`), a message the account sees (`404`), a player's message (`400`
+ *  without a reason), then the limits (`reactions`). A reaction put on twice,
+ *  or taken off when it is not there, changes nothing and tells nobody. */
 function chatReact(response, conversation, body) {
   const me = account.id;
-  const message = visibleMessages(conversation).find((entry) => entry.seq === body?.seq && entry.kind === "user");
-  if (!message) return fail(response, 404, "not_found", "No such message");
   if (!canSend(conversation)) return refuse(response, 403, "forbidden", "not_friends", "You can only read this conversation");
-  if (!isEmoji(body?.emoji)) return fail(response, 400, "invalid", "That is not an emoji");
+  if (!isEmoji(body?.emoji)) return refuse(response, 400, "invalid", "emoji", "A reaction is one emoji");
+  const message = visibleMessages(conversation).find((entry) => entry.seq === body?.seq);
+  if (!message) return fail(response, 404, "not_found", "Message not found");
+  if (message.kind !== "user") return fail(response, 400, "invalid", "A system message takes no reactions");
   const emoji = body.emoji;
   const on = body?.on !== false;
+  let changed = false;
   if (on) {
     const mine = [...message.reactions.values()].filter((users) => users.has(me)).length;
     if (!message.reactions.get(emoji)?.has(me)) {
-      if (mine >= 3) return fail(response, 400, "invalid", "At most three reactions per message");
+      if (mine >= 3) return refuse(response, 400, "invalid", "reactions", "You put at most three emoji on one message");
       if (!message.reactions.has(emoji) && message.reactions.size >= 20) {
-        return fail(response, 400, "invalid", "At most twenty different reactions per message");
+        return refuse(response, 400, "invalid", "reactions", "A message carries at most twenty different emoji");
       }
       message.reactions.set(emoji, new Set([...(message.reactions.get(emoji) ?? []), me]));
+      changed = true;
     }
-  } else if (message.reactions.has(emoji)) {
+  } else if (message.reactions.get(emoji)?.has(me)) {
     message.reactions.get(emoji).delete(me);
     if (message.reactions.get(emoji).size === 0) message.reactions.delete(emoji);
+    changed = true;
   }
-  broadcastChat("chat.reaction", { conversationId: conversation.id, seq: message.seq, userId: me, emoji, on });
+  if (changed) {
+    broadcastChat("chat.reaction", { conversationId: conversation.id, seq: message.seq, userId: me, emoji, on });
+  }
   return send(response, 200, {
     seq: message.seq,
     reactions: [...message.reactions].map(([key, users]) => ({ emoji: key, userIds: [...users] })),
@@ -2706,10 +2801,11 @@ function chatNotify(response, conversation, body) {
 
 function chatOpenDirect(response, userId) {
   const me = account.id;
-  if (userId === me || !userById(userId)) return fail(response, 404, "not_found", "No such player");
+  if (userId === me) return fail(response, 400, "invalid", "You cannot open a conversation with yourself");
+  if (!userById(userId)) return fail(response, 404, "not_found", "No player with that id");
   const existing = [...chats.values()].find((conversation) => conversation.kind === "direct" && conversation.peerId === userId);
   if (existing) return send(response, 200, conversationWire(existing));
-  if (!isFriend(userId)) return fail(response, 404, "not_found", "No such player");
+  if (!isFriend(userId)) return fail(response, 404, "not_found", "You are not friends with this player");
   const conversation = newConversation("direct", { peerId: userId });
   addMember(conversation, me);
   addMember(conversation, userId);
@@ -2720,81 +2816,116 @@ function chatOpenDirect(response, userId) {
 /** Adds a member after its join message, which is the first message it sees
  *  unless the conversation shows history to new members (D1). */
 function join(conversation, userId, event, by) {
-  const message = systemPost(conversation, event, { userId, by });
+  const message = systemPost(conversation, event, by === undefined ? { userId } : { userId, by });
   addMember(conversation, userId, { visibleFromSeq: conversation.historyForNewMembers ? 0 : message.seq - 1 });
   return message;
 }
 
+/** A group title as the service keeps it: one line, whitespace of any kind
+ *  as one space, controls and bidi characters dropped, `null` when empty.
+ *  `undefined` when it is longer than 64 characters. */
+function groupTitle(raw) {
+  if (raw == null) return null;
+  const title = String(raw)
+    .replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if ([...title].length > 64) return undefined;
+  return title || null;
+}
+
+/** The player ids of a request as the service reads them: trimmed, without
+ *  repeats, at most 100. `null` for more. */
+function playerIds(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  if (list.length > 100) return null;
+  return [...new Set(list.map((entry) => String(entry).trim()).filter(Boolean))];
+}
+
 function chatCreateGroup(response, body) {
   const me = account.id;
-  const clientId = String(body?.clientId ?? "");
-  if (!clientId) return fail(response, 400, "invalid", "clientId is required");
+  const clientId = String(body?.clientId ?? "").trim();
+  if (!isClientId(clientId)) return fail(response, 400, "invalid", "clientId must be the ULID the launcher made");
+  const title = groupTitle(body?.title);
+  if (title === undefined) return refuse(response, 400, "invalid", "too_long", "A group title holds at most 64 characters");
   const replay = [...chats.values()].find((conversation) => conversation.ownerId === me && conversation.createClientId === clientId);
   if (replay) return send(response, 200, { conversation: conversationWire(replay), added: [], invited: [], refused: [] });
-  const title = body?.title == null ? null : String(body.title).trim() || null;
-  if (title && [...title].length > 64) return fail(response, 400, "invalid", "A title is at most 64 characters");
-  const ids = [...new Set(Array.isArray(body?.memberIds) ? body.memberIds.map(String) : [])].filter((userId) => userId !== me);
-  if (ids.length > CHAT_GROUP_MAX_MEMBERS - 1) return refuse(response, 400, "invalid", "group_full", "That is more people than a group holds");
-  const conversation = newConversation("group", { ownerId: me, title, createClientId: clientId });
-  addMember(conversation, me, { role: "owner" });
-  const added = [];
-  const invited = [];
-  const refused = [];
-  for (const userId of ids) {
-    if (!isFriend(userId)) refused.push({ userId, reason: "not_friend" });
-    else if (asksBeforeAdding(userId)) invited.push(userId);
-    else {
-      addMember(conversation, userId);
-      added.push(userId);
-    }
+  const named = playerIds(body?.memberIds);
+  if (named === null) return fail(response, 400, "invalid", "Name at most 100 players at once");
+  const ids = named.filter((userId) => userId !== me);
+  const refused = ids.filter((userId) => !isFriend(userId)).map((userId) => ({ userId, reason: "not_friend" }));
+  const friendly = ids.filter((userId) => isFriend(userId));
+  const invited = friendly.filter((userId) => asksBeforeAdding(userId));
+  const added = friendly.filter((userId) => !asksBeforeAdding(userId));
+  // The cap counts the members and the invites; strangers take no seat.
+  if (added.length + invited.length > CHAT_GROUP_MAX_MEMBERS - 1) {
+    return refuse(response, 400, "invalid", "group_full", `A group holds at most ${CHAT_GROUP_MAX_MEMBERS} players`);
   }
-  systemPost(conversation, "created", { by: me });
+  const conversation = newConversation("group", { ownerId: me, title, createClientId: clientId });
+  systemPost(conversation, "created", title ? { by: me, title } : { by: me });
+  addMember(conversation, me, { role: "owner" });
+  for (const userId of added) addMember(conversation, userId);
   announceConversation(conversation);
   return send(response, 201, { conversation: conversationWire(conversation), added, invited, refused });
 }
 
+/** The service writes a system message only for what changed, and a PATCH
+ *  that changes nothing tells nobody; one that does sends
+ *  `chat.conversation` first and the system messages after it. */
 function chatPatchGroup(response, conversation, body) {
   const me = account.id;
   if (body?.title === undefined && body?.historyForNewMembers === undefined) {
-    return fail(response, 400, "invalid", "Change the title or the history setting");
+    return fail(response, 400, "invalid", "Change the title or historyForNewMembers");
   }
-  if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the owner of the group can change it");
-  if (body.title !== undefined) {
-    const title = body.title == null ? null : String(body.title).trim() || null;
-    if (title && [...title].length > 64) return fail(response, 400, "invalid", "A title is at most 64 characters");
-    if (title !== conversation.title) {
-      conversation.title = title;
-      announceMessage(conversation, systemPost(conversation, "renamed", { by: me, title }));
-    }
+  if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the owner of the group changes it");
+  const title = body.title === undefined ? undefined : groupTitle(body.title);
+  if (body.title !== undefined && title === undefined) {
+    return refuse(response, 400, "invalid", "too_long", "A group title holds at most 64 characters");
+  }
+  const written = [];
+  if (body.title !== undefined && title !== conversation.title) {
+    conversation.title = title;
+    written.push(systemPost(conversation, "renamed", { title, by: me }));
   }
   if (body.historyForNewMembers !== undefined) {
     const on = Boolean(body.historyForNewMembers);
     if (on !== conversation.historyForNewMembers) {
       conversation.historyForNewMembers = on;
-      announceMessage(conversation, systemPost(conversation, "historyForNewMembers", { on, by: me }));
+      written.push(systemPost(conversation, "historyForNewMembers", { on, by: me }));
     }
   }
-  announceConversation(conversation);
+  if (written.length > 0) {
+    announceConversation(conversation);
+    for (const message of written) announceMessage(conversation, message);
+  }
   return send(response, 200, conversationWire(conversation));
 }
 
+/** Every member added in one request sees the group from the first of the
+ *  `memberAdded` messages on, as on the service. */
 function chatAddMembers(response, conversation, body) {
   const me = account.id;
-  const ids = [...new Set(Array.isArray(body?.userIds) ? body.userIds.map(String) : [])];
+  const ids = playerIds(body?.userIds);
+  if (ids === null) return fail(response, 400, "invalid", "Name at most 100 players at once");
   const added = [];
   const invited = [];
   const refused = [];
+  const visibleFromSeq = conversation.historyForNewMembers ? 0 : conversation.lastSeq;
   for (const userId of ids) {
-    if (conversation.members.has(userId)) refused.push({ userId, reason: "member" });
+    if (userId === me || conversation.members.has(userId)) refused.push({ userId, reason: "member" });
     else if (!isFriend(userId)) refused.push({ userId, reason: "not_friend" });
     else if (conversation.members.size >= CHAT_GROUP_MAX_MEMBERS) refused.push({ userId, reason: "full" });
     else if (asksBeforeAdding(userId)) invited.push(userId);
     else {
-      announceMessage(conversation, join(conversation, userId, "memberAdded", me));
+      addMember(conversation, userId, { visibleFromSeq });
       added.push(userId);
     }
   }
-  announceConversation(conversation);
+  const written = added.map((userId) => systemPost(conversation, "memberAdded", { userId, by: me }));
+  if (written.length > 0) {
+    announceConversation(conversation);
+    for (const message of written) announceMessage(conversation, message);
+  }
   return send(response, 200, { added, invited, refused });
 }
 
@@ -2804,10 +2935,10 @@ function chatJoinGroup(response, conversation) {
   if (!invite) return fail(response, 404, "not_found", "That invite is gone");
   if (conversation.members.size >= CHAT_GROUP_MAX_MEMBERS) return refuse(response, 409, "conflict", "group_full", "The group is full");
   groupInvites = groupInvites.filter((entry) => entry !== invite);
-  const message = join(conversation, me, "memberJoined", null);
-  announceMessage(conversation, message);
-  announceConversation(conversation);
+  const message = join(conversation, me, "memberJoined");
   broadcastChat("chat.groupInvite.removed", { conversationId: conversation.id });
+  announceConversation(conversation);
+  announceMessage(conversation, message);
   return send(response, 200, conversationWire(conversation));
 }
 
@@ -2822,28 +2953,40 @@ function chatRemoveMember(response, conversationId, userId) {
   const me = account.id;
   const conversation = chats.get(conversationId);
   if (!conversation || !conversation.members.has(me)) return noConversation(response);
-  if (conversation.kind === "direct") return fail(response, 400, "invalid", "A direct conversation cannot be left");
+  if (userId !== me && conversation.kind !== "direct" && conversation.ownerId !== me) {
+    return refuse(response, 403, "forbidden", "owner_only", "Only the owner removes members");
+  }
+  if (conversation.kind === "direct") {
+    return fail(response, 400, "invalid", "A direct conversation has no members to leave or remove");
+  }
   if (userId === me) {
+    // The host leaving its own server chat ends it: no system message.
+    if (conversation.kind === "server" && conversation.ownerId === me) {
+      endChat(conversation, "left");
+      return send(response, 204, null);
+    }
     conversation.members.delete(me);
-    systemPost(conversation, "memberLeft", { userId: me });
-    if (conversation.ownerId === me && conversation.kind === "group") {
-      // D4: the earliest-joined remaining member takes over.
-      const next = [...conversation.members.values()].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
-      if (next) {
+    if (conversation.members.size === 0) {
+      chats.delete(conversation.id);
+    } else {
+      systemPost(conversation, "memberLeft", { userId: me });
+      if (conversation.ownerId === me && conversation.kind === "group") {
+        // D4: the earliest-joined remaining member takes over.
+        const next = [...conversation.members.values()].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt))[0];
         next.role = "owner";
         conversation.ownerId = next.userId;
         systemPost(conversation, "ownerChanged", { userId: next.userId, by: me });
       }
     }
-    if (conversation.members.size === 0 || (conversation.kind === "server" && conversation.ownerId === me)) chats.delete(conversation.id);
     broadcastChat("chat.conversation.removed", { conversationId, reason: "left" });
     return send(response, 204, null);
   }
-  if (conversation.ownerId !== me) return refuse(response, 403, "forbidden", "owner_only", "Only the owner can remove members");
-  if (!conversation.members.has(userId)) return fail(response, 404, "not_found", "Not a member");
+  if (!conversation.members.has(userId)) return fail(response, 404, "not_found", "That player is not a member");
+  if (conversation.members.get(userId).role === "owner") return refuse(response, 403, "forbidden", "owner_only", "The owner cannot be removed");
   conversation.members.delete(userId);
-  announceMessage(conversation, systemPost(conversation, "memberRemoved", { userId, by: me }));
+  const message = systemPost(conversation, "memberRemoved", { userId, by: me });
   announceConversation(conversation);
+  announceMessage(conversation, message);
   return send(response, 204, null);
 }
 
@@ -2866,17 +3009,24 @@ function chatOpenServer(response, sessionId) {
 
 function chatJoinServer(response, sessionId, body) {
   const me = account.id;
-  const hostId = String(body?.hostUserId ?? "");
+  const hostId = String(body?.hostUserId ?? "").trim();
+  if (!hostId) return fail(response, 400, "invalid", "Name the host in hostUserId");
   const conversation = [...chats.values()].find((entry) => entry.kind === "server" && entry.server.hostId === hostId && entry.server.sessionId === sessionId);
+  // The host is in its chat from the start: the join answers it.
+  if (hostId === me) return conversation ? send(response, 200, conversationWire(conversation)) : noConversation(response);
   const host = world.friends.find((friend) => friend.user.id === hostId);
-  if (!conversation || host?.presence?.hosting?.sessionId !== sessionId) return noConversation(response);
-  if (conversation.members.has(me)) return send(response, 200, conversationWire(conversation));
+  if (host?.presence?.hosting?.sessionId !== sessionId) {
+    return fail(response, 404, "not_found", "That player does not host this server now");
+  }
   const invited = world.invites.some((invite) => invite.from.id === hostId && invite.hosting?.sessionId === sessionId);
   if (!hostingFor(host.presence.hosting, me).canJoin && !invited) {
-    return fail(response, 403, "forbidden", "The host did not open the server to you");
+    return fail(response, 403, "forbidden", "The host did not open this server to you");
   }
-  announceMessage(conversation, join(conversation, me, "memberJoined", null));
+  if (!conversation) return noConversation(response);
+  if (conversation.members.has(me)) return send(response, 200, conversationWire(conversation));
+  const message = join(conversation, me, "memberJoined");
   announceConversation(conversation);
+  announceMessage(conversation, message);
   return send(response, 200, conversationWire(conversation));
 }
 
@@ -2900,21 +3050,31 @@ function chatPatchServer(response, sessionId, body) {
   // A switch that changes nothing tells nobody, as on the service.
   if (body.historyForNewMembers !== conversation.historyForNewMembers) {
     conversation.historyForNewMembers = body.historyForNewMembers;
-    announceMessage(conversation, systemPost(conversation, "historyForNewMembers", { on: body.historyForNewMembers, by: me }));
+    const message = systemPost(conversation, "historyForNewMembers", { on: body.historyForNewMembers, by: me });
     announceConversation(conversation);
+    announceMessage(conversation, message);
   }
   return send(response, 200, conversationWire(conversation));
 }
 
 function chatSearch(response, url) {
+  const present = (key) => String(url.searchParams.get(key) ?? "").trim() || null;
   const q = String(url.searchParams.get("q") ?? "").trim();
-  const conversationId = url.searchParams.get("conversationId");
-  const senderId = url.searchParams.get("senderId");
-  const has = url.searchParams.get("has");
-  const cursor = url.searchParams.has("before") ? Number(url.searchParams.get("before")) : Infinity;
+  const conversationId = present("conversationId");
+  const senderId = present("senderId");
+  const has = present("has");
+  const before = present("before");
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 20) || 20, 1), 50);
   if (!q || [...q].length > 64) return fail(response, 400, "invalid", "Search for 1 to 64 characters");
-  if ([...q].length < 3 && !conversationId) return fail(response, 400, "invalid", "A search of one or two characters needs a conversation");
+  if (has && !["file", "image", "video", "card", "link"].includes(has)) {
+    return fail(response, 400, "invalid", "has is one of file, image, video, card and link");
+  }
+  const cursor = before === null ? Infinity : Number(before);
+  if (!Number.isInteger(cursor) && cursor !== Infinity) return fail(response, 400, "invalid", "before is the nextCursor of an earlier page");
+  if (cursor <= 0) return fail(response, 400, "invalid", "before is the nextCursor of an earlier page");
+  // A conversation the account is not in is not there, as on the service.
+  if (conversationId && !chats.get(conversationId)?.members.has(account.id)) return noConversation(response);
+  if ([...q].length < 3 && !conversationId) return fail(response, 400, "invalid", "A search of one or two characters needs a conversationId");
   const needle = q.toLocaleLowerCase();
   const hits = [];
   for (const conversation of myConversations()) {
@@ -2968,6 +3128,28 @@ function classifyFile(name, bytes) {
   return { class: "other", mediaType: "application/octet-stream", danger: false };
 }
 
+/** What the service keeps of a file's `meta`: the four fields it knows,
+ *  `null` for each one not stated, and `null` for all of them when none was;
+ *  other fields are dropped. A string is the refusal. */
+function fileMeta(raw) {
+  if (raw == null || typeof raw !== "object") return null;
+  const number = (value) => (Number.isInteger(value) && value >= 0 ? value : null);
+  const meta = {
+    width: number(raw.width),
+    height: number(raw.height),
+    durationMs: number(raw.durationMs),
+    origin: typeof raw.origin === "string" ? raw.origin : null,
+  };
+  if ([meta.width, meta.height].some((side) => side !== null && side > 16384)) {
+    return "meta.width and meta.height are at most 16384";
+  }
+  if (meta.durationMs !== null && meta.durationMs > 86_400_000) return "meta.durationMs is at most 86400000";
+  if (meta.origin !== null && !["media", "file", "clipboard"].includes(meta.origin)) {
+    return "meta.origin is one of media, file and clipboard";
+  }
+  return Object.values(meta).every((value) => value === null) ? null : meta;
+}
+
 function chatRegisterFile(response, body) {
   const me = account.id;
   const conversation = chats.get(String(body?.conversationId ?? ""));
@@ -2979,6 +3161,8 @@ function chatRegisterFile(response, body) {
   }
   const sha256 = String(body?.sha256 ?? "");
   if (!/^[0-9a-f]{64}$/.test(sha256)) return fail(response, 400, "invalid", "sha256 must be 64 lowercase hex characters");
+  const meta = fileMeta(body?.meta);
+  if (typeof meta === "string") return fail(response, 400, "invalid", meta);
   const quota = chatQuota();
   if (quota.usedBytes + size > quota.quotaBytes) {
     return refuse(response, 400, "invalid", "quota_account", "Your chat files are over the quota", { usedBytes: quota.usedBytes, quotaBytes: quota.quotaBytes });
@@ -2999,7 +3183,7 @@ function chatRegisterFile(response, body) {
     mediaType: own?.mediaType ?? "application/octet-stream",
     class: own?.class ?? "other",
     danger: own?.danger ?? false,
-    meta: body?.meta ?? null,
+    meta,
     status: own ? "ready" : "pending",
     bytes: own?.bytes ?? null,
     createdAt: nowIso(),
@@ -3010,7 +3194,11 @@ function chatRegisterFile(response, body) {
 
 function chatUploadFile(request, response, fileId, bytes) {
   const file = chatFiles.get(fileId);
-  if (!file || file.uploaderId !== account.id) return fail(response, 404, "not_found", "No such file");
+  // A row that is gone, or that another player registered, is `file_gone`:
+  // the launcher registers the file again once.
+  if (!file || file.uploaderId !== account.id) {
+    return refuse(response, 404, "not_found", "file_gone", "This file is no longer stored; upload it again");
+  }
   if (file.status === "ready") return send(response, 200, { file: fileWire(file) });
   const length = Number(request.headers["content-length"]);
   if (length !== file.size || bytes.length !== file.size) {
@@ -3085,8 +3273,9 @@ function devChatServerJoin(response, sessionId, body) {
   const userId = String(body?.userId ?? cast.kyle.id);
   if (!isFriend(userId)) return fail(response, 403, "forbidden", "Only a friend of the host joins the chat of its server");
   if (!conversation.members.has(userId)) {
-    announceMessage(conversation, join(conversation, userId, "memberJoined", null));
+    const message = join(conversation, userId, "memberJoined");
     announceConversation(conversation);
+    announceMessage(conversation, message);
   }
   const member = conversation.members.get(userId);
   const seqs = conversation.messages.filter((message) => message.seq > member.visibleFromSeq).map((message) => message.seq);

@@ -1184,8 +1184,7 @@ pub(crate) async fn put_staged(
 pub async fn chat_file_local(app: AppHandle, file_id: String, download: bool) -> Result<FileLocal> {
     let file_id = path_segment(&file_id)?.to_string();
     let path = files_dir(&app)?.join(&file_id);
-    if path.is_file() {
-        shown(&app, &path);
+    if show_cached(&app, &path).await?.is_some() {
         return Ok(FileLocal {
             status: LocalStatus::Cached,
             path: Some(path.display().to_string()),
@@ -1228,8 +1227,7 @@ pub(crate) async fn ensure_cached(app: &AppHandle, file_id: &str) -> Result<Path
     let target = dir.join(&file_id);
     let started = Instant::now();
     loop {
-        if target.is_file() {
-            shown(app, &target);
+        if show_cached(app, &target).await?.is_some() {
             return Ok(target);
         }
         let claimed = {
@@ -1283,8 +1281,7 @@ pub(crate) async fn ensure_cached(app: &AppHandle, file_id: &str) -> Result<Path
                     log::warn!("chat: cannot tidy {}: {e}", cache.display());
                 }
             });
-            shown(app, &path);
-            let size = std::fs::metadata(&path).map(|meta| meta.len()).unwrap_or(0);
+            let size = show_cached(app, &path).await.ok().flatten().unwrap_or(0);
             emit(
                 app,
                 EVENT_DOWNLOAD,
@@ -1468,8 +1465,27 @@ fn range_total(headers: &HeaderMap) -> Option<u64> {
     value.rsplit_once('/')?.1.trim().parse().ok()
 }
 
+/// Answers the size of the cached copy at `path`, or `None` when there is
+/// none; a copy that is there counts as [`shown`]. The checks and the touch
+/// are disk calls, so they run off the async runtime: a thread full of
+/// pictures asks for each one.
+async fn show_cached(app: &AppHandle, path: &Path) -> Result<Option<u64>> {
+    let (app, path) = (app.clone(), path.to_path_buf());
+    blocking("checking a cached file", move || {
+        let size = std::fs::metadata(&path)
+            .ok()
+            .filter(|meta| meta.is_file())
+            .map(|meta| meta.len());
+        if size.is_some() {
+            shown(&app, &path);
+        }
+        Ok(size)
+    })
+    .await
+}
+
 /// A cached file was shown: it moves to the end of the eviction queue, and
-/// the asset protocol may serve it by this very path.
+/// the asset protocol may serve it by this very path. Blocks on the disk.
 fn shown(app: &AppHandle, path: &Path) {
     touch(path);
     if let Err(e) = app.asset_protocol_scope().allow_file(path) {

@@ -15,7 +15,11 @@ interface FriendPickerProps {
   exclude: ReadonlySet<string>;
   picked: string[];
   onChange: (picked: string[]) => void;
-  /** How many may be picked at most: the room left in the group. */
+  /**
+   * How many may be picked at most: the room left in the group as far as the
+   * launcher can tell. For an existing group it is an upper bound, since
+   * invitations still waiting for an answer hold seats it cannot see.
+   */
   room: number;
   /** The count line above the list: «4 of 20». */
   countText: string;
@@ -29,9 +33,10 @@ interface FriendPickerProps {
  *
  * The friends list of **New group** and **Add friends**: a search field, the
  * picked friends as chips, and a row with a check box per friend, the ones
- * who are around first. Once the group is full the rows that are not picked
- * switch off; a friend who asks before being added still appears, since
- * nobody can tell until the service answers with an invitation.
+ * who are around first. Once the picks fill `room` the rows that are not
+ * picked switch off: a pick past it would be refused for sure. A friend who
+ * asks before being added still appears, since nobody can tell until the
+ * service answers with an invitation.
  */
 export function FriendPicker({
   friends,

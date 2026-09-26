@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-import type { ChatDownloadEvent, ChatStagedFile, ChatUploadEvent } from "./ipc";
+import type { ChatDownloadEvent, ChatFileLocal, ChatStagedFile, ChatUploadEvent } from "./ipc";
 
 /**
  * --- slice: chat ---
@@ -21,6 +21,18 @@ type Listener = () => void;
 /** How long a typing line stays without a fresh event: the service's `ttlMs`. */
 export const TYPING_TTL_MS = 6_000;
 
+/**
+ * --- slice: chat cards --- how the last download of a file ended: `cached`
+ * with the path, `remote` when it failed and may be asked for again, `gone`
+ * when the service no longer has the file. `seq` orders the ends of all
+ * files, so an answer of the core can tell whether an end came after it asked.
+ */
+export interface DownloadEnd {
+  seq: number;
+  status: Exclude<ChatFileLocal["status"], "downloading">;
+  path: string | null;
+}
+
 interface TypingEntry {
   userIds: string[];
   until: number;
@@ -30,6 +42,8 @@ let typing: Readonly<Record<string, TypingEntry>> = {};
 let uploads: Readonly<Record<string, ChatUploadEvent>> = {};
 // --- slice: chat cards --- how far each download has got, by file id.
 let downloads: Readonly<Record<string, ChatDownloadEvent>> = {};
+let downloadEnds: Readonly<Record<string, DownloadEnd>> = {};
+let endSeq = 0;
 let dropped: readonly ChatStagedFile[] = [];
 // --- slice: chat groups --- sessions whose server chat the host ended.
 let endedSessions: ReadonlySet<string> = new Set();
@@ -106,13 +120,43 @@ export const chatLive = {
   },
 
   // --- slice: chat cards ---
-  /** The progress of a download; the last event of it ends the entry. */
+  /**
+   * The progress of a download; the last event of it ends the entry and
+   * records how it ended.
+   */
   setDownload(event: ChatDownloadEvent) {
     const next = { ...downloads };
-    if (event.status === undefined || event.status === "downloading") next[event.fileId] = event;
-    else delete next[event.fileId];
+    if (event.status === undefined || event.status === "downloading") {
+      next[event.fileId] = event;
+    } else {
+      delete next[event.fileId];
+      endSeq += 1;
+      downloadEnds = {
+        ...downloadEnds,
+        [event.fileId]: { seq: endSeq, status: event.status, path: event.path ?? null },
+      };
+    }
     downloads = next;
     publish();
+  },
+
+  /** How the last download of a file ended, or `undefined` while none has. */
+  downloadEnd(fileId: string): DownloadEnd | undefined {
+    return downloadEnds[fileId];
+  },
+
+  /** A mark to take before asking the core where a file is. */
+  downloadMark(): number {
+    return endSeq;
+  },
+
+  /**
+   * The end of a download of the file that came after `mark`: newer than an
+   * answer of the core asked for at the mark, which then must not replace it.
+   */
+  downloadEndedSince(fileId: string, mark: number): DownloadEnd | null {
+    const end = downloadEnds[fileId];
+    return end !== undefined && end.seq > mark ? end : null;
   },
 
   download(fileId: string): ChatDownloadEvent | undefined {
@@ -163,6 +207,7 @@ export const chatLive = {
     typing = {};
     uploads = {};
     downloads = {};
+    downloadEnds = {};
     dropped = [];
     endedSessions = new Set();
     publish();
@@ -187,6 +232,11 @@ export function useUploadProgress(handle: string): ChatUploadEvent | undefined {
 /** The progress of one file on its way down, or `undefined` while none comes. */
 export function useDownloadProgress(fileId: string): ChatDownloadEvent | undefined {
   return useSyncExternalStore(subscribe, () => chatLive.download(fileId));
+}
+
+/** How the last download of one file ended, or `undefined` while none has. */
+export function useDownloadEnd(fileId: string): DownloadEnd | undefined {
+  return useSyncExternalStore(subscribe, () => chatLive.downloadEnd(fileId));
 }
 
 /** How many dropped files wait for a composer. */

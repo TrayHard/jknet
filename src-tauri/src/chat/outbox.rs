@@ -36,8 +36,9 @@ use super::{
 const MIN_BACKOFF: Duration = Duration::from_secs(1);
 /// The longest wait between two attempts.
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
-/// How long an entry keeps trying before it is `failed`.
-const GIVE_UP_AFTER: Duration = Duration::from_secs(10 * 60);
+/// How long an entry keeps trying before it is `failed`. Read markers keep
+/// the same pace.
+pub(super) const GIVE_UP_AFTER: Duration = Duration::from_secs(10 * 60);
 
 /// Where an entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -358,8 +359,8 @@ impl Outbox {
     }
 }
 
-/// 1 s, 2 s, 4 s … up to 30 s.
-fn backoff(attempts: u32) -> Duration {
+/// The wait after `attempts` failures in a row: 1 s, 2 s, 4 s … up to 30 s.
+pub(super) fn backoff(attempts: u32) -> Duration {
     let doubled = MIN_BACKOFF.saturating_mul(1u32 << attempts.saturating_sub(1).min(5));
     doubled.min(MAX_BACKOFF)
 }

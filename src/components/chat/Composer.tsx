@@ -194,12 +194,27 @@ export function Composer({
     [conversationId],
   );
 
-  // Files dropped on the window, staged by the core, join the tray.
+  // --- slice: chat cards ---
+  // Files and cards join the tray up to the service's limits; what does not
+  // fit is left out with a line saying why, and a file the core staged for
+  // nothing is let go at once.
+  const addFiles = (files: ChatStagedFile[]) => {
+    const room = FILES_MAX - staged.length;
+    const taken = files.slice(0, Math.max(0, room));
+    for (const file of files.slice(taken.length)) stage.unstage.mutate(file.handle);
+    if (taken.length < files.length) setError(t("composer.tooManyFiles", { max: FILES_MAX }));
+    if (taken.length > 0) setStaged((current) => [...current, ...taken]);
+  };
+
+  // Files dropped on the window, staged by the core, join the tray by the
+  // same rule as picked ones: the cap holds, and what does not fit is let go.
   const takeDropped = dropped.take;
   useEffect(() => {
     if (dropped.count === 0 || !conversation.canSend) return;
     const files = takeDropped();
-    if (files.length > 0) setStaged((current) => [...current, ...files]);
+    if (files.length > 0) addFiles(files);
+    // `addFiles` is new each render; a drop is what runs this, and the
+    // render it runs after is the one whose tray it counts.
   }, [dropped.count, takeDropped, conversation.canSend]);
 
   // The field grows with its text up to `MAX_HEIGHT`, then scrolls.
@@ -243,17 +258,7 @@ export function Composer({
   const tooLong = chars > MAX_BODY_CHARS;
   const empty = body.trim() === "" && staged.length === 0 && cards.length === 0;
 
-  // --- slice: chat cards ---
-  // Files and cards join the tray up to the service's limits; what does not
-  // fit is left out with a line saying why, and a file the core staged for
-  // nothing is let go at once.
-  const addFiles = (files: ChatStagedFile[]) => {
-    const room = FILES_MAX - staged.length;
-    const taken = files.slice(0, Math.max(0, room));
-    for (const file of files.slice(taken.length)) stage.unstage.mutate(file.handle);
-    if (taken.length < files.length) setError(t("composer.tooManyFiles", { max: FILES_MAX }));
-    if (taken.length > 0) setStaged((current) => [...current, ...taken]);
-  };
+  // --- slice: chat cards --- a card joins the tray up to the service's limit.
   const addCard = (card: ChatCard) => {
     if (cards.length >= CARDS_MAX) {
       setError(t("composer.tooManyCards", { max: CARDS_MAX }));

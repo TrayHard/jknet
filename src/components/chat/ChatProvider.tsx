@@ -2,6 +2,7 @@ import { AtSign, MessageCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { useErrorText } from "../../i18n/errors";
 // --- slice: chat notifications ---
 import { trayLabels, type ChatTranslate } from "../../lib/chat/tray";
 import type { ChatNotifyEvent, ChatRemovedEvent, Conversation } from "../../lib/ipc";
@@ -12,6 +13,7 @@ import {
   useChatUnread,
   useOnlineConfigured,
   useSetTrayLabels,
+  type ChatStageRefusal,
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
 import { useToasts } from "../ToastsProvider";
@@ -21,12 +23,15 @@ import { useChatNames } from "./useChatText";
 
 /** How long a toast of a new message stays: a notification, not a task. */
 const NOTIFY_TOAST_MS = 6_000;
+/** How long the list of dropped files that were not attached stays. */
+const REFUSED_TOAST_MS = 10_000;
 
 interface ChatProviderProps {
   /**
    * `main`: the launcher window. It shows the toasts of new messages and of
    * group invitations and keeps the tray menu in the language on screen.
-   * `window`: the chat window, which only listens.
+   * `window`: the chat window, which only listens. Both name the files
+   * dropped on them that the core would not attach.
    */
   role: "main" | "window";
   children: ReactNode;
@@ -48,6 +53,7 @@ export function ChatProvider({ role, children }: ChatProviderProps) {
   const toasts = useToasts();
   const openChat = useOpenChat();
   const names = useChatNames();
+  const errorText = useErrorText();
   const { show, dismiss } = toasts;
   const main = role === "main";
 
@@ -90,7 +96,33 @@ export function ChatProvider({ role, children }: ChatProviderProps) {
     [main, show, t, names],
   );
 
-  useChatEvents({ onNotify, onRemoved, onOpen: (event) => openChat(event.conversationId) });
+  // --- slice: chat cards --- files dropped on this window that the core
+  // would not stage: the composer never sees them, so the toast names each
+  // one with its reason. Either window: the drop reaches only the one it
+  // landed on.
+  const onRefused = useCallback(
+    (refused: ChatStageRefusal[]) => {
+      const id = "chat-files-refused";
+      show(id, {
+        variant: "warning",
+        title: t("composer.refusedTitle", { count: refused.length }),
+        text: (
+          <span className="flex flex-col gap-2">
+            {refused.map((file, index) => (
+              <span key={`${index}:${file.name}`} className="[overflow-wrap:anywhere] [unicode-bidi:isolate]">
+                {t("composer.refusedLine", { name: file.name, reason: errorText(file.error) })}
+              </span>
+            ))}
+          </span>
+        ),
+        onDismiss: () => dismiss(id),
+      });
+      window.setTimeout(() => dismiss(id), REFUSED_TOAST_MS);
+    },
+    [show, dismiss, t, errorText],
+  );
+
+  useChatEvents({ onNotify, onRemoved, onRefused, onOpen: (event) => openChat(event.conversationId) });
 
   return (
     <>

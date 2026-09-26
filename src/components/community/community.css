@@ -67,6 +67,9 @@
    AppShell, not of the window: the chat drawer pinned beside the page takes
    380 px of the window. 818 px is the page of the 1050 px window these steps
    were written for; the one-column step comes before the side column would
-   leave the page body under 300 px. */
-@container page (max-width:818px) { .community-app { padding:20px; } .community-heading { align-items:flex-start; } .community-detail-grid { grid-template-columns:minmax(0,1fr) 265px; } .community-files li { flex-wrap:wrap; } }
-@container page (max-width:640px) { .community-app { padding:16px; } .community-heading { flex-direction:column; gap:8px; } .community-detail-grid { grid-template-columns:1fr; } .community-form-columns,.community-file-edit { grid-template-columns:1fr; } .community-panel { padding:18px; } .community-app h1 { font-size:26px; } .community-toolbar { align-items:stretch; } .community-toolbar select { flex:1; } .community-cards { grid-template-columns:1fr; } }
+   leave the page body under 300 px. The toolbar folds with them: the search
+   keeps room for its placeholder and the game list wraps below it rather
+   than squeezing it, and on the narrow step the search takes a row of its own
+   with the game list and Add server under it. */
+@container page (max-width:818px) { .community-app { padding:20px; } .community-heading { align-items:flex-start; } .community-detail-grid { grid-template-columns:minmax(0,1fr) 265px; } .community-files li { flex-wrap:wrap; } .community-search { min-width:220px; } }
+@container page (max-width:640px) { .community-app { padding:16px; } .community-heading { flex-direction:column; gap:8px; } .community-detail-grid { grid-template-columns:1fr; } .community-form-columns,.community-file-edit { grid-template-columns:1fr; } .community-panel { padding:18px; } .community-app h1 { font-size:26px; } .community-toolbar { align-items:stretch; } .community-toolbar select { flex:1; } .community-search { flex-basis:100%; } .community-cards { grid-template-columns:1fr; } }

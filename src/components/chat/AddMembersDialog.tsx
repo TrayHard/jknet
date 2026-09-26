@@ -2,7 +2,14 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
-import { GROUP_MAX_MEMBERS, addOutcome, addedAnybody, groupRoom, type AddOutcome } from "../../lib/chat/groups";
+import {
+  GROUP_MAX_MEMBERS,
+  addOutcome,
+  addedAnybody,
+  groupRoom,
+  outOfRoom,
+  type AddOutcome,
+} from "../../lib/chat/groups";
 import type { Conversation } from "../../lib/ipc";
 import { useAddChatMembers, useFriendsState } from "../../lib/queries";
 import { Button, Dialog } from "../ui";
@@ -27,6 +34,12 @@ interface AddMembersDialogProps {
  * An answer that added or invited somebody closes the dialog, the rest of
  * it in a toast. An answer that added nobody stays, with the reasons under
  * the list.
+ *
+ * The room the picker allows is an upper bound: the invitations of the
+ * group still waiting for an answer hold seats too, and a conversation does
+ * not say how many there are. The dialog says so under the list, and once
+ * the service refuses somebody as `full` it knows no seat is left and stops
+ * offering friends.
  */
 export function AddMembersDialog({ conversation, onClose }: AddMembersDialogProps) {
   const { t } = useTranslation("chat");
@@ -38,11 +51,14 @@ export function AddMembersDialog({ conversation, onClose }: AddMembersDialogProp
   const report = useGroupReport();
   const [picked, setPicked] = useState<string[]>([]);
   const [refused, setRefused] = useState<AddOutcome | null>(null);
+  // Set once the service refused somebody as `full`: pending invitations
+  // took the seats the member count still shows as free.
+  const [noSeats, setNoSeats] = useState(false);
   const exclude = useMemo(
     () => new Set(conversation.members.map((member) => member.user.id)),
     [conversation.members],
   );
-  const room = groupRoom(conversation);
+  const room = noSeats ? 0 : groupRoom(conversation);
   const title = names.title(conversation);
 
   const submit = () => {
@@ -56,6 +72,7 @@ export function AddMembersDialog({ conversation, onClose }: AddMembersDialogProp
           if (!addedAnybody(outcome)) {
             setRefused(outcome);
             setPicked([]);
+            if (outOfRoom(outcome)) setNoSeats(true);
             return;
           }
           report.toast(outcome, title, conversation.id);
@@ -104,6 +121,7 @@ export function AddMembersDialog({ conversation, onClose }: AddMembersDialogProp
               disabled={add.isPending}
             />
           )}
+          <p className="text-body-sm text-fg-muted">{t("group.seatsNote")}</p>
           {reasons.length > 0 ? (
             <div role="alert" className="flex flex-col gap-2 rounded-md bg-warm-subtle px-10 py-8 text-body-sm text-fg-warm">
               {reasons.map((line) => (

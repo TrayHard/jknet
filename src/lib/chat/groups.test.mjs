@@ -20,6 +20,7 @@ import {
   groupRoom,
   leaveOutcome,
   orderMembers,
+  outOfRoom,
   ownsConversation,
   pickCandidates,
   serverChatOf,
@@ -145,6 +146,41 @@ describe("room in a group", () => {
   test("nobody is added to a server chat or a direct chat", () => {
     assert.equal(canAddMembers(serverChat(ME)), false);
     assert.equal(canAddMembers(group({ kind: "direct" })), false);
+  });
+
+  test("the room of a group is only an upper bound: invitations waiting hold seats", () => {
+    // 15 members and 5 pending invitations the conversation does not show:
+    // the launcher still offers five seats, the service refuses them all.
+    const members = Array.from({ length: 15 }, (_, index) => member(`m${index}`));
+    assert.equal(groupRoom(group({ members })), 5);
+    const answer = addOutcome({
+      added: [],
+      invited: [],
+      refused: ["a", "b", "c", "d", "e"].map((userId) => ({ userId, reason: "full" })),
+    });
+    assert.equal(addedAnybody(answer), false);
+    assert.equal(outOfRoom(answer), true);
+  });
+
+  test("only a refusal for want of room says the seats are gone", () => {
+    assert.equal(outOfRoom(addOutcome({ added: ["a"], invited: [], refused: [] })), false);
+    assert.equal(
+      outOfRoom(addOutcome({ added: [], invited: [], refused: [{ userId: "b", reason: "cooldown" }] })),
+      false,
+    );
+    assert.equal(
+      outOfRoom(
+        addOutcome({
+          added: ["a"],
+          invited: ["b"],
+          refused: [
+            { userId: "c", reason: "not_friend" },
+            { userId: "d", reason: "full" },
+          ],
+        }),
+      ),
+      true,
+    );
   });
 });
 

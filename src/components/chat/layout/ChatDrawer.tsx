@@ -3,8 +3,8 @@ import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "../../../lib/format";
-import { useOpenChatWindow } from "../../../lib/queries";
 import { ChatSurface } from "../ChatSurface";
+import { useChatWindowOpener } from "../useOpenChat";
 
 interface ChatDrawerProps {
   /** The conversation of the thread level, or `null` for the list. */
@@ -44,7 +44,7 @@ export function ChatDrawer({
   focusKey,
 }: ChatDrawerProps) {
   const { t } = useTranslation("chat");
-  const openWindow = useOpenChatWindow().mutate;
+  const openWindow = useChatWindowOpener();
   const root = useRef<HTMLElement>(null);
   const returnTo = useRef<HTMLElement | null>(null);
 

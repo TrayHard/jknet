@@ -1,9 +1,11 @@
 import { useCallback, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { chatFileUrl, type ChatFileRef, type ChatMessage } from "../../../lib/ipc";
 import {
   useChatDownload,
+  useChatDownloadEnd,
   useChatFileLocal,
   useFetchChatFile,
   useSaveChatFile,
@@ -32,7 +34,7 @@ export interface ChatFileState {
   saving: boolean;
   /** Where the last save put the file. */
   savedTo: string | null;
-  /** The last failure of a fetch or a save, in words. */
+  /** The last failure of a fetch, a download or a save, in words. */
   error: string | null;
   /** The danger question while it is open. Render it. */
   dialog: ReactNode;
@@ -52,6 +54,7 @@ export interface ChatFileState {
  * `auto` fetches a picture no larger than the setting as soon as it is shown.
  */
 export function useChatFile(file: ChatFileRef, message: ChatMessage, auto = false): ChatFileState {
+  const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const names = useChatNames();
   const settings = useSettings().data;
@@ -59,6 +62,7 @@ export function useChatFile(file: ChatFileRef, message: ChatMessage, auto = fals
   const wantsAuto = auto && limitMb > 0 && file.size <= limitMb * 1024 * 1024;
   const local = useChatFileLocal(file.id, wantsAuto);
   const progress = useChatDownload(file.id);
+  const end = useChatDownloadEnd(file.id);
   const fetchFile = useFetchChatFile();
   const saveFile = useSaveChatFile();
   const [danger, setDanger] = useState<string | null>(null);
@@ -97,6 +101,8 @@ export function useChatFile(file: ChatFileRef, message: ChatMessage, auto = fals
 
   const saveError = saveFile.error && chatRefusal(saveFile.error)?.code !== CONFIRM_DANGER ? saveFile.error : null;
   const failure = fetchFile.error ?? saveError ?? null;
+  // The last download of this file ended without it and nothing new was asked since.
+  const downloadFailed = status === "remote" && end?.status === "remote" && !fetchFile.isPending;
 
   const dialog =
     danger === null ? null : (
@@ -121,7 +127,7 @@ export function useChatFile(file: ChatFileRef, message: ChatMessage, auto = fals
     save,
     saving: saveFile.isPending,
     savedTo,
-    error: failure ? errorText(failure) : null,
+    error: failure ? errorText(failure) : downloadFailed ? t("files.downloadFailed") : null,
     dialog,
   };
 }

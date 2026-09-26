@@ -53,7 +53,11 @@ export function canChangeHistory(conversation: Conversation, meId: string | null
   return conversation.kind === "group" && ownsConversation(conversation, meId);
 }
 
-/** **Add friends**: any member of a group while it has room. */
+/**
+ * **Add friends**: any member of a group while its members leave room. The
+ * invitations still waiting for an answer may have taken that room already;
+ * only the service's answer tells (see `groupRoom`).
+ */
 export function canAddMembers(conversation: Conversation): boolean {
   return conversation.kind === "group" && groupRoom(conversation) > 0;
 }
@@ -66,7 +70,16 @@ export function canRemoveMember(conversation: Conversation, meId: string | null,
   return userId !== owner && conversation.members.some((member) => member.user.id === userId);
 }
 
-/** How many more members a group takes; a new group counts me already. */
+/**
+ * How many more members a group takes at most; a new group counts me already.
+ *
+ * The service counts a seat for every member and for every invitation still
+ * waiting for an answer, and a conversation does not say how many of those
+ * it has. So for an existing group this is an upper bound: a pick past it is
+ * refused for sure, a pick within it may still be refused as `full`, which
+ * `outOfRoom` then reads. A new group has no invitations yet, so its room is
+ * exact.
+ */
 export function groupRoom(conversation: Conversation | null): number {
   const members = conversation === null ? 1 : conversation.members.length;
   return Math.max(0, GROUP_MAX_MEMBERS - members);
@@ -171,6 +184,16 @@ export function addOutcome(result: ChatAddResult): AddOutcome {
 /** Whether an answer changed anything: somebody was added or invited. */
 export function addedAnybody(outcome: AddOutcome): boolean {
   return outcome.added.length > 0 || outcome.invited.length > 0;
+}
+
+/**
+ * Whether an answer turned somebody away for want of room. The service fills
+ * the seats in the order of the request and refuses the rest as `full`, so
+ * such an answer leaves the group without a free seat, whatever its member
+ * count says: the invitations still waiting for an answer hold the others.
+ */
+export function outOfRoom(outcome: AddOutcome): boolean {
+  return outcome.refused.some((group) => group.reason === "full");
 }
 
 /**

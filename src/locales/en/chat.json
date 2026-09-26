@@ -34,6 +34,7 @@
     "openInLauncher": "Open in launcher",
     "onTopNote": "Stays on top of the game in windowed or borderless mode. Exclusive fullscreen hides it.",
     "close": "Close the chat window",
+    "openFailed": "The chat window did not open",
     "strip": "Switch chats"
   },
   "surface": {
@@ -102,6 +103,7 @@
     "noFriends": "You have no friends to add yet. Add friends on the Friends screen first.",
     "allIn": "All your friends are already in this group.",
     "asksNote": "A friend who asks before being added to groups gets an invitation and joins after accepting it.",
+    "seatsNote": "Invitations still waiting for an answer hold seats too, so the group may take fewer friends than the count shows.",
     "pickHint": "Pick at least one friend",
     "create": "Create",
     "creating": "Creating…",
@@ -359,6 +361,9 @@
     "removeCard": "Remove {{name}}",
     "tooManyCards": "A message can carry up to {{max}} cards.",
     "tooManyFiles": "A message can carry up to {{max}} files.",
+    "refusedTitle_one": "{{count}} file was not attached",
+    "refusedTitle_other": "{{count}} files were not attached",
+    "refusedLine": "{{name}}: {{reason}}",
     "counter": "{{used}} / {{max}}",
     "tooLong": "A message can be up to {{max}} characters long.",
     "notFriends": "You are no longer friends. The chat is read-only; once you are friends again, it picks up where it left off.",
@@ -397,6 +402,7 @@
     "download": "Download",
     "downloadingLabel": "Download progress",
     "downloading": "Downloading… {{received}} of {{total}}",
+    "downloadFailed": "The download did not finish. Press Download to try again.",
     "gone": "This file is no longer available. Files are kept for 90 days.",
     "danger": "Executable file. Open it only if you trust {{name}}.",
     "dangerExt": "Executable file (.{{ext}}). Open it only if you trust {{name}}.",

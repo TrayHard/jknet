@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { useOpenChatWindow, useOpenDirectChat } from "../../lib/queries";
@@ -19,7 +20,7 @@ import { currentChatLayout, useChatLayout } from "./ChatLayoutContext";
  */
 export function useOpenChat(): (conversationId?: string | null) => void {
   const layout = useChatLayout();
-  const openWindow = useOpenChatWindow().mutate;
+  const openWindow = useChatWindowOpener();
   return useCallback(
     (conversationId?: string | null) => {
       const target = layout ?? currentChatLayout();
@@ -28,6 +29,23 @@ export function useOpenChat(): (conversationId?: string | null) => void {
     },
     [layout, openWindow],
   );
+}
+
+/**
+ * Opens the separate chat window, or raises it. A refusal of the core becomes
+ * a toast: **Pop out**, a toast or a notification that asked has nowhere to
+ * print it, and the drawer that asked is closed by then.
+ */
+export function useChatWindowOpener(): (request: { conversationId?: string | null; compact?: boolean }) => void {
+  const { t } = useTranslation("chat");
+  const errorText = useErrorText();
+  const { show } = useToasts();
+  const onError = useCallback(
+    (error: unknown) =>
+      show("chat-window-failed", { variant: "error", title: t("window.openFailed"), text: errorText(error) }),
+    [show, t, errorText],
+  );
+  return useOpenChatWindow(onError).mutate;
 }
 
 /**

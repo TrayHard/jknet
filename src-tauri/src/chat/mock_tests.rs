@@ -349,7 +349,8 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         .await
         .expect("reacted");
     assert!(reactions.iter().any(|r| r.emoji == "🔥" && r.user_ids.contains(&me.id)));
-    assert_eq!(code_of(client.chat_react(&ctx, &school.id, 6, "no", true).await), "invalid");
+    // The service names the cause: not one emoji.
+    assert_eq!(code_of(client.chat_react(&ctx, &school.id, 6, "no", true).await), "emoji");
     let muted = client.chat_set_notify(&ctx, &school.id, "mute").await.expect("muted");
     assert_eq!(muted.notify, "mute");
 

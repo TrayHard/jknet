@@ -36,6 +36,8 @@ function refusalKey(reason: ChatRefusalReason | string): string {
  */
 export function useGroupReport() {
   const { t } = useTranslation("chat");
+  // `refusalKey` picks the key at run time; every key it answers exists.
+  const loose = t as unknown as (key: string, values?: Record<string, unknown>) => string;
   const names = useChatNames();
   const { show, dismiss } = useToasts();
 
@@ -48,11 +50,11 @@ export function useGroupReport() {
       if (withAdded && outcome.added.length > 0) out.push(t("group.report.added", { names: list(outcome.added) }));
       if (outcome.invited.length > 0) out.push(t("group.report.invited", { names: list(outcome.invited) }));
       for (const refusal of outcome.refused) {
-        out.push((t as unknown as (key: string, options: object) => string)(refusalKey(refusal.reason), { names: list(refusal.userIds) }));
+        out.push(loose(refusalKey(refusal.reason), { names: list(refusal.userIds) }));
       }
       return out;
     },
-    [t, list],
+    [t, loose, list],
   );
 
   /** A toast of the invitations and refusals of an answer that did change the group. */
