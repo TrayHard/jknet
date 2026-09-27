@@ -49,6 +49,11 @@
 //! restored) and fetches what is after the last message of every other
 //! thread it holds.
 
+// The state lives behind `std::sync::Mutex`, which deadlocks when the thread
+// that holds a guard locks it again. A guard left in a `match` or `if let`
+// scrutinee lives through the whole expression, so clippy flags it here.
+#![warn(clippy::significant_drop_in_scrutinee)]
+
 pub mod cards;
 pub mod files;
 pub mod frames;

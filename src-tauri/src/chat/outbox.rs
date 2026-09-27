@@ -375,11 +375,14 @@ pub fn kick(app: &AppHandle) {
     let chat = app.state::<ChatState>();
     let started = chat.outbox().start_ready(Instant::now());
     for client_id in started {
-        if let Some(conversation_id) = chat
+        // A guard in an `if let` scrutinee lives through its block, and
+        // `emit_outbox` locks the queue again: take the id in a statement
+        // of its own, or the send deadlocks.
+        let conversation_id = chat
             .outbox()
             .get(&client_id)
-            .map(|entry| entry.conversation_id.clone())
-        {
+            .map(|entry| entry.conversation_id.clone());
+        if let Some(conversation_id) = conversation_id {
             emit_outbox(app, &conversation_id);
         }
         let handle = app.clone();
@@ -429,7 +432,8 @@ async fn run(app: &AppHandle, client_id: &str) {
             if is_file_lost(&error) && chat.outbox().reregister(client_id) {
                 log::info!("chat: the files of {client_id} are gone on the service, uploading again");
             } else if is_retryable(&error) {
-                match chat.outbox().retry_later(client_id, &error, Instant::now()) {
+                let retry = chat.outbox().retry_later(client_id, &error, Instant::now());
+                match retry {
                     Retry::After(wait) => {
                         log::debug!("chat: sending {client_id} failed ({error}), again in {wait:?}");
                         let handle = app.clone();
