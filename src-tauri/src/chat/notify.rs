@@ -688,6 +688,11 @@ pub(crate) fn show_toast(app: &AppHandle, title: String, text: String, open: Opt
 
 /// Plays the chat sound the player picked, the mention one for a mention.
 pub(crate) fn play_sound(app: &AppHandle, sound_name: &str, mentioned: bool) {
+    // A test build stays silent whatever path reaches here: tests run on a
+    // desktop that somebody is using.
+    if cfg!(test) {
+        return;
+    }
     let Some(path) = sound_path(app, sound_name, mentioned) else {
         return;
     };

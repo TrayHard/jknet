@@ -2129,6 +2129,19 @@ fn check_frame(frame: &LiveFrame) -> Result<(), String> {
             lossless::<ChatPrivacy>(&what, &payload["settings"])?;
         }
         "chat.resync" => {}
+        // A hint for the web app to read its joinable server chats again.
+        // The core drops it as an unknown kind on purpose, so only its shape
+        // is checked here.
+        "chat.serverJoinable" => {
+            only(&["hostUserId", "sessionId", "open"])?;
+            let shaped = payload["hostUserId"].is_string()
+                && payload["sessionId"].is_string()
+                && payload["open"].is_boolean();
+            if !shaped {
+                return Err(format!("{what} carries {payload}"));
+            }
+            return Ok(());
+        }
         _ => {}
     }
     if matches!(parsed, Frame::Unknown(_)) {
