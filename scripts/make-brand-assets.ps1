@@ -7,6 +7,16 @@
 #   public/brand/jknet-logo-128.png  title bar and small marks
 #   public/brand/jknet-logo-256.png  onboarding brand panel and larger marks
 #   public/brand/jknet-logo-512.png  spare size for future surfaces
+#   web/public/brand/jknet-logo-{64,128,256}.png
+#                                    the same marks for the web app
+#   web/public/icons/icon-180.png    Apple touch icon of the web app
+#   web/public/icons/icon-192.png    manifest icon
+#   web/public/icons/icon-512.png    manifest icon
+#   web/public/icons/icon-512-maskable.png
+#                                    manifest icon, purpose maskable: the logo
+#                                    in the inner 80 % on the brand background,
+#                                    so a round or squircle mask cuts no part
+#                                    of the mark
 #
 # Every output is written as Format32bppArgb so the Tauri icon generator, which
 # refuses non-RGBA input, accepts source.png. The background of the source is
@@ -14,9 +24,13 @@
 #
 # Run from the repository root:
 #   powershell -ExecutionPolicy Bypass -File scripts/make-brand-assets.ps1
+# `-WebOnly` writes the web app's files alone and leaves the launcher's as
+# they are.
 
 [CmdletBinding()]
-param()
+param(
+    [switch] $WebOnly
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -36,11 +50,15 @@ $sourceStream = New-Object System.IO.MemoryStream(, $sourceBytes)
 $source = [System.Drawing.Image]::FromStream($sourceStream)
 
 # Rescales the source into a square of the given side and writes a PNG.
+# `-Inset` below 1 draws the logo that much smaller, centred on `-Background`:
+# the safe zone of a maskable icon.
 function Write-ScaledPng {
     param(
         [System.Drawing.Image] $Image,
         [int] $Side,
-        [string] $Path
+        [string] $Path,
+        [double] $Inset = 1.0,
+        [System.Drawing.Color] $Background = [System.Drawing.Color]::Transparent
     )
 
     $target = New-Object System.Drawing.Bitmap($Side, $Side, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -58,7 +76,13 @@ function Write-ScaledPng {
         $attributes = New-Object System.Drawing.Imaging.ImageAttributes
         try {
             $attributes.SetWrapMode([System.Drawing.Drawing2D.WrapMode]::TileFlipXY)
-            $rect = New-Object System.Drawing.Rectangle(0, 0, $Side, $Side)
+            $inner = [int][Math]::Round($Side * $Inset)
+            $offset = [int][Math]::Floor(($Side - $inner) / 2)
+            if ($inner -lt $Side) {
+                $graphics.Clear($Background)
+                $graphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
+            }
+            $rect = New-Object System.Drawing.Rectangle($offset, $offset, $inner, $inner)
             $graphics.DrawImage($Image, $rect, 0, 0, $Image.Width, $Image.Height, [System.Drawing.GraphicsUnit]::Pixel, $attributes)
         } finally {
             $attributes.Dispose()
@@ -86,11 +110,23 @@ try {
     Write-Host ("  {0}x{1}, {2}, top-left pixel {3} (alpha {4})" -f $source.Width, $source.Height, $source.PixelFormat, $cornerHex, $corner.A)
     Write-Host 'Writing:'
 
-    Write-ScaledPng -Image $source -Side 1024 -Path (Join-Path $repoRoot 'src-tauri\icons\source.png')
+    if (-not $WebOnly) {
+        Write-ScaledPng -Image $source -Side 1024 -Path (Join-Path $repoRoot 'src-tauri\icons\source.png')
 
-    foreach ($side in 64, 128, 256, 512) {
-        Write-ScaledPng -Image $source -Side $side -Path (Join-Path $repoRoot ('public\brand\jknet-logo-{0}.png' -f $side))
+        foreach ($side in 64, 128, 256, 512) {
+            Write-ScaledPng -Image $source -Side $side -Path (Join-Path $repoRoot ('public\brand\jknet-logo-{0}.png' -f $side))
+        }
     }
+
+    # --- slice: web app ---
+    foreach ($side in 64, 128, 256) {
+        Write-ScaledPng -Image $source -Side $side -Path (Join-Path $repoRoot ('web\public\brand\jknet-logo-{0}.png' -f $side))
+    }
+    foreach ($side in 180, 192, 512) {
+        Write-ScaledPng -Image $source -Side $side -Path (Join-Path $repoRoot ('web\public\icons\icon-{0}.png' -f $side))
+    }
+    $brand = [System.Drawing.Color]::FromArgb(255, $corner.R, $corner.G, $corner.B)
+    Write-ScaledPng -Image $source -Side 512 -Inset 0.8 -Background $brand -Path (Join-Path $repoRoot 'web\public\icons\icon-512-maskable.png')
 } finally {
     $source.Dispose()
     $sourceStream.Dispose()

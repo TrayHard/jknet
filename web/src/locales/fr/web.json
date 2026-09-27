@@ -35,7 +35,10 @@
       "servers": "Choisissez un serveur",
       "bundles": "Choisissez un bundle",
       "jkhub": "Choisissez un mod"
-    }
+    },
+    "where": "online.jknet.app",
+    "closeDetails": "Fermer les détails",
+    "pending": "Cette partie de JKNet arrivera avec une prochaine mise à jour de l'application web."
   },
   "signin": {
     "title": "Se connecter à JKNet",
@@ -143,5 +146,19 @@
     "title": "À propos",
     "version": "Build {{commit}} du {{date}}",
     "launcher": "JKNet pour votre PC"
+  },
+  "friendsScreen": {
+    "requests": "Demandes et invitations",
+    "invites": "Invitations sur un serveur",
+    "inviteFrom": "{{name}} vous invite sur {{server}}",
+    "inviteNote": "Rejoignez la partie depuis JKNet sur votre PC.",
+    "none": "Aucune demande d'ami ni invitation sur un serveur pour le moment.",
+    "gone": "Ce joueur n'est pas dans votre liste d'amis.",
+    "since": "Amis depuis le {{date}}"
+  },
+  "account": {
+    "signOutText": "Déconnecte ce navigateur. Votre compte et vos amis restent.",
+    "deleteText": "Supprime du service le compte, vos amis, vos invitations et vos discussions.",
+    "deleteBody": "Votre compte, votre liste d'amis, vos invitations et vos discussions sont supprimés du service. Cette action est irréversible."
   }
 }

@@ -1,0 +1,85 @@
+/*
+ * The web app's styles: the launcher's tokens, fonts and base rules, plus
+ * what a phone needs.
+ *
+ * Tailwind scans the shared components and the web app's own. The dark page
+ * background is set here and not in `index.html`: the page runs under
+ * `style-src 'self'`, which refuses a `style` attribute.
+ */
+@import "../../src/index.css";
+@source "../../src";
+@source "../src";
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-bg-app);
+  }
+
+  html,
+  body,
+  #root {
+    /* The visible height, which follows the phone's address bar and
+       keyboard: `100vh` would put the composer under the keyboard. */
+    height: 100dvh;
+  }
+
+  body {
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+}
+
+/* The edge swipe that opens the menu: vertical scrolling stays the
+   browser's, a horizontal move reaches the page. */
+.touch-pan-y {
+  touch-action: pan-y;
+}
+
+/* Clear of the notch and the home indicator, whichever edge they are on. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.safe-left {
+  padding-left: env(safe-area-inset-left);
+}
+.safe-right {
+  padding-right: env(safe-area-inset-right);
+}
+
+@keyframes jknet-drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-in {
+  animation: jknet-drawer-in 180ms ease-out;
+}
+
+@keyframes jknet-sheet-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.details-sheet-in {
+  animation: jknet-sheet-in 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-in,
+  .details-sheet-in {
+    animation: none;
+  }
+}

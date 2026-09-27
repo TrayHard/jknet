@@ -59,6 +59,19 @@ jobs:
       - name: Frontend unit tests
         run: npm run test:unit
 
+      # --- slice: web app ---
+      # The web app shares the frontend and the catalogs above and ships on
+      # its own: its types, its core's unit tests, and a build that enforces
+      # the first-download budget and keeps launcher-only modules out.
+      - name: Web typecheck
+        run: npm run web:typecheck
+
+      - name: Web unit tests
+        run: npm run web:test
+
+      - name: Web build
+        run: npm run web:build
+
       # Not one of the six gates: it covers scripts/release-manifest.mjs, which
       # otherwise runs only in the release job, on a tag, after the whole build.
       - name: Release manifest tests

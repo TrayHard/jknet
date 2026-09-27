@@ -35,7 +35,10 @@
       "servers": "Válasszon szervert",
       "bundles": "Válasszon bundle-t",
       "jkhub": "Válasszon modot"
-    }
+    },
+    "where": "online.jknet.app",
+    "closeDetails": "Részletek bezárása",
+    "pending": "A JKNet ezen része a webalkalmazás egy későbbi frissítésével érkezik."
   },
   "signin": {
     "title": "Bejelentkezés a JKNetbe",
@@ -143,5 +146,19 @@
     "title": "Névjegy",
     "version": "{{commit}} build, {{date}}",
     "launcher": "JKNet a számítógépére"
+  },
+  "friendsScreen": {
+    "requests": "Kérések és meghívások",
+    "invites": "Szervermeghívások",
+    "inviteFrom": "{{name}} meghív a(z) {{server}} szerverre",
+    "inviteNote": "A játékhoz a számítógépeden futó JKNet-ből csatlakozhatsz.",
+    "none": "Most nincs se barátkérés, se szervermeghívás.",
+    "gone": "Ez a játékos nincs a barátlistádon.",
+    "since": "Barátok ekkor óta: {{date}}"
+  },
+  "account": {
+    "signOutText": "Kijelentkezteti ezt a böngészőt. A fiókod és a barátaid megmaradnak.",
+    "deleteText": "Törli a szolgáltatásból a fiókot, a barátaidat, a meghívásaidat és a csevegéseidet.",
+    "deleteBody": "A fiókod, a barátlistád, a meghívásaid és a csevegéseid törlődnek a szolgáltatásból. Ez nem vonható vissza."
   }
 }

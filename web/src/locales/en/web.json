@@ -35,7 +35,10 @@
       "servers": "Pick a server",
       "bundles": "Pick a bundle",
       "jkhub": "Pick a mod"
-    }
+    },
+    "where": "online.jknet.app",
+    "closeDetails": "Close details",
+    "pending": "This part of JKNet arrives with a later update of the web app."
   },
   "signin": {
     "title": "Sign in to JKNet",
@@ -143,5 +146,19 @@
     "title": "About",
     "version": "Build {{commit}} of {{date}}",
     "launcher": "JKNet for your PC"
+  },
+  "friendsScreen": {
+    "requests": "Requests and invites",
+    "invites": "Server invites",
+    "inviteFrom": "{{name}} invites you to {{server}}",
+    "inviteNote": "Join the game from JKNet on your PC.",
+    "none": "No friend requests or server invites right now.",
+    "gone": "This player is not on your friends list.",
+    "since": "Friends since {{date}}"
+  },
+  "account": {
+    "signOutText": "Signs this browser out. Your account and your friends stay.",
+    "deleteText": "Removes the account, your friends, your invites and your chats from the service.",
+    "deleteBody": "Your account, your friends list, your invites and your chats are removed from the service. This cannot be undone."
   }
 }

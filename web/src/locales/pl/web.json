@@ -35,7 +35,10 @@
       "servers": "Wybierz serwer",
       "bundles": "Wybierz bundle",
       "jkhub": "Wybierz mod"
-    }
+    },
+    "where": "online.jknet.app",
+    "closeDetails": "Zamknij szczegóły",
+    "pending": "Ta część JKNet pojawi się w jednej z kolejnych aktualizacji aplikacji webowej."
   },
   "signin": {
     "title": "Zaloguj się do JKNet",
@@ -143,5 +146,19 @@
     "title": "O aplikacji",
     "version": "Kompilacja {{commit}} z {{date}}",
     "launcher": "JKNet na komputer"
+  },
+  "friendsScreen": {
+    "requests": "Zaproszenia do znajomych i na serwery",
+    "invites": "Zaproszenia na serwer",
+    "inviteFrom": "{{name}} zaprasza cię na {{server}}",
+    "inviteNote": "Do gry dołączysz z JKNet na komputerze.",
+    "none": "Nie ma teraz zaproszeń do znajomych ani na serwery.",
+    "gone": "Tego gracza nie ma na twojej liście znajomych.",
+    "since": "Znajomi od {{date}}"
+  },
+  "account": {
+    "signOutText": "Wylogowuje tę przeglądarkę. Konto i znajomi zostają.",
+    "deleteText": "Usuwa z usługi konto, twoich znajomych, zaproszenia i czaty.",
+    "deleteBody": "Twoje konto, lista znajomych, zaproszenia i czaty zostaną usunięte z usługi. Tego nie można cofnąć."
   }
 }
