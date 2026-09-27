@@ -54,6 +54,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     JKNET_ONLINE_CHAT_FILE_DIR: join(dir, "chat-files"),
     JKNET_ONLINE_DEV_PROVIDER: "1",
     JKNET_ONLINE_VAPID_PRIVATE_KEY: vapid,
+    // A hidden tab, and the socket of a page that navigated away, count
+    // for seconds instead of minutes, and the service looks for expired
+    // presence every two seconds, so the presence spec sees a player go
+    // offline. A page's reload in another spec may flicker its player for
+    // a moment; nothing there reads presence across one.
+    JKNET_ONLINE_WEB_HIDDEN_GRACE_SECS: "5",
+    JKNET_ONLINE_WEB_CLOSE_GRACE_SECS: "5",
+    JKNET_ONLINE_PRESENCE_SWEEP_SECS: "2",
   };
 
   const log = openSync(join(dir, "service.log"), "a");

@@ -117,6 +117,9 @@ export async function startPwa(canAutoApply: () => boolean): Promise<void> {
     console.warn("The service worker did not register", error);
     return;
   }
+  // A browser that blocks workers (a test run, a locked-down profile) may
+  // answer the registration with nothing at all.
+  if (!registration) return;
 
   const noteWaiting = () => {
     if (registration?.waiting && workers.controller) set({ waiting: true });

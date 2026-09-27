@@ -47,6 +47,16 @@ export function needsLauncher(command: string): CoreError {
   return new CoreError(NEEDS_LAUNCHER, NEEDS_LAUNCHER, { command });
 }
 
+/** Arguments the core refuses before any request, `AppError::InvalidInput` of the launcher. */
+export function invalidInput(reason: string): CoreError {
+  return new CoreError("invalidInput", `Invalid input: ${reason}`, { reason });
+}
+
+/** Something the command names is not there, `AppError::NotFound` of the launcher. */
+export function notFound(what: string): CoreError {
+  return new CoreError("notFound", `Not found: ${what}`, { what });
+}
+
 /** A command that needs an account while nobody is signed in. */
 export function signedOut(): CoreError {
   return onlineError("unauthorized", "Sign in to JKNet first", 401);

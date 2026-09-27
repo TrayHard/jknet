@@ -41,3 +41,6 @@ dev.cmd
 /AGENTS.md
 /CLAUDE.md
 /.vscode/
+
+# Chat sounds the web build copies from src-tauri/resources/sounds
+web/public/sounds/

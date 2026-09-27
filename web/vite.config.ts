@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
@@ -70,6 +72,68 @@ function buildInfo(info: { commit: string; builtAt: string }): Plugin {
 }
 
 /**
+ * The launcher's editors and 3D previews, stood in for by empty components
+ * in the web build.
+ *
+ * Shared chat cards and bundle views reach them by static imports: **Apply**
+ * of a config card opens the config editor (CodeMirror), **Save as profile**
+ * of a profile card the skin preview (three.js), **Contents** and **Edit**
+ * of a bundle file the file preview and the pk3 editor. On the web those
+ * buttons are hidden or disabled by the platform's capabilities, so the
+ * editors never render; this keeps their libraries out of every chunk,
+ * which `check-bundle.mjs` requires. The launcher's build is untouched.
+ */
+const LAUNCHER_ONLY: Record<string, string> = {
+  "src/components/ConfigCodeEditor.tsx": "web/src/stubs/ConfigCodeEditor.tsx",
+  "src/components/ModelPreview.tsx": "web/src/stubs/ModelPreview.tsx",
+  "src/components/library/FilePreviewDialog.tsx": "web/src/stubs/FilePreviewDialog.tsx",
+  "src/components/pk3/Pk3EditorDialog.tsx": "web/src/stubs/Pk3EditorDialog.tsx",
+};
+
+function launcherOnly(): Plugin {
+  const repo = fileURLToPath(new URL("..", import.meta.url)).replace(/\\/g, "/");
+  return {
+    name: "jknet-launcher-only",
+    enforce: "pre",
+    async resolveId(source, importer, options) {
+      if (importer === undefined || !source.startsWith(".")) return null;
+      const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+      if (resolved === null) return null;
+      const path = resolved.id.replace(/\\/g, "/").split("?")[0];
+      const relative = path.startsWith(repo) ? path.slice(repo.length) : null;
+      const stub = relative === null ? undefined : LAUNCHER_ONLY[relative];
+      return stub === undefined ? null : `${repo}${stub}`;
+    },
+  };
+}
+
+/**
+ * The chat sounds of the launcher, `src-tauri/resources/sounds/<set>/<kind>.wav`,
+ * copied to `web/public/sounds/<set>-<kind>.wav` before every build and dev
+ * server start, so the web app plays the very files the launcher does and
+ * the service worker caches them with the shell. A copy that already holds
+ * the same bytes is left alone.
+ */
+function chatSounds(): Plugin {
+  const source = fileURLToPath(new URL("../src-tauri/resources/sounds", import.meta.url));
+  const target = fileURLToPath(new URL("./public/sounds", import.meta.url));
+  const copy = () => {
+    mkdirSync(target, { recursive: true });
+    for (const set of readdirSync(source, { withFileTypes: true })) {
+      if (!set.isDirectory()) continue;
+      for (const file of readdirSync(join(source, set.name))) {
+        if (!file.endsWith(".wav")) continue;
+        const bytes = readFileSync(join(source, set.name, file));
+        const to = join(target, `${set.name}-${file}`);
+        if (existsSync(to) && readFileSync(to).equals(bytes)) continue;
+        writeFileSync(to, bytes);
+      }
+    }
+  };
+  return { name: "jknet-chat-sounds", buildStart: copy };
+}
+
+/**
  * Records which modules went into which output chunk, as paths relative to
  * the repository, in `.vite/modules.json`: `check-bundle.mjs` reads it to
  * refuse a build that pulled in a launcher-only module.
@@ -101,7 +165,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: webRoot,
-    plugins: [react(), tailwindcss(), buildInfo(info), moduleMap()],
+    plugins: [launcherOnly(), chatSounds(), react(), tailwindcss(), buildInfo(info), moduleMap()],
     envDir: webRoot,
     resolve: {
       alias: { "@app": fileURLToPath(new URL("../src", import.meta.url)) },

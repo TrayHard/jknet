@@ -20,13 +20,15 @@ import { createWebCore } from "./core/index.ts";
 import { loadPrefs } from "./core/prefs.ts";
 import type { CoreStats } from "./core/router.ts";
 import { openStorage } from "./core/storage.ts";
-import { initWebI18n, startLanguage } from "./i18n.ts";
+import { i18next, initWebI18n, startLanguage } from "./i18n.ts";
 import "./web.css";
 
 declare global {
   interface Window {
     /** Non-production builds: what the e2e run checks after every test. */
     __jknetStats?: CoreStats;
+    /** Non-production builds: the chat's state, for the e2e run to read what the screens draw from. */
+    __jknetChat?: { view(): unknown; idle(): boolean };
   }
 }
 
@@ -42,8 +44,16 @@ async function start(): Promise<void> {
     prefs,
     device: { kind: deviceKind, name: deviceName },
     origin: window.location.origin,
+    // The words the core writes into a notification itself, as the launcher's tray labels.
+    texts: () => ({
+      newMessage: i18next.t("chat:tray.newMessage"),
+      deletedAccount: i18next.t("chat:people.deleted"),
+    }),
   });
-  if (EXPOSE_STATS) window.__jknetStats = core.stats;
+  if (EXPOSE_STATS) {
+    window.__jknetStats = core.stats;
+    window.__jknetChat = { view: () => core.chat.view(), idle: () => core.chat.idle() };
+  }
   setBackend(core.backend);
 
   try {
@@ -61,9 +71,9 @@ async function start(): Promise<void> {
   );
 
   if (!import.meta.env.DEV) {
-    // Nothing is staged and no message waits yet: the outbox and the staged
-    // files of the chat join this answer when they exist.
-    void startPwa(() => true);
+    // An update applies by itself only while no message waits to go out; the
+    // staged files of the chat join this answer with the files.
+    void startPwa(() => !core.chat.busy());
   }
 }
 

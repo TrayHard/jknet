@@ -34,7 +34,7 @@ import { MessageGroup } from "./MessageGroup";
 import { OutboxStatus } from "./OutboxStatus";
 import { SystemMessage } from "./SystemMessage";
 import { ThreadContext, type ThreadActions } from "./ThreadContext";
-import { ThreadHeader } from "./ThreadHeader";
+import { ThreadHeader, type ThreadInfoMode } from "./ThreadHeader";
 import { TypingLine } from "./TypingLine";
 import { UnreadDivider } from "./UnreadDivider";
 import { useChatNames } from "./useChatText";
@@ -63,6 +63,14 @@ interface ThreadProps {
   onOpenMessage?: (conversationId: string, seq: number) => void;
   /** --- slice: chat groups --- I left the chat or ended it: back to the list. */
   onGone?: () => void;
+  /**
+   * --- slice: web app --- the info of a group or a server chat opens where
+   * the layout keeps it (the details column of the web app) instead of over
+   * the messages. Left out, the thread opens its own panel.
+   */
+  onInfo?: (mode: ThreadInfoMode) => void;
+  /** --- slice: web app --- a line above the composer, such as the note of a server chat's guest. */
+  composerNote?: ReactNode;
 }
 
 /** What the info of a group or a server chat opens on. */
@@ -104,6 +112,8 @@ export function Thread({
   jump = null,
   onOpenMessage,
   onGone,
+  onInfo: onInfoOutside,
+  composerNote,
 }: ThreadProps) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
@@ -334,11 +344,16 @@ export function Thread({
             setSearching((open) => !open);
           }}
           searching={searching && info === null}
-          onInfo={(mode) =>
+          onInfo={(mode) => {
+            if (onInfoOutside !== undefined) {
+              setSearching(false);
+              onInfoOutside(mode);
+              return;
+            }
             setInfo((current) =>
               current !== null && mode === "view" ? null : { mode, key: (current?.key ?? 0) + 1 },
-            )
-          }
+            );
+          }}
           infoOpen={info !== null}
           actions={headerActions}
           dense={dense}
@@ -467,6 +482,7 @@ export function Thread({
         {/* Hidden, not gone, under the info: the composer keeps its files. */}
         <div className={info !== null ? "hidden" : "contents"}>
           <TypingLine conversationId={conversationId} />
+          {composerNote}
           <Composer
             conversation={conversation}
             replyTo={replyTo}

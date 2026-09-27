@@ -71,10 +71,15 @@ export function GroupInviteRow({ invite, onJoined, onOpen, selected = false }: G
           variant="primary"
           disabled={answer.isPending}
           onClick={() =>
-            answer.mutate(
-              { conversationId: invite.conversationId, accept: true },
-              { onSuccess: (conversation) => conversation && onJoined(conversation.id) },
-            )
+            // Awaited rather than an `onSuccess` of this call: the answer
+            // takes the invitation out of the state, which unmounts this row,
+            // and React Query drops the callbacks of an unmounted caller.
+            void answer
+              .mutateAsync({ conversationId: invite.conversationId, accept: true })
+              .then((conversation) => {
+                if (conversation) onJoined(conversation.id);
+              })
+              .catch(() => undefined)
           }
         >
           {t("invites.join")}

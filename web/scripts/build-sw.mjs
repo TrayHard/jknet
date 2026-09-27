@@ -6,8 +6,9 @@
  * constants baked in: `__PRECACHE__`, the shell of this build, and
  * `__BUILD__`, the name of its cache. The shell is the page, the entry chunk
  * with its static imports and their styles, the WOFF2 fonts those styles
- * use, the manifest, the icons and the sounds: everything the app needs to
- * open offline. Chunks of later routes are cached on their first load.
+ * use, the manifest, the icons and the chat sounds: everything the app
+ * needs to open offline. Chunks of later routes are cached on their first
+ * load.
  *
  * Usage: `node web/scripts/build-sw.mjs [--out DIR]`, `DIR` defaulting to
  * `web/dist`, from the repository root.

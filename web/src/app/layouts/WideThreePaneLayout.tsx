@@ -52,7 +52,9 @@ export function WideThreePaneLayout({ view, nav, me, navigate, banners }: Layout
           </section>
 
           <main data-pane="detail" className="relative flex min-w-500 flex-1 flex-col bg-surface">
-            {view.detail !== undefined ? (
+            {view.detail !== undefined && view.ownHeader === true ? (
+              <div className="flex min-h-0 flex-1 flex-col">{view.detail}</div>
+            ) : view.detail !== undefined ? (
               <>
                 <header className="flex h-64 shrink-0 items-center gap-12 border-b border-line-subtle px-24">
                   {view.detailHeader !== undefined ? (

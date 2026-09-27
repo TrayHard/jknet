@@ -70,24 +70,37 @@ export function PhoneDrawerLayout({ view, nav, me, attention, up, banners }: Lay
   const level = view.aside !== undefined ? "aside" : view.detail !== undefined ? "detail" : "list";
   const content = level === "aside" ? view.aside : level === "detail" ? view.detail : view.list;
   const title = level === "aside" ? (view.asideTitle ?? view.title) : view.title;
+  // The thread is its own top bar: the way up, the avatar, the status, the tools.
+  const bare = level === "detail" && view.ownHeader === true;
 
   return (
     <DialogPresentationContext value="sheet">
       <SheetHistoryContext value={registerSheet}>
         <div data-layout="phone" className="flex h-full min-h-0 flex-col bg-app">
-          <TopBar
-            kind={root ? "root" : "detail"}
-            title={title}
-            header={level === "detail" ? view.detailHeader : undefined}
-            actions={root ? view.headerActions : level === "detail" ? view.detailActions : undefined}
-            attention={attention}
-            drawerOpen={drawer.open}
-            onMenu={drawer.openDrawer}
-            onBack={up}
-            menuRef={menuButton}
-          />
+          {bare ? (
+            <div className="safe-top shrink-0 bg-surface" />
+          ) : (
+            <TopBar
+              kind={root ? "root" : "detail"}
+              title={title}
+              header={level === "detail" ? view.detailHeader : undefined}
+              actions={root ? view.headerActions : level === "detail" ? view.detailActions : undefined}
+              attention={attention}
+              drawerOpen={drawer.open}
+              onMenu={drawer.openDrawer}
+              onBack={up}
+              menuRef={menuButton}
+            />
+          )}
           {banners}
-          <main data-pane={level} className="touch-pan-y safe-left safe-right flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <main
+            data-pane={level}
+            className={
+              bare
+                ? "touch-pan-y safe-left safe-right safe-bottom flex min-h-0 flex-1 flex-col bg-surface"
+                : "touch-pan-y safe-left safe-right flex min-h-0 flex-1 flex-col overflow-y-auto"
+            }
+          >
             {content}
           </main>
           {drawer.open ? (

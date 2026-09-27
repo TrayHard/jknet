@@ -4,8 +4,8 @@
  *
  * - `install`: caches the shell of this build (`shell-<build>`): the page,
  *   the entry chunk with its static imports and styles, the fonts, the
- *   manifest, the icons and the sounds. It waits; the page decides when the
- *   new version takes over.
+ *   manifest, the icons and the chat sounds. It waits; the page decides
+ *   when the new version takes over.
  * - `activate`: drops the shells of other builds and takes the open pages.
  * - `fetch`: a navigation goes to the network and falls back to the cached
  *   page offline; `/assets/*` comes from the cache first, a chunk of a later

@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next";
 import { useLocation, useMatches, useNavigate } from "react-router";
 
 import { ChatLayoutContext, useRegisterChatLayout, type ChatLayout } from "../../../src/components/chat/ChatLayoutContext.ts";
-import { useAccountState } from "../../../src/lib/queries.ts";
+import { useAccountState, useChatConversation } from "../../../src/lib/queries.ts";
 import { safeNext } from "../core/session.ts";
 import { useWebCore } from "./CoreContext.tsx";
 import { deviceKind } from "./device.ts";
 import { layouts } from "./layouts/index.ts";
+import { LayoutActionsContext, type LayoutActions } from "./layouts/LayoutActions.ts";
 import { overlayOf } from "./layouts/history.ts";
 import { useHistoryModel, useUp } from "./layouts/overlays.ts";
 import type { LayoutMe } from "./layouts/types.ts";
@@ -40,6 +41,7 @@ function isRouteHandle(handle: unknown): handle is RouteHandle {
 export function LayoutHost() {
   const { t } = useTranslation("web");
   const { t: tFriends } = useTranslation("friends");
+  const { t: tChat } = useTranslation("chat");
   const matches = useMatches();
   const location = useLocation();
   const routerNavigate = useNavigate();
@@ -57,15 +59,19 @@ export function LayoutHost() {
   const spec = (match?.handle as RouteHandle | undefined)?.spec;
   const params = match?.params ?? {};
   const paramsKey = JSON.stringify(params);
+  // The details column of a chat is its info: a group's, or a server chat's.
+  const infoOf = useChatConversation(spec?.aside === "groupInfo" ? (params.conversationId ?? null) : null);
+  const asideTitle = infoOf?.kind === "server" ? tChat("info.titleServer") : tChat("info.title");
 
   const view = useMemo(
-    () => (spec === undefined ? null : viewOf(spec, params, t)),
+    () => (spec === undefined ? null : viewOf(spec, params, t, { asideTitle })),
     // `params` is a new object each render; its content is what counts.
-    [spec, paramsKey, t],
+    [spec, paramsKey, t, asideTitle],
   );
 
   const history = useHistoryModel();
   const up = useUp(history, view?.parent);
+  const actions = useMemo<LayoutActions>(() => ({ up: wide ? null : up, wide }), [up, wide]);
 
   const navigate = useCallback(
     (path: string, options?: { replace?: boolean }) => void routerNavigate(path, { replace: options?.replace }),
@@ -132,6 +138,7 @@ export function LayoutHost() {
   const Layout = wide ? layouts.wide : layouts.phone;
   return (
     <ChatLayoutContext value={chatLayout}>
+      <LayoutActionsContext value={actions}>
       <Layout
         view={view}
         nav={nav}
@@ -146,6 +153,7 @@ export function LayoutHost() {
           </>
         }
       />
+      </LayoutActionsContext>
     </ChatLayoutContext>
   );
 }

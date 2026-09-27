@@ -7,13 +7,19 @@
  * Settings`) and three fields of its own preferences on top. A write may touch
  * only those three; anything else is a launcher setting, and asking the web
  * app to change it is a gating bug of the screen that asked.
+ *
+ * The chat sound (`sound` and `soundName` of `chatNotifications`) is kept
+ * apart, in `prefs.sound`: it belongs to this browser and outlives a
+ * sign-out. It is on by default and plays whenever the app is open, a tab in
+ * the background included; nothing of the launcher's settings touches it.
  */
 
-import { needsLauncher } from "./errors.ts";
+import { invalidInput, needsLauncher } from "./errors.ts";
 import { EVENTS, type EventBus } from "./events.ts";
-import type { PrefsStore } from "./prefs.ts";
+import type { PrefsStore, SoundPref } from "./prefs.ts";
 import type { ChatNotifications, Game, Settings } from "../../../src/lib/ipc.ts";
 import type { Language, LanguageSetting } from "../../../src/i18n/languages.ts";
+import { isChatSound } from "../../../src/lib/chat/notifySettings.ts";
 
 /** `ChatNotifications::default()` of the launcher. */
 export const DEFAULT_CHAT_NOTIFICATIONS: ChatNotifications = {
@@ -69,6 +75,18 @@ export function launcherDefaults(apiBase: string): Settings {
   };
 }
 
+/** The chat sound of a browser that never changed it: on, the launcher's default set. */
+export const DEFAULT_SOUND: SoundPref = Object.freeze({ on: true, name: "default" });
+
+/** The stored sound, every field set; a value this build cannot read is the default. */
+export function soundOf(stored: unknown): SoundPref {
+  const value = stored !== null && typeof stored === "object" ? (stored as Partial<SoundPref>) : {};
+  return {
+    on: typeof value.on === "boolean" ? value.on : DEFAULT_SOUND.on,
+    name: isChatSound(value.name) ? value.name : DEFAULT_SOUND.name,
+  };
+}
+
 /** The fields `update_settings` accepts on the web. */
 export const WEB_SETTINGS = ["language", "activeGame", "chatNotifications"] as const;
 
@@ -104,7 +122,13 @@ export function createSettings(options: {
     const game = prefs.get("activeGame");
     if (isGame(game)) settings.activeGame = game;
     const chat = prefs.get("chatNotifications");
-    if (chat !== undefined) settings.chatNotifications = { ...DEFAULT_CHAT_NOTIFICATIONS, ...chat };
+    const sound = soundOf(prefs.get("sound"));
+    settings.chatNotifications = {
+      ...DEFAULT_CHAT_NOTIFICATIONS,
+      ...(chat ?? {}),
+      sound: sound.on,
+      soundName: sound.name,
+    };
     settings.onlineUser = options.user();
     return settings;
   };
@@ -124,9 +148,19 @@ export function createSettings(options: {
         await prefs.set("activeGame", value);
       } else if (name === "chatNotifications") {
         const current = get().chatNotifications ?? DEFAULT_CHAT_NOTIFICATIONS;
-        const next = { ...current, ...(value as Partial<ChatNotifications>) };
+        const patch = value !== null && typeof value === "object" ? (value as Partial<ChatNotifications>) : {};
+        const { sound, soundName, ...rest } = patch;
+        if (sound !== undefined && typeof sound !== "boolean") throw invalidInput("sound is on or off");
+        if (soundName !== undefined && !isChatSound(soundName)) {
+          throw invalidInput(`${JSON.stringify(soundName)} is not a chat sound`);
+        }
+        // `get()` read the stored sound through `soundOf`, so its name is a chat sound.
+        const nextSound = soundOf({ on: sound ?? current.sound, name: soundName ?? current.soundName });
+        const next = { ...current, ...rest, sound: nextSound.on, soundName: nextSound.name };
         chatChanged = JSON.stringify(next) !== JSON.stringify(current);
-        await prefs.set("chatNotifications", next);
+        const { sound: _on, soundName: _name, ...stored } = next;
+        await prefs.set("chatNotifications", stored);
+        await prefs.set("sound", nextSound);
       }
     }
 

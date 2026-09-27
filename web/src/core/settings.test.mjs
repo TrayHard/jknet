@@ -55,6 +55,43 @@ test("a chat switch merges into the rest and is announced once", async () => {
   assert.equal(emitted.length, 1, "an unchanged switch is not announced");
 });
 
+test("the chat sound is on by default and lives in this browser's own preference", async () => {
+  const { settings, prefs } = await setup();
+  assert.equal(settings.get().chatNotifications.sound, true);
+  assert.equal(settings.get().chatNotifications.soundName, "default");
+  assert.equal(prefs.get("sound"), undefined, "nothing is written until the player picks");
+
+  const next = await settings.update({ chatNotifications: { sound: false, soundName: "comlink" } });
+  assert.equal(next.chatNotifications.sound, false);
+  assert.equal(next.chatNotifications.soundName, "comlink");
+  assert.deepEqual(prefs.get("sound"), { on: false, name: "comlink" });
+  assert.equal("sound" in (prefs.get("chatNotifications") ?? {}), false, "the other switches do not carry it");
+  assert.equal("soundName" in (prefs.get("chatNotifications") ?? {}), false);
+
+  await settings.update({ chatNotifications: { dnd: true } });
+  assert.deepEqual(prefs.get("sound"), { on: false, name: "comlink" }, "another switch leaves the sound alone");
+  assert.equal(settings.get().chatNotifications.dnd, true);
+});
+
+test("an unknown sound set is refused, and one stored by a newer build plays the default", async () => {
+  const { settings, prefs } = await setup();
+  await assert.rejects(settings.update({ chatNotifications: { soundName: "trumpet" } }), (error) => error.code === "invalidInput");
+  await prefs.set("sound", { on: true, name: "trumpet" });
+  assert.equal(settings.get().chatNotifications.soundName, "default");
+  await prefs.set("sound", "loud");
+  assert.equal(settings.get().chatNotifications.sound, true);
+});
+
+test("the sound outlives a sign-out, like the language", async () => {
+  const { settings, prefs, storage } = await setup();
+  await settings.update({ chatNotifications: { sound: false, inApp: false } });
+  await storage.wipe();
+  await prefs.restoreDevicePrefs();
+  const after = settings.get().chatNotifications;
+  assert.equal(after.sound, false);
+  assert.equal(after.inApp, true, "the account's switches go with the account");
+});
+
 test("any other field is a launcher setting", async () => {
   const { settings } = await setup();
   for (const patch of [{ closeOnLaunch: true }, { onlineUrl: "https://evil.example.com" }, { language: "ru", favoriteServers: [] }]) {

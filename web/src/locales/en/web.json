@@ -85,6 +85,7 @@
   },
   "notifications": {
     "title": "Notifications",
+    "soundText": "Plays whenever JKNet is open in this browser, even in a background tab. This choice stays on this device.",
     "enable": "Enable notifications",
     "unavailable": "Notifications are not available right now.",
     "blocked": "Notifications are blocked in the settings of the browser.",

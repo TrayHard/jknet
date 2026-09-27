@@ -46,7 +46,30 @@ interface Findings {
   allowed: RegExp[];
 }
 
+/**
+ * Runs in every page of every context before the app. Besides the guard's
+ * listeners it keeps the run silent in every engine, WebKit included, which
+ * has no mute switch: a media element is muted before it loads or plays, and
+ * an audio context stays suspended. The app plays no sound; this holds for
+ * whatever a later test opens.
+ */
 const INIT_SCRIPT = `
+  {
+    const mute = (element) => { element.muted = true; element.volume = 0; };
+    const play = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function () { mute(this); return play.call(this); };
+    for (const type of ["loadstart", "play"]) {
+      document.addEventListener(type, (event) => { if (event.target instanceof HTMLMediaElement) mute(event.target); }, true);
+    }
+    for (const name of ["AudioContext", "webkitAudioContext"]) {
+      const Base = window[name];
+      if (typeof Base !== "function") continue;
+      window[name] = class extends Base {
+        constructor(...args) { super(...args); void this.suspend(); }
+        resume() { return Promise.resolve(); }
+      };
+    }
+  }
   document.addEventListener("securitypolicyviolation", (event) => {
     console.error("securitypolicyviolation: " + event.violatedDirective + " " + event.blockedURI);
   });
@@ -223,15 +246,32 @@ export async function backFromService(page: Page): Promise<void> {
  * does, to reach a screen directly.
  */
 export async function visit(page: Page, path: string): Promise<void> {
-  // Bounded: the live socket keeps a connection open for good.
-  if (page.url().startsWith(BASE)) await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => undefined);
+  await settle(page);
   await page.goto(path);
 }
 
 /** Reloads the page once it has settled: see `visit`. */
 export async function reload(page: Page): Promise<void> {
-  await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => undefined);
+  await settle(page);
   await page.reload();
+}
+
+/**
+ * Waits until the page has no request of its own on the way and its chat
+ * nothing waiting — a read marker a second from going out, a message — so
+ * a navigation of the test cuts nothing off. Bounded: the live socket keeps
+ * a connection open for good.
+ */
+async function settle(page: Page): Promise<void> {
+  if (!page.url().startsWith(BASE)) return;
+  await page.waitForLoadState("networkidle", { timeout: 2_000 }).catch(() => undefined);
+  await page
+    .waitForFunction(
+      () => (window as unknown as { __jknetChat?: { idle(): boolean } }).__jknetChat?.idle() ?? true,
+      undefined,
+      { timeout: 5_000 },
+    )
+    .catch(() => undefined);
 }
 
 /** The account id of the signed-in player, read from the web app's database. */
@@ -251,6 +291,78 @@ export async function userIdOf(page: Page): Promise<string> {
         };
       }),
   );
+}
+
+/** A launcher of the account, as the service sees one: a token of client `launcher`. */
+export interface LauncherClient {
+  token: string;
+  userId: string;
+}
+
+/**
+ * Signs a launcher in with the developer provider, the way JKNet on a PC
+ * does: a login session of client `launcher`, the provider's form, the
+ * poll. The same name is the same account as the web app's sign-in.
+ */
+export async function launcherSignIn(name: string): Promise<LauncherClient> {
+  const headers = { "content-type": "application/json", "x-forwarded-for": `203.0.113.${1 + Math.floor(Math.random() * 254)}` };
+  const created = await fetch(`${SERVICE}/v1/auth/login-sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ provider: "dev", deviceName: "E2E-LAUNCHER", client: "launcher" }),
+  });
+  expect(created.status, "a launcher's login session").toBe(201);
+  const session = (await created.json()) as { id: string; url: string };
+  const form = await (await fetch(session.url, { headers })).text();
+  const state = /name="state" value="([^"]+)"/.exec(form)?.[1];
+  expect(state, "the developer sign-in form carries its state").toBeTruthy();
+  const callback = await fetch(
+    `${SERVICE}/v1/auth/dev/callback?state=${encodeURIComponent(state ?? "")}&name=${encodeURIComponent(name)}`,
+    { headers, redirect: "manual" },
+  );
+  expect(callback.status).toBeLessThan(400);
+  const done = (await (await fetch(`${SERVICE}/v1/auth/login-sessions/${session.id}`, { headers })).json()) as {
+    status: string;
+    token?: string;
+    user?: { id: string };
+  };
+  expect(done.status).toBe("done");
+  return { token: done.token ?? "", userId: done.user?.id ?? "" };
+}
+
+/** One presence heartbeat of a launcher: `online`, or `in_game` with where. */
+export async function launcherHeartbeat(
+  launcher: LauncherClient,
+  beat: { status: "online" | "in_game"; serverName?: string; serverAddress?: string },
+): Promise<void> {
+  const response = await fetch(`${SERVICE}/v1/presence`, {
+    method: "PUT",
+    headers: { "content-type": "application/json", authorization: `Bearer ${launcher.token}` },
+    body: JSON.stringify(beat),
+  });
+  expect(response.ok, `a launcher heartbeat (${response.status})`).toBe(true);
+}
+
+/** Signs a launcher out: its presence goes at once, the account's web sessions stay. */
+export async function launcherSignOut(launcher: LauncherClient): Promise<void> {
+  const response = await fetch(`${SERVICE}/v1/auth/logout`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${launcher.token}` },
+  });
+  expect(response.status).toBe(204);
+}
+
+/**
+ * Puts a page in the background as far as the app can tell: the document
+ * reads `hidden` and says so, as when the player switches tabs or apps. A
+ * headless browser never hides a page by itself.
+ */
+export async function hideTab(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
 }
 
 /** Sends a friend request from the friends screen and waits for the answer. */

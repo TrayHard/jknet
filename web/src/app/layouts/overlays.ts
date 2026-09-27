@@ -97,6 +97,12 @@ let sheetCounter = 0;
  * The phone's registrar of sheets: each open sheet gets a history entry of
  * its own, the system back closes the one on top, and a sheet that closes by
  * itself takes its entry back.
+ *
+ * The back of a sheet that closes by itself waits for the end of the task.
+ * A sheet that opens in the same task — a line of an action menu that opens
+ * a confirmation — takes the closing sheet's entry over with a replace
+ * instead: a back and a push issued together race in the browser, and the
+ * new sheet loses its entry to the back and closes before it is seen.
  */
 export function useSheetRegistrar(): SheetRegistrar {
   const navigate = useNavigate();
@@ -104,6 +110,8 @@ export function useSheetRegistrar(): SheetRegistrar {
   const latest = useRef(location);
   latest.current = location;
   const stack = useRef<OpenSheet[]>([]);
+  /** The sheet whose entry is on top and whose back waits for the task's end. */
+  const leaving = useRef<string | null>(null);
 
   useEffect(() => {
     const current = overlayOf(location.state).sheet;
@@ -133,14 +141,38 @@ export function useSheetRegistrar(): SheetRegistrar {
       stack.current.push({ token, close, pushed: false });
       const at = latest.current;
       const state = at.state !== null && typeof at.state === "object" ? (at.state as Record<string, unknown>) : {};
-      void navigate(here(at), { state: { ...state, sheet: token } });
+      // The entry of a sheet that closed a moment ago in this task is still
+      // on top, and its back has not gone out: this sheet takes it over.
+      const takeOver = leaving.current !== null && liveSheet(at) === leaving.current;
+      leaving.current = null;
+      void navigate(here(at), { replace: takeOver, state: { ...state, sheet: token } });
       return () => {
         const index = stack.current.findIndex((sheet) => sheet.token === token);
         if (index < 0) return;
         stack.current.splice(index, 1);
-        if (overlayOf(latest.current.state).sheet === token) void navigate(-1);
+        // The entry the browser is on right now, not the one this render saw:
+        // a sheet that closes because its action navigated (a new group opens
+        // its chat) must not go back over that navigation.
+        if (liveSheet(latest.current) !== token) return;
+        leaving.current = token;
+        queueMicrotask(() => {
+          if (leaving.current !== token) return;
+          leaving.current = null;
+          if (liveSheet(latest.current) === token) void navigate(-1);
+        });
       };
     },
     [navigate],
   );
+}
+
+/**
+ * The sheet the history entry the browser is on names. The router writes its
+ * state to `usr` of `history.state`; an entry that is not the router's falls
+ * back to the state of `fallback`, the location the last render saw.
+ */
+function liveSheet(fallback: Location): string | undefined {
+  const entry = typeof window === "undefined" ? null : (window.history.state as { usr?: unknown } | null);
+  const live = entry !== null && typeof entry === "object" && "usr" in entry;
+  return overlayOf(live ? entry.usr : fallback.state).sheet;
 }

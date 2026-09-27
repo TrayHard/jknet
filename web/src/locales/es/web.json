@@ -85,6 +85,7 @@
   },
   "notifications": {
     "title": "Notificaciones",
+    "soundText": "Suena mientras JKNet esté abierto en este navegador, incluso en una pestaña en segundo plano. Esta elección se guarda solo en este dispositivo.",
     "enable": "Activar las notificaciones",
     "unavailable": "Las notificaciones no están disponibles ahora.",
     "blocked": "Las notificaciones están bloqueadas en los ajustes del navegador.",

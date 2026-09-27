@@ -11,6 +11,11 @@ import { SettingRow, SettingsCard, ToggleRow } from "./SettingRow";
 
 interface ChatSoundsCardProps {
   onChange: (patch: ChatNotificationsPatch) => void;
+  /**
+   * --- slice: web app --- the line under the title. The launcher says the
+   * volume is the system mixer's; the web app says where its sound plays.
+   */
+  text?: string;
 }
 
 /**
@@ -23,7 +28,7 @@ interface ChatSoundsCardProps {
  * file through Windows, which has no volume of its own: the volume is the
  * one of the system mixer.
  */
-export function ChatSoundsCard({ onChange }: ChatSoundsCardProps) {
+export function ChatSoundsCard({ onChange, text }: ChatSoundsCardProps) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const settings = useSettings();
@@ -48,7 +53,7 @@ export function ChatSoundsCard({ onChange }: ChatSoundsCardProps) {
     <SettingsCard
       icon={notifications.sound ? <Volume2 size={20} /> : <VolumeX size={20} />}
       title={t("settings.sounds.title")}
-      text={t("settings.sounds.text")}
+      text={text ?? t("settings.sounds.text")}
     >
       <ToggleRow
         title={t("settings.sounds.sound")}

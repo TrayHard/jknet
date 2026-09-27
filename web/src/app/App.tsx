@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router";
 
 import { AccountProvider } from "../../../src/components/AccountProvider.tsx";
+import { ChatProvider } from "../../../src/components/chat/ChatProvider.tsx";
 import { ToastsProvider } from "../../../src/components/ToastsProvider.tsx";
 import { listen } from "../../../src/lib/backend.ts";
 import { ACCOUNT_CHANGED_EVENT, type AccountChanged } from "../../../src/lib/ipc.ts";
@@ -44,13 +45,20 @@ function AccountSwitch() {
 
 /**
  * The web app: the core's gate first, then the providers the shared
- * components expect — queries, toasts, the account — and the router.
+ * components expect — queries, toasts, the account, the chat's one
+ * subscription to the `chat:*` events — and the router.
  */
 export function App({ core }: { core: WebCore }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
+        // The commands go to the core in this page, which answers offline
+        // too: a message written offline goes into its queue. React Query
+        // would hold every call while the browser says it is offline.
+        defaultOptions: {
+          queries: { retry: 1, refetchOnWindowFocus: false, networkMode: "always" },
+          mutations: { networkMode: "always" },
+        },
       }),
   );
   const [router] = useState(() => createBrowserRouter(routes));
@@ -63,7 +71,9 @@ export function App({ core }: { core: WebCore }) {
             <AccountProvider>
               <AccountSwitch />
               <FriendsEvents />
-              <RouterProvider router={router} />
+              <ChatProvider role="main">
+                <RouterProvider router={router} />
+              </ChatProvider>
             </AccountProvider>
           </ToastsProvider>
         </QueryClientProvider>

@@ -29,6 +29,13 @@ export interface RouteView {
   detailHeader?: ReactNode;
   /** Tools of the detail's header. */
   detailActions?: ReactNode;
+  /**
+   * The detail draws its own header: the thread, whose header carries the
+   * avatar, the status line and the tools. The wide layout then leaves out
+   * its header of the content pane, the phone its top bar; the phone's way
+   * up reaches the screen through `LayoutActions`.
+   */
+  ownHeader?: boolean;
 }
 
 export interface LayoutMe {

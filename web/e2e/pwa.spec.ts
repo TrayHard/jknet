@@ -75,9 +75,11 @@ test("the browser finds the app installable", async ({ browserName }, testInfo) 
   // Installability is never granted to an incognito profile, which every
   // Playwright context is: this one gets a profile of its own.
   const profile = mkdtempSync(join(tmpdir(), "jknet-web-profile-"));
+  // Muted like every browser of the run (`playwright.config.ts`).
   const context = await chromium.launchPersistentContext(profile, {
     channel: testInfo.project.use.channel,
     headless: true,
+    args: ["--mute-audio"],
     baseURL: BASE,
   });
   try {

@@ -17,11 +17,15 @@
  * | settings        | `settings.ts`  |
  * | live socket     | `socket.ts`, `lifecycle.ts` |
  * | friends         | `friends.ts`   |
+ * | chat            | `chat/`        |
  * | one active tab  | `tabs.ts`      |
  */
 
 import type { Backend, BackendEvent, ListenOptions, PlatformCaps } from "../../../src/lib/backend.ts";
 import type { AccountChangeReason, WebDevice } from "../../../src/lib/ipc.ts";
+import { createChat, type ChatCore, type ChatFiles } from "./chat/index.ts";
+import type { NotifyTexts } from "./chat/notify.ts";
+import { playSound } from "./chat/sounds.ts";
 import { statusOf } from "./errors.ts";
 import { EventBus } from "./events.ts";
 import { createFriends, type FriendsCore } from "./friends.ts";
@@ -30,7 +34,7 @@ import { attachLifecycle, visibleNow } from "./lifecycle.ts";
 import type { PrefsStore } from "./prefs.ts";
 import { createRouter, createStats, type CommandRouter, type CoreStats } from "./router.ts";
 import { createSession, type Session } from "./session.ts";
-import { createSettings, type SettingsCore } from "./settings.ts";
+import { createSettings, DEFAULT_CHAT_NOTIFICATIONS, type SettingsCore } from "./settings.ts";
 import { createSocket, type Frame, type LiveSocket, type SocketStatus } from "./socket.ts";
 import type { Storage } from "./storage.ts";
 import { createTabGate, type TabGate } from "./tabs.ts";
@@ -55,6 +59,10 @@ export interface WebCoreOptions {
   device: { kind(): WebDevice; name(): string };
   /** `location.origin`: sign-in comes back to `/signin/done` on it. */
   origin: string;
+  /** The words of the chat's notifications in the language on screen; English without it. */
+  texts?: () => NotifyTexts;
+  /** The files of the chat, once they are in the web app. */
+  files?: ChatFiles;
 }
 
 export type FrameHandler = (frame: Frame) => boolean;
@@ -67,6 +75,7 @@ export interface WebCore {
   readonly session: Session;
   readonly settings: SettingsCore;
   readonly friends: FriendsCore;
+  readonly chat: ChatCore;
   readonly socket: LiveSocket;
   readonly prefs: PrefsStore;
   readonly storage: Storage;
@@ -135,10 +144,15 @@ export function createWebCore(options: WebCoreOptions): WebCore {
       for (const handler of frameHandlers) {
         if (handler(frame)) return;
       }
+      chat.handleFrame(frame);
     },
-    onOpen: () => friends.connected(),
+    onOpen: () => {
+      friends.connected();
+      chat.connected();
+    },
     onStatus: (status) => {
       friends.setLive(status === "open");
+      chat.setLive(status === "open");
       for (const listener of [...socketListeners]) listener();
     },
     onSignedOut: () => void sessionRef?.expire(),
@@ -149,6 +163,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
   const wipe = async (reason: AccountChangeReason) => {
     socket.stop();
     friends.stop();
+    chat.forget();
     await storage.wipe();
     await prefs.restoreDevicePrefs();
     await clearBrowserState();
@@ -164,7 +179,9 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     device,
     wipe,
     signedIn: () => {
-      if (started) socket.start();
+      if (!started) return;
+      socket.start();
+      void chat.start();
     },
   });
   sessionRef = session;
@@ -179,13 +196,42 @@ export function createWebCore(options: WebCoreOptions): WebCore {
   });
 
   const settings = createSettings({ apiBase: http.apiBase, prefs, events, user: () => session.user() });
-  const invoke = createRouter({ apiBase: http.apiBase, session, settings, friends, stats });
 
+  const chat: ChatCore = createChat({
+    http,
+    events,
+    storage,
+    me: () => session.user()?.id ?? null,
+    signedIn: () => session.signedIn(),
+    live: () => socket.status() === "open",
+    sendFrame: (frame) => socket.send(frame),
+    notifications: () => settings.get().chatNotifications ?? defaultNotifications(),
+    pushSubscribed: () => {
+      const id = prefs.get("pushSubscriptionId");
+      return typeof id === "string" && id !== "";
+    },
+    texts: options.texts ?? (() => ENGLISH_TEXTS),
+    openExternal: (url) => backend.openExternal(url),
+    files: options.files,
+    page: {
+      visible: visibleNow,
+      online: () => typeof navigator === "undefined" || navigator.onLine !== false,
+      playSound,
+      showNotification: (title, notification) => void showPageNotification(title, notification),
+    },
+  });
+
+  const invoke = createRouter({ apiBase: http.apiBase, session, settings, friends, chat, stats });
+
+  // Answers and events leave the core as copies, the way the launcher's
+  // core serializes them: a screen that keeps an answer in its cache must
+  // never hold an object the core goes on changing, or a later update that
+  // equals it would be taken for no change at all.
   const backend: Backend = {
     kind: "web",
-    invoke: <T>(command: string, args?: Record<string, unknown>) => invoke(command, args) as Promise<T>,
+    invoke: async <T>(command: string, args?: Record<string, unknown>) => detach(await invoke(command, args)) as T,
     listen: async <T>(event: string, handler: (event: BackendEvent<T>) => void, _options?: ListenOptions) =>
-      events.on(event, (payload) => handler({ payload: payload as T })),
+      events.on(event, (payload) => handler({ payload: detach(payload) as T })),
     emitTo: async (_target, event, payload) => events.emit(event, payload),
     // Only `blob:` addresses of files the core fetched ever reach this.
     convertFileSrc: (path) => path,
@@ -208,6 +254,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     detachLifecycle = null;
     socket.stop();
     friends.stop();
+    chat.stop();
     session.stop();
     storage.close();
   }
@@ -220,6 +267,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     session,
     settings,
     friends,
+    chat,
     socket,
     prefs,
     storage,
@@ -232,12 +280,15 @@ export function createWebCore(options: WebCoreOptions): WebCore {
       await session.load();
       detachLifecycle = attachLifecycle(socket, {
         hidden: () => {
+          chat.hidden();
           for (const listener of [...hiddenListeners]) listener();
         },
         resumed: () => {
+          chat.resumed();
           for (const listener of [...resumeListeners]) listener();
         },
       });
+      await chat.start();
       if (session.signedIn()) {
         socket.start();
         void session.refreshMe().catch(() => undefined);
@@ -267,6 +318,40 @@ export function createWebCore(options: WebCoreOptions): WebCore {
       return () => hiddenListeners.delete(listener);
     },
   };
+}
+
+/** A copy of an answer or an event, as a serialized one would be. */
+export function detach<T>(value: T): T {
+  return value === undefined || value === null || typeof value !== "object" ? value : structuredClone(value);
+}
+
+/** The notification words before the interface language is known. */
+const ENGLISH_TEXTS: NotifyTexts = { newMessage: "New message", deletedAccount: "Deleted account" };
+
+function defaultNotifications() {
+  return { ...DEFAULT_CHAT_NOTIFICATIONS };
+}
+
+/**
+ * A system notification of a chat message, shown by the page: only for a
+ * device without a push subscription (push is otherwise the one system
+ * notification) and only once the player allowed notifications. The tag is
+ * the one push uses, so the two never pile up for one conversation.
+ */
+async function showPageNotification(title: string, notification: { body: string; tag: string; url: string }): Promise<void> {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const registration = await navigator.serviceWorker?.getRegistration?.();
+    if (registration === undefined) return;
+    await registration.showNotification(title, {
+      body: notification.body,
+      tag: notification.tag,
+      icon: "/icons/icon-192.png",
+      data: { url: notification.url },
+    });
+  } catch (error) {
+    console.warn("Showing a chat notification failed", error);
+  }
 }
 
 /**

@@ -107,7 +107,7 @@ export function createHttp(options: HttpOptions): Http {
       if (response.status === 401 && token !== null && !path.startsWith(AUTH_PREFIX)) {
         options.onUnauthorized();
       }
-      throw refusal(response.status, text);
+      throw refusal(response.status, text, path);
     }
 
     if (response.status === 204 || text === "") return { status: response.status, data: undefined as T };
@@ -127,15 +127,62 @@ export function createHttp(options: HttpOptions): Http {
   };
 }
 
-/** The error envelope of the contract: `{ "error": { "code", "message" } }`. */
-function refusal(status: number, text: string) {
+/** The path prefix of the chat API, whose refusals name their cause in `details.reason`. */
+export const CHAT_PREFIX = "/v1/chat/";
+
+/**
+ * The code of a service that has no chat API at all: an older deployment
+ * answers every `/v1/chat/*` route with `404 No such endpoint`. The chat
+ * screens say "Chat is not available" instead of an error.
+ */
+export const CHAT_UNAVAILABLE_CODE = "chat_unavailable";
+
+/** The contract's code for an answer without an error document, as `code_for_status` of the launcher. */
+export function codeForStatus(status: number): string {
+  if (status === 400 || status === 422) return "invalid";
+  if (status === 401) return "unauthorized";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 409) return "conflict";
+  if (status === 413) return "too_large";
+  if (status === 429) return "rate_limited";
+  if (status >= 502 && status <= 504) return "provider_error";
+  return "internal";
+}
+
+/**
+ * The refusal an answer becomes: the error envelope of the contract,
+ * `{ "error": { "code", "message", "details" } }`, or the code of the status
+ * when the body is not one (a proxy's page, an empty body).
+ *
+ * A refusal of the chat API follows `chat_refusal` of the launcher's
+ * `online/client.rs`: `403 forbidden` is `owner_only` in one place and
+ * `not_friends` in another, so `details.reason` becomes the code the screens
+ * read, and `404 No such endpoint` becomes `chat_unavailable`.
+ */
+export function refusal(status: number, text: string, path = "") {
+  let code: string | null = null;
+  let message: string | null = null;
+  let reason: string | null = null;
   try {
-    const parsed = JSON.parse(text) as { error?: { code?: unknown; message?: unknown } };
-    const code = typeof parsed.error?.code === "string" ? parsed.error.code : null;
-    const message = typeof parsed.error?.message === "string" ? parsed.error.message : null;
-    if (code !== null) return onlineError(code, message ?? `HTTP ${status}`, status);
+    const parsed = JSON.parse(text) as { error?: { code?: unknown; message?: unknown; details?: { reason?: unknown } } };
+    code = typeof parsed.error?.code === "string" && parsed.error.code.trim() !== "" ? parsed.error.code : null;
+    message = typeof parsed.error?.message === "string" && parsed.error.message.trim() !== "" ? parsed.error.message : null;
+    const raw = parsed.error?.details?.reason;
+    if (typeof raw === "string") {
+      const trimmed = raw.trim();
+      if (trimmed !== "" && trimmed.length <= 40 && /^[a-z_]+$/.test(trimmed)) reason = trimmed;
+    }
   } catch {
-    // Not the contract's envelope: a proxy's page, an empty body.
+    // Not the contract's envelope.
   }
-  return onlineError(status === 401 ? "unauthorized" : status >= 500 ? "internal" : "invalid", `HTTP ${status}`, status);
+  if (code === null) return onlineError(codeForStatus(status), `the service answered ${status}`, status);
+  const said = message ?? `the service answered ${status}`;
+  if (path.startsWith(CHAT_PREFIX)) {
+    if (status === 404 && code === "not_found" && said.trim().toLowerCase() === "no such endpoint") {
+      return onlineError(CHAT_UNAVAILABLE_CODE, "this JKNet Online service has no chat", status);
+    }
+    if (reason !== null) return onlineError(reason, said, status);
+  }
+  return onlineError(code, said, status);
 }

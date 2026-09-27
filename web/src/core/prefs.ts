@@ -5,20 +5,32 @@
  * document is answered without a round trip to IndexedDB. A write goes to
  * both.
  *
- * `locale` belongs to the device, not to the account: it survives sign-out,
- * which wipes the rest of the database with the account's data.
+ * `locale` and `sound` belong to the device, not to the account: they
+ * survive sign-out, which wipes the rest of the database with the account's
+ * data.
  */
 
 import type { Storage } from "./storage.ts";
-import type { ChatNotifications, Game } from "../../../src/lib/ipc.ts";
+import type { ChatNotifications, ChatSoundName, Game } from "../../../src/lib/ipc.ts";
 import type { Language } from "../../../src/i18n/languages.ts";
+
+/**
+ * The chat sound of this browser: whether a message that notifies plays one,
+ * and which of the launcher's sets. The web app's own switch: the launcher's
+ * settings never reach it, and it never reaches them.
+ */
+export interface SoundPref {
+  on: boolean;
+  name: ChatSoundName;
+}
 
 export interface Prefs {
   locale?: Language;
   activeGame?: Game;
-  sound?: boolean;
+  sound?: SoundPref;
   toasts?: boolean;
-  chatNotifications?: ChatNotifications;
+  /** The chat's switches besides the sound, which `sound` keeps. */
+  chatNotifications?: Partial<ChatNotifications>;
   pushSubscriptionId?: string;
   vapidKey?: string;
 }
@@ -26,7 +38,7 @@ export interface Prefs {
 export type PrefName = keyof Prefs;
 
 /** The preferences that outlive a sign-out. */
-export const DEVICE_PREFS: readonly PrefName[] = ["locale"];
+export const DEVICE_PREFS: readonly PrefName[] = ["locale", "sound"];
 
 export interface PrefsStore {
   get<K extends PrefName>(name: K): Prefs[K];

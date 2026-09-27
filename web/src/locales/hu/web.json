@@ -85,6 +85,7 @@
   },
   "notifications": {
     "title": "Értesítések",
+    "soundText": "Megszólal, amíg a JKNet nyitva van ebben a böngészőben, akkor is, ha a lap a háttérben van. Ez a választás csak erre az eszközre vonatkozik.",
     "enable": "Értesítések bekapcsolása",
     "unavailable": "Az értesítések most nem érhetők el.",
     "blocked": "Az értesítések le vannak tiltva a böngésző beállításaiban.",

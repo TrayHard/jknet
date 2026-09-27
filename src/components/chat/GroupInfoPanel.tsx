@@ -45,6 +45,11 @@ interface GroupInfoPanelProps {
   /** Opens **Add friends** at once: the item of the header's menu. */
   adding?: boolean;
   dense?: boolean;
+  /**
+   * --- slice: web app --- the title row with **Back to the messages**.
+   * The web app's layout draws its own around the panel and turns it off.
+   */
+  header?: boolean;
 }
 
 const LEVELS: ChatNotifyLevel[] = ["all", "mentions", "mute"];
@@ -73,6 +78,7 @@ export function GroupInfoPanel({
   renaming: startRenaming = false,
   adding: startAdding = false,
   dense = false,
+  header = true,
 }: GroupInfoPanelProps) {
   const { t } = useTranslation("chat");
   const { t: tCommon } = useTranslation("common");
@@ -144,20 +150,22 @@ export function GroupInfoPanel({
       aria-label={server ? t("info.titleServer") : t("info.title")}
       className="flex h-full min-h-0 flex-col"
     >
-      <div className={cn("flex shrink-0 items-center gap-8 border-b border-line-subtle", dense ? "h-36 px-8" : "h-40 px-12")}>
-        <h3 className="min-w-0 flex-1 truncate text-heading-sm text-fg">
-          {server ? t("info.titleServer") : t("info.title")}
-        </h3>
-        <button
-          type="button"
-          aria-label={t("info.close")}
-          title={t("info.close")}
-          onClick={onClose}
-          className="flex size-28 shrink-0 items-center justify-center rounded-sm text-fg-secondary cursor-pointer select-none hover:bg-hover-overlay hover:text-fg"
-        >
-          <X size={14} />
-        </button>
-      </div>
+      {header ? (
+        <div className={cn("flex shrink-0 items-center gap-8 border-b border-line-subtle", dense ? "h-36 px-8" : "h-40 px-12")}>
+          <h3 className="min-w-0 flex-1 truncate text-heading-sm text-fg">
+            {server ? t("info.titleServer") : t("info.title")}
+          </h3>
+          <button
+            type="button"
+            aria-label={t("info.close")}
+            title={t("info.close")}
+            onClick={onClose}
+            className="flex size-28 shrink-0 items-center justify-center rounded-sm text-fg-secondary cursor-pointer select-none hover:bg-hover-overlay hover:text-fg"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* Who: the picture, the name, who made it. */}
@@ -341,7 +349,16 @@ export function GroupInfoPanel({
                   size="sm"
                   variant="danger"
                   disabled={leave.isPending}
-                  onClick={() => leave.mutate(conversation.id, { onSuccess: onLeft })}
+                  onClick={() =>
+                    // Awaited rather than an `onSuccess` of this call: leaving
+                    // takes the chat out of the state, which unmounts this
+                    // panel, and React Query drops the callbacks of an
+                    // unmounted caller.
+                    void leave
+                      .mutateAsync(conversation.id)
+                      .then(onLeft)
+                      .catch(() => undefined)
+                  }
                 >
                   {outcome.kind === "end" ? t("info.endChat") : t("info.confirmLeave")}
                 </Button>

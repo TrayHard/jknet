@@ -85,6 +85,7 @@
   },
   "notifications": {
     "title": "Notifications",
+    "soundText": "Joué tant que JKNet est ouvert dans ce navigateur, même dans un onglet en arrière-plan. Ce choix reste sur cet appareil.",
     "enable": "Activer les notifications",
     "unavailable": "Les notifications ne sont pas disponibles pour le moment.",
     "blocked": "Les notifications sont bloquées dans les paramètres du navigateur.",

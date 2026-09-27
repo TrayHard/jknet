@@ -1,8 +1,9 @@
-import { UserMinus } from "lucide-react";
+import { MessageCircle, UserMinus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
+import { useMessageFriend } from "../../../../src/components/chat/useOpenChat.ts";
 import { providerHandle, webDevice } from "../../../../src/components/friends/presence.ts";
 import { useStatusLine } from "../../../../src/components/friends/useStatusLine.ts";
 import { Avatar, Badge, Button, Dialog } from "../../../../src/components/ui/index.ts";
@@ -22,8 +23,9 @@ export function FriendTitle({ userId }: { userId: string }) {
 }
 
 /**
- * One friend: who they are, where they are, and **Remove friend** behind a
- * confirmation. Joining their game stays in the launcher.
+ * One friend: who they are, where they are, **Message** — the direct chat,
+ * made on first use — and **Remove friend** behind a confirmation. Joining
+ * their game stays in the launcher.
  */
 export function FriendDetailsScreen({ userId }: { userId: string }) {
   const { t } = useTranslation("friends");
@@ -35,6 +37,7 @@ export function FriendDetailsScreen({ userId }: { userId: string }) {
   const navigate = useNavigate();
   const friends = useFriendsState();
   const remove = useRemoveFriend();
+  const message = useMessageFriend();
   const [confirming, setConfirming] = useState(false);
 
   const view = friends.data;
@@ -71,6 +74,17 @@ export function FriendDetailsScreen({ userId }: { userId: string }) {
           {statusLine(friend.presence)}
         </p>
         <p className="text-body-sm text-fg-muted">{tWeb("friendsScreen.since", { date: format.date(friend.friendsSince) })}</p>
+      </div>
+
+      <div>
+        <Button
+          variant="primary"
+          icon={<MessageCircle size={16} />}
+          disabled={message.pending}
+          onClick={() => message.open(friend.user.id)}
+        >
+          {t("panel.message")}
+        </Button>
       </div>
 
       {remove.error != null ? (

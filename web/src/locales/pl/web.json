@@ -85,6 +85,7 @@
   },
   "notifications": {
     "title": "Powiadomienia",
+    "soundText": "Odtwarzany, gdy JKNet jest otwarty w tej przeglądarce, także w karcie w tle. Ten wybór dotyczy tylko tego urządzenia.",
     "enable": "Włącz powiadomienia",
     "unavailable": "Powiadomienia są teraz niedostępne.",
     "blocked": "Powiadomienia są zablokowane w ustawieniach przeglądarki.",

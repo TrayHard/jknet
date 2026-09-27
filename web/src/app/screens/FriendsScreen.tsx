@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
+import { useMessageFriend } from "../../../../src/components/chat/useOpenChat.ts";
 import { FriendRow } from "../../../../src/components/friends/FriendRow.tsx";
 import { GROUPS, groupFriends, matchesSearch } from "../../../../src/components/friends/presence.ts";
 import { Button, EmptyState, Input } from "../../../../src/components/ui/index.ts";
@@ -33,6 +34,7 @@ export function FriendsScreen({ selectedId, requestsOpen = false }: FriendsScree
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const navigate = useNavigate();
+  const message = useMessageFriend();
   const friends = useFriendsState();
   const send = useSendFriendRequest();
   const [search, setSearch] = useState("");
@@ -150,6 +152,7 @@ export function FriendsScreen({ selectedId, requestsOpen = false }: FriendsScree
                     friend={friend}
                     selected={friend.user.id === selectedId}
                     onSelect={() => void navigate(`/friends/${encodeURIComponent(friend.user.id)}`)}
+                    onMessage={() => message.open(friend.user.id)}
                   />
                 ))}
               </section>
