@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import type { Friend } from "../../lib/ipc";
+// --- slice: web app ---
+import { webDevice } from "../friends/presence";
 import { useStatusLine } from "../friends/useStatusLine";
 import { Avatar, Badge, Button } from "../ui";
 import { CheckboxBox } from "./Choice";
@@ -47,6 +49,8 @@ export function InviteRow({
         name={friend.user.displayName}
         src={friend.user.avatarUrl}
         status={friend.presence.status}
+        // --- slice: web app --- the badge beside "Online from phone".
+        device={webDevice(friend.presence)}
       />
       <span className="flex-1 min-w-0 flex flex-col gap-2">
         <span className="text-body-md-medium text-fg truncate">{friend.user.displayName}</span>

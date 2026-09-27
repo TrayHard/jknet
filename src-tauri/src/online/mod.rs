@@ -56,6 +56,13 @@ pub use types::{
     Friend, FriendRemoved, FriendRequest, HostingInfo, Invite, LiveFrame, NewInvite, OnlineUser,
     Presence, PresenceUpdate, PresenceUpdated, RelayGrant, SendRequestResult, SignInPoll,
 };
+// --- slice: web app ---
+// The devices of the account, which `crate::account` lists and signs out.
+pub use types::DeviceSession;
+/// The answer of `GET /v1/me/sessions`, for the test of `account` that reads
+/// one the way the service writes it.
+#[cfg(test)]
+pub use types::DeviceSessions;
 // --- slice: chat ---
 // The chat API: its wire types, which `crate::chat` keeps and forwards to the
 // windows as they are, and the helpers that read its refusals. Only what

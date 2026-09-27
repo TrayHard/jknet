@@ -38,6 +38,8 @@ use super::types::{
     Friend, FriendsList, Invite, LoginSession, Me, NewInvite, OnlineUser, Presence, PresenceUpdate,
     RelayGrant, SendRequestResult,
 };
+// --- slice: web app ---
+use super::types::{DeviceSession, DeviceSessions};
 // --- slice: chat ---
 use super::types::{
     AddResult, ChatMessage, ChatPrivacy, ChatPrivacyPatch, ChatSyncDoc, Conversation, FileMeta,
@@ -539,6 +541,32 @@ impl OnlineClient {
     /// invites. Nothing on this machine is touched.
     pub async fn delete_me(&self, ctx: &OnlineContext) -> Result<()> {
         self.call(ctx, Method::DELETE, "/v1/me", None, Auth::Required)
+            .await
+            .map(|_| ())
+    }
+
+    // --- slice: web app ---
+    /// Every launcher and browser signed in to the account, the most recently
+    /// used first; the one of this launcher is marked `current`.
+    pub async fn list_sessions(&self, ctx: &OnlineContext) -> Result<Vec<DeviceSession>> {
+        self.call(ctx, Method::GET, "/v1/me/sessions", None, Auth::Required)
+            .await?
+            .json::<DeviceSessions>()
+            .map(|answer| answer.sessions)
+    }
+
+    /// Signs one device of the account out: its token goes, its sockets close,
+    /// and it learns on its next request. The id is the session's public id.
+    pub async fn revoke_session(&self, ctx: &OnlineContext, id: &str) -> Result<()> {
+        let path = format!("/v1/me/sessions/{}", path_segment(id)?);
+        self.call(ctx, Method::DELETE, &path, None, Auth::Required)
+            .await
+            .map(|_| ())
+    }
+
+    /// Signs every device of the account out but this launcher.
+    pub async fn revoke_other_sessions(&self, ctx: &OnlineContext) -> Result<()> {
+        self.call(ctx, Method::DELETE, "/v1/me/sessions?others=true", None, Auth::Required)
             .await
             .map(|_| ())
     }

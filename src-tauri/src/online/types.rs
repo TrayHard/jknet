@@ -67,6 +67,17 @@ pub struct Presence {
     /// is true); the launcher's own carries the whole object.
     #[serde(default)]
     pub hosting: Option<HostingInfo>,
+    // --- slice: web app ---
+    /// `web` when the player is online only in the web app, with no launcher
+    /// running. The service never sets it next to a launcher's presence: a
+    /// launcher that is online or in a game wins over every browser.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
+    /// The kind of device of that web app, `phone` or `desktop`, which the
+    /// Friends screen turns into "Online from phone" or "Online in browser".
+    /// Only next to `via`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device: Option<String>,
 }
 
 /// A presence nobody has said anything about is an offline one, which is also
@@ -80,6 +91,8 @@ impl Default for Presence {
             client_name: None,
             since: String::new(),
             hosting: None,
+            via: None,
+            device: None,
         }
     }
 }
@@ -96,7 +109,7 @@ impl Default for Presence {
 /// `game` and `joinPolicy` are strings, like every enumeration of the
 /// contract here: a value a newer launcher sends must not turn a friend list
 /// into a parse error. `Debug` leaves the password out.
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HostingInfo {
     /// `jknet_session` of the server: 16 hex characters the launcher made.
@@ -134,6 +147,42 @@ pub struct HostingInfo {
     /// service on the copy it forwards; the host never sends it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub can_join: Option<bool>,
+    // --- slice: web app ---
+    /// Whether friends who may join can also join the server's chat from the
+    /// web app, without starting the game. The host switches it on the **Play
+    /// with friends** screen. Absent, as from a launcher before 0.8.0 and on
+    /// every copy the service forwards while it is on, means yes; this
+    /// launcher always sends it.
+    #[serde(default = "yes")]
+    pub chat_from_web: bool,
+}
+
+/// The default of [`HostingInfo::chat_from_web`].
+fn yes() -> bool {
+    true
+}
+
+/// A server with nothing said about it: every field empty, and the chat open
+/// to the web app, as an absent `chatFromWeb` reads.
+impl Default for HostingInfo {
+    fn default() -> Self {
+        HostingInfo {
+            session_id: String::new(),
+            game: String::new(),
+            mod_name: None,
+            map: None,
+            gametype: 0,
+            players: 0,
+            max_players: 0,
+            lan_addresses: Vec::new(),
+            relay_address: None,
+            password: None,
+            join_policy: String::new(),
+            join_user_ids: None,
+            can_join: None,
+            chat_from_web: true,
+        }
+    }
 }
 
 impl std::fmt::Debug for HostingInfo {
@@ -153,6 +202,7 @@ impl std::fmt::Debug for HostingInfo {
             join_policy,
             join_user_ids,
             can_join,
+            chat_from_web,
         } = self;
         f.debug_struct("HostingInfo")
             .field("session_id", session_id)
@@ -168,6 +218,7 @@ impl std::fmt::Debug for HostingInfo {
             .field("join_policy", join_policy)
             .field("join_user_ids", join_user_ids)
             .field("can_join", can_join)
+            .field("chat_from_web", chat_from_web)
             .finish()
     }
 }
@@ -422,6 +473,52 @@ pub struct LoginSession {
     pub user: Option<OnlineUser>,
     #[serde(default)]
     pub error: Option<String>,
+}
+
+// --- slice: web app ---
+/// One signed-in device of the account: a token of a launcher or of a
+/// browser running the web app. `GET /v1/me/sessions` lists them, the
+/// **Devices and sessions** card of Settings · Account draws them.
+///
+/// `client` and `device` are strings, like every enumeration of the contract
+/// here. The id is the token's public handle, never the token.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceSession {
+    pub id: String,
+    /// `launcher` or `web`.
+    #[serde(default)]
+    pub client: String,
+    /// `phone` or `desktop` for the web app, `None` for a launcher.
+    #[serde(default)]
+    pub device: Option<String>,
+    /// What the device said about itself at sign-in: the computer's name of
+    /// a launcher, `JKNet web · <system> · <browser>` of the web app.
+    #[serde(default)]
+    pub device_name: Option<String>,
+    /// RFC 3339 in UTC.
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub last_used_at: String,
+    #[serde(default)]
+    pub expires_at: String,
+    /// The token of the request that listed it: this launcher.
+    #[serde(default)]
+    pub current: bool,
+    /// Whether the device has a live socket open right now.
+    #[serde(default)]
+    pub online: bool,
+    /// Whether the device receives Web Push notifications.
+    #[serde(default)]
+    pub push: bool,
+}
+
+/// The answer of `GET /v1/me/sessions`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeviceSessions {
+    #[serde(default)]
+    pub sessions: Vec<DeviceSession>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1068,6 +1165,67 @@ mod tests {
             serde_json::to_value(&patch).expect("writes"),
             json!({ "shareTyping": false })
         );
+    }
+
+    // --- slice: web app ---
+    #[test]
+    fn a_friend_online_only_in_the_web_app_says_from_which_device() {
+        let phone: Presence = serde_json::from_value(json!({
+            "status": "online", "since": "2026-09-27T10:00:00Z", "via": "web", "device": "phone"
+        }))
+        .expect("parses");
+        assert_eq!((phone.via.as_deref(), phone.device.as_deref()), (Some("web"), Some("phone")));
+        let desktop: Presence = serde_json::from_value(json!({
+            "status": "online", "since": "2026-09-27T10:00:00Z", "via": "web", "device": "desktop"
+        }))
+        .expect("parses");
+        assert_eq!(desktop.device.as_deref(), Some("desktop"));
+
+        // A launcher's presence, as every service before the web app sent it,
+        // has neither, and reaches the frontend without them.
+        let launcher: Presence = serde_json::from_value(json!({
+            "status": "in_game", "serverAddress": "203.0.113.10:29070", "serverName": "EU FFA",
+            "clientName": null, "since": "2026-09-27T10:00:00Z"
+        }))
+        .expect("parses");
+        assert_eq!((launcher.via, launcher.device), (None, None));
+        let back = serde_json::to_value(Presence { status: Presence::ONLINE.into(), ..Presence::default() })
+            .expect("writes");
+        assert!(back.get("via").is_none() && back.get("device").is_none(), "{back}");
+        // Nor does the heartbeat carry them: the service decides where a player is.
+        let body = serde_json::to_value(PresenceUpdate::from(&phone)).expect("writes");
+        assert!(body.get("via").is_none() && body.get("device").is_none(), "{body}");
+    }
+
+    #[test]
+    fn a_friends_server_reads_as_open_to_the_web_app_unless_it_says_otherwise() {
+        let hosting = |extra: serde_json::Value| {
+            let mut value = json!({
+                "sessionId": "5e0b7c1f9a2d4c38", "game": "ja", "mod": null, "map": "mp/ffa3",
+                "gametype": 0, "players": 1, "maxPlayers": 8, "lanAddresses": [],
+                "relayAddress": null, "joinPolicy": "friends", "canJoin": true
+            });
+            value.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            serde_json::from_value::<HostingInfo>(value).expect("parses")
+        };
+        // The service leaves the field out while the host keeps it on, and a
+        // host on a launcher before 0.8.0 never sends it.
+        assert!(hosting(json!({})).chat_from_web);
+        assert!(hosting(json!({ "chatFromWeb": true })).chat_from_web);
+        assert!(!hosting(json!({ "chatFromWeb": false })).chat_from_web);
+        assert!(HostingInfo::default().chat_from_web);
+
+        // Inside a friend's presence, as `GET /v1/friends` carries it.
+        let friend: Friend = serde_json::from_value(json!({
+            "user": user("01HKYLE"),
+            "presence": { "status": "online", "since": "2026-09-27T10:00:00Z", "hosting": {
+                "sessionId": "5e0b7c1f9a2d4c38", "game": "ja", "joinPolicy": "invite",
+                "canJoin": false, "chatFromWeb": false
+            } },
+            "friendsSince": "2026-09-01T10:00:00Z"
+        }))
+        .expect("parses");
+        assert!(!friend.presence.hosting.expect("hosting").chat_from_web);
     }
 
     #[test]

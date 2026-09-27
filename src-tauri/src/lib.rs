@@ -473,6 +473,10 @@ pub fn run() {
         // nothing here goes stale when the player signs in or points the
         // launcher at another service.
         .manage(online::OnlineClient::new())
+        // --- slice: web app ---
+        // Which of the account's sessions is this launcher's, as the last
+        // listing of the devices card said.
+        .manage(account::SessionsState::default())
         // --- slice: friends ---
         // The presence the launcher reports and whether the live socket is
         // up. Kept apart from `AppState` for the same reason as the two above:
@@ -610,6 +614,9 @@ pub fn run() {
             account::sign_out,
             account::update_display_name,
             account::delete_account,
+            // --- slice: web app ---
+            account::get_sessions,
+            account::revoke_session,
             // --- slice: friends ---
             friends::get_friends_state,
             friends::send_friend_request,
@@ -629,6 +636,8 @@ pub fn run() {
             hosting::host_join_own,
             hosting::host_change_map,
             hosting::host_set_join_policy,
+            // --- slice: web app ---
+            hosting::host_set_chat_from_web,
             hosting::host_retry_relay,
             hosting::host_invite,
             hosting::host_open_log,

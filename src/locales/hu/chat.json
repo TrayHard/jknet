@@ -821,6 +821,10 @@
       "storageOf": "{{used}} foglalt ennyiből: {{quota}}",
       "nextFree": "A legrégebbi fájlja ekkor jár le, és felszabadítja a helyét: {{date}}.",
       "retention": "Az üzeneteket és a fájlokat a JKNet Online 90 napig őrzi, utána törli."
+    },
+    "webApp": {
+      "title": "Csevegés telefonról",
+      "text": "A csevegései és barátai a böngészőben, és alkalmazásként a telefonján. Ott ugyanazzal a fiókkal jelentkezzen be."
     }
   },
   "trayHint": {

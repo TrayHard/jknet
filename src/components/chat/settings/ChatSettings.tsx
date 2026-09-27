@@ -1,17 +1,23 @@
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ExternalLink, Smartphone } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
-import { usePlatform } from "../../../lib/backend";
+import { backend, usePlatform } from "../../../lib/backend";
 import type { ChatNotificationsPatch, SettingsPatch } from "../../../lib/ipc";
 import { useUpdateChatSettings } from "../../../lib/queries";
+import { Button } from "../../ui";
 import { ChatFilesCard } from "./ChatFilesCard";
 import { ChatLevelsCard } from "./ChatLevelsCard";
 import { ChatNotificationsCard } from "./ChatNotificationsCard";
 import { ChatPrivacyCard } from "./ChatPrivacyCard";
 import { ChatSoundsCard } from "./ChatSoundsCard";
+import { SettingsCard } from "./SettingRow";
 import { TrayStartupCard } from "./TrayStartupCard";
+
+// --- slice: web app ---
+/** The web app: the same chats in a browser, and as an app on a phone. */
+const WEB_APP_URL = "https://online.jknet.app";
 
 /** The anchor of the group: `#/settings?section=chat`. */
 export const CHAT_SETTINGS_SECTION_ID = "settings-chat";
@@ -84,8 +90,34 @@ export function ChatSettings() {
           {caps.tray ? <TrayStartupCard onChange={save} /> : null}
           <ChatPrivacyCard />
           <ChatFilesCard onChange={save} />
+          {/* --- slice: web app --- where the same chats live off this PC;
+              the web app itself has no use for a link to itself. */}
+          {caps.game ? <WebAppCard /> : null}
         </div>
       </div>
     </section>
+  );
+}
+
+// --- slice: web app ---
+/** **Chat from your phone**: a link to the web app, opened in the browser. */
+function WebAppCard() {
+  const { t } = useTranslation("chat");
+  return (
+    <SettingsCard
+      icon={<Smartphone size={20} />}
+      title={t("settings.webApp.title")}
+      text={t("settings.webApp.text")}
+    >
+      <div>
+        <Button
+          size="sm"
+          icon={<ExternalLink size={14} />}
+          onClick={() => void backend().openExternal(WEB_APP_URL).catch(() => undefined)}
+        >
+          {new URL(WEB_APP_URL).host}
+        </Button>
+      </div>
+    </SettingsCard>
   );
 }

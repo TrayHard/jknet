@@ -29,14 +29,16 @@
 //! frontend gets instead is [`AccountState`]: whether a token exists, and who
 //! it belongs to.
 
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{AppError, Result};
 use crate::online::{
-    is_http_url, is_local_online, normalize_display_name, OnlineClient, OnlineContext, OnlineUser,
-    SignInPoll, PROVIDERS,
+    is_http_url, is_local_online, normalize_display_name, DeviceSession, OnlineClient,
+    OnlineContext, OnlineUser, SignInPoll, PROVIDERS,
 };
 use crate::settings::Settings;
 use crate::state::AppState;
@@ -250,6 +252,12 @@ pub async fn sign_out(
     state: tauri::State<'_, AppState>,
     online: tauri::State<'_, OnlineClient>,
 ) -> Result<()> {
+    sign_out_here(&app, &state, &online).await
+}
+
+/// The body of [`sign_out`], which signing out this launcher's own session
+/// from the devices card runs too.
+async fn sign_out_here(app: &tauri::AppHandle, state: &AppState, online: &OnlineClient) -> Result<()> {
     let settings = state.settings()?;
     let ctx = OnlineContext::from_settings(&settings);
 
@@ -259,8 +267,8 @@ pub async fn sign_out(
         }
     }
 
-    store_account(&state, None, None)?;
-    announce(&app, false, AccountChangeReason::SignedOut);
+    store_account(state, None, None)?;
+    announce(app, false, AccountChangeReason::SignedOut);
     log::info!("signed out");
     Ok(())
 }
@@ -316,6 +324,137 @@ pub async fn delete_account(
     announce(&app, false, AccountChangeReason::Deleted);
     log::info!("the service account was deleted");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: web app ---
+// Devices and sessions: every launcher and browser signed in to the account,
+// and signing one of them out from here.
+// ---------------------------------------------------------------------------
+
+/// The id the service gave this launcher's own session, as the last listing
+/// marked it `current`, with the token it was listed with.
+///
+/// Kept so that **Sign out** on this launcher's own row runs the sign-out of
+/// this machine rather than deleting the token under its feet, which would
+/// read as an expired session. The token is kept beside the id because a
+/// sign-in in between makes the id someone else's.
+#[derive(Default)]
+pub struct SessionsState {
+    current: Mutex<Option<CurrentSession>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CurrentSession {
+    token: String,
+    id: String,
+}
+
+impl SessionsState {
+    fn remember(&self, current: Option<CurrentSession>) {
+        *self.current.lock().unwrap_or_else(|e| e.into_inner()) = current;
+    }
+
+    /// The id of this launcher's session, while the token it was listed
+    /// with is still the one in force.
+    fn current_id(&self, token: Option<&str>) -> Option<String> {
+        let current = self.current.lock().unwrap_or_else(|e| e.into_inner());
+        current
+            .as_ref()
+            .filter(|known| token.map(str::trim) == Some(known.token.as_str()))
+            .map(|known| known.id.clone())
+    }
+}
+
+/// Every launcher and browser signed in to the account, the most recently
+/// used first. The session of this launcher is the one marked `current`.
+#[tauri::command]
+pub async fn get_sessions(
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    sessions: tauri::State<'_, SessionsState>,
+) -> Result<Vec<DeviceSession>> {
+    let settings = state.settings()?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let list = online.list_sessions(&ctx).await?;
+    sessions.remember(current_of(&list, ctx.token.as_deref()));
+    Ok(list)
+}
+
+/// Signs devices of the account out: the session `id`, or with `others`
+/// every session but this launcher's.
+///
+/// The device learns on its next request: a launcher at its next heartbeat
+/// at the latest, a browser at once, since its socket closes. With no `id`,
+/// or with the id of this launcher's own session, this is **Sign out** of
+/// this machine.
+#[tauri::command]
+pub async fn revoke_session(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    sessions: tauri::State<'_, SessionsState>,
+    id: Option<String>,
+    others: bool,
+) -> Result<()> {
+    let settings = state.settings()?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let current = sessions.current_id(ctx.token.as_deref());
+    match revoke_target(id, others, current.as_deref())? {
+        RevokeTarget::Others => {
+            online.revoke_other_sessions(&ctx).await?;
+            log::info!("signed out every other device");
+            Ok(())
+        }
+        RevokeTarget::One(id) => {
+            online.revoke_session(&ctx, &id).await?;
+            log::info!("signed a device out");
+            Ok(())
+        }
+        RevokeTarget::ThisLauncher => {
+            sessions.remember(None);
+            sign_out_here(&app, &state, &online).await
+        }
+    }
+}
+
+/// What `revoke_session` was asked to sign out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RevokeTarget {
+    /// Every session of the account but this launcher's.
+    Others,
+    /// One session of another device.
+    One(String),
+    /// This launcher: its own sign-out.
+    ThisLauncher,
+}
+
+/// Reads the arguments of `revoke_session`. `current` is the id of this
+/// launcher's session, when a listing named it.
+fn revoke_target(id: Option<String>, others: bool, current: Option<&str>) -> Result<RevokeTarget> {
+    let id = id.map(|id| id.trim().to_string());
+    match (id, others) {
+        (Some(_), true) => Err(AppError::InvalidInput(
+            "name one session or every other one, not both".into(),
+        )),
+        (None, true) => Ok(RevokeTarget::Others),
+        (None, false) => Ok(RevokeTarget::ThisLauncher),
+        (Some(id), false) if id.is_empty() => {
+            Err(AppError::InvalidInput("the session id is empty".into()))
+        }
+        (Some(id), false) if current == Some(id.as_str()) => Ok(RevokeTarget::ThisLauncher),
+        (Some(id), false) => Ok(RevokeTarget::One(id)),
+    }
+}
+
+/// The session a listing marks as this launcher's, bound to the token that
+/// listed it.
+fn current_of(list: &[DeviceSession], token: Option<&str>) -> Option<CurrentSession> {
+    let token = token.map(str::trim).filter(|token| !token.is_empty())?;
+    list.iter().find(|session| session.current).map(|session| CurrentSession {
+        token: token.to_string(),
+        id: session.id.clone(),
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -670,6 +809,161 @@ mod tests {
             serde_json::from_str(&json).expect("the payload reads back");
         assert!(!read.signed_in);
         assert_eq!(read.reason, AccountChangeReason::Expired);
+    }
+
+    // --- slice: web app ---
+
+    fn listed(id: &str, current: bool) -> DeviceSession {
+        DeviceSession {
+            id: id.into(),
+            client: "launcher".into(),
+            current,
+            ..DeviceSession::default()
+        }
+    }
+
+    #[test]
+    fn signing_a_device_out_names_one_session_every_other_one_or_this_launcher() {
+        assert_eq!(revoke_target(None, true, None).unwrap(), RevokeTarget::Others);
+        assert_eq!(
+            revoke_target(Some(" 01JPHONE ".into()), false, Some("01JPC")).unwrap(),
+            RevokeTarget::One("01JPHONE".into())
+        );
+        // No id, or the id of this launcher's own session: the sign-out of
+        // this machine, not a token deleted under its feet.
+        assert_eq!(revoke_target(None, false, None).unwrap(), RevokeTarget::ThisLauncher);
+        assert_eq!(
+            revoke_target(Some("01JPC".into()), false, Some("01JPC")).unwrap(),
+            RevokeTarget::ThisLauncher
+        );
+        // Not knowing which session is ours, an id is somebody else's.
+        assert_eq!(
+            revoke_target(Some("01JPC".into()), false, None).unwrap(),
+            RevokeTarget::One("01JPC".into())
+        );
+        assert!(revoke_target(Some("01JPHONE".into()), true, None).is_err());
+        assert!(revoke_target(Some("  ".into()), false, None).is_err());
+    }
+
+    #[test]
+    fn this_launchers_session_is_known_only_for_the_token_that_listed_it() {
+        let list = [listed("01JPHONE", false), listed("01JPC", true)];
+        let sessions = SessionsState::default();
+        sessions.remember(current_of(&list, Some("0123456789abcdef")));
+        assert_eq!(sessions.current_id(Some("0123456789abcdef")).as_deref(), Some("01JPC"));
+        // Signed out, or signed in again in between: the id is not ours.
+        assert_eq!(sessions.current_id(None), None);
+        assert_eq!(sessions.current_id(Some("fedcba9876543210")), None);
+
+        // A listing without a current row, or without a token, remembers nothing.
+        assert_eq!(current_of(&[listed("01JPHONE", false)], Some("0123456789abcdef")), None);
+        assert_eq!(current_of(&list, None), None);
+        assert_eq!(current_of(&list, Some(" ")), None);
+    }
+
+    #[test]
+    fn the_sessions_of_the_contract_read_with_and_without_a_device() {
+        let answer: serde_json::Value = serde_json::json!({ "sessions": [
+            { "id": "01JWEB", "client": "web", "device": "phone", "deviceName": "JKNet web · Android · Chrome",
+              "createdAt": "2026-09-26T10:00:00Z", "lastUsedAt": "2026-09-27T10:00:00Z",
+              "expiresAt": "2026-12-25T10:00:00Z", "current": false, "online": true, "push": true },
+            { "id": "01JPC", "client": "launcher", "device": null, "deviceName": null,
+              "createdAt": "2026-09-20T10:00:00Z", "lastUsedAt": "2026-09-27T09:00:00Z",
+              "expiresAt": "2026-12-19T10:00:00Z", "current": true, "online": false, "push": false }
+        ]});
+        let read: crate::online::DeviceSessions = serde_json::from_value(answer).expect("parses");
+        let [phone, pc] = read.sessions.as_slice() else { panic!("two sessions") };
+        assert_eq!((phone.client.as_str(), phone.device.as_deref()), ("web", Some("phone")));
+        assert!(phone.online && phone.push && !phone.current);
+        assert_eq!((pc.device.as_deref(), pc.device_name.as_deref()), (None, None));
+        assert!(pc.current);
+
+        // The frontend gets the same names back.
+        let json = serde_json::to_value(phone).expect("writes");
+        assert_eq!(json["deviceName"], "JKNet web · Android · Chrome");
+        assert_eq!(json["lastUsedAt"], "2026-09-27T10:00:00Z");
+    }
+
+    /// The devices card against a service that is actually running: two
+    /// launchers of one account, one signs the other out, then a third comes
+    /// and goes with **Sign out of all other devices**.
+    ///
+    /// Ignored for the reason of `friends::online_tests`: it needs the real
+    /// service on `127.0.0.1:8787` with the developer provider on. Run it by
+    /// hand:
+    ///
+    /// ```text
+    /// cargo test --lib -- --ignored --nocapture account::tests::devices
+    /// ```
+    #[tokio::test]
+    #[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1"]
+    async fn devices_are_listed_and_signed_out_against_the_real_service() {
+        use crate::friends::online_tests::sign_in;
+
+        let client = OnlineClient::new();
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970")
+            .as_secs()
+            % 100_000;
+        // The developer provider gives one account per name: three sign-ins
+        // with one name are three devices of one account.
+        let name = format!("Test Devices {stamp}");
+        let pc = sign_in(&client, &name).await;
+        let laptop = sign_in(&client, &name).await;
+        assert_eq!(pc.user.id, laptop.user.id, "one account");
+
+        let outcome = async {
+            let listed = client.list_sessions(&pc.ctx).await.map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
+            println!("GET /v1/me/sessions -> {listed:?}");
+            let mine = current_of(&listed, pc.ctx.token.as_deref()).ok_or("no session is marked current")?;
+            let theirs = client
+                .list_sessions(&laptop.ctx)
+                .await
+                .map_err(|e| format!("GET /v1/me/sessions as the laptop: {e}"))?;
+            let other = current_of(&theirs, laptop.ctx.token.as_deref()).ok_or("the laptop has no current session")?;
+            if mine.id == other.id || !listed.iter().any(|row| row.id == other.id) {
+                return Err(format!("the two launchers are not two rows: {listed:?}"));
+            }
+            if listed.iter().any(|row| row.client != "launcher" || row.device.is_some()) {
+                return Err(format!("a launcher's session reads as the web app: {listed:?}"));
+            }
+
+            // One device: the laptop's next call is refused.
+            let target = revoke_target(Some(other.id.clone()), false, Some(&mine.id)).map_err(|e| e.to_string())?;
+            let RevokeTarget::One(id) = target else {
+                return Err("the laptop's row reads as this launcher".into());
+            };
+            client.revoke_session(&pc.ctx, &id).await.map_err(|e| format!("DELETE /v1/me/sessions/{{id}}: {e}"))?;
+            match client.get_me(&laptop.ctx).await {
+                Err(AppError::Online { code, .. }) if code == "unauthorized" => {}
+                other => return Err(format!("the signed-out laptop still gets {other:?}")),
+            }
+            let after = client.list_sessions(&pc.ctx).await.map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
+            if after.iter().any(|row| row.id == id) {
+                return Err(format!("the laptop is still listed: {after:?}"));
+            }
+
+            // Every other device: a third comes, and goes with the others.
+            let phone = sign_in(&client, &name).await;
+            client.revoke_other_sessions(&pc.ctx).await.map_err(|e| format!("DELETE /v1/me/sessions?others=true: {e}"))?;
+            match client.get_me(&phone.ctx).await {
+                Err(AppError::Online { code, .. }) if code == "unauthorized" => {}
+                other => return Err(format!("the third device still gets {other:?}")),
+            }
+            let alone = client.list_sessions(&pc.ctx).await.map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
+            if alone.len() != 1 || !alone[0].current {
+                return Err(format!("this launcher is not alone: {alone:?}"));
+            }
+            Ok::<(), String>(())
+        }
+        .await;
+
+        match client.delete_me(&pc.ctx).await {
+            Ok(()) => println!("DELETE /v1/me -> 204"),
+            Err(e) => println!("DELETE /v1/me failed: {e}"),
+        }
+        outcome.expect("the scenario");
     }
 
     #[test]

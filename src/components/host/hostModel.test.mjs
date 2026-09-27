@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  chatFromWebToggle,
   consoleCommand,
   countdown,
   currentStep,
@@ -51,6 +52,7 @@ const SETTINGS = {
   joinUserIds: [],
   inviteUserIds: [],
   joinAfterStart: true,
+  chatFromWeb: true,
 };
 
 const RELAY_OFF = { status: "off", address: null, region: null, expiresAt: null, error: null, errorCode: null };
@@ -349,5 +351,36 @@ describe("the Setup form", () => {
     assert.equal(pickMap(names, "mp/duel1", "mp/ffa3"), "mp/ffa3");
     assert.equal(pickMap(names, "mp/duel1", "mp/duel2"), "mp/ffa1");
     assert.equal(pickMap([], "mp/duel1", "mp/ffa3"), "");
+  });
+});
+
+// --- slice: web app ---
+describe("the Chat from the web app switch", () => {
+  test("is on unless the settings say off", () => {
+    assert.deepEqual(chatFromWebToggle("select", SETTINGS), { checked: true, disabled: false });
+    assert.deepEqual(chatFromWebToggle("live", { ...SETTINGS, chatFromWeb: false }), {
+      checked: false,
+      disabled: false,
+    });
+    // A session of a core older than the switch carries no field.
+    const { chatFromWeb: _dropped, ...older } = SETTINGS;
+    assert.deepEqual(chatFromWebToggle("live", older), { checked: true, disabled: false });
+  });
+
+  test("is off-limits without an account and before the form arrives", () => {
+    assert.deepEqual(chatFromWebToggle("signedOut", { ...SETTINGS, chatFromWeb: false }), {
+      checked: false,
+      disabled: true,
+    });
+    assert.deepEqual(chatFromWebToggle("off", SETTINGS), { checked: true, disabled: true });
+    assert.deepEqual(chatFromWebToggle("select", null), { checked: true, disabled: true });
+  });
+
+  test("travels with the form into the start", () => {
+    const form = formFromSettings({ ...SETTINGS, chatFromWeb: false }, "fresh123");
+    assert.equal(form.settings.chatFromWeb, false);
+    assert.equal(settingsToStart(form, "JKNet game", true).chatFromWeb, false);
+    const on = formFromSettings(SETTINGS, "fresh123");
+    assert.equal(settingsToStart(on, "JKNet game", true).chatFromWeb, true);
   });
 });

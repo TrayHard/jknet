@@ -848,6 +848,10 @@
       "storageOf": "{{used}} utilisés sur {{quota}}",
       "nextFree": "Votre plus ancien fichier expire le {{date}} et libère sa place.",
       "retention": "Les messages et les fichiers sont conservés 90 jours sur JKNet Online, puis supprimés."
+    },
+    "webApp": {
+      "title": "Discuter depuis votre téléphone",
+      "text": "Vos discussions et vos amis dans le navigateur, et en application sur votre téléphone. Connectez-vous-y avec le même compte."
     }
   },
   "trayHint": {

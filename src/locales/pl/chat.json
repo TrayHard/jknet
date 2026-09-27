@@ -875,6 +875,10 @@
       "storageOf": "Zajęte {{used}} z {{quota}}",
       "nextFree": "Twój najstarszy plik wygaśnie {{date}} i zwolni miejsce.",
       "retention": "Wiadomości i pliki są przechowywane w JKNet Online przez 90 dni, potem usuwane."
+    },
+    "webApp": {
+      "title": "Czat z telefonu",
+      "text": "Twoje czaty i znajomi w przeglądarce oraz jako aplikacja na telefonie. Zaloguj się tam tym samym kontem."
     }
   },
   "trayHint": {

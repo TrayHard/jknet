@@ -304,6 +304,33 @@ export function settingsToStart(
   };
 }
 
+// --- slice: web app ---
+/** What the **Chat from the web app** switch of the Invite friends panel shows. */
+export interface ChatFromWebToggle {
+  checked: boolean;
+  disabled: boolean;
+}
+
+/**
+ * The **Chat from the web app** switch for a mode of the panel and the
+ * settings on screen, the form's before a start and the session's while it
+ * runs.
+ *
+ * On unless the settings say off: a session of an older core has no field,
+ * and the service reads a missing one as on. Off-limits like the join policy
+ * without an account, since nobody could join the chat then, and while the
+ * form has not arrived.
+ */
+export function chatFromWebToggle(
+  mode: "select" | "live" | "signedOut" | "off",
+  settings: Pick<HostSettings, "chatFromWeb"> | null | undefined,
+): ChatFromWebToggle {
+  return {
+    checked: settings?.chatFromWeb !== false,
+    disabled: mode === "signedOut" || mode === "off" || settings == null,
+  };
+}
+
 /**
  * The map to keep after the list changed: the one chosen, while the list still
  * has it; then the default map of the game; then the first of the list.

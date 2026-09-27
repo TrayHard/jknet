@@ -1790,7 +1790,46 @@ export const accountIpc = {
   updateDisplayName: (displayName: string) =>
     call<OnlineUser>("update_display_name", { displayName }),
   deleteAccount: () => call<void>("delete_account"),
+  // --- slice: web app ---
+  /** Every launcher and browser signed in to the account, most recently used first. */
+  getSessions: () => call<DeviceSession[]>("get_sessions"),
+  /**
+   * Signs devices out: one session by its `id`, or with `others` every
+   * session but this one. The id of this device's own session, or no id at
+   * all, is **Sign out** of this device.
+   */
+  revokeSession: (target: { id: string } | { others: true }) =>
+    call<void>("revoke_session", {
+      id: "id" in target ? target.id : null,
+      others: "others" in target,
+    }),
 };
+
+// --- slice: web app ---
+/**
+ * One signed-in device of the account, `GET /v1/me/sessions`: a token of a
+ * launcher or of a browser running the web app. The web app's core answers
+ * `get_sessions` with the same shape.
+ */
+export interface DeviceSession {
+  /** The session's public id, never the token. */
+  id: string;
+  client: "launcher" | "web";
+  /** The web app's device kind; `null` for a launcher. */
+  device: WebDevice | null;
+  /** The computer's name of a launcher, `JKNet web · <system> · <browser>` of the web app. */
+  deviceName: string | null;
+  /** RFC 3339 in UTC. */
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  /** The device asking. */
+  current: boolean;
+  /** Whether the device has a live socket open right now. */
+  online: boolean;
+  /** Whether the device receives Web Push notifications. */
+  push: boolean;
+}
 
 /**
  * The contract's error code inside a refusal from the service, or `null`.
@@ -1894,7 +1933,22 @@ export interface Presence {
    * presence it is the whole object the launcher sends.
    */
   hosting?: HostingInfo | null;
+  // --- slice: web app ---
+  /**
+   * `web` when the player is online only in the web app, with no launcher
+   * running; absent otherwise. A launcher online or in a game always wins.
+   */
+  via?: "web" | null;
+  /**
+   * The web app's kind of device, next to `via`: "Online from phone" or
+   * "Online in browser". Absent reads as a phone.
+   */
+  device?: WebDevice | null;
 }
+
+// --- slice: web app ---
+/** The two kinds of device the web app tells apart. */
+export type WebDevice = "phone" | "desktop";
 
 export interface Friend {
   user: OnlineUser;
@@ -2051,6 +2105,9 @@ export interface HostSettings {
   inviteUserIds: string[];
   /** **Start and play**: start my own game on the server once it is ready. */
   joinAfterStart: boolean;
+  // --- slice: web app ---
+  /** **Chat from the web app**: friends who may join can chat from the web app. */
+  chatFromWeb: boolean;
 }
 
 /**
@@ -2071,6 +2128,12 @@ export interface HostDefaults {
   network: HostNetwork;
   joinPolicy: HostJoinPolicy;
   joinUserIds: string[];
+  // --- slice: web app ---
+  /**
+   * Whether **Chat from the web app** was off. The negative, so that a
+   * document written before the switch reads as on. Absent in such a document.
+   */
+  webChatClosed?: boolean;
 }
 
 /** Why a client of the game cannot host. */
@@ -2290,6 +2353,14 @@ export interface HostingInfo {
   joinUserIds?: string[];
   /** On a friend's presence only: whether I may join without an invite. */
   canJoin?: boolean;
+  // --- slice: web app ---
+  /**
+   * **Chat from the web app**: whether friends who may join can join the
+   * server's chat from the web app without starting the game. Absent means
+   * yes: the service leaves it out while it is on, and launchers before
+   * 0.8.0 never send it.
+   */
+  chatFromWeb?: boolean;
 }
 
 /** How a join reached its server. */
@@ -2360,6 +2431,9 @@ export const hostIpc = {
   /** Who joins without an invite, while the server runs; presence follows at once. */
   setJoinPolicy: (joinPolicy: HostJoinPolicy, joinUserIds: string[]) =>
     callHost<HostSession>("host_set_join_policy", { joinPolicy, joinUserIds }),
+  // --- slice: web app ---
+  /** **Chat from the web app**, while the server runs; presence follows at once. */
+  setChatFromWeb: (on: boolean) => callHost<HostSession>("host_set_chat_from_web", { on }),
   /** **Retry** of the relay line. */
   retryRelay: () => callHost<HostSession>("host_retry_relay"),
   /** **Invite**: an invite to this server, with its addresses and password. */

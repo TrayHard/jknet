@@ -821,6 +821,10 @@
       "storageOf": "{{used}} of {{quota}} used",
       "nextFree": "Your oldest file expires {{date}} and frees its space.",
       "retention": "Messages and files are kept on JKNet Online for 90 days, then deleted."
+    },
+    "webApp": {
+      "title": "Chat from your phone",
+      "text": "Your chats and friends in a browser, and as an app on your phone. Sign in there with the same account."
     }
   },
   "trayHint": {

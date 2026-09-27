@@ -5,7 +5,7 @@
  * the invite toast all say the same thing about the same friend.
  */
 
-import type { Friend, Presence } from "../../lib/ipc";
+import type { Friend, Presence, WebDevice } from "../../lib/ipc";
 
 /** The three groups the screen sorts friends into, in the order it shows them. */
 export const GROUPS = ["in_game", "online", "offline"] as const;
@@ -62,8 +62,30 @@ export function statusLine(presence: Presence): StatusLine {
     }
     return { key: "status.inGame" };
   }
-  if (presence.status === "online") return { key: "status.online" };
+  if (presence.status === "online") {
+    // --- slice: web app ---
+    // Online without a launcher: the web app says from what. A launcher
+    // online or in a game wins on the service, so this never hides one.
+    const device = webDevice(presence);
+    if (device === "phone") return { key: "status.onlineFromPhone" };
+    if (device === "desktop") return { key: "status.onlineInBrowser" };
+    return { key: "status.online" };
+  }
   return lastSeen(presence.since);
+}
+
+// --- slice: web app ---
+/**
+ * The web app's kind of device of a player who is online only there, or
+ * `null` for a launcher and for anybody offline or in a game.
+ *
+ * A missing `device` next to `via: "web"` reads as a phone, the web app's
+ * first audience; an unknown one too, so a kind a newer service adds still
+ * says "not at the PC" rather than plain "Online".
+ */
+export function webDevice(presence: Presence): WebDevice | null {
+  if (presence.status !== "online" || presence.via !== "web") return null;
+  return presence.device === "desktop" ? "desktop" : "phone";
 }
 
 /**

@@ -538,6 +538,12 @@ pub struct HostDefaults {
     /// `friends`, `selected` or `invite`.
     pub join_policy: String,
     pub join_user_ids: Vec<String>,
+    // --- slice: web app ---
+    /// Whether the host switched **Chat from the web app** off. Kept as the
+    /// negative so that the derived default, and every document written
+    /// before the switch existed, reads as the default of the feature:
+    /// friends may join the server's chat from the web app.
+    pub web_chat_closed: bool,
 }
 
 impl Default for Settings {
@@ -1715,6 +1721,28 @@ mod tests {
         let older: Settings = serde_json::from_str("{}").expect("an empty document");
         assert!(older.host_defaults.is_empty());
         assert!(!older.host_firewall_note_seen);
+    }
+
+    // --- slice: web app ---
+    #[test]
+    fn host_defaults_written_before_the_web_switch_keep_the_chat_open_to_the_web() {
+        // What launcher 0.7.0 wrote: every field of the screen but the switch.
+        let older: Settings = serde_json::from_str(
+            r#"{ "hostDefaults": { "ja": { "clientId": "everyday", "map": "mp/ffa3", "maxPlayers": 8,
+                  "network": "internet_lan", "joinPolicy": "friends", "joinUserIds": [] } } }"#,
+        )
+        .expect("a 0.7.0 document");
+        assert!(!older.host_defaults[&Game::JediAcademy].web_chat_closed);
+        assert!(!HostDefaults::default().web_chat_closed);
+
+        // Switched off, it survives the file.
+        let mut settings = filled();
+        patch(r#"{ "hostDefaults": { "ja": { "clientId": "everyday", "webChatClosed": true } } }"#)
+            .apply(&mut settings);
+        let json = serde_json::to_string(&settings).expect("serializes");
+        assert!(json.contains(r#""webChatClosed":true"#), "{json}");
+        let read: Settings = serde_json::from_str(&json).expect("reads back");
+        assert!(read.host_defaults[&Game::JediAcademy].web_chat_closed);
     }
 
     #[test]

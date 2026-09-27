@@ -10,6 +10,8 @@ import { HostSetup } from "../components/host/HostSetup";
 import { HostStarting } from "../components/host/HostStarting";
 import { HostStopped } from "../components/host/HostStopped";
 import {
+  // --- slice: web app ---
+  chatFromWebToggle,
   formFromSettings,
   HOST_INVITE_PARAM,
   hostView,
@@ -36,6 +38,8 @@ import {
   useRetryHostRelay,
   useRunningGame,
   useSetHostJoinPolicy,
+  // --- slice: web app ---
+  useSetHostChatFromWeb,
   useStartHost,
   useStopHost,
 } from "../lib/queries";
@@ -70,6 +74,8 @@ export function HostPage() {
   const stop = useStopHost();
   const joinOwn = useJoinOwnServer();
   const setPolicy = useSetHostJoinPolicy();
+  // --- slice: web app ---
+  const setChatFromWeb = useSetHostChatFromWeb();
   const retryRelay = useRetryHostRelay();
   const invite = useHostInvite();
   const openLog = useOpenHostLog();
@@ -213,6 +219,8 @@ export function HostPage() {
       joinPolicy: form?.settings.joinPolicy ?? session.settings.joinPolicy,
       joinUserIds: form?.settings.joinUserIds ?? session.settings.joinUserIds,
       inviteUserIds: form?.settings.inviteUserIds ?? [],
+      // --- slice: web app --- the panel's switch, like its door.
+      chatFromWeb: form?.settings.chatFromWeb ?? session.settings.chatFromWeb,
     });
   };
 
@@ -226,6 +234,8 @@ export function HostPage() {
         joinPolicy: current?.settings.joinPolicy ?? session.settings.joinPolicy,
         joinUserIds: current?.settings.joinUserIds ?? session.settings.joinUserIds,
         inviteUserIds: current?.settings.inviteUserIds ?? [],
+        // --- slice: web app ---
+        chatFromWeb: current?.settings.chatFromWeb ?? session.settings.chatFromWeb,
       },
     }));
     setSetupFor(session.id);
@@ -245,6 +255,18 @@ export function HostPage() {
       current === null
         ? current
         : { ...current, settings: { ...current.settings, joinPolicy: policy, joinUserIds } },
+    );
+  };
+
+  // --- slice: web app ---
+  /** **Chat from the web app**: to the core while the server runs, into the form before. */
+  const onChatFromWebChange = (on: boolean) => {
+    if (panelMode === "live") {
+      setChatFromWeb.mutate(on);
+      return;
+    }
+    setForm((current) =>
+      current === null ? current : { ...current, settings: { ...current.settings, chatFromWeb: on } },
     );
   };
 
@@ -382,6 +404,9 @@ export function HostPage() {
           policy={policySource?.joinPolicy ?? "friends"}
           joinUserIds={policySource?.joinUserIds ?? []}
           onPolicyChange={onPolicyChange}
+          // --- slice: web app ---
+          chatFromWeb={chatFromWebToggle(panelMode, policySource)}
+          onChatFromWebChange={onChatFromWebChange}
           marked={marked}
           lockedMarks={lockedMarks}
           onToggleMark={onToggleMark}

@@ -17,6 +17,8 @@ import { JkhubCatalogCard } from "../components/JkhubCatalogCard";
 import { MapPicturesCard } from "../components/MapPicturesCard";
 // --- slice: account ---
 import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
+// --- slice: web app ---
+import { SessionsCard, SESSIONS_SECTION_ID } from "../components/account/SessionsCard";
 // --- slice: chat notifications ---
 import { ChatSettings, CHAT_SETTINGS_SECTION_ID } from "../components/chat/settings/ChatSettings";
 import { TRAY_SECTION_ID } from "../components/chat/settings/TrayStartupCard";
@@ -35,6 +37,8 @@ import { ipc, type GameInfo } from "../lib/ipc";
 // --- slice: game switch ---
 import { findDefaultClient } from "../lib/game";
 import {
+  // --- slice: web app ---
+  useAccountState,
   useClients,
   useDataPaths,
   useGames,
@@ -58,6 +62,8 @@ export function SettingsPage() {
   const errorText = useErrorText();
   const dataPaths = useDataPaths();
   const settings = useSettings();
+  // --- slice: web app ---
+  const account = useAccountState();
   const [error, setError] = useState<string | null>(null);
   // --- slice: account ---
   // The sidebar's user block links to `#/settings?section=account`, so the
@@ -67,15 +73,17 @@ export function SettingsPage() {
   useEffect(() => {
     // --- slice: chat notifications --- `chat` is the chat group, `tray` its
     // Tray and startup card: the hint of the first hide into the tray links
-    // there.
+    // there. --- slice: web app --- `devices` is the devices card.
     const anchor =
       section === "account"
         ? ACCOUNT_SECTION_ID
-        : section === "chat"
-          ? CHAT_SETTINGS_SECTION_ID
-          : section === "tray"
-            ? TRAY_SECTION_ID
-            : null;
+        : section === "devices"
+          ? SESSIONS_SECTION_ID
+          : section === "chat"
+            ? CHAT_SETTINGS_SECTION_ID
+            : section === "tray"
+              ? TRAY_SECTION_ID
+              : null;
     if (anchor === null) return;
     document
       .getElementById(anchor)
@@ -155,6 +163,10 @@ export function SettingsPage() {
 
       {/* --- slice: account --- */}
       <AccountCard />
+
+      {/* --- slice: web app --- every device of the account, while there is
+          one to be signed in to. */}
+      {account.data?.onlineConfigured && account.data.onlineSignedIn ? <SessionsCard /> : null}
 
       {/* --- slice: chat notifications --- notifications, sounds, the tray,
           privacy and files of the chat, after the account they belong to. */}

@@ -9,7 +9,7 @@ import { FoldedPanelBack } from "../FoldedPanel";
 // --- slice: play with friends ---
 import { isHostLive } from "../host/hostModel";
 import { Avatar, Badge, Button } from "../ui";
-import { canJoin, inviteOnly, myServer, providerHandle } from "./presence";
+import { canJoin, inviteOnly, myServer, providerHandle, webDevice } from "./presence";
 import { useStatusLine } from "./useStatusLine";
 
 interface FriendPanelProps {
@@ -102,6 +102,8 @@ export function FriendPanel({
           src={friend.user.avatarUrl}
           size="lg"
           status={friend.presence.status}
+          // --- slice: web app ---
+          device={webDevice(friend.presence)}
         />
         <div className="flex-1 min-w-0 flex flex-col gap-2">
           <span className="text-heading-sm text-fg truncate">

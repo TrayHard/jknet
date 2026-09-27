@@ -4,8 +4,15 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import type { Friend, HostJoinPolicy, HostSession } from "../../lib/ipc";
-import { Button } from "../ui";
-import { inviteGroups, isInMyGame, lastInvite, relayDown } from "./hostModel";
+import { Button, Toggle } from "../ui";
+import {
+  inviteGroups,
+  isInMyGame,
+  lastInvite,
+  relayDown,
+  // --- slice: web app ---
+  type ChatFromWebToggle,
+} from "./hostModel";
 import { InviteRow, type InviteRowState } from "./InviteRow";
 import { JoinPolicy } from "./JoinPolicy";
 import { Notice } from "./Notice";
@@ -29,6 +36,10 @@ interface InvitePanelProps {
   policy: HostJoinPolicy;
   joinUserIds: string[];
   onPolicyChange: (policy: HostJoinPolicy, joinUserIds: string[]) => void;
+  // --- slice: web app ---
+  /** **Chat from the web app**, of the form or of the session like the policy. */
+  chatFromWeb: ChatFromWebToggle;
+  onChatFromWebChange: (on: boolean) => void;
   /** `select`: the friends to invite once the server is ready. */
   marked?: string[];
   /** `select`: marks the core already has and a click cannot take back. */
@@ -63,6 +74,8 @@ export function InvitePanel({
   policy,
   joinUserIds,
   onPolicyChange,
+  chatFromWeb,
+  onChatFromWebChange,
   marked = [],
   lockedMarks = [],
   onToggleMark,
@@ -111,6 +124,8 @@ export function InvitePanel({
           onChange={onPolicyChange}
           disabled
         />
+        {/* --- slice: web app --- */}
+        <ChatFromWebSwitch state={chatFromWeb} onChange={onChatFromWebChange} />
       </aside>
     );
   }
@@ -150,6 +165,8 @@ export function InvitePanel({
         friends={ordered}
         onChange={onPolicyChange}
       />
+      {/* --- slice: web app --- */}
+      <ChatFromWebSwitch state={chatFromWeb} onChange={onChatFromWebChange} />
       <div aria-hidden="true" className="h-px shrink-0 bg-line-subtle" />
       {mode === "select" ? (
         <p className="text-body-sm text-fg-muted">{t("panel.caption")}</p>
@@ -200,5 +217,39 @@ export function InvitePanel({
         </>
       )}
     </aside>
+  );
+}
+
+// --- slice: web app ---
+/**
+ * **Chat from the web app**: under the join policy, because it widens the
+ * same door. Friends the policy or an invite lets in may also read and write
+ * in the server's chat from the web app without starting the game. On by
+ * default; off stops later joins from the web only.
+ */
+function ChatFromWebSwitch({
+  state,
+  onChange,
+}: {
+  state: ChatFromWebToggle;
+  onChange: (on: boolean) => void;
+}) {
+  const { t } = useTranslation("host");
+  const title = t("policy.chatFromWeb");
+  return (
+    <div className="flex items-start gap-12">
+      {/* The switch dims itself when off-limits; the words dim like the policy above. */}
+      <span className={cn("flex-1 min-w-0 flex flex-col gap-2", state.disabled && "opacity-60")}>
+        <span className="text-body-sm text-fg">{title}</span>
+        <span className="text-body-sm text-fg-muted">{t("policy.chatFromWebHint")}</span>
+      </span>
+      <Toggle
+        checked={state.checked}
+        onChange={onChange}
+        disabled={state.disabled}
+        label={title}
+        className="mt-2"
+      />
+    </div>
   );
 }

@@ -821,6 +821,10 @@
       "storageOf": "{{used}} von {{quota}} belegt",
       "nextFree": "Ihre älteste Datei läuft am {{date}} ab und gibt ihren Platz frei.",
       "retention": "Nachrichten und Dateien werden 90 Tage bei JKNet Online aufbewahrt und dann gelöscht."
+    },
+    "webApp": {
+      "title": "Chatten vom Handy",
+      "text": "Ihre Chats und Freunde im Browser und als App auf dem Handy. Melden Sie sich dort mit demselben Konto an."
     }
   },
   "trayHint": {

@@ -189,6 +189,8 @@ function settingsOf(people: DevHostPeople, patch: Partial<HostSettings> = {}): H
     joinUserIds: [],
     inviteUserIds: [people.dana, people.juno],
     joinAfterStart: true,
+    // --- slice: web app ---
+    chatFromWeb: true,
     ...patch,
   };
 }
@@ -581,6 +583,13 @@ export async function devHost<T>(command: string, args: Record<string, unknown> 
         joinPolicy: args.joinPolicy as HostSettings["joinPolicy"],
         joinUserIds: (args.joinUserIds as string[]) ?? [],
       };
+      publish();
+      return copy(world.session) as T;
+    }
+    // --- slice: web app ---
+    case "host_set_chat_from_web": {
+      if (world.session?.status !== "running") throw refusal("hostNotRunning", "The server is not running.");
+      world.session.settings = { ...world.session.settings, chatFromWeb: args.on === true };
       publish();
       return copy(world.session) as T;
     }

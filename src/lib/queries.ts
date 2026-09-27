@@ -234,6 +234,8 @@ import {
   settingsEvents,
   type AccountChanged,
   type AccountState,
+  // --- slice: web app ---
+  type DeviceSession,
   // --- slice: bundles ---
   type BundleDetailsWithLocal,
   type BundleFileRoot,
@@ -1653,6 +1655,9 @@ export function useLevelshotEvents(): void {
 export const accountKeys = {
   /** Whether a token is on file, and the account it belongs to. */
   state: ["account", "state"] as const,
+  // --- slice: web app ---
+  /** The devices signed in to the account: `get_sessions`. */
+  sessions: ["account", "sessions"] as const,
 };
 
 /**
@@ -1885,6 +1890,39 @@ export function useDeleteAccount() {
   return useMutation({
     mutationFn: () => accountIpc.deleteAccount(),
     onSuccess: refresh,
+  });
+}
+
+// --- slice: web app ---
+/**
+ * The devices signed in to the account, for the **Devices and sessions** card.
+ *
+ * Read when the card mounts, and again after every sign-out it sends; never
+ * on a timer. The service counts these calls in a small budget of their own,
+ * so the query does not retry either: a refusal is shown, not repeated.
+ */
+export function useDeviceSessions(enabled: boolean): UseQueryResult<DeviceSession[]> {
+  return useQuery({
+    queryKey: accountKeys.sessions,
+    queryFn: accountIpc.getSessions,
+    enabled: enabled && hasBackend(),
+    refetchOnMount: "always",
+    retry: false,
+  });
+}
+
+/**
+ * **Sign out** of one device, or of every other one. Signing this device's
+ * own session out is the sign-out of this device, and `account:changed`
+ * follows.
+ */
+export function useRevokeSession() {
+  const queryClient = useQueryClient();
+  const refresh = useAccountRefresh();
+  return useMutation({
+    mutationFn: (target: { id: string } | { others: true }) => accountIpc.revokeSession(target),
+    onSuccess: refresh,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: accountKeys.sessions }),
   });
 }
 
@@ -2225,6 +2263,12 @@ export function useSetHostJoinPolicy() {
     ({ joinPolicy, joinUserIds }: { joinPolicy: HostJoinPolicy; joinUserIds: string[] }) =>
       hostIpc.setJoinPolicy(joinPolicy, joinUserIds),
   );
+}
+
+// --- slice: web app ---
+/** **Chat from the web app**, while the server runs. */
+export function useSetHostChatFromWeb() {
+  return useHostWriter((on: boolean) => hostIpc.setChatFromWeb(on));
 }
 
 /** **Retry** of the relay line. */

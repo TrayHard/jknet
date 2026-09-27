@@ -19,6 +19,7 @@ fn settings() -> HostSettings {
         join_user_ids: Vec::new(),
         invite_user_ids: Vec::new(),
         join_after_start: true,
+        chat_from_web: true,
     }
 }
 
@@ -367,4 +368,65 @@ fn the_session_reaches_the_frontend_in_the_shape_of_ipc_ts() {
     assert_eq!(sent.network, Network::Internet);
     assert_eq!(sent.join_policy, JoinPolicy::Invite);
     assert!(sent.join_user_ids.is_empty() && !sent.join_after_start);
+}
+
+// --- slice: web app ---
+
+#[test]
+fn the_presence_says_whether_friends_may_chat_from_the_web_app() {
+    // On by default, and sent even then: a service reads a missing field as
+    // on too, but the host's own copy is the whole object.
+    let mut view = session(SessionStatus::Running);
+    let info = hosting_info(&view, None);
+    assert!(info.chat_from_web);
+    let json = serde_json::to_value(&info).unwrap();
+    assert_eq!(json["chatFromWeb"], true);
+
+    // Switched off, the heartbeat and every invite of this server say so.
+    view.settings.chat_from_web = false;
+    let json = serde_json::to_value(hosting_info(&view, None)).unwrap();
+    assert_eq!(json["chatFromWeb"], false);
+    let presence = host_presence(&view, None).expect("a running session is published");
+    assert!(!presence.info.chat_from_web);
+}
+
+#[test]
+fn the_switch_changes_the_running_session_and_nothing_else() {
+    let live = live(SessionStatus::Running);
+    let session = set_chat_from_web(&live, false);
+    assert!(!session.settings.chat_from_web);
+    assert_eq!(session.settings.join_policy, JoinPolicy::Friends, "the door stays as it was");
+    assert!(!hosting_info(&session, None).chat_from_web);
+    assert!(set_chat_from_web(&live, true).settings.chat_from_web);
+}
+
+#[test]
+fn the_switch_is_remembered_per_game_and_opens_on_by_default() {
+    // A form without the field, as a screen older than the switch sends it.
+    let sent: HostSettings = serde_json::from_value(serde_json::json!({
+        "clientId": "everyday", "map": "mp/ffa3", "gametype": 0, "maxPlayers": 8,
+        "timeLimit": 0, "scoreLimit": 20, "bots": 0, "serverName": "x",
+        "password": null, "network": "lan", "joinPolicy": "friends"
+    }))
+    .expect("the settings of the form parse");
+    assert!(sent.chat_from_web);
+
+    // Written as the negative, so a document without it reads as on.
+    let mut closed = settings();
+    closed.chat_from_web = false;
+    assert!(defaults_of(&closed).web_chat_closed);
+    assert!(!defaults_of(&settings()).web_chat_closed);
+
+    let mut document = Settings {
+        online_url: "http://127.0.0.1:8787".into(),
+        ..Settings::default()
+    };
+    let options = options_of(&document, Game::JediAcademy, vec![client("everyday", true)]);
+    assert!(options.defaults.chat_from_web, "nothing remembered: on");
+    document.host_defaults.insert(Game::JediAcademy, defaults_of(&closed));
+    let options = options_of(&document, Game::JediAcademy, vec![client("everyday", true)]);
+    assert!(!options.defaults.chat_from_web);
+    // The other game keeps its own.
+    let options = options_of(&document, Game::JediOutcast, vec![client("everyday", true)]);
+    assert!(options.defaults.chat_from_web);
 }

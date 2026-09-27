@@ -165,6 +165,17 @@ pub struct HostSettings {
     pub invite_user_ids: Vec<String>,
     #[serde(default)]
     pub join_after_start: bool,
+    // --- slice: web app ---
+    /// **Chat from the web app**: whether friends who may join can also join
+    /// the server's chat from the web app without starting the game. Absent,
+    /// as from a screen older than the switch, means yes.
+    #[serde(default = "yes")]
+    pub chat_from_web: bool,
+}
+
+/// The default of [`HostSettings::chat_from_web`].
+fn yes() -> bool {
+    true
 }
 
 impl std::fmt::Debug for HostSettings {
@@ -185,6 +196,7 @@ impl std::fmt::Debug for HostSettings {
             join_user_ids,
             invite_user_ids,
             join_after_start,
+            chat_from_web,
         } = self;
         f.debug_struct("HostSettings")
             .field("client_id", client_id)
@@ -201,6 +213,7 @@ impl std::fmt::Debug for HostSettings {
             .field("join_user_ids", join_user_ids)
             .field("invite_user_ids", invite_user_ids)
             .field("join_after_start", join_after_start)
+            .field("chat_from_web", chat_from_web)
             .finish()
     }
 }
@@ -707,6 +720,8 @@ fn options_of(settings: &Settings, game: Game, clients: Vec<HostClientOption>) -
         join_user_ids: saved.join_user_ids,
         invite_user_ids: Vec::new(),
         join_after_start: true,
+        // --- slice: web app ---
+        chat_from_web: !saved.web_chat_closed,
     };
     HostOptions {
         game,
@@ -974,23 +989,7 @@ pub async fn host_start(
 fn remember_defaults(state: &AppState, game: Game, settings: &HostSettings) {
     let result = (|| -> Result<()> {
         let mut document = Settings::current(state)?;
-        document.host_defaults.insert(
-            game,
-            HostDefaults {
-                client_id: Some(settings.client_id.clone()),
-                map: Some(settings.map.clone()),
-                gametype: settings.gametype as u8,
-                max_players: settings.max_players as u8,
-                time_limit: settings.time_limit as u16,
-                score_limit: settings.score_limit as u16,
-                bots: settings.bots as u8,
-                server_name: Some(settings.server_name.clone()),
-                use_password: settings.password.is_some(),
-                network: settings.network.as_str().to_string(),
-                join_policy: settings.join_policy.as_str().to_string(),
-                join_user_ids: settings.join_user_ids.clone(),
-            },
-        );
+        document.host_defaults.insert(game, defaults_of(settings));
         if settings.network.uses_lan() {
             document.host_firewall_note_seen = true;
         }
@@ -999,6 +998,27 @@ fn remember_defaults(state: &AppState, game: Game, settings: &HostSettings) {
     })();
     if let Err(e) = result {
         log::warn!("hosting: cannot remember the settings of this server: {e}");
+    }
+}
+
+/// The defaults `remember_defaults` writes for a start: the form, without the
+/// password and without what belongs to one start.
+fn defaults_of(settings: &HostSettings) -> HostDefaults {
+    HostDefaults {
+        client_id: Some(settings.client_id.clone()),
+        map: Some(settings.map.clone()),
+        gametype: settings.gametype as u8,
+        max_players: settings.max_players as u8,
+        time_limit: settings.time_limit as u16,
+        score_limit: settings.score_limit as u16,
+        bots: settings.bots as u8,
+        server_name: Some(settings.server_name.clone()),
+        use_password: settings.password.is_some(),
+        network: settings.network.as_str().to_string(),
+        join_policy: settings.join_policy.as_str().to_string(),
+        join_user_ids: settings.join_user_ids.clone(),
+        // --- slice: web app ---
+        web_chat_closed: !settings.chat_from_web,
     }
 }
 
@@ -1154,6 +1174,37 @@ pub fn host_set_join_policy(
     emit_session(&app, &session);
     let _ = live.commands.send(Command::Presence);
     Ok(session)
+}
+
+// --- slice: web app ---
+/// **Chat from the web app**, while the server starts or runs.
+///
+/// The presence follows at once, and with it what every friend's web app
+/// offers. Switching it off stops later joins from the web only: a friend
+/// already in the chat stays until they leave, the host removes them, or the
+/// server stops.
+#[tauri::command]
+pub fn host_set_chat_from_web(
+    app: AppHandle,
+    host: tauri::State<'_, HostState>,
+    on: bool,
+) -> Result<HostSession> {
+    let live = host
+        .live()
+        .filter(|live| matches!(live.status(), SessionStatus::Starting | SessionStatus::Running))
+        .ok_or(AppError::HostNotRunning)?;
+    let session = set_chat_from_web(&live, on);
+    emit_session(&app, &session);
+    let _ = live.commands.send(Command::Presence);
+    Ok(session)
+}
+
+/// The session with the switch set, as `host_set_chat_from_web` leaves it.
+fn set_chat_from_web(live: &Live, on: bool) -> HostSession {
+    live.update(|view| {
+        view.settings.chat_from_web = on;
+        view.clone()
+    })
 }
 
 /// **Retry** of the relay line.
@@ -2185,6 +2236,8 @@ fn hosting_info(view: &HostSession, fs_game: Option<&str>) -> HostingInfo {
             Vec::new()
         }),
         can_join: None,
+        // --- slice: web app ---
+        chat_from_web: view.settings.chat_from_web,
     }
 }
 

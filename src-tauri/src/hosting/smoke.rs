@@ -436,6 +436,7 @@ async fn hosting_checks(
         join_policy: "friends".into(),
         join_user_ids: Some(Vec::new()),
         can_join: None,
+        chat_from_web: true,
     };
     let update = PresenceUpdate {
         status: "online".into(),

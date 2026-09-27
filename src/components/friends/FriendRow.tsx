@@ -8,7 +8,7 @@ import type { Friend } from "../../lib/ipc";
 import { hasTextSelection } from "../../lib/selection";
 import { Avatar, Button } from "../ui";
 // --- slice: play with friends ---
-import { canJoin, inviteOnly } from "./presence";
+import { canJoin, inviteOnly, webDevice } from "./presence";
 import { useStatusLine } from "./useStatusLine";
 
 interface FriendRowProps {
@@ -89,6 +89,8 @@ export function FriendRow({
         name={friend.user.displayName}
         src={friend.user.avatarUrl}
         status={friend.presence.status}
+        // --- slice: web app ---
+        device={webDevice(friend.presence)}
       />
       <span className="flex-1 min-w-0 flex flex-col">
         <span

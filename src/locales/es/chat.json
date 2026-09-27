@@ -848,6 +848,10 @@
       "storageOf": "{{used}} de {{quota}} usados",
       "nextFree": "Su archivo más antiguo caduca el {{date}} y libera su espacio.",
       "retention": "Los mensajes y archivos se guardan en JKNet Online 90 días y después se eliminan."
+    },
+    "webApp": {
+      "title": "Chatea desde el móvil",
+      "text": "Sus chats y amigos en el navegador y como aplicación en el móvil. Inicie sesión allí con la misma cuenta."
     }
   },
   "trayHint": {
