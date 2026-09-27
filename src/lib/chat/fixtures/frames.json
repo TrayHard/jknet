@@ -1,0 +1,217 @@
+[
+  {
+    "name": "a message of a friend moves the summary and may notify",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }] },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HKYLE0000000000000000000", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "state", "notify"]
+  },
+  {
+    "name": "a message of the conversation on screen is read at once",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }], "viewing": "c" },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HKYLE0000000000000000000", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "state", "markRead", "notify"]
+  },
+  {
+    "name": "a message seen before changes nothing",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 3, "readSeq": 3 }] },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HKYLE0000000000000000000", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message"]
+  },
+  {
+    "name": "an older message changes nothing",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 5, "readSeq": 5 }] },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 4, "senderId": "01HKYLE0000000000000000000", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message"]
+  },
+  {
+    "name": "my own message settles its outbox entry by client id",
+    "state": {
+      "me": "01HME000000000000000000000",
+      "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }],
+      "outbox": [{ "clientId": "01J0CLIENT", "conversationId": "c" }]
+    },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HME000000000000000000000", "clientId": "01J0CLIENT", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "outbox", "state"]
+  },
+  {
+    "name": "my own message from another device",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }] },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HME000000000000000000000", "clientId": "01J0ELSEWHERE", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "state"]
+  },
+  {
+    "name": "a message of somebody else with my client id is not mine",
+    "state": {
+      "me": "01HME000000000000000000000",
+      "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }],
+      "outbox": [{ "clientId": "01J0CLIENT", "conversationId": "c" }]
+    },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HKYLE0000000000000000000", "clientId": "01J0CLIENT", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "state", "notify"]
+  },
+  {
+    "name": "a message of a conversation the book does not know fetches it",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "new", "seq": 1, "senderId": "01HKYLE0000000000000000000", "kind": "user", "body": "hi" } } },
+    "effects": ["chat:message", "refresh", "notify"]
+  },
+  {
+    "name": "a system message never notifies",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }] },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": null, "kind": "system", "body": "" } } },
+    "effects": ["chat:message", "state"]
+  },
+  {
+    "name": "a message of a deleted account is somebody else's",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }] },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": null, "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "state", "notify"]
+  },
+  {
+    "name": "a message ends the typing of its sender",
+    "state": {
+      "me": "01HME000000000000000000000",
+      "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }],
+      "typing": [{ "conversationId": "c", "userId": "01HKYLE0000000000000000000" }]
+    },
+    "frame": { "type": "chat.message", "payload": { "message": { "conversationId": "c", "seq": 3, "senderId": "01HKYLE0000000000000000000", "kind": "user", "body": "gg" } } },
+    "effects": ["chat:message", "state", "chat:typing", "notify"]
+  },
+  {
+    "name": "a read marker of a friend",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2 }] },
+    "frame": { "type": "chat.read", "payload": { "conversationId": "c", "userId": "01HKYLE0000000000000000000", "seq": 2 } },
+    "effects": ["chat:read", "state"]
+  },
+  {
+    "name": "my own read marker short of the last message refreshes",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 10, "readSeq": 2, "unread": 8 }] },
+    "frame": { "type": "chat.read", "payload": { "conversationId": "c", "userId": "01HME000000000000000000000", "seq": 5 } },
+    "effects": ["chat:read", "state", "refresh"]
+  },
+  {
+    "name": "my own read marker at the last message",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 10, "readSeq": 2, "unread": 8 }] },
+    "frame": { "type": "chat.read", "payload": { "conversationId": "c", "userId": "01HME000000000000000000000", "seq": 10 } },
+    "effects": ["chat:read", "state"]
+  },
+  {
+    "name": "a read marker of a conversation the book does not know",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.read", "payload": { "conversationId": "gone", "userId": "01HKYLE0000000000000000000", "seq": 2 } },
+    "effects": ["chat:read"]
+  },
+  {
+    "name": "a friend types",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 0, "readSeq": 0 }] },
+    "frame": { "type": "chat.typing", "payload": { "conversationId": "c", "userId": "01HKYLE0000000000000000000", "ttlMs": 6000 } },
+    "effects": ["chat:typing", "typingExpires"]
+  },
+  {
+    "name": "my own typing on another device is nobody typing",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 0, "readSeq": 0 }] },
+    "frame": { "type": "chat.typing", "payload": { "conversationId": "c", "userId": "01HME000000000000000000000", "ttlMs": 6000 } },
+    "effects": []
+  },
+  {
+    "name": "hiding my typing hides everybody's",
+    "state": {
+      "me": "01HME000000000000000000000",
+      "conversations": [{ "id": "c", "lastSeq": 0, "readSeq": 0 }],
+      "privacy": { "shareReadReceipts": true, "shareTyping": false, "groupAdd": "friends" }
+    },
+    "frame": { "type": "chat.typing", "payload": { "conversationId": "c", "userId": "01HKYLE0000000000000000000" } },
+    "effects": []
+  },
+  {
+    "name": "a reaction to the last message moves the summary",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2, "lastMessageSeq": 2 }] },
+    "frame": { "type": "chat.reaction", "payload": { "conversationId": "c", "seq": 2, "userId": "01HKYLE0000000000000000000", "emoji": "👍", "on": true } },
+    "effects": ["chat:reaction", "state"]
+  },
+  {
+    "name": "a reaction to an older message",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 2, "readSeq": 2, "lastMessageSeq": 2 }] },
+    "frame": { "type": "chat.reaction", "payload": { "conversationId": "c", "seq": 1, "userId": "01HKYLE0000000000000000000", "emoji": "👍", "on": true } },
+    "effects": ["chat:reaction"]
+  },
+  {
+    "name": "a conversation replaces its summary",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.conversation", "payload": { "conversation": { "id": "g", "kind": "group", "title": "Saber school" } } },
+    "effects": ["state"]
+  },
+  {
+    "name": "a removed conversation takes its queue along",
+    "state": {
+      "me": "01HME000000000000000000000",
+      "conversations": [{ "id": "c", "lastSeq": 1, "readSeq": 1 }],
+      "outbox": [{ "clientId": "01J0CLIENT", "conversationId": "c" }]
+    },
+    "frame": { "type": "chat.conversation.removed", "payload": { "conversationId": "c", "reason": "ended" } },
+    "effects": ["chat:removed", "outbox", "state"]
+  },
+  {
+    "name": "a removed conversation without a queue",
+    "state": { "me": "01HME000000000000000000000", "conversations": [{ "id": "c", "lastSeq": 1, "readSeq": 1 }] },
+    "frame": { "type": "chat.conversation.removed", "payload": { "conversationId": "c", "reason": "left" } },
+    "effects": ["chat:removed", "state"]
+  },
+  {
+    "name": "a removed conversation the book did not know is still told",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.conversation.removed", "payload": { "conversationId": "c", "reason": "removed" } },
+    "effects": ["chat:removed"]
+  },
+  {
+    "name": "a group invite arrives",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": {
+      "type": "chat.groupInvite",
+      "payload": { "invite": { "conversationId": "g", "title": "Saber school", "invitedBy": { "id": "01HKYLE0000000000000000000", "displayName": "Kyle", "avatarUrl": null, "provider": "dev", "providerName": "kyle", "createdAt": "2026-09-01T10:00:00Z" }, "memberCount": 3, "createdAt": "2026-09-26T10:00:00Z", "expiresAt": "2026-10-03T10:00:00Z" } }
+    },
+    "effects": ["state"]
+  },
+  {
+    "name": "a group invite goes",
+    "state": { "me": "01HME000000000000000000000", "invites": ["g"] },
+    "frame": { "type": "chat.groupInvite.removed", "payload": { "conversationId": "g" } },
+    "effects": ["state"]
+  },
+  {
+    "name": "a group invite the book did not have goes",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.groupInvite.removed", "payload": { "conversationId": "g" } },
+    "effects": []
+  },
+  {
+    "name": "settings that flip read receipts resync",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.settings", "payload": { "settings": { "shareReadReceipts": false, "shareTyping": true, "groupAdd": "friends" } } },
+    "effects": ["resync", "state"]
+  },
+  {
+    "name": "settings that keep read receipts",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.settings", "payload": { "settings": { "shareReadReceipts": true, "shareTyping": false, "groupAdd": "ask" } } },
+    "effects": ["state"]
+  },
+  {
+    "name": "the socket lagged",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.resync", "payload": {} },
+    "effects": ["resync"]
+  },
+  {
+    "name": "a kind this build does not know",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.poll", "payload": { "x": 1 } },
+    "effects": []
+  },
+  {
+    "name": "a known kind with a payload that does not read",
+    "state": { "me": "01HME000000000000000000000" },
+    "frame": { "type": "chat.read", "payload": { "seq": "x" } },
+    "effects": []
+  }
+]

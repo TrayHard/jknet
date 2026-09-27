@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useGametypeLabels } from "../../../i18n/useGameLabels";
+import { usePlatform } from "../../../lib/backend";
 import type { MapCardFields } from "../../../lib/chat/cardDrafts";
 import { useGameNames } from "../../../lib/game";
 import { levelshotUrl, type HostSettings } from "../../../lib/ipc";
@@ -33,12 +34,18 @@ import type { CardViewProps } from "./withFields";
  * starts one with the last settings of the Play with friends screen and this
  * map, in a mode the map offers. Both ask first: a card never starts a server
  * or moves the players of one by itself.
+ *
+ * --- slice: web app --- a platform without game files and without the game
+ * (`usePlatform()`) never asks for the levelshot and offers neither button,
+ * only **Copy map name** and a line that playing is the launcher's.
  */
 export function MapCardView({ card, fields }: CardViewProps<"map">) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const games = useGameNames();
-  const levelshot = useLevelshot(fields.name, fields.game);
+  const caps = usePlatform();
+  // An empty name disables the query, so no `get_levelshot` leaves a browser.
+  const levelshot = useLevelshot(caps.localFiles ? fields.name : null, fields.game);
   const session = useHostSession().data ?? null;
   const check = useCheckedCard();
   const [copied, flashCopied] = useFlash();
@@ -84,19 +91,21 @@ export function MapCardView({ card, fields }: CardViewProps<"map">) {
         }
         actions={
           <>
-            <Button
-              size="sm"
-              variant="primary"
-              icon={running ? <Play size={14} /> : <Server size={14} />}
-              disabled={check.checking || blocked}
-              onClick={() =>
-                check.run(card, (clean) => {
-                  if (clean.type === "map") setAsking({ kind: running ? "change" : "host", fields: clean.fields });
-                })
-              }
-            >
-              {running ? t("cards.map.play") : t("cards.map.host")}
-            </Button>
+            {caps.game ? (
+              <Button
+                size="sm"
+                variant="primary"
+                icon={running ? <Play size={14} /> : <Server size={14} />}
+                disabled={check.checking || blocked}
+                onClick={() =>
+                  check.run(card, (clean) => {
+                    if (clean.type === "map") setAsking({ kind: running ? "change" : "host", fields: clean.fields });
+                  })
+                }
+              >
+                {running ? t("cards.map.play") : t("cards.map.host")}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="ghost"
@@ -112,6 +121,8 @@ export function MapCardView({ card, fields }: CardViewProps<"map">) {
             <CardStatus tone="danger">{errorText(check.error)}</CardStatus>
           ) : done !== null ? (
             <CardStatus tone="success">{done}</CardStatus>
+          ) : !caps.game ? (
+            <CardStatus>{t("cards.openInLauncher")}</CardStatus>
           ) : blocked ? (
             <CardStatus>{blockedText}</CardStatus>
           ) : null

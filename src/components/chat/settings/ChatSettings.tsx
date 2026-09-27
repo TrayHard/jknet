@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
+import { usePlatform } from "../../../lib/backend";
 import type { ChatNotificationsPatch, SettingsPatch } from "../../../lib/ipc";
 import { useUpdateChatSettings } from "../../../lib/queries";
 import { ChatFilesCard } from "./ChatFilesCard";
@@ -35,6 +36,7 @@ export function ChatSettings() {
   const update = useUpdateChatSettings();
   const [error, setError] = useState<string | null>(null);
   const { mutate } = update;
+  const caps = usePlatform();
 
   const save = useCallback(
     (patch: SettingsPatch) => {
@@ -78,7 +80,8 @@ export function ChatSettings() {
           <ChatLevelsCard />
         </div>
         <div className="flex flex-col gap-16 min-w-0">
-          <TrayStartupCard onChange={save} />
+          {/* --- slice: web app --- the tray and the start with Windows are the desktop shell's. */}
+          {caps.tray ? <TrayStartupCard onChange={save} /> : null}
           <ChatPrivacyCard />
           <ChatFilesCard onChange={save} />
         </div>

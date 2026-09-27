@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
+import { usePlatform } from "../../../lib/backend";
 import { fileExtension } from "../../../lib/chat/cardDrafts";
 import { useActiveGame } from "../../../lib/game";
 import type { ChatCardConfig, ChatFileClass } from "../../../lib/ipc";
@@ -59,6 +60,8 @@ export function FileCard({ file, message }: AttachmentProps) {
   const extension = fileExtension(file.name);
   const danger = file.danger || file.class === "executable";
   const gone = state.status === "gone";
+  // --- slice: web app --- the config editor lives with the game clients.
+  const caps = usePlatform();
 
   return (
     <>
@@ -78,7 +81,7 @@ export function FileCard({ file, message }: AttachmentProps) {
             </p>
           ) : null
         }
-        actions={file.class === "config" ? <OpenConfigButton state={state} name={file.name} /> : null}
+        actions={file.class === "config" && caps.localFiles ? <OpenConfigButton state={state} name={file.name} /> : null}
       />
       {state.dialog}
     </>

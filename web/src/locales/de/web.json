@@ -1,0 +1,147 @@
+{
+  "nav": {
+    "label": "Bereiche",
+    "openMenu": "Menü öffnen",
+    "closeMenu": "Menü schließen",
+    "back": "Zurück",
+    "groups": {
+      "chat": "Chat",
+      "browse": "Entdecken",
+      "app": "App"
+    },
+    "sections": {
+      "chats": "Chats",
+      "friends": "Freunde",
+      "community": "Community-Server",
+      "servers": "Serverliste",
+      "bundles": "Bundles",
+      "jkhub": "JKHub-Mods",
+      "settings": "Einstellungen"
+    },
+    "rail": {
+      "chats": "Chats",
+      "friends": "Freunde",
+      "community": "Community",
+      "servers": "Server",
+      "bundles": "Bundles",
+      "jkhub": "JKHub",
+      "settings": "Einstellungen"
+    },
+    "drawerNote": "Spielen, Server betreten und Bundles installieren bleiben in JKNet auf Ihrem PC.",
+    "empty": {
+      "chats": "Wählen Sie einen Chat",
+      "friends": "Wählen Sie einen Freund",
+      "community": "Wählen Sie einen Server",
+      "servers": "Wählen Sie einen Server",
+      "bundles": "Wählen Sie ein Bundle",
+      "jkhub": "Wählen Sie eine Mod"
+    }
+  },
+  "signin": {
+    "title": "Bei JKNet anmelden",
+    "intro": "Chatten Sie mit Ihren Freunden vom Handy oder im Browser.",
+    "discord": "Mit Discord anmelden",
+    "jkhub": "Mit JKHub anmelden",
+    "waiting": "Schließen Sie die Anmeldung auf der geöffneten Seite ab.",
+    "expired": "Die Anmeldung hat zu lange gedauert. Versuchen Sie es erneut.",
+    "failed": "Die Anmeldung wurde nicht abgeschlossen.",
+    "retry": "Erneut versuchen",
+    "done": "Angemeldet. JKNet wird geöffnet…",
+    "installFirst": "Fügen Sie JKNet auf dem iPhone zuerst zum Home-Bildschirm hinzu und melden Sie sich dort an: Die installierte App hat eine eigene Anmeldung."
+  },
+  "install": {
+    "title": "App installieren",
+    "body": "Installiert öffnet sich JKNet vom Startbildschirm und kann Benachrichtigungen zeigen.",
+    "action": "Installieren",
+    "iosSteps": "Tippen Sie auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+    "installed": "JKNet ist auf diesem Gerät installiert."
+  },
+  "tabs": {
+    "title": "JKNet ist in einem anderen Tab geöffnet",
+    "body": "Es bleibt immer nur ein Tab verbunden.",
+    "takeOver": "Hier öffnen"
+  },
+  "offline": {
+    "banner": "Keine Verbindung. Nachrichten warten und gehen raus, sobald Sie wieder online sind.",
+    "reconnecting": "Verbindung wird wiederhergestellt…"
+  },
+  "update": {
+    "available": "Eine neue Version von JKNet ist bereit.",
+    "action": "Aktualisieren",
+    "required": "Diese Version von JKNet ist zu alt. Aktualisieren Sie, um fortzufahren."
+  },
+  "settings": {
+    "title": "Einstellungen",
+    "language": "Sprache",
+    "account": "Konto",
+    "notifications": "Benachrichtigungen",
+    "privacy": "Privatsphäre",
+    "sessions": "Geräte und Sitzungen",
+    "install": "App installieren",
+    "about": "Über"
+  },
+  "notifications": {
+    "title": "Benachrichtigungen",
+    "enable": "Benachrichtigungen aktivieren",
+    "unavailable": "Benachrichtigungen sind gerade nicht verfügbar.",
+    "blocked": "Benachrichtigungen sind in den Browsereinstellungen blockiert.",
+    "messageText": "Nachrichtentext",
+    "preview": {
+      "full": "Name und Anfang der Nachricht",
+      "sender": "Nur Name und Chat",
+      "none": "Keine Details"
+    },
+    "atPc": "Wenn ich am PC bin",
+    "whileActiveElsewhere": {
+      "delay": "Nach einer Minute, falls ungelesen",
+      "always": "Sofort",
+      "never": "Nicht senden"
+    },
+    "test": "Testbenachrichtigung senden",
+    "lastDelivery": "Zuletzt zugestellt: {{date}}",
+    "otherDevices": "Andere Geräte",
+    "remove": "Entfernen",
+    "sessionsLink": "Geräte und Sitzungen"
+  },
+  "push": {
+    "activity": "Aktivität in JKNet",
+    "newMessage": "Neue Nachricht",
+    "sentFiles": "Hat Dateien gesendet",
+    "sharedCard": "Hat eine Karte geteilt",
+    "reaction": "Hat mit {{emoji}} auf Ihre Nachricht reagiert",
+    "groupInvite": "Lädt Sie in die Gruppe {{title}} ein",
+    "friendRequest": "Möchte mit Ihnen befreundet sein",
+    "friendAccepted": "Hat Ihre Freundschaftsanfrage angenommen",
+    "invite": "Lädt Sie auf den eigenen Server ein",
+    "test": "Benachrichtigungen von JKNet funktionieren auf diesem Gerät."
+  },
+  "sessions": {
+    "title": "Geräte und Sitzungen",
+    "signedOut": "Dieses Gerät wurde von einem anderen Gerät abgemeldet."
+  },
+  "serverChats": {
+    "hosts": "{{name}} hostet einen Server",
+    "invited": "Eingeladen",
+    "guestNote": "Sie sind Gast auf diesem Server. Chatten Sie von hier, betreten Sie das Spiel mit JKNet auf Ihrem PC.",
+    "gone": "Dieser Chat ist nicht mehr verfügbar"
+  },
+  "serverList": {
+    "title": "Serverliste",
+    "unavailable": "Die Serverliste ist gerade nicht verfügbar",
+    "updating": "Wird aktualisiert…",
+    "playNote": "Um hier zu spielen, öffnen Sie JKNet auf Ihrem PC.",
+    "friendsHere": "Freunde auf dem Server",
+    "lastSeen": "Antwortete {{time}}"
+  },
+  "jkhub": {
+    "title": "JKHub-Mods",
+    "installNote": "Installieren Sie über JKNet auf Ihrem PC.",
+    "open": "Auf JKHub öffnen",
+    "indexedAt": "Katalog vom {{date}}"
+  },
+  "about": {
+    "title": "Über",
+    "version": "Build {{commit}} vom {{date}}",
+    "launcher": "JKNet für Ihren PC"
+  }
+}

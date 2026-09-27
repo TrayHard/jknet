@@ -146,6 +146,31 @@ pub enum Retry {
     Gone,
 }
 
+/// What kind of failure an attempt met, before the entry's own history (a
+/// second loss of its files, its ten minutes) has a say. The rows of the
+/// table at the top of this module; `src/lib/chat/fixtures/outbox-failures.json`
+/// holds the cases the web client answers the same way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Failure {
+    /// `file_gone`, `file_not_ready`: the service lost what the entry registered.
+    FilesLost,
+    /// The network, `429`, a `5xx`: the same attempt may pass later.
+    Transient,
+    /// Anything else the service refused.
+    Refused,
+}
+
+/// Sorts the error of one attempt into a row of the table.
+pub(super) fn classify(error: &AppError) -> Failure {
+    if is_file_lost(error) {
+        Failure::FilesLost
+    } else if is_retryable(error) {
+        Failure::Transient
+    } else {
+        Failure::Refused
+    }
+}
+
 /// The queue, in the order the player wrote.
 #[derive(Debug, Default)]
 pub struct Outbox {
@@ -426,9 +451,10 @@ async fn run(app: &AppHandle, client_id: &str) {
             let Some(conversation) = conversation else {
                 return;
             };
-            if is_file_lost(&error) && chat.outbox().reregister(client_id) {
+            let failure = classify(&error);
+            if failure == Failure::FilesLost && chat.outbox().reregister(client_id) {
                 log::info!("chat: the files of {client_id} are gone on the service, uploading again");
-            } else if is_retryable(&error) {
+            } else if failure == Failure::Transient {
                 match chat.outbox().retry_later(client_id, &error, Instant::now()) {
                     Retry::After(wait) => {
                         log::debug!("chat: sending {client_id} failed ({error}), again in {wait:?}");
@@ -662,6 +688,55 @@ mod tests {
         outbox.retry_later("a1", &network(), now);
         outbox.flush();
         assert_eq!(outbox.start_ready(now), ["a1"]);
+    }
+
+    /// The cases the launcher and the web client share: an answer of the
+    /// service, and the row of the table it falls in.
+    #[test]
+    fn the_shared_failure_cases_sort_into_their_rows() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            status: u16,
+            code: Option<String>,
+            #[serde(default)]
+            reason: Option<String>,
+            #[serde(default)]
+            message: Option<String>,
+            verdict: String,
+        }
+        let cases: Vec<Case> = serde_json::from_str(include_str!(
+            "../../../src/lib/chat/fixtures/outbox-failures.json"
+        ))
+        .expect("the shared failure cases parse");
+        assert!(cases.len() >= 10, "the shared failure cases are there");
+        for case in cases {
+            // Status 0 is an answer that never came; a missing code is an
+            // answer without an error document.
+            let error = if case.status == 0 {
+                network()
+            } else {
+                let body = match &case.code {
+                    Some(code) => serde_json::json!({ "error": {
+                        "code": code,
+                        "message": case.message.clone().unwrap_or_else(|| "refused".into()),
+                        "details": case.reason.as_ref().map(|reason| serde_json::json!({ "reason": reason })),
+                    }})
+                    .to_string(),
+                    None => String::new(),
+                };
+                crate::online::chat_error_for_test(case.status, body.as_bytes())
+            };
+            let verdict = match classify(&error) {
+                Failure::FilesLost => "reregister",
+                Failure::Transient => "retry",
+                Failure::Refused => "fail",
+            };
+            assert_eq!(
+                verdict, case.verdict,
+                "{} {:?} {:?} -> {error:?}",
+                case.status, case.code, case.reason
+            );
+        }
     }
 
     #[test]

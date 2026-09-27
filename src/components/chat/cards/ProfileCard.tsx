@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
+import { usePlatform } from "../../../lib/backend";
 import { parseCharColor, type ProfileCardFields } from "../../../lib/chat/cardDrafts";
 import { clientsOfGame, useActiveGame, useDefaultClient, useGameNames } from "../../../lib/game";
 import { SABER_BLADE_RGB, type ChatCardProfile } from "../../../lib/ipc";
@@ -24,12 +25,17 @@ import type { CardViewProps } from "./withFields";
  * (`chat_card_to_profile`), which checks every value with the rules of the
  * profile form, and opens that form on it in a client of the active game.
  * Nothing is saved until the player presses **Save profile** there.
+ *
+ * --- slice: web app --- a platform without game clients on the machine
+ * (`usePlatform().localFiles`) keeps no player profiles: the card only shows
+ * the profile, with a line that saving it is the launcher's.
  */
 export function ProfileCardView({ card, fields }: CardViewProps<"profile">) {
   const { t } = useTranslation("chat");
   const { t: tClients } = useTranslation("clients");
   const errorText = useErrorText();
   const toProfile = useChatCardToProfile();
+  const caps = usePlatform();
   const [draft, setDraft] = useState<ChatCardProfile | null>(null);
   const [saved, setSaved] = useState(false);
   const title = fields.nickname;
@@ -54,23 +60,27 @@ export function ProfileCardView({ card, fields }: CardViewProps<"profile">) {
         title={<ColoredNickname raw={title} placeholder={fields.model} />}
         subtitle={t("cards.kinds.profile")}
         actions={
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={toProfile.isPending}
-            onClick={() => {
-              setSaved(false);
-              toProfile.mutate(card, { onSuccess: setDraft });
-            }}
-          >
-            {t("cards.profile.save")}
-          </Button>
+          caps.localFiles ? (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={toProfile.isPending}
+              onClick={() => {
+                setSaved(false);
+                toProfile.mutate(card, { onSuccess: setDraft });
+              }}
+            >
+              {t("cards.profile.save")}
+            </Button>
+          ) : null
         }
         status={
           toProfile.error ? (
             <CardStatus tone="danger">{errorText(toProfile.error)}</CardStatus>
           ) : saved ? (
             <CardStatus tone="success">{t("cards.profile.saved")}</CardStatus>
+          ) : !caps.localFiles ? (
+            <CardStatus>{t("cards.openInLauncher")}</CardStatus>
           ) : null
         }
       >

@@ -702,6 +702,143 @@ mod tests {
         assert!(chat.book().invites.is_empty());
     }
 
+    /// The cases the launcher and the web client share: a state, one frame
+    /// as the service sends it, and the kinds of what the frame asks for. An
+    /// `Emit` is named by its event, the rest by the variant; the order is
+    /// not part of the promise, so both sides compare sorted lists.
+    #[test]
+    fn the_shared_frame_cases_hold() {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CaseConversation {
+            id: String,
+            last_seq: u64,
+            read_seq: u64,
+            #[serde(default)]
+            unread: Option<u32>,
+            /// The last message of the summary, from the other member.
+            #[serde(default)]
+            last_message_seq: Option<u64>,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CaseEntry {
+            client_id: String,
+            conversation_id: String,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CaseTyping {
+            conversation_id: String,
+            user_id: String,
+        }
+        #[derive(serde::Deserialize, Default)]
+        #[serde(default, rename_all = "camelCase")]
+        struct CaseState {
+            me: Option<String>,
+            conversations: Vec<CaseConversation>,
+            viewing: Option<String>,
+            outbox: Vec<CaseEntry>,
+            privacy: Option<ChatPrivacy>,
+            invites: Vec<String>,
+            typing: Vec<CaseTyping>,
+        }
+        #[derive(serde::Deserialize)]
+        struct CaseFrame {
+            #[serde(rename = "type")]
+            kind: String,
+            payload: Value,
+        }
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            #[serde(default)]
+            state: CaseState,
+            frame: CaseFrame,
+            effects: Vec<String>,
+        }
+        fn kind(effect: &Effect) -> String {
+            match effect {
+                Effect::Emit { event, .. } => (*event).to_string(),
+                Effect::State => "state".into(),
+                Effect::Outbox(_) => "outbox".into(),
+                Effect::MarkRead(_) => "markRead".into(),
+                Effect::Refresh(_) => "refresh".into(),
+                Effect::Resync => "resync".into(),
+                Effect::TypingExpires { .. } => "typingExpires".into(),
+                Effect::Notify(_) => "notify".into(),
+            }
+        }
+
+        let cases: Vec<Case> =
+            serde_json::from_str(include_str!("../../../src/lib/chat/fixtures/frames.json"))
+                .expect("the shared frame cases parse");
+        assert!(cases.len() >= 20, "the shared frame cases are there");
+        for case in cases {
+            let state = case.state;
+            // The fixtures name the two players of `test_support`.
+            assert!(state.me.as_deref().is_none_or(|me| me == ME), "{}", case.name);
+            let chat = state_with(
+                state
+                    .conversations
+                    .iter()
+                    .map(|entry| {
+                        let mut summary = conversation(&entry.id, entry.last_seq, entry.read_seq);
+                        if let Some(unread) = entry.unread {
+                            summary.unread = unread;
+                        }
+                        summary.last_message =
+                            entry.last_message_seq.map(|seq| message(&entry.id, seq, Some(KYLE)));
+                        summary
+                    })
+                    .collect(),
+            );
+            if let Some(viewing) = state.viewing {
+                lock(&chat.viewing).insert(
+                    "main".into(),
+                    Viewing {
+                        conversation_id: Some(viewing),
+                        focused: true,
+                        at_bottom: true,
+                        composer: true,
+                    },
+                );
+            }
+            for entry in state.outbox {
+                chat.outbox().push(OutboxEntry::new(
+                    &entry.client_id,
+                    &entry.conversation_id,
+                    SendDraft { body: "gg".into(), ..SendDraft::default() },
+                ));
+            }
+            if let Some(privacy) = state.privacy {
+                chat.book().set_privacy(privacy);
+            }
+            for conversation_id in state.invites {
+                chat.book().upsert_invite(GroupInvite {
+                    conversation_id,
+                    invited_by: user(KYLE),
+                    ..GroupInvite::default()
+                });
+            }
+            let now = Instant::now();
+            for hint in state.typing {
+                chat.book().set_typing(&hint.conversation_id, &hint.user_id, now + Duration::from_secs(6));
+            }
+
+            // A payload that does not read is dropped, as `handle` drops it.
+            let effects = match parse(&case.frame.kind, case.frame.payload) {
+                Ok(frame) => apply(&chat, state.me.as_deref(), frame, now),
+                Err(_) => Vec::new(),
+            };
+            let mut got: Vec<String> = effects.iter().map(kind).collect();
+            got.sort();
+            let mut want = case.effects.clone();
+            want.sort();
+            assert_eq!(got, want, "{}", case.name);
+        }
+    }
+
     #[test]
     fn an_unknown_kind_does_nothing() {
         let chat = state_with(Vec::new());

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
+import { usePlatform } from "../../../lib/backend";
 import { demoGame } from "../../../lib/chat/cardDrafts";
 import { useActiveGame, useDefaultClient, useGameNames } from "../../../lib/game";
 import { useImportChatFile } from "../../../lib/queries";
@@ -32,6 +33,7 @@ export function DemoAttachment({ file, message }: AttachmentProps) {
   const client = useDefaultClient(game);
   const state = useChatFile(file, message);
   const importFile = useImportChatFile();
+  const caps = usePlatform();
 
   const addButton = (
     <Button
@@ -54,13 +56,15 @@ export function DemoAttachment({ file, message }: AttachmentProps) {
         file={file}
         state={state}
         subtitle={`${t("files.class.demo")} · ${games.short(game)} · ${format.bytes(file.size)}`}
-        actions={addButton}
+        // --- slice: web app --- without game clients on the machine the demo
+        // is a file to save, nothing to add to Media.
+        actions={caps.localFiles ? addButton : undefined}
         extra={
           importFile.error ? (
             <CardStatus tone="danger">{errorText(importFile.error)}</CardStatus>
           ) : importFile.isSuccess && client !== undefined ? (
             <CardStatus tone="success">{t("files.demo.added", { client: client.name })}</CardStatus>
-          ) : client === undefined ? (
+          ) : client === undefined && caps.localFiles ? (
             <CardStatus>{t("cards.noClient", { game: games.label(game) })}</CardStatus>
           ) : null
         }

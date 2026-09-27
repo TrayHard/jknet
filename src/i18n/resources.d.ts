@@ -32,6 +32,9 @@ import type pk3 from "../locales/en/pk3.json";
 import type servers from "../locales/en/servers.json";
 import type settings from "../locales/en/settings.json";
 import type update from "../locales/en/update.json";
+// --- slice: web app --- the strings only the web app prints, kept outside
+// `src/locales` so the launcher never loads them. A type, no runtime import.
+import type web from "../../web/src/locales/en/web.json";
 
 declare module "i18next" {
   interface CustomTypeOptions {
@@ -61,6 +64,8 @@ declare module "i18next" {
       host: typeof host;
       // --- slice: chat ---
       chat: typeof chat;
+      // --- slice: web app ---
+      web: typeof web;
     };
   }
 }

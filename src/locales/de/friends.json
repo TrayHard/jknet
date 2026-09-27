@@ -21,6 +21,8 @@
     "playingOnAddress": "Spielt auf {{address}}",
     "inGame": "Im Spiel",
     "online": "Online",
+    "onlineFromPhone": "Online vom Handy",
+    "onlineInBrowser": "Online im Browser",
     "offline": "Offline",
     "lastSeenJustNow": "Zuletzt gerade eben gesehen",
     "lastSeenOn": "Zuletzt am {{date}} gesehen",

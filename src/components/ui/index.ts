@@ -11,6 +11,16 @@ export { Button, type ButtonSize, type ButtonVariant } from "./Button";
 // --- slice: connect dialog ---
 export { Combobox, type ComboboxOption } from "./Combobox";
 export { Dialog, type DialogVariant } from "./Dialog";
+// --- slice: web app --- dialogs, menus and floating layers as bottom sheets.
+export {
+  DialogPresentationContext,
+  SheetHistoryContext,
+  SheetPanel,
+  useDialogPresentation,
+  useSheetEntry,
+  type DialogPresentation,
+  type SheetRegistrar,
+} from "./DialogPresentation";
 export { EmptyState } from "./EmptyState";
 export { Input } from "./Input";
 // --- slice: server actions ---

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
+import { usePlatform } from "../../../lib/backend";
 import { lineCount, previewLines } from "../../../lib/chat/cardDrafts";
 import type { ChatCardConfig } from "../../../lib/ipc";
 import { useChatCardToConfig, useChatCommandScan } from "../../../lib/queries";
@@ -24,6 +25,10 @@ const PREVIEW_LINES = 4;
  * should read first. **Open in the editor** opens the text as a new
  * document of the config editor with those lines marked; nothing is saved
  * until the player saves it there.
+ *
+ * --- slice: web app --- a platform without game clients on the machine
+ * (`usePlatform().localFiles`) has no config editor: the card keeps **Copy**
+ * and a line that applying is the launcher's.
  */
 export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
   const { t } = useTranslation("chat");
@@ -31,6 +36,7 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
   const format = useFormat();
   const scan = useChatCommandScan(fields.text);
   const toConfig = useChatCardToConfig();
+  const caps = usePlatform();
   const [config, setConfig] = useState<ChatCardConfig | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [copied, flashCopied] = useFlash();
@@ -47,18 +53,20 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
         subtitle={t("cards.config.lines", { count: lineCount(fields.text), size: format.bytes(size) })}
         actions={
           <>
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<FilePen size={14} />}
-              disabled={toConfig.isPending}
-              onClick={() => {
-                setSaved(null);
-                toConfig.mutate({ card }, { onSuccess: setConfig });
-              }}
-            >
-              {t("cards.config.open")}
-            </Button>
+            {caps.localFiles ? (
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<FilePen size={14} />}
+                disabled={toConfig.isPending}
+                onClick={() => {
+                  setSaved(null);
+                  toConfig.mutate({ card }, { onSuccess: setConfig });
+                }}
+              >
+                {t("cards.config.open")}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="ghost"
@@ -74,6 +82,8 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
             <CardStatus tone="danger">{errorText(toConfig.error)}</CardStatus>
           ) : saved !== null ? (
             <CardStatus tone="success">{t("apply.config.saved", { name: saved })}</CardStatus>
+          ) : !caps.localFiles ? (
+            <CardStatus>{t("cards.openInLauncher")}</CardStatus>
           ) : null
         }
       >

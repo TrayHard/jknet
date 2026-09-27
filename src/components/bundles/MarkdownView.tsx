@@ -1,5 +1,3 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Element, ElementContent } from "hast";
 import { ExternalLink, ImageOff, Play } from "lucide-react";
 import {
@@ -19,10 +17,10 @@ import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from "r
 import remarkGfm from "remark-gfm";
 import type { PluggableList } from "unified";
 
+import { backend, convertFileSrc, hasBackend } from "../../lib/backend";
 import { cn } from "../../lib/format";
 import { blobSha256, blobUrl } from "../../lib/ipc";
 import { useDraftImagePath, useOnlineUrl } from "../../lib/queries";
-import { isTauri } from "../../lib/runtime";
 import {
   VIDEO_HOST_NAMES,
   isWebLink,
@@ -88,12 +86,15 @@ function soleLink(node: Element | undefined): string | null {
   return child.children.every((grandchild) => grandchild.type === "text") ? href : null;
 }
 
-/** Opens a link in the system browser inside Tauri; a plain browser follows the anchor. */
+/**
+ * Opens a link through the backend: the system browser of the launcher, a new
+ * tab of the web app. A page without a backend follows the anchor.
+ */
 function openLink(event: MouseEvent<HTMLAnchorElement>, href: string | undefined) {
-  if (!isTauri()) return;
+  if (!hasBackend()) return;
   event.preventDefault();
   if (href === undefined || !isWebLink(href)) return;
-  void openUrl(href).catch(() => undefined);
+  void backend().openExternal(href).catch(() => undefined);
 }
 
 /** A paragraph, or the block of a video when the paragraph is one link to a video page. */

@@ -1,10 +1,19 @@
-import { Globe, LogIn, Wifi } from "lucide-react";
+import { Globe, LogIn, MessageCircle, Wifi } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useGametypeLabels } from "../../../i18n/useGameLabels";
-import { useChatMeId, useFriendPresence, useHostSession, useJoinHostCard } from "../../../lib/queries";
+import { usePlatform } from "../../../lib/backend";
+import {
+  useChatMeId,
+  useFriendPresence,
+  useHostSession,
+  useJoinableServers,
+  useJoinHostCard,
+  useJoinServerChat,
+} from "../../../lib/queries";
 import { Button } from "../../ui";
+import { useOpenChat } from "../useOpenChat";
 import { useChatNames } from "../useChatText";
 import { CardShell, CardStatus } from "./CardShell";
 import { useCheckedCard } from "./useCardActions";
@@ -21,6 +30,11 @@ import type { CardViewProps } from "./withFields";
  * where the server is open to me (`chat_join_host_card`). Whether the server
  * still runs is read from the host's presence, which is the service's word
  * for it; a server that stopped leaves the card with nothing to join.
+ *
+ * --- slice: web app --- a platform that cannot play (`usePlatform().game`)
+ * never joins the game. When its core lists the server's chat as joinable,
+ * **Join chat** makes the player a member of that chat and opens it; either
+ * way a line says that playing is the launcher's.
  */
 export function HostInviteCardView({ card, fields }: CardViewProps<"hostInvite">) {
   const { t } = useTranslation("chat");
@@ -32,6 +46,10 @@ export function HostInviteCardView({ card, fields }: CardViewProps<"hostInvite">
   const ownSession = useHostSession().data ?? null;
   const join = useJoinHostCard();
   const check = useCheckedCard();
+  const caps = usePlatform();
+  const joinable = useJoinableServers();
+  const joinChat = useJoinServerChat();
+  const openChat = useOpenChat();
 
   const mine = fields.hostId !== null && fields.hostId === meId;
   const hosting = presence?.hosting ?? null;
@@ -71,6 +89,60 @@ export function HostInviteCardView({ card, fields }: CardViewProps<"hostInvite">
 
   const busy = join.isPending || check.checking;
   const failure = join.error ?? check.error;
+
+  // --- slice: web app ---
+  const chatOpen =
+    !caps.game &&
+    !mine &&
+    (joinable.data ?? []).some(
+      (server) => server.hostUserId === fields.hostId && server.sessionId === fields.sessionId,
+    );
+  const onJoinChat = () => {
+    if (fields.hostId === null) return;
+    joinChat.reset();
+    joinChat.mutate(
+      { hostUserId: fields.hostId, sessionId: fields.sessionId },
+      { onSuccess: (conversation) => openChat(conversation.id) },
+    );
+  };
+
+  if (!caps.game) {
+    return (
+      <CardShell
+        label={t("cards.label", { kind: t("cards.kinds.hostInvite"), title })}
+        icon={<LogIn size={16} />}
+        title={title}
+        titleText={title}
+        subtitle={mine ? t("cards.hostInvite.mine") : t("cards.kinds.hostInvite")}
+        actions={
+          chatOpen ? (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<MessageCircle size={14} />}
+              disabled={joinChat.isPending}
+              onClick={onJoinChat}
+            >
+              {joinChat.isPending ? t("cards.server.joining") : t("cards.joinChat")}
+            </Button>
+          ) : null
+        }
+        status={
+          joinChat.error ? (
+            <CardStatus tone="danger">{errorText(joinChat.error)}</CardStatus>
+          ) : !mine && !live ? (
+            <CardStatus>{t("cards.hostInvite.stopped")}</CardStatus>
+          ) : (
+            <CardStatus>{t("cards.openInLauncher")}</CardStatus>
+          )
+        }
+      >
+        {facts.length > 0 ? (
+          <p className="text-body-sm text-fg-secondary [overflow-wrap:anywhere]">{facts.join(" · ")}</p>
+        ) : null}
+      </CardShell>
+    );
+  }
 
   return (
     <CardShell

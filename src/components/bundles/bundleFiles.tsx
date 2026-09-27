@@ -1,9 +1,9 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
+import i18next from "i18next";
 import { ExternalLink, Gamepad2, Users } from "lucide-react";
 import { useEffect, type MouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { i18next } from "../../i18n";
 import { useFormat } from "../../i18n/useFormat";
 import { cn } from "../../lib/format";
 import type {

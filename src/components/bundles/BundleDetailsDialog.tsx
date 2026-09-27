@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { useFormat } from "../../i18n/useFormat";
+import { usePlatform } from "../../lib/backend";
 import { installJobKey, useBundleInstallJob } from "../../lib/bundleJobs";
 import {
   bundleLanguages,
@@ -65,6 +66,9 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
   // --- slice: chat cards --- **Share to chat**: the bundle as a card.
   const share = useShareDialog();
   const { t: tChat } = useTranslation("chat");
+  // --- slice: web app --- the web app browses the catalogue and shares from
+  // it; installing and the client windows stay with the launcher.
+  const caps = usePlatform();
 
   // The version on screen. `null` is the latest one, which came with the
   // record; another one is fetched with its manifest when picked.
@@ -337,26 +341,28 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
               </Section>
             ) : null}
 
-            {/* Install */}
-            <Section heading={t("details.install.heading")}>
-              {version === null ? (
-                <p className="text-body-sm text-fg-muted">{t("details.install.noVersion")}</p>
-              ) : (
-                <BundleInstallForm
-                  key={version.id}
-                  components={components}
-                  defaultName={text.name}
-                  hasExecutables={hasExecutables}
-                  job={job}
-                  installedClients={installedClients}
-                  onInstall={runInstall}
-                  onOpenClient={(clientId) => {
-                    setFailure(null);
-                    openClientWindow(clientId).catch((e: unknown) => setFailure(errorText(e)));
-                  }}
-                />
-              )}
-            </Section>
+            {/* Install: a platform without game clients on the machine installs nothing. */}
+            {caps.localFiles ? (
+              <Section heading={t("details.install.heading")}>
+                {version === null ? (
+                  <p className="text-body-sm text-fg-muted">{t("details.install.noVersion")}</p>
+                ) : (
+                  <BundleInstallForm
+                    key={version.id}
+                    components={components}
+                    defaultName={text.name}
+                    hasExecutables={hasExecutables}
+                    job={job}
+                    installedClients={installedClients}
+                    onInstall={runInstall}
+                    onOpenClient={(clientId) => {
+                      setFailure(null);
+                      openClientWindow(clientId).catch((e: unknown) => setFailure(errorText(e)));
+                    }}
+                  />
+                )}
+              </Section>
+            ) : null}
           </div>
         ) : record.isLoading ? (
           <p className="text-body-sm text-fg-muted pt-16">{tCommon("states.loading")}</p>

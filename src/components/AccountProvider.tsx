@@ -1,11 +1,10 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import { hasBackend, listen, type UnlistenFn } from "../lib/backend";
 import { ACCOUNT_CHANGED_EVENT, type AccountChanged } from "../lib/ipc";
 import { accountKeys, friendsKeys, queryKeys } from "../lib/queries";
-import { isTauri } from "../lib/runtime";
 import { useToasts } from "./ToastsProvider";
 
 /** One message, however many refusals the core answered. */
@@ -30,7 +29,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
   const { show } = toasts;
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!hasBackend()) return;
     let disposed = false;
     let stop: UnlistenFn | undefined;
 

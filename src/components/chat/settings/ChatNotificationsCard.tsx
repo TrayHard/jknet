@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useLocale } from "../../../i18n/useFormat";
+import { usePlatform } from "../../../lib/backend";
 import {
   chatNotificationsOf,
   clockLabel,
@@ -49,6 +50,10 @@ export function ChatNotificationsCard({ onChange }: ChatNotificationsCardProps) 
   const now = useNow(CLOCK_MS);
   const silence = silenceAt(notifications, minutesOfDay(new Date(now)));
   const anyChannel = notifications.inApp || notifications.os;
+  // --- slice: web app --- the Windows notification belongs to the desktop
+  // shell, the game switches to the platform that plays; a browser shows
+  // neither row.
+  const caps = usePlatform();
 
   return (
     <SettingsCard
@@ -79,13 +84,15 @@ export function ChatNotificationsCard({ onChange }: ChatNotificationsCardProps) 
         disabled={loading}
         onChange={(inApp) => onChange({ inApp })}
       />
-      <ToggleRow
-        title={t("settings.notifications.os")}
-        hint={t("settings.notifications.osHint")}
-        checked={notifications.os}
-        disabled={loading}
-        onChange={(os) => onChange({ os })}
-      />
+      {caps.tray ? (
+        <ToggleRow
+          title={t("settings.notifications.os")}
+          hint={t("settings.notifications.osHint")}
+          checked={notifications.os}
+          disabled={loading}
+          onChange={(os) => onChange({ os })}
+        />
+      ) : null}
       <ToggleRow
         title={t("settings.notifications.showText")}
         hint={
@@ -120,26 +127,28 @@ export function ChatNotificationsCard({ onChange }: ChatNotificationsCardProps) 
         />
       </RowGroup>
 
-      <RowGroup title={t("settings.notifications.gameTitle")}>
-        <ToggleRow
-          title={t("settings.notifications.dndInGame")}
-          hint={t("settings.notifications.dndInGameHint")}
-          checked={notifications.dndInGame}
-          disabled={loading}
-          onChange={(dndInGame) => onChange({ dndInGame })}
-        />
-        <ToggleRow
-          title={t("settings.notifications.summary")}
-          hint={
-            notifications.dndInGame
-              ? t("settings.notifications.summaryHint")
-              : t("settings.notifications.summaryNeedsDnd")
-          }
-          checked={notifications.summaryAfterGame}
-          disabled={loading || !notifications.dndInGame}
-          onChange={(summaryAfterGame) => onChange({ summaryAfterGame })}
-        />
-      </RowGroup>
+      {caps.game ? (
+        <RowGroup title={t("settings.notifications.gameTitle")}>
+          <ToggleRow
+            title={t("settings.notifications.dndInGame")}
+            hint={t("settings.notifications.dndInGameHint")}
+            checked={notifications.dndInGame}
+            disabled={loading}
+            onChange={(dndInGame) => onChange({ dndInGame })}
+          />
+          <ToggleRow
+            title={t("settings.notifications.summary")}
+            hint={
+              notifications.dndInGame
+                ? t("settings.notifications.summaryHint")
+                : t("settings.notifications.summaryNeedsDnd")
+            }
+            checked={notifications.summaryAfterGame}
+            disabled={loading || !notifications.dndInGame}
+            onChange={(summaryAfterGame) => onChange({ summaryAfterGame })}
+          />
+        </RowGroup>
+      ) : null}
     </SettingsCard>
   );
 }

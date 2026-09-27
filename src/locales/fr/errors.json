@@ -66,7 +66,10 @@
     "emoji": "Une réaction doit être un seul emoji.",
     "notHosting": "Votre serveur privé n’apparaît pas encore sur JKNet Online.",
     "confirmDanger": "Ce fichier peut s’exécuter sur votre ordinateur. Confirmez avant de l’enregistrer.",
-    "confirmLink": "Confirmez avant d’ouvrir un lien vers {{message}}."
+    "confirmLink": "Confirmez avant d’ouvrir un lien vers {{message}}.",
+    "webJoinOff": "L’hôte réserve la discussion de ce serveur aux joueurs en jeu.",
+    "catalogDisabled": "Ce catalogue est désactivé sur JKNet Online pour le moment.",
+    "catalogNotReady": "JKNet Online construit encore ce catalogue. Réessayez dans quelques minutes."
   },
   "frontend": {
     "noRuntime": "L’environnement Tauri n’est pas disponible",

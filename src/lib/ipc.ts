@@ -7,22 +7,23 @@
  * the only place the frontend is allowed to name a command.
  */
 
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, hasBackend, invoke } from "./backend";
 
 // --- slice: i18n ---
 import type { LanguageSetting } from "../i18n/languages";
 import { isTauri, NO_RUNTIME_MESSAGE } from "./runtime";
 
 /**
- * Calls a command, or fails with one readable line outside Tauri.
+ * Calls a command, or fails with one readable line when nothing answers.
  *
- * `invoke` reaches into `window.__TAURI_INTERNALS__` and throws a `TypeError`
- * when the page runs in a plain browser. The guard turns that into a rejected
- * promise with a message a screen can print, so `npm run dev` shows the error
- * and empty states instead of a blank page.
+ * The backend of `lib/backend.ts` is the Tauri core in the launcher and the
+ * TypeScript core in the web app. A plain browser under `npm run dev` has
+ * neither, and the guard turns that into a rejected promise with a message a
+ * screen can print, so the page shows the error and empty states instead of
+ * a blank page.
  */
 function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (!isTauri()) return Promise.reject(new Error(NO_RUNTIME_MESSAGE));
+  if (!hasBackend()) return Promise.reject(new Error(NO_RUNTIME_MESSAGE));
   return invoke<T>(command, args);
 }
 
@@ -1866,7 +1867,7 @@ function callFriends<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
-  if (import.meta.env.DEV && !isTauri()) {
+  if (import.meta.env.DEV && !hasBackend()) {
     return import("./devOnline").then((module) => module.devFriends<T>(command, args));
   }
   return call<T>(command, args);
@@ -2332,7 +2333,7 @@ export function newHostPassword(): string {
  * bundle, and inside Tauri nothing changes.
  */
 function callHost<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (import.meta.env.DEV && !isTauri()) {
+  if (import.meta.env.DEV && !hasBackend()) {
     return import("./devHost").then((module) => module.devHost<T>(command, args));
   }
   return call<T>(command, args);
@@ -2865,7 +2866,7 @@ function callBundles<T>(
   command: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
-  if (import.meta.env.DEV && !isTauri()) {
+  if (import.meta.env.DEV && !hasBackend()) {
     return import("./devOnline").then((module) => module.devBundles<T>(command, args));
   }
   return call<T>(command, args);
@@ -4461,6 +4462,31 @@ export interface ChatFilesStagedEvent {
   refused: ChatStageRefusal[];
 }
 
+/**
+ * The chat of a friend's private server the player may join without
+ * playing, `GET /v1/chat/servers/joinable` of the service: the server is
+ * open to the player by its join policy or by a live invite (`invited`),
+ * the host lets the web app in, and the player is not a member yet. No
+ * address, no password.
+ *
+ * Only the web app's core answers `chat_joinable_servers` and
+ * `chat_join_server`: a launcher joins a server chat when it starts the game.
+ */
+export interface JoinableServer {
+  hostUserId: string;
+  sessionId: string;
+  game: Game;
+  map: string;
+  mod: string | null;
+  gametype: number;
+  /** Members of the chat now. */
+  members: number;
+  invited: boolean;
+}
+
+/** Where the files handed to `chat_stage_web_files` came from, for `meta.origin`. */
+export type ChatWebFileOrigin = "file" | "clipboard";
+
 /** Event names of the chat slice. */
 export const chatEvents = {
   state: "chat:state",
@@ -4479,6 +4505,8 @@ export const chatEvents = {
   upload: "chat:upload",
   download: "chat:download",
   filesStaged: "chat:files-staged",
+  /** The server chats the player may join changed. Only the web app's core sends it. */
+  joinable: "chat:joinable",
 } as const;
 
 /**
@@ -4490,7 +4518,7 @@ export const chatEvents = {
  * production bundle.
  */
 function callChat<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-  if (import.meta.env.DEV && !isTauri()) {
+  if (import.meta.env.DEV && !hasBackend()) {
     return import("./devChat").then((module) => module.devChat<T>(command, args));
   }
   return call<T>(command, args);
@@ -4603,6 +4631,22 @@ export const chatIpc = {
     callChat<void>("chat_open_link", { url, confirmed }),
   joinHostCard: (hostId: string, sessionId: string) =>
     callChat<JoinResult>("chat_join_host_card", { hostId, sessionId }),
+  /**
+   * The web app joins the chat of a friend's private server without playing.
+   * The launcher's core does not implement it: nothing in the launcher calls it.
+   */
+  joinServer: (hostUserId: string, sessionId: string) =>
+    callChat<Conversation>("chat_join_server", { hostUserId, sessionId }),
+  /** The server chats the web app may join; see `JoinableServer`. */
+  joinableServers: () => callChat<JoinableServer[]>("chat_joinable_servers"),
+  /**
+   * Files of the page — pasted, dropped, picked with a file input — staged by
+   * the web app's core, which answers like a drop: `chat:files-staged`. The
+   * Tauri core never receives it; the web backend is an in-process call, so
+   * the `File` objects pass as they are.
+   */
+  stageWebFiles: (files: File[], origin: ChatWebFileOrigin = "file") =>
+    callChat<ChatFilesStagedEvent>("chat_stage_web_files", { files, origin }),
   getDraft: (conversationId: string) => callChat<string>("chat_get_draft", { conversationId }),
   setDraft: (conversationId: string, text: string) =>
     callChat<void>("chat_set_draft", { conversationId, text }),
@@ -4634,11 +4678,11 @@ export const chatIpc = {
  * --- slice: chat cards ---
  * A file of the chat cache as a URL the webview may load: a picture or a
  * video of a message. The core puts the cache folder, and only that, in the
- * scope of the asset protocol. `null` outside Tauri, like `levelshotUrl`.
+ * scope of the asset protocol; the web app's core answers a `blob:` address,
+ * which its backend hands back as it is. `null` without a backend.
  */
 export function chatFileUrl(path: string): string | null {
-  if (!isTauri()) return null;
-  return convertFileSrc(path);
+  return hasBackend() ? convertFileSrc(path) : null;
 }
 
 /** What the close button of the main window does: hide it in the tray, or close it. */

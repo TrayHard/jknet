@@ -385,6 +385,7 @@
     "kinds": {
       "file": "Any file",
       "clipboard": "Image from the clipboard",
+      "photo": "Photo",
       "media": "Video or screenshot from Media",
       "server": "Server",
       "map": "Map",
@@ -451,6 +452,8 @@
       "config": "Config"
     },
     "noClient": "Add a {{game}} client on the Clients screen first.",
+    "openInLauncher": "Open JKNet on your computer to play",
+    "joinChat": "Join chat",
     "copied": "Copied",
     "more_one": "and {{count}} more",
     "more_other": "and {{count}} more",

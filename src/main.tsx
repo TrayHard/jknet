@@ -10,6 +10,8 @@ import App from "./App";
 // --- slice: i18n ---
 import { bootstrapI18n } from "./i18n";
 import { readSystemLocale } from "./i18n/useSystemLocale";
+import { setBackend } from "./lib/backend";
+import { tauriBackend } from "./lib/backend-tauri";
 import { errorMessage, ipc } from "./lib/ipc";
 import { isTauri } from "./lib/runtime";
 // --- slice: selection context menu ---
@@ -17,6 +19,11 @@ import { blockNativeContextMenu } from "./lib/selection";
 // --- slice: client window ---
 import { logWindow } from "./lib/windowLog";
 import "./index.css";
+
+// Before anything else can call a command or attach a listener: the IPC
+// wrappers and the event hooks reach the core through `lib/backend.ts`, and
+// in a plain browser (`npm run dev`) none is registered, as before.
+if (isTauri()) setBackend(tauriBackend);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("index.html is missing the #root element");

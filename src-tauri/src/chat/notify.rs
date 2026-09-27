@@ -1021,6 +1021,84 @@ mod tests {
         assert_eq!(cases, (1 << SWITCHES) * 3 * 3);
     }
 
+    /// The cases the launcher and the web client share: a message, its
+    /// conversation, the switches and the moment, and what the player gets.
+    /// `toast` is the toast of a focused window or the system notification of
+    /// an unfocused one, with the sound when it is on; `sound` is the sound
+    /// alone; `summary` waits for the end of a game, which only the launcher
+    /// knows about.
+    #[test]
+    fn the_shared_notification_cases_hold() {
+        #[derive(serde::Deserialize, Default)]
+        #[serde(default)]
+        struct CaseMessage {
+            own: bool,
+            system: bool,
+            mentioned: bool,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct CaseContext {
+            time: String,
+            focused: bool,
+            #[serde(default)]
+            other_window_focused: bool,
+            #[serde(default)]
+            in_game: bool,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Case {
+            name: String,
+            #[serde(default)]
+            message: CaseMessage,
+            notify: String,
+            #[serde(default)]
+            viewing: bool,
+            #[serde(default)]
+            settings: ChatNotifications,
+            context: CaseContext,
+            expect: String,
+        }
+        let cases: Vec<Case> = serde_json::from_str(include_str!(
+            "../../../src/lib/chat/fixtures/notify-decide.json"
+        ))
+        .expect("the shared notification cases parse");
+        assert!(cases.len() >= 20, "the shared notification cases are there");
+        for case in cases {
+            let msg = Incoming {
+                own: case.message.own,
+                system: case.message.system,
+                mentioned: case.message.mentioned,
+            };
+            let conv = ConvCtx { notify: Level::of(&case.notify), viewed: case.viewing };
+            let ctx = NotifyCtx {
+                minute_of_day: crate::settings::parse_clock(&case.context.time).expect("a time of day"),
+                in_game: case.context.in_game,
+                main_focused: case.context.focused,
+                any_focused: case.context.focused || case.context.other_window_focused,
+            };
+            let d = decide(&msg, &conv, &case.settings, &ctx);
+            let verdict = if d.is_silent() {
+                "silent"
+            } else if d.summary {
+                "summary"
+            } else if d.in_app || d.os {
+                "toast"
+            } else {
+                "sound"
+            };
+            assert_eq!(verdict, case.expect, "{}: {d:?}", case.name);
+            if verdict == "toast" {
+                // The toast in the focused window, the system notification
+                // otherwise, never both; the sound follows its switch.
+                assert_eq!(d.in_app, case.context.focused, "{}", case.name);
+                assert_eq!(d.os, !ctx.any_focused, "{}", case.name);
+                assert_eq!(d.sound, case.settings.sound, "{}", case.name);
+            }
+        }
+    }
+
     #[test]
     fn a_mention_or_a_reply_to_the_player_counts_as_mentioned() {
         let mut message = message("c", 5, Some(KYLE));

@@ -70,3 +70,7 @@ pub use types::{
 /// summaries from.
 #[cfg(test)]
 pub use types::ChatMember;
+/// A refusal of the chat API as the core reads it, for the failure cases the
+/// outbox shares with the web client.
+#[cfg(test)]
+pub(crate) use client::chat_error_for_test;

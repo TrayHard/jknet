@@ -404,6 +404,7 @@
     "kinds": {
       "file": "Cualquier archivo",
       "clipboard": "Imagen del portapapeles",
+      "photo": "Foto",
       "media": "Vídeo o captura de «Media»",
       "server": "Servidor",
       "map": "Mapa",
@@ -470,6 +471,8 @@
       "config": "Config"
     },
     "noClient": "Añada primero un cliente de {{game}} en la pantalla «Clientes».",
+    "openInLauncher": "Abra JKNet en su ordenador para jugar",
+    "joinChat": "Unirse al chat",
     "copied": "Copiado",
     "server": {
       "players": "{{players}}/{{max}} jugadores",

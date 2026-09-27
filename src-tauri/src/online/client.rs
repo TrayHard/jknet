@@ -1330,6 +1330,14 @@ pub fn is_chat_unavailable(error: &AppError) -> bool {
     matches!(error, AppError::Online { code, .. } if code == CHAT_UNAVAILABLE_CODE)
 }
 
+/// The error a refusal of a chat route becomes, for the shared failure cases
+/// of `crate::chat::outbox`: the status and the body as the service sent them.
+#[cfg(test)]
+pub(crate) fn chat_error_for_test(status: u16, body: &[u8]) -> AppError {
+    let status = StatusCode::from_u16(status).expect("an HTTP status");
+    service_error(&format!("{CHAT_PREFIX}conversations/c/messages"), status, body)
+}
+
 /// The error of a refused request, by the path it was refused on.
 fn service_error(path: &str, status: StatusCode, body: &[u8]) -> AppError {
     if path.starts_with(CHAT_PREFIX) {

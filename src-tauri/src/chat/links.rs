@@ -182,6 +182,41 @@ mod tests {
         assert!(check_link(&fits).is_ok());
     }
 
+    /// The cases the launcher and the web client share: an address, whether
+    /// it opens at once, asks first or never opens, and what opens.
+    #[test]
+    fn the_shared_link_cases_hold() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            input: String,
+            verdict: String,
+            #[serde(default)]
+            url: Option<String>,
+            #[serde(default)]
+            host: Option<String>,
+        }
+        let cases: Vec<Case> =
+            serde_json::from_str(include_str!("../../../src/lib/chat/fixtures/links.json"))
+                .expect("the shared link cases parse");
+        assert!(cases.len() >= 30, "the shared link cases are there");
+        for case in cases {
+            let checked = check_link(&case.input);
+            let verdict = match &checked {
+                Err(_) => "refuse",
+                Ok(link) if link.trusted => "open",
+                Ok(_) => "confirm",
+            };
+            assert_eq!(verdict, case.verdict, "{:?}", case.input);
+            let Ok(link) = checked else { continue };
+            if let Some(url) = &case.url {
+                assert_eq!(&link.url, url, "{:?}", case.input);
+            }
+            if let Some(host) = &case.host {
+                assert_eq!(&link.host, host, "{:?}", case.input);
+            }
+        }
+    }
+
     #[test]
     fn what_opens_is_what_the_parser_wrote_back() {
         let link = check_link("https://JKHub.org/files/../search?q=\"duel\"").unwrap();

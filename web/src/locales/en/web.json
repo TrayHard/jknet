@@ -1,0 +1,147 @@
+{
+  "nav": {
+    "label": "Sections",
+    "openMenu": "Open the menu",
+    "closeMenu": "Close the menu",
+    "back": "Back",
+    "groups": {
+      "chat": "Chat",
+      "browse": "Browse",
+      "app": "App"
+    },
+    "sections": {
+      "chats": "Chats",
+      "friends": "Friends",
+      "community": "Community servers",
+      "servers": "Server list",
+      "bundles": "Bundles",
+      "jkhub": "JKHub mods",
+      "settings": "Settings"
+    },
+    "rail": {
+      "chats": "Chats",
+      "friends": "Friends",
+      "community": "Community",
+      "servers": "Servers",
+      "bundles": "Bundles",
+      "jkhub": "JKHub",
+      "settings": "Settings"
+    },
+    "drawerNote": "Playing, joining servers and installing bundles stay in JKNet on your PC.",
+    "empty": {
+      "chats": "Pick a chat",
+      "friends": "Pick a friend",
+      "community": "Pick a server",
+      "servers": "Pick a server",
+      "bundles": "Pick a bundle",
+      "jkhub": "Pick a mod"
+    }
+  },
+  "signin": {
+    "title": "Sign in to JKNet",
+    "intro": "Chat with your friends from your phone or your browser.",
+    "discord": "Sign in with Discord",
+    "jkhub": "Sign in with JKHub",
+    "waiting": "Finish signing in on the page that opened.",
+    "expired": "The sign-in took too long. Try again.",
+    "failed": "The sign-in did not finish.",
+    "retry": "Try again",
+    "done": "Signed in. Opening JKNet…",
+    "installFirst": "On iPhone, add JKNet to the Home Screen first and sign in there: the installed app keeps its own sign-in."
+  },
+  "install": {
+    "title": "Install the app",
+    "body": "Installed, JKNet opens from the home screen and can show notifications.",
+    "action": "Install",
+    "iosSteps": "Tap Share, then Add to Home Screen.",
+    "installed": "JKNet is installed on this device."
+  },
+  "tabs": {
+    "title": "JKNet is open in another tab",
+    "body": "Only one tab stays connected at a time.",
+    "takeOver": "Open here"
+  },
+  "offline": {
+    "banner": "No connection. Messages wait and go out once you are back online.",
+    "reconnecting": "Reconnecting…"
+  },
+  "update": {
+    "available": "A new version of JKNet is ready.",
+    "action": "Update",
+    "required": "This version of JKNet is too old. Update to carry on."
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "account": "Account",
+    "notifications": "Notifications",
+    "privacy": "Privacy",
+    "sessions": "Devices and sessions",
+    "install": "Install the app",
+    "about": "About"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "enable": "Enable notifications",
+    "unavailable": "Notifications are not available right now.",
+    "blocked": "Notifications are blocked in the settings of the browser.",
+    "messageText": "Message text",
+    "preview": {
+      "full": "Name and start of the message",
+      "sender": "Only name and chat",
+      "none": "No details"
+    },
+    "atPc": "When I'm at my PC",
+    "whileActiveElsewhere": {
+      "delay": "After a minute, if unread",
+      "always": "Right away",
+      "never": "Don't send"
+    },
+    "test": "Send test notification",
+    "lastDelivery": "Last delivery: {{date}}",
+    "otherDevices": "Other devices",
+    "remove": "Remove",
+    "sessionsLink": "Devices and sessions"
+  },
+  "push": {
+    "activity": "Activity in JKNet",
+    "newMessage": "New message",
+    "sentFiles": "Sent files",
+    "sharedCard": "Shared a card",
+    "reaction": "Reacted {{emoji}} to your message",
+    "groupInvite": "Invites you to the group {{title}}",
+    "friendRequest": "Wants to be your friend",
+    "friendAccepted": "Accepted your friend request",
+    "invite": "Invites you to their server",
+    "test": "Notifications from JKNet work on this device."
+  },
+  "sessions": {
+    "title": "Devices and sessions",
+    "signedOut": "This device was signed out from another device."
+  },
+  "serverChats": {
+    "hosts": "{{name}} hosts a server",
+    "invited": "Invited",
+    "guestNote": "You're a guest on this server. Chat from here, join the game from JKNet on your PC.",
+    "gone": "This chat is no longer available"
+  },
+  "serverList": {
+    "title": "Server list",
+    "unavailable": "The server list is not available right now",
+    "updating": "Updating…",
+    "playNote": "To play here, open JKNet on your PC.",
+    "friendsHere": "Friends here",
+    "lastSeen": "Answered {{time}}"
+  },
+  "jkhub": {
+    "title": "JKHub mods",
+    "installNote": "Install from JKNet on your PC.",
+    "open": "Open on JKHub",
+    "indexedAt": "Catalog of {{date}}"
+  },
+  "about": {
+    "title": "About",
+    "version": "Build {{commit}} of {{date}}",
+    "launcher": "JKNet for your PC"
+  }
+}

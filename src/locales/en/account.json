@@ -52,5 +52,21 @@
     "timedOut": "The sign-in took too long. Try again.",
     "expired": "The sign-in expired. Try again.",
     "failed": "The sign-in did not finish."
+  },
+  "devices": {
+    "title": "Devices and sessions",
+    "hint": "Every launcher and browser signed in to this account. Signing a device out ends its session there.",
+    "unnamed": "Unnamed device",
+    "lastActive": "Last active {{time}}",
+    "thisDevice": "This device",
+    "online": "Online",
+    "pushOn": "Push on",
+    "signOut": "Sign out",
+    "signOutOthers": "Sign out of all other devices",
+    "confirmTitle": "Sign out {{name}}?",
+    "confirmBody": "That device has to sign in again to see your friends and chats.",
+    "confirmOthersTitle": "Sign out of all other devices?",
+    "confirmOthersBody": "Every other launcher and browser of this account has to sign in again.",
+    "failed": "The device was not signed out."
   }
 }

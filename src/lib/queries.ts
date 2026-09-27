@@ -45,9 +45,11 @@ import {
   type ChatStateView,
   type ChatTypingEvent,
   type ChatUploadEvent,
+  type ChatWebFileOrigin,
   // --- slice: chat window ---
   type ChatWindowView,
   type Conversation,
+  type JoinableServer,
   type Presence,
   type TrayLabels,
   // --- slice: chat cards ---
@@ -190,9 +192,6 @@ export function useFilePreviewText(source: FilePreviewSource, name: string, enab
     enabled: enabled && isTauri(), staleTime: Infinity, gcTime: 60_000, retry: false,
   });
 }
-import { emitTo, listen, type UnlistenFn } from "@tauri-apps/api/event";
-// --- slice: chat window ---
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Window as TauriWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 // --- slice: i18n ---
@@ -312,6 +311,7 @@ import {
 import { bundleJobs, draftJobKey, installJobKey } from "./bundleJobs";
 // --- slice: jkhub details ---
 import { jkhubDownloads } from "./jkhubDownloads";
+import { emitTo, hasBackend, listen, usePlatform, type UnlistenFn } from "./backend";
 import { isTauri } from "./runtime";
 
 export const queryKeys = {
@@ -1191,13 +1191,16 @@ export function useServerStatus(
   address: string | null,
   // --- slice: chat cards --- a server card names its own game.
   forGame?: Game,
+  // A platform that cannot ask a server over UDP (`usePlatform().serverQuery`)
+  // passes `false`, and the card draws what it carries.
+  enabled = true,
 ): UseQueryResult<ServerStatus> {
   const active = useActiveGame();
   const game = forGame ?? active;
   return useQuery({
     queryKey: serverKeys.status(game, address ?? ""),
     queryFn: () => serversIpc.getServerStatus(address ?? "", game),
-    enabled: address !== null,
+    enabled: enabled && address !== null,
     staleTime: 15_000,
     retry: false,
   });
@@ -1663,7 +1666,7 @@ export function useAccountState(): UseQueryResult<AccountState> {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!hasBackend()) return;
     let disposed = false;
     let stop: UnlistenFn | undefined;
 
@@ -2044,7 +2047,7 @@ export function useFriendsEvents(): void {
   const configured = useOnlineConfigured();
 
   useEffect(() => {
-    if (!isTauri() || configured === false) return;
+    if (!hasBackend() || configured === false) return;
     let disposed = false;
     const stops: UnlistenFn[] = [];
 
@@ -2340,7 +2343,7 @@ export function useJkhubCategories(
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!hasBackend()) return;
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<JkhubCategoriesUpdated>(
@@ -2365,7 +2368,7 @@ export function useJkhubCategories(
   return useQuery({
     queryKey: jkhubKeys.categories(game),
     queryFn: () => jkhubIpc.categories(game),
-    enabled: enabled && isTauri(),
+    enabled: enabled && hasBackend(),
     staleTime: Infinity,
   });
 }
@@ -2564,7 +2567,7 @@ export function useJkhubSearch(
     queryKey: jkhubKeys.search(game, query, categoryId, sort, perPage, direction),
     queryFn: () =>
       jkhubIpc.search({ game, query, categoryId, sort, direction, page: 1, perPage }),
-    enabled: isTauri(),
+    enabled: hasBackend(),
     staleTime: Infinity,
     // The previous answer stays on screen while a longer page or a narrower
     // query is fetched, so typing does not blank the grid between keystrokes.
@@ -2587,7 +2590,7 @@ export function useJkhubIndexStatus(
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!hasBackend()) return;
     let unlisten: UnlistenFn | undefined;
     let disposed = false;
     void listen<JkhubIndexUpdate>(jkhubEvents.indexUpdated, (event) => {
@@ -2616,7 +2619,7 @@ export function useJkhubIndexStatus(
   return useQuery({
     queryKey: jkhubKeys.index(game),
     queryFn: () => jkhubIpc.indexStatus(game),
-    enabled: enabled && isTauri(),
+    enabled: enabled && hasBackend(),
     staleTime: 15_000,
     // `building` is the core's own claim on the game, released however the
     // work ends, so it is the one thing worth polling: a crawl takes a minute
@@ -2833,7 +2836,7 @@ export const bundleKeys = {
 export function useOnlineUrl(): string {
   const account = useAccountState();
   if (account.data?.onlineUrl) return account.data.onlineUrl;
-  if (import.meta.env.DEV && !isTauri()) {
+  if (import.meta.env.DEV && !hasBackend()) {
     return new URLSearchParams(window.location.search).get("online") ?? "http://127.0.0.1:8787";
   }
   return "";
@@ -3761,6 +3764,8 @@ export const chatKeys = {
   window: ["chat", "window"] as const,
   /** My account id where there is no account state: a browser under `npm run dev`. */
   devMe: ["chat", "dev-me"] as const,
+  /** The server chats the web app may join, `useJoinableServers`. */
+  joinable: ["chat", "joinable"] as const,
 };
 
 /** Which page of a thread a page of the infinite query is. `null`: the newest. */
@@ -3841,7 +3846,7 @@ export function useChatMeId(): string | null {
     queryFn: import.meta.env.DEV
       ? () => import("./devChat").then((module) => module.devMe())
       : () => Promise.resolve(null),
-    enabled: import.meta.env.DEV && !isTauri(),
+    enabled: import.meta.env.DEV && !hasBackend(),
     staleTime: Infinity,
     retry: false,
   });
@@ -4248,6 +4253,11 @@ export function useStageChatFiles() {
     pick: useMutation({ mutationFn: () => chatIpc.pickFiles() }),
     clipboard: useMutation({ mutationFn: () => chatIpc.stageClipboardImage() }),
     media: useMutation({ mutationFn: (mediaId: string) => chatIpc.stageMedia(mediaId) }),
+    /** --- slice: web app --- files of the page, staged by the web app's core. */
+    web: useMutation({
+      mutationFn: ({ files, origin }: { files: File[]; origin: ChatWebFileOrigin }) =>
+        chatIpc.stageWebFiles(files, origin),
+    }),
     unstage: useMutation({
       mutationFn: (handle: string) => chatIpc.unstage(handle),
       onSettled: (_, __, handle) => chatLive.clearUpload(handle),
@@ -4408,6 +4418,58 @@ export function useJoinHostCard() {
 }
 
 /**
+ * The chats of friends' private servers the player may join from the web
+ * app, without playing (`JoinableServer`).
+ *
+ * Only a platform that cannot play asks: the launcher joins a server chat by
+ * starting the game, so it never sends `chat_joinable_servers`. The web
+ * app's core announces a change of the list as `chat:joinable`.
+ */
+export function useJoinableServers(): UseQueryResult<JoinableServer[]> {
+  const queryClient = useQueryClient();
+  const enabled = hasBackend() && !usePlatform().game;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let disposed = false;
+    let stop: UnlistenFn | undefined;
+    void listen(chatEvents.joinable, () => {
+      void queryClient.invalidateQueries({ queryKey: chatKeys.joinable });
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    });
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [enabled, queryClient]);
+
+  return useQuery({
+    queryKey: chatKeys.joinable,
+    queryFn: chatIpc.joinableServers,
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * **Join chat** of a friend's private server from the web app: the player
+ * becomes a member of its chat, and the answer goes into the list.
+ */
+export function useJoinServerChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ hostUserId, sessionId }: { hostUserId: string; sessionId: string }) =>
+      chatIpc.joinServer(hostUserId, sessionId),
+    onSuccess: (conversation) => {
+      upsertConversation(queryClient, conversation);
+      void queryClient.invalidateQueries({ queryKey: chatKeys.joinable });
+    },
+  });
+}
+
+/**
  * **Share to chat**: the message goes to a conversation, or to the direct chat
  * with a friend, which is created on the way. Answers the conversation it
  * went to, so the toast can open it.
@@ -4491,7 +4553,7 @@ export function useChatNotificationEvents(): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!hasBackend()) return;
     let cancelled = false;
     let stop: UnlistenFn | undefined;
 
@@ -4812,7 +4874,8 @@ export interface ChatEventHandlers {
 }
 
 /**
- * Subscribes to a chat event in Tauri, or to the stand-in bus of `devChat.ts` in a browser.
+ * Subscribes to a chat event of the backend, or to the stand-in bus of
+ * `devChat.ts` in a browser under `npm run dev`.
  *
  * --- slice: chat window ---
  * `own` is for the three events the core sends to one window with `emit_to`:
@@ -4823,11 +4886,10 @@ export interface ChatEventHandlers {
  * composers of both. Those three listen on this window only.
  */
 function listenChat<T>(event: string, handler: (payload: T) => void, own = false): Promise<UnlistenFn> {
-  if (import.meta.env.DEV && !isTauri()) {
+  if (import.meta.env.DEV && !hasBackend()) {
     return import("./devChat").then((module) => module.devListen<T>(event, handler));
   }
-  if (own) return getCurrentWebviewWindow().listen<T>(event, (e) => handler(e.payload));
-  return listen<T>(event, (e) => handler(e.payload));
+  return listen<T>(event, (e) => handler(e.payload), { target: own ? "own" : "any" });
 }
 
 /** Catch-ups in flight, per conversation: a burst of gaps asks once. */
@@ -4900,7 +4962,7 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
   me.current = meId;
 
   useEffect(() => {
-    if (!isTauri() && !import.meta.env.DEV) return;
+    if (!hasBackend() && !import.meta.env.DEV) return;
     if (configured === false) return;
     let disposed = false;
     const stops: UnlistenFn[] = [];

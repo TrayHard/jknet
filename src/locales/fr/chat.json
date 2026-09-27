@@ -404,6 +404,7 @@
     "kinds": {
       "file": "N’importe quel fichier",
       "clipboard": "Image du presse-papiers",
+      "photo": "Photo",
       "media": "Vidéo ou capture de « Media »",
       "server": "Serveur",
       "map": "Carte",
@@ -470,6 +471,8 @@
       "config": "Config"
     },
     "noClient": "Ajoutez d’abord un client {{game}} sur l’écran « Clients ».",
+    "openInLauncher": "Ouvrez JKNet sur votre ordinateur pour jouer",
+    "joinChat": "Rejoindre la discussion",
     "copied": "Copié",
     "server": {
       "players": "{{players}}/{{max}} joueurs",

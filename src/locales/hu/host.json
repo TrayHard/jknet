@@ -203,6 +203,8 @@
     "selected": "Friends I choose",
     "invite": "Nobody (invite only)",
     "hint": "Friends who can join get the password and see Join game while the server runs.",
+    "chatFromWeb": "Csevegés a webalkalmazásból",
+    "chatFromWebHint": "A csatlakozni jogosult barátok az online.jknet.app oldalon olvashatnak és írhatnak a szerver csevegésébe a játék elindítása nélkül",
     "noFriends": "You have no friends to choose yet."
   },
   "home": {

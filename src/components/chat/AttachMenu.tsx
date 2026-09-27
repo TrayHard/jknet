@@ -1,5 +1,6 @@
 import {
   Box,
+  Camera,
   Clipboard,
   Clapperboard,
   FileCode,
@@ -14,12 +15,17 @@ import {
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import type { PlatformCaps } from "../../lib/backend";
+import { cn } from "../../lib/format";
+import { useDialogPresentation } from "../ui/DialogPresentation";
 import { Floating } from "./Floating";
 
 /** What the attach menu can put into a message. */
 export type AttachKind =
   | "file"
   | "clipboard"
+  // --- slice: web app --- a picture from the gallery or the camera of a phone.
+  | "photo"
   | "media"
   | "server"
   | "map"
@@ -42,9 +48,24 @@ export const ATTACH_KINDS: AttachKind[] = [
   "jkhubMod",
 ];
 
+/**
+ * --- slice: web app ---
+ * The kinds of a platform without game clients on the machine: a file or a
+ * photo the browser picks, and the cards of the catalogs. A pasted picture
+ * needs no entry there, and a Media item, a map, a player profile, a bind and
+ * a cfg all come out of game clients.
+ */
+export const WEB_ATTACH_KINDS: AttachKind[] = ["file", "photo", "server", "bundle", "jkhubMod"];
+
+/** The kinds the attach menu lists on this platform. */
+export function attachKindsFor(caps: PlatformCaps): AttachKind[] {
+  return caps.localFiles ? ATTACH_KINDS : WEB_ATTACH_KINDS;
+}
+
 const ICONS: Record<AttachKind, LucideIcon> = {
   file: Paperclip,
   clipboard: Clipboard,
+  photo: Camera,
   media: Clapperboard,
   server: Server,
   map: MapIcon,
@@ -58,6 +79,8 @@ const ICONS: Record<AttachKind, LucideIcon> = {
 interface AttachMenuProps {
   /** The kinds this composer can act on now; the rest are listed, switched off. */
   available: ReadonlySet<AttachKind>;
+  /** The kinds listed, in order: `ATTACH_KINDS` unless the platform has fewer. */
+  kinds?: readonly AttachKind[];
   onPick: (kind: AttachKind) => void;
   disabled?: boolean;
 }
@@ -72,8 +95,9 @@ interface AttachMenuProps {
  * pickers of `pickers/AttachPicker.tsx`. A kind left out of `available` is
  * listed switched off.
  */
-export function AttachMenu({ available, onPick, disabled = false }: AttachMenuProps) {
+export function AttachMenu({ available, kinds = ATTACH_KINDS, onPick, disabled = false }: AttachMenuProps) {
   const { t } = useTranslation("chat");
+  const sheet = useDialogPresentation() === "sheet";
   const button = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
 
@@ -93,8 +117,15 @@ export function AttachMenu({ available, onPick, disabled = false }: AttachMenuPr
         <Paperclip size={16} />
       </button>
       <Floating anchor={open ? button.current : null} onClose={() => setOpen(false)} placement="top-start" label={t("attach.open")}>
-        <div role="menu" className="flex w-[240px] flex-col gap-2 rounded-lg border border-line-strong bg-elevated p-4 shadow-popover">
-          {ATTACH_KINDS.map((kind) => {
+        <div
+          role="menu"
+          className={cn(
+            "flex flex-col gap-2",
+            // A sheet is the frame already: the list fills it.
+            sheet ? "w-full p-4" : "w-[240px] rounded-lg border border-line-strong bg-elevated p-4 shadow-popover",
+          )}
+        >
+          {kinds.map((kind) => {
             const Icon = ICONS[kind];
             const on = available.has(kind);
             return (

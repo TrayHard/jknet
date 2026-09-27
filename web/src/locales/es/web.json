@@ -1,0 +1,147 @@
+{
+  "nav": {
+    "label": "Secciones",
+    "openMenu": "Abrir el menú",
+    "closeMenu": "Cerrar el menú",
+    "back": "Atrás",
+    "groups": {
+      "chat": "Chat",
+      "browse": "Explorar",
+      "app": "Aplicación"
+    },
+    "sections": {
+      "chats": "Chats",
+      "friends": "Amigos",
+      "community": "Servidores de comunidades",
+      "servers": "Lista de servidores",
+      "bundles": "Bundles",
+      "jkhub": "Mods de JKHub",
+      "settings": "Ajustes"
+    },
+    "rail": {
+      "chats": "Chats",
+      "friends": "Amigos",
+      "community": "Comunidad",
+      "servers": "Servidores",
+      "bundles": "Bundles",
+      "jkhub": "JKHub",
+      "settings": "Ajustes"
+    },
+    "drawerNote": "Jugar, entrar en servidores e instalar bundles se hace en JKNet en su PC.",
+    "empty": {
+      "chats": "Elija un chat",
+      "friends": "Elija un amigo",
+      "community": "Elija un servidor",
+      "servers": "Elija un servidor",
+      "bundles": "Elija un bundle",
+      "jkhub": "Elija un mod"
+    }
+  },
+  "signin": {
+    "title": "Iniciar sesión en JKNet",
+    "intro": "Chatee con sus amigos desde el teléfono o el navegador.",
+    "discord": "Iniciar sesión con Discord",
+    "jkhub": "Iniciar sesión con JKHub",
+    "waiting": "Termine de iniciar sesión en la página que se abrió.",
+    "expired": "El inicio de sesión tardó demasiado. Inténtelo de nuevo.",
+    "failed": "El inicio de sesión no terminó.",
+    "retry": "Intentar de nuevo",
+    "done": "Sesión iniciada. Abriendo JKNet…",
+    "installFirst": "En iPhone, añada primero JKNet a la pantalla de inicio e inicie sesión allí: la aplicación instalada tiene su propia sesión."
+  },
+  "install": {
+    "title": "Instalar la aplicación",
+    "body": "Instalado, JKNet se abre desde la pantalla de inicio y puede mostrar notificaciones.",
+    "action": "Instalar",
+    "iosSteps": "Toque Compartir y luego Añadir a pantalla de inicio.",
+    "installed": "JKNet está instalado en este dispositivo."
+  },
+  "tabs": {
+    "title": "JKNet está abierto en otra pestaña",
+    "body": "Solo una pestaña queda conectada a la vez.",
+    "takeOver": "Abrir aquí"
+  },
+  "offline": {
+    "banner": "Sin conexión. Los mensajes esperan y se envían cuando vuelva a estar en línea.",
+    "reconnecting": "Reconectando…"
+  },
+  "update": {
+    "available": "Hay una nueva versión de JKNet lista.",
+    "action": "Actualizar",
+    "required": "Esta versión de JKNet es demasiado antigua. Actualícela para continuar."
+  },
+  "settings": {
+    "title": "Ajustes",
+    "language": "Idioma",
+    "account": "Cuenta",
+    "notifications": "Notificaciones",
+    "privacy": "Privacidad",
+    "sessions": "Dispositivos y sesiones",
+    "install": "Instalar la aplicación",
+    "about": "Acerca de"
+  },
+  "notifications": {
+    "title": "Notificaciones",
+    "enable": "Activar las notificaciones",
+    "unavailable": "Las notificaciones no están disponibles ahora.",
+    "blocked": "Las notificaciones están bloqueadas en los ajustes del navegador.",
+    "messageText": "Texto del mensaje",
+    "preview": {
+      "full": "Nombre y comienzo del mensaje",
+      "sender": "Solo nombre y chat",
+      "none": "Sin detalles"
+    },
+    "atPc": "Cuando estoy en mi PC",
+    "whileActiveElsewhere": {
+      "delay": "Tras un minuto, si no está leído",
+      "always": "Enseguida",
+      "never": "No enviar"
+    },
+    "test": "Enviar una notificación de prueba",
+    "lastDelivery": "Última entrega: {{date}}",
+    "otherDevices": "Otros dispositivos",
+    "remove": "Quitar",
+    "sessionsLink": "Dispositivos y sesiones"
+  },
+  "push": {
+    "activity": "Actividad en JKNet",
+    "newMessage": "Mensaje nuevo",
+    "sentFiles": "Envió archivos",
+    "sharedCard": "Compartió una tarjeta",
+    "reaction": "Reaccionó {{emoji}} a su mensaje",
+    "groupInvite": "Le invita al grupo {{title}}",
+    "friendRequest": "Quiere ser su amigo",
+    "friendAccepted": "Aceptó su solicitud de amistad",
+    "invite": "Le invita a su servidor",
+    "test": "Las notificaciones de JKNet funcionan en este dispositivo."
+  },
+  "sessions": {
+    "title": "Dispositivos y sesiones",
+    "signedOut": "Se cerró la sesión de este dispositivo desde otro dispositivo."
+  },
+  "serverChats": {
+    "hosts": "{{name}} aloja un servidor",
+    "invited": "Invitado",
+    "guestNote": "Es invitado en este servidor. Chatee desde aquí y entre en la partida con JKNet en su PC.",
+    "gone": "Este chat ya no está disponible"
+  },
+  "serverList": {
+    "title": "Lista de servidores",
+    "unavailable": "La lista de servidores no está disponible ahora",
+    "updating": "Actualizando…",
+    "playNote": "Para jugar aquí, abra JKNet en su PC.",
+    "friendsHere": "Amigos en el servidor",
+    "lastSeen": "Respondió {{time}}"
+  },
+  "jkhub": {
+    "title": "Mods de JKHub",
+    "installNote": "Instálelo desde JKNet en su PC.",
+    "open": "Abrir en JKHub",
+    "indexedAt": "Catálogo del {{date}}"
+  },
+  "about": {
+    "title": "Acerca de",
+    "version": "Compilación {{commit}} del {{date}}",
+    "launcher": "JKNet para su PC"
+  }
+}

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
+import { backend, usePlatform } from "../../../lib/backend";
 import { jkhubFileUrl } from "../../../lib/chat/cardDrafts";
 import { useDefaultClient, useGameNames } from "../../../lib/game";
 import { useJkhubFile, useJkhubInstall } from "../../../lib/queries";
@@ -27,6 +28,11 @@ import type { CardViewProps } from "./withFields";
  *
  * Every picture carries `referrerPolicy="no-referrer"`: the site refuses a
  * hotlinked image otherwise, as `JkhubCard` explains.
+ *
+ * --- slice: web app --- a platform without game clients on the machine
+ * (`usePlatform().localFiles`) installs nothing: the card keeps **Open on
+ * JKHub**, which opens the file page through the backend, and a line that
+ * installing is the launcher's.
  */
 export function JkhubModCardView({ card, fields }: CardViewProps<"jkhubMod">) {
   const { t } = useTranslation("chat");
@@ -38,6 +44,7 @@ export function JkhubModCardView({ card, fields }: CardViewProps<"jkhubMod">) {
   const install = useJkhubInstall(client?.id ?? null);
   const check = useCheckedCard();
   const link = useLinkOpener();
+  const caps = usePlatform();
   const [broken, setBroken] = useState(false);
 
   const page = file.data;
@@ -100,25 +107,32 @@ export function JkhubModCardView({ card, fields }: CardViewProps<"jkhubMod">) {
         subtitle={subtitle}
         actions={
           <>
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<Download size={14} />}
-              disabled={client === undefined || busy}
-              title={client === undefined ? noClient : undefined}
-              onClick={onInstall}
-            >
-              {busy
-                ? t("cards.jkhubMod.installing")
-                : client === undefined
-                  ? t("cards.jkhubMod.installPlain")
-                  : t("cards.jkhubMod.install", { client: client.name })}
-            </Button>
+            {caps.localFiles ? (
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<Download size={14} />}
+                disabled={client === undefined || busy}
+                title={client === undefined ? noClient : undefined}
+                onClick={onInstall}
+              >
+                {busy
+                  ? t("cards.jkhubMod.installing")
+                  : client === undefined
+                    ? t("cards.jkhubMod.installPlain")
+                    : t("cards.jkhubMod.install", { client: client.name })}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="ghost"
               icon={<ExternalLink size={14} />}
-              onClick={() => link.open(page?.url ?? jkhubFileUrl(fields.fileId, fields.slug))}
+              onClick={() => {
+                const url = page?.url ?? jkhubFileUrl(fields.fileId, fields.slug);
+                // jkhub.org opens without the link dialog either way.
+                if (caps.localFiles) link.open(url);
+                else void backend().openExternal(url).catch(() => undefined);
+              }}
             >
               {t("cards.jkhubMod.open")}
             </Button>
@@ -129,6 +143,8 @@ export function JkhubModCardView({ card, fields }: CardViewProps<"jkhubMod">) {
             <CardStatus tone="danger">{errorText(failure)}</CardStatus>
           ) : outcome !== null ? (
             <CardStatus tone={outcome.tone}>{outcome.text}</CardStatus>
+          ) : !caps.localFiles ? (
+            <CardStatus>{t("cards.openInLauncher")}</CardStatus>
           ) : client === undefined ? (
             <CardStatus>{noClient}</CardStatus>
           ) : null

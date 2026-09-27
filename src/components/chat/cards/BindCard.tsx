@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
+import { usePlatform } from "../../../lib/backend";
 import { bindLines, cardTitle } from "../../../lib/chat/cardDrafts";
 import type { ChatCardConfig } from "../../../lib/ipc";
 import { useChatCardToConfig, useChatCommandScan } from "../../../lib/queries";
@@ -27,6 +28,10 @@ const SHOWN = 6;
  * **Add to a config** opens the binds as a new document of the config editor
  * (`chat_card_to_config`), with those lines marked; **Copy** puts the bind
  * lines on the clipboard for a console.
+ *
+ * --- slice: web app --- a platform without game clients on the machine
+ * (`usePlatform().localFiles`) has no config editor: the card keeps **Copy**
+ * and a line that applying is the launcher's.
  */
 export function BindCardView({ card, fields }: CardViewProps<"bind">) {
   const { t } = useTranslation("chat");
@@ -34,6 +39,7 @@ export function BindCardView({ card, fields }: CardViewProps<"bind">) {
   const lines = useMemo(() => bindLines(fields.binds), [fields.binds]);
   const scan = useChatCommandScan(lines);
   const toConfig = useChatCardToConfig();
+  const caps = usePlatform();
   const [config, setConfig] = useState<ChatCardConfig | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
   const [copied, flashCopied] = useFlash();
@@ -49,18 +55,20 @@ export function BindCardView({ card, fields }: CardViewProps<"bind">) {
         subtitle={t("cards.kinds.bind")}
         actions={
           <>
-            <Button
-              size="sm"
-              variant="primary"
-              icon={<FilePlus2 size={14} />}
-              disabled={toConfig.isPending}
-              onClick={() => {
-                setSaved(null);
-                toConfig.mutate({ card }, { onSuccess: setConfig });
-              }}
-            >
-              {t("cards.bind.apply")}
-            </Button>
+            {caps.localFiles ? (
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<FilePlus2 size={14} />}
+                disabled={toConfig.isPending}
+                onClick={() => {
+                  setSaved(null);
+                  toConfig.mutate({ card }, { onSuccess: setConfig });
+                }}
+              >
+                {t("cards.bind.apply")}
+              </Button>
+            ) : null}
             <Button
               size="sm"
               variant="ghost"
@@ -76,6 +84,8 @@ export function BindCardView({ card, fields }: CardViewProps<"bind">) {
             <CardStatus tone="danger">{errorText(toConfig.error)}</CardStatus>
           ) : saved !== null ? (
             <CardStatus tone="success">{t("apply.config.saved", { name: saved })}</CardStatus>
+          ) : !caps.localFiles ? (
+            <CardStatus>{t("cards.openInLauncher")}</CardStatus>
           ) : null
         }
       >

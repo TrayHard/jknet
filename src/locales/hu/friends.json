@@ -21,6 +21,8 @@
     "playingOnAddress": "Itt játszik: {{address}}",
     "inGame": "Játékban",
     "online": "Online",
+    "onlineFromPhone": "Online telefonról",
+    "onlineInBrowser": "Online böngészőben",
     "offline": "Offline",
     "lastSeenJustNow": "Az imént volt aktív",
     "lastSeenOn": "Utoljára ekkor volt aktív: {{date}}",

@@ -52,5 +52,21 @@
     "timedOut": "A bejelentkezés túl sokáig tartott. Próbálja újra.",
     "expired": "A bejelentkezés lejárt. Próbálja újra.",
     "failed": "A bejelentkezés nem fejeződött be."
+  },
+  "devices": {
+    "title": "Eszközök és munkamenetek",
+    "hint": "Minden launcher és böngésző, amelyben be van jelentkezve ebbe a fiókba. Egy eszköz kijelentkeztetése ott befejezi a munkamenetet.",
+    "unnamed": "Névtelen eszköz",
+    "lastActive": "Utoljára aktív: {{time}}",
+    "thisDevice": "Ez az eszköz",
+    "online": "Online",
+    "pushOn": "Push bekapcsolva",
+    "signOut": "Kijelentkeztetés",
+    "signOutOthers": "Kijelentkeztetés az összes többi eszközön",
+    "confirmTitle": "Kijelentkezteti ezt: {{name}}?",
+    "confirmBody": "Annak az eszköznek újra be kell jelentkeznie, hogy lássa a barátait és a csevegéseit.",
+    "confirmOthersTitle": "Kijelentkeztet minden más eszközt?",
+    "confirmOthersBody": "A fiók minden más launcherének és böngészőjének újra be kell jelentkeznie.",
+    "failed": "Az eszköz kijelentkeztetése nem sikerült."
   }
 }

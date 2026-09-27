@@ -4,14 +4,18 @@
  *
  * Two checks, both of which fail the build:
  *
- *  1. Every language folder under `src/locales/` holds exactly the namespaces
- *     and keys English holds, with the same `{{placeholders}}`, the same
- *     `<0>` markup tags, the plural forms that language's CLDR rules ask for,
- *     and no empty value.
- *  2. No `.tsx` file under `src/` prints a sentence of its own: JSX text nodes,
- *     the `placeholder`, `title`, `aria-label` and `alt` attributes and the
- *     text props of the UI kit all have to come from `t()`. Names and tokens
- *     are allowed, and the list of them is `scripts/i18n-allowlist.json`.
+ *  1. Every language folder of a catalog root holds exactly the namespaces
+ *     and keys English of that root holds, with the same `{{placeholders}}`,
+ *     the same `<0>` markup tags, the plural forms that language's CLDR rules
+ *     ask for, and no empty value. The roots are `src/locales/`, the catalogs
+ *     the launcher and the web app share, and `web/src/locales/`, the strings
+ *     only the web app prints; each is measured against its own English, and
+ *     both hold the same languages.
+ *  2. No `.tsx` file under `src/` or `web/src/` prints a sentence of its own:
+ *     JSX text nodes, the `placeholder`, `title`, `aria-label` and `alt`
+ *     attributes and the text props of the UI kit all have to come from
+ *     `t()`. Names and tokens are allowed, and the list of them is
+ *     `scripts/i18n-allowlist.json`.
  *
  * Node only, no dependencies: it runs from `prebuild`, so a missing package
  * would break every build rather than one check.
@@ -19,13 +23,22 @@
  * Usage: `npm run i18n:check`. It prints every finding and exits 1 on any.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const LOCALES = join(ROOT, "src", "locales");
-const SOURCE = join(ROOT, "src");
+/**
+ * The catalog roots. `prefix` goes in front of a finding, so a finding of the
+ * launcher's catalogs reads as it always did and one of the web app's names
+ * its root.
+ */
+const CATALOG_ROOTS = [
+  { dir: join(ROOT, "src", "locales"), name: "src/locales", prefix: "" },
+  { dir: join(ROOT, "web", "src", "locales"), name: "web/src/locales", prefix: "web/src/locales/" },
+];
+/** Where the screens live: the shared components and the web app's own. */
+const SOURCES = [join(ROOT, "src"), join(ROOT, "web", "src")];
 const SOURCE_LANGUAGE = "en";
 
 /**
@@ -149,12 +162,12 @@ function namespacesOf(folder) {
     .sort();
 }
 
-function readCatalog(language, namespace) {
-  const file = join(LOCALES, language, `${namespace}.json`);
+function readCatalog(root, language, namespace) {
+  const file = join(root.dir, language, `${namespace}.json`);
   try {
     return JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
-    fail(`${language}/${namespace}.json`, `cannot be read: ${error.message}`);
+    fail(`${root.prefix}${language}/${namespace}.json`, `cannot be read: ${error.message}`);
     return null;
   }
 }
@@ -176,25 +189,30 @@ function describe(flat, pluralBases) {
   return { plain, plurals };
 }
 
-function checkCatalogs() {
-  const languages = readdirSync(LOCALES).filter((name) =>
-    statSync(join(LOCALES, name)).isDirectory(),
+/** Checks one catalog root against its own English. */
+function checkCatalogs(root) {
+  if (!existsSync(root.dir)) {
+    fail(root.name, "is missing");
+    return;
+  }
+  const languages = readdirSync(root.dir).filter((name) =>
+    statSync(join(root.dir, name)).isDirectory(),
   );
   if (!languages.includes(SOURCE_LANGUAGE)) {
-    fail("src/locales", `there is no ${SOURCE_LANGUAGE} folder to check against`);
+    fail(root.name, `there is no ${SOURCE_LANGUAGE} folder to check against`);
     return;
   }
 
-  const namespaces = namespacesOf(join(LOCALES, SOURCE_LANGUAGE));
+  const namespaces = namespacesOf(join(root.dir, SOURCE_LANGUAGE));
   if (namespaces.length === 0) {
-    fail(`src/locales/${SOURCE_LANGUAGE}`, "holds no namespace");
+    fail(`${root.name}/${SOURCE_LANGUAGE}`, "holds no namespace");
     return;
   }
 
   // English first: it is the shape every other folder is measured against.
   const source = new Map();
   for (const namespace of namespaces) {
-    const catalog = readCatalog(SOURCE_LANGUAGE, namespace);
+    const catalog = readCatalog(root, SOURCE_LANGUAGE, namespace);
     if (catalog === null) continue;
     const flat = flatten(catalog);
     const bases = new Set(
@@ -222,30 +240,30 @@ function checkCatalogs() {
   for (const language of languages) {
     // The marker is how a reader — and the report of a release — tells a
     // translated folder from one that still holds the English text.
-    const marker = join(LOCALES, language, "_status.json");
+    const marker = join(root.dir, language, "_status.json");
     try {
       const status = JSON.parse(readFileSync(marker, "utf8"));
       if (!STATES.has(status.state)) {
-        fail(`${language}/_status.json`, `state ${JSON.stringify(status.state)} is unknown`);
+        fail(`${root.prefix}${language}/_status.json`, `state ${JSON.stringify(status.state)} is unknown`);
       }
       for (const field of Object.keys(status).filter((one) => !FIELDS.has(one))) {
-        fail(`${language}/_status.json`, `${field} is not a field of the marker`);
+        fail(`${root.prefix}${language}/_status.json`, `${field} is not a field of the marker`);
       }
       if (status.reviewer !== undefined && status.reviewer !== null) {
         if (typeof status.reviewer !== "string" || status.reviewer.trim() === "") {
-          fail(`${language}/_status.json`, "reviewer is neither a name nor null");
+          fail(`${root.prefix}${language}/_status.json`, "reviewer is neither a name nor null");
         }
       }
     } catch (error) {
-      fail(`${language}/_status.json`, `is missing or unreadable: ${error.message}`);
+      fail(`${root.prefix}${language}/_status.json`, `is missing or unreadable: ${error.message}`);
     }
 
-    const own = namespacesOf(join(LOCALES, language));
+    const own = namespacesOf(join(root.dir, language));
     for (const missing of namespaces.filter((one) => !own.includes(one))) {
-      fail(`${language}`, `${missing}.json is missing`);
+      fail(`${root.prefix}${language}`, `${missing}.json is missing`);
     }
     for (const extra of own.filter((one) => !namespaces.includes(one))) {
-      fail(`${language}`, `${extra}.json is not a namespace of ${SOURCE_LANGUAGE}`);
+      fail(`${root.prefix}${language}`, `${extra}.json is not a namespace of ${SOURCE_LANGUAGE}`);
     }
 
     const categories = pluralCategories(language);
@@ -253,9 +271,9 @@ function checkCatalogs() {
     for (const namespace of namespaces) {
       const english = source.get(namespace);
       if (english === undefined || !own.includes(namespace)) continue;
-      const catalog = readCatalog(language, namespace);
+      const catalog = readCatalog(root, language, namespace);
       if (catalog === null) continue;
-      const where = `${language}/${namespace}.json`;
+      const where = `${root.prefix}${language}/${namespace}.json`;
       const theirs = describe(flatten(catalog), english.bases);
 
       for (const [key, value] of theirs.plain) {
@@ -385,7 +403,8 @@ function tsxFiles(folder, into = []) {
 }
 
 function checkLiterals() {
-  for (const file of tsxFiles(SOURCE)) {
+  const files = SOURCES.filter((folder) => existsSync(folder)).flatMap((folder) => tsxFiles(folder));
+  for (const file of files) {
     const shown = relative(ROOT, file).replace(/\\/g, "/");
     if (SKIPPED_FILES.has(shown)) continue;
     const source = stripComments(readFileSync(file, "utf8"));
@@ -438,14 +457,38 @@ function checkLiterals() {
 
 // ---------------------------------------------------------------------------
 
-checkCatalogs();
+/**
+ * Every root speaks the languages the first one does: the web app switches
+ * the shared catalogs and its own together, and a language that one root
+ * lacks would show half of the screen in English.
+ */
+function checkLanguagesMatch() {
+  const languagesOf = (root) =>
+    existsSync(root.dir)
+      ? readdirSync(root.dir).filter((name) => statSync(join(root.dir, name)).isDirectory()).sort()
+      : [];
+  const [first, ...rest] = CATALOG_ROOTS;
+  const expected = languagesOf(first);
+  for (const root of rest) {
+    const own = languagesOf(root);
+    for (const missing of expected.filter((language) => !own.includes(language))) {
+      fail(root.name, `${missing} is missing, which ${first.name} has`);
+    }
+    for (const extra of own.filter((language) => !expected.includes(language))) {
+      fail(root.name, `${extra} is not a language of ${first.name}`);
+    }
+  }
+}
+
+for (const root of CATALOG_ROOTS) checkCatalogs(root);
+checkLanguagesMatch();
 checkLiterals();
 
 if (problems.length > 0) {
   console.error(`i18n check: ${problems.length} problem(s)\n`);
   for (const problem of problems) console.error(`  ${problem}`);
   console.error(
-    "\nCatalogs live in src/locales/. The words a screen may print without t() are in scripts/i18n-allowlist.json.",
+    "\nCatalogs live in src/locales/ (shared with the web app) and web/src/locales/ (the web app only). The words a screen may print without t() are in scripts/i18n-allowlist.json.",
   );
   process.exit(1);
 }

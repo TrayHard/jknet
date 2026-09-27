@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useGametypeLabels } from "../../../i18n/useGameLabels";
+import { usePlatform } from "../../../lib/backend";
 import { useConnectClient, useGameNames } from "../../../lib/game";
 import { useLaunchClient, useServerStatus } from "../../../lib/queries";
 import { ColoredNickname } from "../../client/ColoredNickname";
@@ -21,13 +22,18 @@ import type { CardViewProps } from "./withFields";
  * does, so what it shows is now, not what the sender saw. **Join** starts
  * the client **Connect** would pick for that address; **Copy address** is
  * for a friend who plays without JKNet.
+ *
+ * --- slice: web app --- a platform that cannot play and cannot ask a server
+ * over UDP (`usePlatform()`) shows what the card carries, **Copy address**
+ * and a line that playing is the launcher's.
  */
 export function ServerCardView({ card, fields }: CardViewProps<"server">) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const labels = useGametypeLabels();
   const games = useGameNames();
-  const status = useServerStatus(fields.address, fields.game);
+  const caps = usePlatform();
+  const status = useServerStatus(fields.address, fields.game, caps.serverQuery);
   const connectClient = useConnectClient(fields.game);
   const launch = useLaunchClient();
   const check = useCheckedCard();
@@ -79,16 +85,18 @@ export function ServerCardView({ card, fields }: CardViewProps<"server">) {
       }
       actions={
         <>
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Play size={14} />}
-            disabled={client === undefined || busy}
-            title={client === undefined ? noClient : undefined}
-            onClick={join}
-          >
-            {busy ? t("cards.server.joining") : t("cards.server.join")}
-          </Button>
+          {caps.game ? (
+            <Button
+              size="sm"
+              variant="primary"
+              icon={<Play size={14} />}
+              disabled={client === undefined || busy}
+              title={client === undefined ? noClient : undefined}
+              onClick={join}
+            >
+              {busy ? t("cards.server.joining") : t("cards.server.join")}
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="ghost"
@@ -102,18 +110,26 @@ export function ServerCardView({ card, fields }: CardViewProps<"server">) {
       status={
         failure ? (
           <CardStatus tone="danger">{errorText(failure)}</CardStatus>
+        ) : !caps.game ? (
+          <CardStatus>{t("cards.openInLauncher")}</CardStatus>
         ) : client === undefined ? (
           <CardStatus>{noClient}</CardStatus>
         ) : null
       }
     >
-      <p className="text-body-sm text-fg-secondary [overflow-wrap:anywhere]">
-        {status.isPending
-          ? t("cards.server.checking")
-          : status.isError
-            ? t("cards.server.offline")
-            : facts.join(" · ")}
-      </p>
+      {!caps.serverQuery ? (
+        facts.length > 0 ? (
+          <p className="text-body-sm text-fg-secondary [overflow-wrap:anywhere]">{facts.join(" · ")}</p>
+        ) : null
+      ) : (
+        <p className="text-body-sm text-fg-secondary [overflow-wrap:anywhere]">
+          {status.isPending
+            ? t("cards.server.checking")
+            : status.isError
+              ? t("cards.server.offline")
+              : facts.join(" · ")}
+        </p>
+      )}
     </CardShell>
   );
 }

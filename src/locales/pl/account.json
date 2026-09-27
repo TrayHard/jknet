@@ -52,5 +52,21 @@
     "timedOut": "Logowanie trwało zbyt długo. Spróbuj ponownie.",
     "expired": "Logowanie wygasło. Spróbuj ponownie.",
     "failed": "Logowanie nie zostało dokończone."
+  },
+  "devices": {
+    "title": "Urządzenia i sesje",
+    "hint": "Wszystkie launchery i przeglądarki zalogowane na to konto. Wylogowanie urządzenia kończy na nim sesję.",
+    "unnamed": "Urządzenie bez nazwy",
+    "lastActive": "Ostatnio aktywne {{time}}",
+    "thisDevice": "To urządzenie",
+    "online": "W sieci",
+    "pushOn": "Push włączone",
+    "signOut": "Wyloguj",
+    "signOutOthers": "Wyloguj na wszystkich innych urządzeniach",
+    "confirmTitle": "Wylogować {{name}}?",
+    "confirmBody": "To urządzenie będzie musiało zalogować się ponownie, aby widzieć znajomych i czaty.",
+    "confirmOthersTitle": "Wylogować na wszystkich innych urządzeniach?",
+    "confirmOthersBody": "Wszystkie inne launchery i przeglądarki tego konta będą musiały zalogować się ponownie.",
+    "failed": "Nie udało się wylogować urządzenia."
   }
 }

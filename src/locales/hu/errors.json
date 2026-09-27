@@ -66,7 +66,10 @@
     "emoji": "Egy reakció csak egyetlen emoji lehet.",
     "notHosting": "A privát szervere még nem jelent meg a JKNet Online-ban.",
     "confirmDanger": "Ez a fájl futhat a számítógépén. Mentés előtt erősítse meg.",
-    "confirmLink": "Erősítse meg, mielőtt megnyit egy hivatkozást ide: {{message}}."
+    "confirmLink": "Erősítse meg, mielőtt megnyit egy hivatkozást ide: {{message}}.",
+    "webJoinOff": "A házigazda a szerver csevegését a játékban lévő játékosoknak tartja fenn.",
+    "catalogDisabled": "Ez a katalógus most ki van kapcsolva a JKNet Online-on.",
+    "catalogNotReady": "A JKNet Online még építi ezt a katalógust. Próbálja újra néhány perc múlva."
   },
   "frontend": {
     "noRuntime": "A Tauri futtatókörnyezet nem érhető el",

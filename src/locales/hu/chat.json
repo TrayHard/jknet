@@ -385,6 +385,7 @@
     "kinds": {
       "file": "Bármilyen fájl",
       "clipboard": "Kép a vágólapról",
+      "photo": "Fénykép",
       "media": "Videó vagy képernyőkép a „Media” képernyőről",
       "server": "Szerver",
       "map": "Pálya",
@@ -451,6 +452,8 @@
       "config": "Config"
     },
     "noClient": "Előbb adjon hozzá egy {{game}}-klienst a „Kliensek” képernyőn.",
+    "openInLauncher": "A játékhoz nyissa meg a JKNetet a számítógépén",
+    "joinChat": "Csatlakozás a csevegéshez",
     "copied": "Másolva",
     "server": {
       "players": "{{players}}/{{max}} játékos",

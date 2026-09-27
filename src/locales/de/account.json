@@ -52,5 +52,21 @@
     "timedOut": "Die Anmeldung hat zu lange gedauert. Versuchen Sie es erneut.",
     "expired": "Die Anmeldung ist abgelaufen. Versuchen Sie es erneut.",
     "failed": "Die Anmeldung wurde nicht abgeschlossen."
+  },
+  "devices": {
+    "title": "Geräte und Sitzungen",
+    "hint": "Alle Launcher und Browser, die bei diesem Konto angemeldet sind. Eine Abmeldung beendet die Sitzung auf dem Gerät.",
+    "unnamed": "Unbenanntes Gerät",
+    "lastActive": "Zuletzt aktiv {{time}}",
+    "thisDevice": "Dieses Gerät",
+    "online": "Online",
+    "pushOn": "Push an",
+    "signOut": "Abmelden",
+    "signOutOthers": "Auf allen anderen Geräten abmelden",
+    "confirmTitle": "{{name}} abmelden?",
+    "confirmBody": "Das Gerät muss sich erneut anmelden, um Ihre Freunde und Chats zu sehen.",
+    "confirmOthersTitle": "Auf allen anderen Geräten abmelden?",
+    "confirmOthersBody": "Alle anderen Launcher und Browser dieses Kontos müssen sich erneut anmelden.",
+    "failed": "Das Gerät wurde nicht abgemeldet."
   }
 }

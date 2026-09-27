@@ -205,6 +205,8 @@
     "selected": "Friends I choose",
     "invite": "Nobody (invite only)",
     "hint": "Friends who can join get the password and see Join game while the server runs.",
+    "chatFromWeb": "Discussion depuis l’application web",
+    "chatFromWebHint": "Les amis qui peuvent rejoindre lisent et écrivent dans la discussion de ce serveur sur online.jknet.app sans lancer le jeu",
     "noFriends": "You have no friends to choose yet."
   },
   "home": {

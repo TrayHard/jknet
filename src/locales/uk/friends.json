@@ -21,6 +21,8 @@
     "playingOnAddress": "Грає на {{address}}",
     "inGame": "У грі",
     "online": "У мережі",
+    "onlineFromPhone": "У мережі з телефона",
+    "onlineInBrowser": "У мережі в браузері",
     "offline": "Не в мережі",
     "lastSeenJustNow": "Востаннє в мережі щойно",
     "lastSeenOn": "Востаннє в мережі {{date}}",

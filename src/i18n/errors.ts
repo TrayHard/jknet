@@ -14,12 +14,12 @@
  * from lasting past the next `cargo test`.
  */
 
+import i18next from "i18next";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 
 import { errorEnvelope, type AppErrorEnvelope } from "../lib/ipc";
 import { NO_RUNTIME_MESSAGE } from "../lib/runtime";
-import { i18next } from "./index";
 
 /** How a service code from the contract is spelled in the catalog. */
 function onlineKey(code: string): string {

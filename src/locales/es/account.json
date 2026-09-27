@@ -52,5 +52,21 @@
     "timedOut": "El inicio de sesión tardó demasiado. Inténtelo de nuevo.",
     "expired": "El inicio de sesión expiró. Inténtelo de nuevo.",
     "failed": "El inicio de sesión no se completó."
+  },
+  "devices": {
+    "title": "Dispositivos y sesiones",
+    "hint": "Todos los launchers y navegadores con sesión iniciada en esta cuenta. Cerrar la sesión de un dispositivo la termina allí.",
+    "unnamed": "Dispositivo sin nombre",
+    "lastActive": "Activo {{time}}",
+    "thisDevice": "Este dispositivo",
+    "online": "En línea",
+    "pushOn": "Push activado",
+    "signOut": "Cerrar sesión",
+    "signOutOthers": "Cerrar sesión en los demás dispositivos",
+    "confirmTitle": "¿Cerrar la sesión de {{name}}?",
+    "confirmBody": "Ese dispositivo tendrá que iniciar sesión de nuevo para ver a sus amigos y chats.",
+    "confirmOthersTitle": "¿Cerrar sesión en los demás dispositivos?",
+    "confirmOthersBody": "Todos los demás launchers y navegadores de esta cuenta tendrán que iniciar sesión de nuevo.",
+    "failed": "No se cerró la sesión del dispositivo."
   }
 }

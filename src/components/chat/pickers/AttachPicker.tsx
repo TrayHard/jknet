@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
+import { usePlatform } from "../../../lib/backend";
 import {
   bindCard,
   bundleCard,
@@ -32,7 +33,7 @@ import {
 import { ColoredNickname } from "../../client/ColoredNickname";
 import { MapThumb } from "../../host/MapOption";
 import { Button, Dialog, Select } from "../../ui";
-import type { AttachKind } from "../AttachMenu";
+import { WEB_ATTACH_KINDS, type AttachKind } from "../AttachMenu";
 import { PickerDialog, type PickerItem } from "./PickerDialog";
 
 /** What a picker hands back to the composer: a card to send, or a staged file. */
@@ -52,6 +53,12 @@ interface PickerProps {
  * and hands the composer a card draft, or a file the core has staged.
  */
 export function AttachPicker({ kind, onPick, onClose }: PickerProps & { kind: AttachKind }) {
+  // --- slice: web app --- without game clients on the machine the menu offers
+  // only the catalogs (`WEB_ATTACH_KINDS`): the server list of the service,
+  // the bundles and the JKHub snapshot. The pickers that read game clients
+  // never open there, whatever asks for them.
+  const caps = usePlatform();
+  if (!caps.localFiles && !WEB_ATTACH_KINDS.includes(kind)) return null;
   switch (kind) {
     case "media":
       return <MediaPicker onPick={onPick} onClose={onClose} />;

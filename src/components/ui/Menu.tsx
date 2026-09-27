@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { cn } from "../../lib/format";
+import { SheetPanel, useDialogPresentation, useSheetEntry } from "./DialogPresentation";
 
 /** One line of the menu. */
 export interface MenuItem {
@@ -365,6 +366,10 @@ function useMenuLayer({
   const id = useId();
   const listId = `${id}-menu`;
   const listRef = useRef<HTMLDivElement>(null);
+  // --- slice: web app --- the phone layout of the web app draws the list as
+  // a bottom sheet: nothing to place, nothing to follow, and the system back
+  // closes it.
+  const sheet = useDialogPresentation() === "sheet";
 
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [align, setAlign] = useState<MenuAlign>("end");
@@ -461,7 +466,7 @@ function useMenuLayer({
   // scroll of an inner container, which does not bubble to the window. A list
   // opened at a point has nothing to follow, so the same events close it.
   useEffect(() => {
-    if (!open) return;
+    if (!open || sheet) return;
     const follow = () => {
       if (track === undefined) {
         close();
@@ -481,7 +486,7 @@ function useMenuLayer({
       window.removeEventListener("scroll", follow, true);
       window.removeEventListener("resize", follow);
     };
-  }, [open, close, track, align]);
+  }, [open, sheet, close, track, align]);
 
   // A press anywhere else closes the menu.
   useEffect(() => {
@@ -511,8 +516,11 @@ function useMenuLayer({
   // it in a Chromium webview.
   useEffect(() => {
     if (!open) return;
-    const navigation = (window as unknown as { navigation?: EventTarget })
-      .navigation;
+    // A sheet puts a history entry of its own when it opens, which the
+    // Navigation API reports as a navigation: the back press is what closes it.
+    const navigation = sheet
+      ? undefined
+      : (window as unknown as { navigation?: EventTarget }).navigation;
     window.addEventListener("popstate", close);
     window.addEventListener("hashchange", close);
     navigation?.addEventListener("navigate", close);
@@ -521,7 +529,9 @@ function useMenuLayer({
       window.removeEventListener("hashchange", close);
       navigation?.removeEventListener("navigate", close);
     };
-  }, [open, close]);
+  }, [open, sheet, close]);
+
+  useSheetEntry(open && sheet, close);
 
   // The focus lives on the active item while the menu is open: that is what
   // makes a screen reader read the line the arrow keys just moved to.
@@ -534,9 +544,63 @@ function useMenuLayer({
     node?.scrollIntoView({ block: "nearest" });
   }, [open, activeIndex]);
 
-  const popover =
-    open && anchor
+  const lines = items.map((item, index) => (
+    <button
+      key={item.id}
+      type="button"
+      role="menuitem"
+      data-index={index}
+      tabIndex={-1}
+      disabled={item.disabled}
+      title={item.title}
+      onMouseEnter={() => {
+        if (!item.disabled) setActiveIndex(index);
+      }}
+      onClick={() => commit(index)}
+      className={cn(
+        // --- slice: web app --- a line of a sheet is a finger's height.
+        sheet
+          ? "flex items-center gap-8 w-full h-48 px-16 text-left"
+          : "flex items-center gap-8 w-full h-32 px-12 text-left",
+        sheet ? "text-body-md transition-colors duration-100" : "text-body-sm transition-colors duration-100",
+        item.disabled
+          ? "text-fg-disabled cursor-not-allowed"
+          : "cursor-pointer hover:bg-hover-overlay focus:bg-hover-overlay outline-none",
+        item.disabled
+          ? ""
+          : item.danger
+            ? "text-fg-danger"
+            : "text-fg",
+      )}
+    >
+      {item.icon ? (
+        <span className="flex items-center shrink-0">{item.icon}</span>
+      ) : null}
+      <span className="flex-1 min-w-0 truncate">{item.label}</span>
+    </button>
+  ));
+
+  const popover = !open || !anchor
+    ? null
+    : sheet
       ? createPortal(
+          // The scrim is outside the list, so a press on it closes the menu
+          // through the same listener as a press anywhere else.
+          <div className="fixed inset-0 z-50 flex items-end bg-overlay">
+            <SheetPanel
+              panelRef={listRef}
+              id={listId}
+              role="menu"
+              aria-label={ariaLabel}
+              onKeyDown={onListKeyDown}
+              className="select-none"
+            >
+              {lines}
+            </SheetPanel>
+          </div>,
+          document.body,
+        )
+      : createPortal(
           <div
             ref={listRef}
             id={listId}
@@ -558,42 +622,10 @@ function useMenuLayer({
               "bg-elevated border border-line rounded-md shadow-popover",
             )}
           >
-            {items.map((item, index) => (
-              <button
-                key={item.id}
-                type="button"
-                role="menuitem"
-                data-index={index}
-                tabIndex={-1}
-                disabled={item.disabled}
-                title={item.title}
-                onMouseEnter={() => {
-                  if (!item.disabled) setActiveIndex(index);
-                }}
-                onClick={() => commit(index)}
-                className={cn(
-                  "flex items-center gap-8 w-full h-32 px-12 text-left",
-                  "text-body-sm transition-colors duration-100",
-                  item.disabled
-                    ? "text-fg-disabled cursor-not-allowed"
-                    : "cursor-pointer hover:bg-hover-overlay focus:bg-hover-overlay outline-none",
-                  item.disabled
-                    ? ""
-                    : item.danger
-                      ? "text-fg-danger"
-                      : "text-fg",
-                )}
-              >
-                {item.icon ? (
-                  <span className="flex items-center shrink-0">{item.icon}</span>
-                ) : null}
-                <span className="flex-1 min-w-0 truncate">{item.label}</span>
-              </button>
-            ))}
+            {lines}
           </div>,
           document.body,
-        )
-      : null;
+        );
 
   return { open, listId, openAt, close, closeAndReturn, popover };
 }

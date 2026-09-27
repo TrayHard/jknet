@@ -1,0 +1,147 @@
+{
+  "nav": {
+    "label": "Részek",
+    "openMenu": "Menü megnyitása",
+    "closeMenu": "Menü bezárása",
+    "back": "Vissza",
+    "groups": {
+      "chat": "Csevegés",
+      "browse": "Böngészés",
+      "app": "Alkalmazás"
+    },
+    "sections": {
+      "chats": "Csevegések",
+      "friends": "Barátok",
+      "community": "Közösségi szerverek",
+      "servers": "Szerverlista",
+      "bundles": "Bundle-ök",
+      "jkhub": "JKHub-modok",
+      "settings": "Beállítások"
+    },
+    "rail": {
+      "chats": "Csevegések",
+      "friends": "Barátok",
+      "community": "Közösség",
+      "servers": "Szerverek",
+      "bundles": "Bundle-ök",
+      "jkhub": "JKHub",
+      "settings": "Beállítások"
+    },
+    "drawerNote": "A játék, a szerverekhez csatlakozás és a bundle-ök telepítése a számítógépen futó JKNetben marad.",
+    "empty": {
+      "chats": "Válasszon csevegést",
+      "friends": "Válasszon barátot",
+      "community": "Válasszon szervert",
+      "servers": "Válasszon szervert",
+      "bundles": "Válasszon bundle-t",
+      "jkhub": "Válasszon modot"
+    }
+  },
+  "signin": {
+    "title": "Bejelentkezés a JKNetbe",
+    "intro": "Csevegjen a barátaival telefonról vagy böngészőből.",
+    "discord": "Bejelentkezés Discorddal",
+    "jkhub": "Bejelentkezés JKHubbal",
+    "waiting": "Fejezze be a bejelentkezést a megnyílt oldalon.",
+    "expired": "A bejelentkezés túl sokáig tartott. Próbálja újra.",
+    "failed": "A bejelentkezés nem fejeződött be.",
+    "retry": "Újra",
+    "done": "Bejelentkezve. A JKNet megnyílik…",
+    "installFirst": "iPhone-on előbb adja hozzá a JKNetet a Főképernyőhöz, és ott jelentkezzen be: a telepített alkalmazásnak saját bejelentkezése van."
+  },
+  "install": {
+    "title": "Alkalmazás telepítése",
+    "body": "Telepítve a JKNet a kezdőképernyőről nyílik, és értesítéseket is mutathat.",
+    "action": "Telepítés",
+    "iosSteps": "Koppintson a Megosztás, majd a Főképernyőhöz adás elemre.",
+    "installed": "A JKNet telepítve van ezen az eszközön."
+  },
+  "tabs": {
+    "title": "A JKNet egy másik lapon van nyitva",
+    "body": "Egyszerre csak egy lap maradhat kapcsolatban.",
+    "takeOver": "Megnyitás itt"
+  },
+  "offline": {
+    "banner": "Nincs kapcsolat. Az üzenetek várnak, és elmennek, amint újra online lesz.",
+    "reconnecting": "Újrakapcsolódás…"
+  },
+  "update": {
+    "available": "Elkészült a JKNet új verziója.",
+    "action": "Frissítés",
+    "required": "A JKNet ezen verziója túl régi. A folytatáshoz frissítse."
+  },
+  "settings": {
+    "title": "Beállítások",
+    "language": "Nyelv",
+    "account": "Fiók",
+    "notifications": "Értesítések",
+    "privacy": "Adatvédelem",
+    "sessions": "Eszközök és munkamenetek",
+    "install": "Alkalmazás telepítése",
+    "about": "Névjegy"
+  },
+  "notifications": {
+    "title": "Értesítések",
+    "enable": "Értesítések bekapcsolása",
+    "unavailable": "Az értesítések most nem érhetők el.",
+    "blocked": "Az értesítések le vannak tiltva a böngésző beállításaiban.",
+    "messageText": "Az üzenet szövege",
+    "preview": {
+      "full": "Név és az üzenet eleje",
+      "sender": "Csak a név és a csevegés",
+      "none": "Részletek nélkül"
+    },
+    "atPc": "Amikor a gépnél vagyok",
+    "whileActiveElsewhere": {
+      "delay": "Egy perc múlva, ha olvasatlan",
+      "always": "Azonnal",
+      "never": "Ne küldjön"
+    },
+    "test": "Próbaértesítés küldése",
+    "lastDelivery": "Utolsó kézbesítés: {{date}}",
+    "otherDevices": "Más eszközök",
+    "remove": "Eltávolítás",
+    "sessionsLink": "Eszközök és munkamenetek"
+  },
+  "push": {
+    "activity": "Tevékenység a JKNetben",
+    "newMessage": "Új üzenet",
+    "sentFiles": "Fájlokat küldött",
+    "sharedCard": "Kártyát osztott meg",
+    "reaction": "{{emoji}} reakciót adott az üzenetére",
+    "groupInvite": "Meghívja a(z) {{title}} csoportba",
+    "friendRequest": "Szeretne a barátja lenni",
+    "friendAccepted": "Elfogadta a barátkérelmét",
+    "invite": "Meghívja a saját szerverére",
+    "test": "A JKNet értesítései működnek ezen az eszközön."
+  },
+  "sessions": {
+    "title": "Eszközök és munkamenetek",
+    "signedOut": "Ezt az eszközt egy másik eszközről jelentették ki."
+  },
+  "serverChats": {
+    "hosts": "{{name}} szervert futtat",
+    "invited": "Meghívták",
+    "guestNote": "Vendég ezen a szerveren. Innen csevegjen, a játékba a számítógépen futó JKNetből lépjen be.",
+    "gone": "Ez a csevegés már nem érhető el"
+  },
+  "serverList": {
+    "title": "Szerverlista",
+    "unavailable": "A szerverlista most nem érhető el",
+    "updating": "Frissítés…",
+    "playNote": "Ha itt szeretne játszani, nyissa meg a JKNetet a számítógépén.",
+    "friendsHere": "Barátok a szerveren",
+    "lastSeen": "Válaszolt: {{time}}"
+  },
+  "jkhub": {
+    "title": "JKHub-modok",
+    "installNote": "Telepítse a számítógépen futó JKNetből.",
+    "open": "Megnyitás a JKHubon",
+    "indexedAt": "Katalógus: {{date}}"
+  },
+  "about": {
+    "title": "Névjegy",
+    "version": "{{commit}} build, {{date}}",
+    "launcher": "JKNet a számítógépére"
+  }
+}

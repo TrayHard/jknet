@@ -2,10 +2,12 @@ import {
   useEffect,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
 
 import { cn } from "../../lib/format";
+import { SheetPanel, useDialogPresentation, useSheetEntry } from "./DialogPresentation";
 
 /** `danger` is for a dialog whose confirming button destroys something. */
 export type DialogVariant = "default" | "danger";
@@ -185,18 +187,61 @@ export function Dialog({
 
   const danger = variant === "danger";
 
+  // --- slice: web app ---
+  // The phone layout of the web app draws dialogs as bottom sheets, and the
+  // system back closes one like any other screen.
+  const sheet = useDialogPresentation() === "sheet";
+  useSheetEntry(sheet, onClose);
+
+  // The overlay closes, the card does not: comparing the two nodes is what
+  // keeps a click that started on a button inside from closing the dialog as
+  // it travels up.
+  const closeOnOverlay = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) onClose();
+  };
+
+  const content = (
+    <>
+      <div className="flex items-start gap-16">
+        <h2 className={cn("flex-1 min-w-0 text-display-md", danger ? "text-fg-danger" : "text-fg")}>
+          {title}
+        </h2>
+        {titleActions ? <div className="flex items-center gap-8 shrink-0">{titleActions}</div> : null}
+      </div>
+      {body ? <p className="text-body-sm text-fg-secondary pt-4">{body}</p> : null}
+      {children}
+      <div className="flex items-center justify-end gap-8 pt-24">{actions}</div>
+    </>
+  );
+
+  if (sheet) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-end justify-center bg-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={closeOnOverlay}
+      >
+        <SheetPanel
+          panelRef={cardRef}
+          tabIndex={-1}
+          onKeyDown={holdFocus}
+          className={cn("px-16 outline-none", danger && "border-line-danger")}
+        >
+          {content}
+        </SheetPanel>
+      </div>
+    );
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-overlay p-24"
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      // The overlay closes, the card does not: comparing the two nodes is what
-      // keeps a click that started on a button inside from closing the dialog
-      // as it travels up.
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+      onClick={closeOnOverlay}
     >
       <div
         ref={cardRef}
@@ -210,15 +255,7 @@ export function Dialog({
           wide === "preview" ? "max-w-[1600px] max-h-[calc(100dvh-48px)] overflow-y-auto" : wide ? "max-w-[720px]" : "max-w-[480px]",
         )}
       >
-        <div className="flex items-start gap-16">
-          <h2 className={cn("flex-1 min-w-0 text-display-md", danger ? "text-fg-danger" : "text-fg")}>
-            {title}
-          </h2>
-          {titleActions ? <div className="flex items-center gap-8 shrink-0">{titleActions}</div> : null}
-        </div>
-        {body ? <p className="text-body-sm text-fg-secondary pt-4">{body}</p> : null}
-        {children}
-        <div className="flex items-center justify-end gap-8 pt-24">{actions}</div>
+        {content}
       </div>
     </div>
   );

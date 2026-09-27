@@ -52,5 +52,21 @@
     "timedOut": "La connexion a pris trop de temps. Réessayez.",
     "expired": "La connexion a expiré. Réessayez.",
     "failed": "La connexion ne s’est pas terminée."
+  },
+  "devices": {
+    "title": "Appareils et sessions",
+    "hint": "Tous les lanceurs et navigateurs connectés à ce compte. Déconnecter un appareil met fin à sa session.",
+    "unnamed": "Appareil sans nom",
+    "lastActive": "Actif {{time}}",
+    "thisDevice": "Cet appareil",
+    "online": "En ligne",
+    "pushOn": "Push activé",
+    "signOut": "Déconnecter",
+    "signOutOthers": "Déconnecter tous les autres appareils",
+    "confirmTitle": "Déconnecter {{name}} ?",
+    "confirmBody": "Cet appareil devra se reconnecter pour voir vos amis et vos discussions.",
+    "confirmOthersTitle": "Déconnecter tous les autres appareils ?",
+    "confirmOthersBody": "Tous les autres lanceurs et navigateurs de ce compte devront se reconnecter.",
+    "failed": "L’appareil n’a pas été déconnecté."
   }
 }

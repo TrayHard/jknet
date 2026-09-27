@@ -1,16 +1,20 @@
 import { Lock, SendHorizontal, Smile } from "lucide-react";
 import {
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type ClipboardEvent,
+  type DragEvent,
   type KeyboardEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
+import { usePlatform } from "../../lib/backend";
 import { fold, peerOf } from "../../lib/chat/conversation";
 import {
   decodeMentions,
@@ -22,7 +26,14 @@ import {
 } from "../../lib/chat/mentions";
 import { CARDS_MAX } from "../../lib/chat/cardDrafts";
 import { cn } from "../../lib/format";
-import type { ChatCard, ChatMessage, ChatStagedFile, Conversation, OnlineUser } from "../../lib/ipc";
+import type {
+  ChatCard,
+  ChatMessage,
+  ChatStagedFile,
+  ChatWebFileOrigin,
+  Conversation,
+  OnlineUser,
+} from "../../lib/ipc";
 import {
   useChatDraft,
   useChatDroppedFiles,
@@ -31,8 +42,9 @@ import {
   useSetChatDraft,
   useStageChatFiles,
 } from "../../lib/queries";
-import { ATTACH_KINDS, AttachMenu, type AttachKind } from "./AttachMenu";
+import { AttachMenu, attachKindsFor, type AttachKind } from "./AttachMenu";
 import { AttachmentTray } from "./AttachmentTray";
+import { ComposerFileSourceContext } from "./ComposerFileSource";
 import { Layer } from "./Layer";
 import { AttachPicker } from "./pickers/AttachPicker";
 import { EmojiPopover } from "./EmojiPopover";
@@ -62,8 +74,6 @@ interface ComposerProps {
 
 /** At most this many files go with one message: the service's limit. */
 const FILES_MAX = 10;
-/** Every kind of the attach menu: the cards slice gave each its picker. */
-const ALL_KINDS: ReadonlySet<AttachKind> = new Set(ATTACH_KINDS);
 
 /**
  * --- slice: chat ---
@@ -95,6 +105,15 @@ export function Composer({
   const stage = useStageChatFiles();
   const dropped = useChatDroppedFiles();
   const ping = useChatTypingPing(conversationId);
+  // --- slice: web app --- a platform without the core's file dialogs picks,
+  // pastes and drops files of the page, which its core stages like a drop.
+  const caps = usePlatform();
+  const fileSource = useContext(ComposerFileSourceContext);
+  const kinds = attachKindsFor(caps);
+  // Every kind listed can act: the cards slice gave each its picker.
+  const available = useMemo<ReadonlySet<AttachKind>>(() => new Set(kinds), [kinds]);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
 
   const [text, setText] = useState("");
   const [picks, setPicks] = useState<MentionPick[]>([]);
@@ -370,7 +389,44 @@ export function Composer({
     }
   };
 
+  // --- slice: web app ---
+  const stageWeb = (files: File[], origin: ChatWebFileOrigin) => {
+    if (files.length === 0) return;
+    setError(null);
+    // The staged files come back as `chat:files-staged`, which the drop
+    // effect above takes into the tray; the answer only carries a refusal.
+    const staging = fileSource ?? ((picked: File[], from: ChatWebFileOrigin) =>
+      stage.web.mutateAsync({ files: picked, origin: from }));
+    staging(files, origin).catch((failure: unknown) => setError(errorText(failure)));
+  };
+
+  const onPickedFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    // The same file may be picked twice in a row.
+    event.target.value = "";
+    stageWeb(files, "file");
+  };
+
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (Array.from(event.dataTransfer.types).includes("Files")) event.preventDefault();
+  };
+
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    const files = Array.from(event.dataTransfer.files);
+    if (files.length === 0) return;
+    event.preventDefault();
+    stageWeb(files, "file");
+  };
+
   const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    if (!caps.nativeDialogs) {
+      // The page reads the pasted files itself; its core strips pictures.
+      const files = Array.from(event.clipboardData.files);
+      if (files.length === 0) return;
+      event.preventDefault();
+      stageWeb(files, "clipboard");
+      return;
+    }
     const hasImage = Array.from(event.clipboardData.items).some((item) => item.type.startsWith("image/"));
     if (!hasImage) return;
     // The core reads the picture off the clipboard itself and strips it.
@@ -382,7 +438,9 @@ export function Composer({
   };
 
   const onAttach = (kind: AttachKind) => {
-    if (kind === "file") {
+    if (!caps.nativeDialogs && (kind === "file" || kind === "photo")) {
+      (kind === "photo" ? photoInput : fileInput).current?.click();
+    } else if (kind === "file") {
       stage.pick.mutate(undefined, {
         onSuccess: (files) => addFiles(files),
         onError: (failure) => setError(errorText(failure)),
@@ -403,7 +461,11 @@ export function Composer({
       : t("composer.placeholderGroup", { name: names.title(conversation) });
 
   return (
-    <div className="relative shrink-0 border-t border-line-subtle">
+    <div
+      className="relative shrink-0 border-t border-line-subtle"
+      onDragOver={caps.nativeDialogs ? undefined : onDragOver}
+      onDrop={caps.nativeDialogs ? undefined : onDrop}
+    >
       {replyTo !== null ? <ReplyBar message={replyTo} onClear={onClearReply} /> : null}
       <AttachmentTray
         files={staged}
@@ -416,7 +478,13 @@ export function Composer({
       />
       <MentionPopover candidates={candidates} active={active} onPick={pick} onHover={setActive} />
       <div className={cn("flex items-end gap-4", dense ? "p-6" : "p-8")}>
-        <AttachMenu available={ALL_KINDS} onPick={onAttach} />
+        <AttachMenu available={available} kinds={kinds} onPick={onAttach} />
+        {caps.nativeDialogs ? null : (
+          <>
+            <input ref={fileInput} type="file" multiple hidden tabIndex={-1} onChange={onPickedFiles} />
+            <input ref={photoInput} type="file" accept="image/*" multiple hidden tabIndex={-1} onChange={onPickedFiles} />
+          </>
+        )}
         <textarea
           ref={field}
           rows={1}

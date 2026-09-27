@@ -66,7 +66,10 @@
     "emoji": "A reaction must be a single emoji.",
     "notHosting": "Your private server is not running on JKNet Online yet.",
     "confirmDanger": "This file can run on your computer. Confirm before you save it.",
-    "confirmLink": "Confirm before you open a link to {{message}}."
+    "confirmLink": "Confirm before you open a link to {{message}}.",
+    "webJoinOff": "The host keeps this server's chat to players in the game.",
+    "catalogDisabled": "This catalog is switched off on JKNet Online right now.",
+    "catalogNotReady": "JKNet Online is still building this catalog. Try again in a few minutes."
   },
   "frontend": {
     "noRuntime": "Tauri runtime is not available",

@@ -8,6 +8,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { SheetPanel, useDialogPresentation, useSheetEntry } from "../ui/DialogPresentation";
+
 /** Which side of the anchor the layer opens on, and which edge it lines up with. */
 export type FloatingPlacement = "top-start" | "top-end" | "bottom-start" | "bottom-end";
 
@@ -43,9 +45,13 @@ export function Floating({ anchor, onClose, placement = "top-end", label, childr
   const [style, setStyle] = useState<CSSProperties>({ visibility: "hidden" });
   const close = useRef(onClose);
   close.current = onClose;
+  // --- slice: web app --- the phone layout of the web app draws the layer
+  // as a bottom sheet: nothing to place, and the system back closes it.
+  const sheet = useDialogPresentation() === "sheet";
+  useSheetEntry(sheet && anchor !== null, onClose);
 
   useLayoutEffect(() => {
-    if (anchor === null) return;
+    if (anchor === null || sheet) return;
     const place = () => {
       const node = layer.current;
       if (node === null) return;
@@ -74,7 +80,7 @@ export function Floating({ anchor, onClose, placement = "top-end", label, childr
       window.removeEventListener("resize", place);
       window.removeEventListener("scroll", place, true);
     };
-  }, [anchor, placement]);
+  }, [anchor, placement, sheet]);
 
   useEffect(() => {
     if (anchor === null) return;
@@ -103,6 +109,18 @@ export function Floating({ anchor, onClose, placement = "top-end", label, childr
   }, [anchor]);
 
   if (anchor === null) return null;
+  if (sheet) {
+    // The scrim is outside the layer, so a press on it closes the layer
+    // through the same listener as a press anywhere else.
+    return createPortal(
+      <div className="fixed inset-0 z-[70] flex items-end bg-overlay">
+        <SheetPanel panelRef={layer} role="dialog" aria-label={label} className="flex flex-col items-center px-8">
+          {children}
+        </SheetPanel>
+      </div>,
+      document.body,
+    );
+  }
   return createPortal(
     <div ref={layer} role="dialog" aria-label={label} style={style} className="z-[70]">
       {children}
