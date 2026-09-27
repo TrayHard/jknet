@@ -20,13 +20,18 @@
  * | what notifies, and how                 | `notify.ts`, `sounds.ts` | `chat/notify.rs` |
  * | search                                 | `search.ts`  | `chat/mod.rs`   |
  * | the wire shapes                        | `wire.ts`    | `online/types.rs` |
+ * | files: staging, upload, cache, save    | `files.ts`, `exif.ts` | `chat/files.rs` |
+ * | cards: building and checking           | `cards.ts`   | `chat/cards.rs` |
+ * | the chats of friends' private servers  | `serverChats.ts` | spec 1.11   |
  *
  * Message history stays in memory, as in the launcher: the service holds
  * it, and a reload reads the sync document again. What must survive a
- * reload — the queue and the drafts — lives in IndexedDB.
+ * reload — the queue, with the staged files it carries, and the drafts —
+ * lives in IndexedDB.
  *
- * Files and cards join through `ChatFiles` and `prepareCards`; the chat of
- * a friend's private server through the router.
+ * Files and cards join this module through `ChatFiles` and `prepareCards`,
+ * which `../index.ts` passes in; the chat of a friend's private server
+ * answers from `serverChats.ts` through the router.
  */
 
 import type {
@@ -86,6 +91,8 @@ export interface ChatFiles {
   drop(handles: string[]): void;
   /** The serializable part of the staged files, for the outbox row. */
   records?(handles: string[]): unknown[];
+  /** The staged files of an outbox row read back after a reload. */
+  restore?(records: unknown[]): void;
 }
 
 /** The page around the core: what it shows, and the two outputs besides events. */
@@ -153,6 +160,8 @@ export interface ChatCore {
   stop(): void;
   /** Whether a message waits to go out: an update waits for it. */
   busy(): boolean;
+  /** Whether a queued message still carries this staged file. */
+  holdsAttachment(handle: string): boolean;
   /** Nothing waits and nothing is on its way: no message, no read marker, no request. */
   idle(): boolean;
   /** Whether a sync document of this account arrived since it signed in. */
@@ -494,6 +503,7 @@ export function createChat(deps: ChatDeps): ChatCore {
       if (outbox.get(key) !== undefined) continue;
       const entry = fromRecord(value, onlineClock());
       if (entry === null) continue;
+      if (Array.isArray(value.files)) deps.files?.restore?.(value.files);
       if (typeof value.firstTryAt === "string") firstTryAt.set(entry.clientId, value.firstTryAt);
       outbox.push(entry);
       conversations.add(entry.conversationId);
@@ -850,6 +860,7 @@ export function createChat(deps: ChatDeps): ChatCore {
     },
 
     busy: () => outbox.busy(),
+    holdsAttachment: (handle) => outbox.holdsAttachment(handle),
     idle: () =>
       inFlight === 0 && readTimer === null && reads.waiting.size === 0 && reads.sending.size === 0 && !outbox.busy(),
     synced: () => syncedOnce,

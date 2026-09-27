@@ -480,6 +480,7 @@
       "version": "{{label}} verzió",
       "size": "{{size}} letöltendő",
       "view": "Megtekintés és telepítés",
+      "viewOnly": "Megtekintés",
       "unavailable": "Ez a bundle már nincs a katalógusban."
     },
     "jkhubMod": {

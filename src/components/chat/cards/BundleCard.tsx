@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
+import { usePlatform } from "../../../lib/backend";
 import { localizedBundleText, useInterfaceLanguage } from "../../../lib/bundleText";
 import { useGameNames } from "../../../lib/game";
 import { useBundle } from "../../../lib/queries";
@@ -26,6 +27,10 @@ import type { CardViewProps } from "./withFields";
  * the size and the likes are today's. **View** opens the record itself, the
  * dialog of the Bundles tab, which is where an install asks for a name and
  * for the components to make.
+ *
+ * --- slice: web app --- a platform without game clients on the machine
+ * (`usePlatform().localFiles`) installs nothing: the button only says
+ * **View**, and the record it opens hides the install.
  */
 export function BundleCardView({ card, fields }: CardViewProps<"bundle">) {
   const { t } = useTranslation("chat");
@@ -36,6 +41,7 @@ export function BundleCardView({ card, fields }: CardViewProps<"bundle">) {
   const language = useInterfaceLanguage();
   const record = useBundle(fields.bundleId);
   const check = useCheckedCard();
+  const caps = usePlatform();
   const [open, setOpen] = useState<string | null>(null);
 
   const details = record.data;
@@ -74,7 +80,7 @@ export function BundleCardView({ card, fields }: CardViewProps<"bundle">) {
               })
             }
           >
-            {t("cards.bundle.view")}
+            {caps.localFiles ? t("cards.bundle.view") : t("cards.bundle.viewOnly")}
           </Button>
         }
         status={

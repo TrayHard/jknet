@@ -71,9 +71,9 @@ async function start(): Promise<void> {
   );
 
   if (!import.meta.env.DEV) {
-    // An update applies by itself only while no message waits to go out; the
-    // staged files of the chat join this answer with the files.
-    void startPwa(() => !core.chat.busy());
+    // An update applies by itself only while no message waits to go out and
+    // no file waits in the composer or on its way up.
+    void startPwa(() => !core.chat.busy() && !core.files.busy());
   }
 }
 

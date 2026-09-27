@@ -480,6 +480,7 @@
       "version": "Version {{label}}",
       "size": "{{size}} zum Herunterladen",
       "view": "Ansehen und installieren",
+      "viewOnly": "Ansehen",
       "unavailable": "Dieses Bundle ist nicht mehr im Katalog."
     },
     "jkhubMod": {

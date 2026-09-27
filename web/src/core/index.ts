@@ -18,13 +18,22 @@
  * | live socket     | `socket.ts`, `lifecycle.ts` |
  * | friends         | `friends.ts`   |
  * | chat            | `chat/`        |
+ * | chat files      | `chat/files.ts`, `chat/exif.ts` |
+ * | cards           | `chat/cards.ts` |
+ * | friends' server chats | `chat/serverChats.ts` |
+ * | catalogs        | `catalogs.ts`  |
  * | one active tab  | `tabs.ts`      |
  */
 
 import type { Backend, BackendEvent, ListenOptions, PlatformCaps } from "../../../src/lib/backend.ts";
-import type { AccountChangeReason, WebDevice } from "../../../src/lib/ipc.ts";
-import { createChat, type ChatCore, type ChatFiles } from "./chat/index.ts";
+import type { AccountChangeReason, ChatMessage, WebDevice } from "../../../src/lib/ipc.ts";
+import { createCatalogs } from "./catalogs.ts";
+import { prepareCards } from "./chat/cards.ts";
+import { createChatFiles, FILE_CACHE, type WebChatFiles } from "./chat/files.ts";
+import { CHAT_EVENTS } from "./chat/frames.ts";
+import { createChat, type ChatCore } from "./chat/index.ts";
 import type { NotifyTexts } from "./chat/notify.ts";
+import { createServerChats, type ServerChats } from "./chat/serverChats.ts";
 import { playSound } from "./chat/sounds.ts";
 import { statusOf } from "./errors.ts";
 import { EventBus } from "./events.ts";
@@ -49,8 +58,11 @@ export const WEB_CAPS: PlatformCaps = Object.freeze({
   serverQuery: false,
 });
 
-/** The file cache of chat downloads; the name carries its version. */
-export const FILE_CACHE_PREFIX = "jknet-files-";
+/**
+ * The file caches of chat downloads, every version of `FILE_CACHE` of
+ * `chat/files.ts`: a sign-out deletes them all.
+ */
+export const FILE_CACHE_PREFIX = FILE_CACHE.slice(0, FILE_CACHE.lastIndexOf("-") + 1);
 
 export interface WebCoreOptions {
   apiBase: string;
@@ -61,8 +73,6 @@ export interface WebCoreOptions {
   origin: string;
   /** The words of the chat's notifications in the language on screen; English without it. */
   texts?: () => NotifyTexts;
-  /** The files of the chat, once they are in the web app. */
-  files?: ChatFiles;
 }
 
 export type FrameHandler = (frame: Frame) => boolean;
@@ -76,6 +86,8 @@ export interface WebCore {
   readonly settings: SettingsCore;
   readonly friends: FriendsCore;
   readonly chat: ChatCore;
+  readonly files: WebChatFiles;
+  readonly serverChats: ServerChats;
   readonly socket: LiveSocket;
   readonly prefs: PrefsStore;
   readonly storage: Storage;
@@ -141,6 +153,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     random: Math.random,
     onFrame: (frame) => {
       if (friends.handleFrame(frame)) return;
+      if (serverChats.handleFrame(frame)) return;
       for (const handler of frameHandlers) {
         if (handler(frame)) return;
       }
@@ -149,6 +162,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     onOpen: () => {
       friends.connected();
       chat.connected();
+      serverChats.connected();
     },
     onStatus: (status) => {
       friends.setLive(status === "open");
@@ -164,6 +178,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     socket.stop();
     friends.stop();
     chat.forget();
+    files.forget();
+    serverChats.stop();
     await storage.wipe();
     await prefs.restoreDevicePrefs();
     await clearBrowserState();
@@ -197,6 +213,19 @@ export function createWebCore(options: WebCoreOptions): WebCore {
 
   const settings = createSettings({ apiBase: http.apiBase, prefs, events, user: () => session.user() });
 
+  // The chat below uploads through the files, and the files ask the chat
+  // which staged file a queued message still holds.
+  const files = createChatFiles({
+    http,
+    events,
+    storage,
+    token: () => session.token(),
+    onUnauthorized: () => void session.expire(),
+    held: (handle) => chat.holdsAttachment(handle),
+  });
+  // A save names the file and warns by what the service said about it.
+  events.on(CHAT_EVENTS.message, (message) => files.remember([message as ChatMessage]));
+
   const chat: ChatCore = createChat({
     http,
     events,
@@ -212,7 +241,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     },
     texts: options.texts ?? (() => ENGLISH_TEXTS),
     openExternal: (url) => backend.openExternal(url),
-    files: options.files,
+    files,
+    prepareCards,
     page: {
       visible: visibleNow,
       online: () => typeof navigator === "undefined" || navigator.onLine !== false,
@@ -221,7 +251,26 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     },
   });
 
-  const invoke = createRouter({ apiBase: http.apiBase, session, settings, friends, chat, stats });
+  const serverChats = createServerChats({
+    http,
+    events,
+    signedIn: () => session.signedIn(),
+    keep: (conversation) => chat.keep(conversation),
+  });
+
+  const catalogs = createCatalogs({ http, signedIn: () => session.signedIn() });
+
+  const invoke = createRouter({
+    apiBase: http.apiBase,
+    session,
+    settings,
+    friends,
+    chat,
+    files,
+    serverChats,
+    catalogs,
+    stats,
+  });
 
   // Answers and events leave the core as copies, the way the launcher's
   // core serializes them: a screen that keeps an answer in its cache must
@@ -268,6 +317,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     settings,
     friends,
     chat,
+    files,
+    serverChats,
     socket,
     prefs,
     storage,

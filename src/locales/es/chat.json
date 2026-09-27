@@ -499,6 +499,7 @@
       "version": "versión {{label}}",
       "size": "{{size}} para descargar",
       "view": "Ver e instalar",
+      "viewOnly": "Ver",
       "unavailable": "Este bundle ya no está en el catálogo."
     },
     "jkhubMod": {
