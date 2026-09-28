@@ -3,10 +3,14 @@ import { fileURLToPath, URL } from "node:url";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
-/** The API every production build talks to; `.env.development` and `.env.e2e` point elsewhere. */
+/** The API every production build talks to. Local modes use their test services. */
 const DEFAULT_API = "https://api.jknet.app";
+const MODE_APIS: Readonly<Record<string, string>> = {
+  development: "http://127.0.0.1:8787",
+  e2e: "http://127.0.0.1:8788",
+};
 
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
 
@@ -95,14 +99,12 @@ function moduleMap(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, webRoot, "VITE_");
-  const api = env.VITE_JKNET_API || DEFAULT_API;
+  const api = MODE_APIS[mode] ?? DEFAULT_API;
   const info = { commit: commit(), builtAt: new Date().toISOString() };
 
   return {
     root: webRoot,
     plugins: [react(), tailwindcss(), buildInfo(info), moduleMap()],
-    envDir: webRoot,
     resolve: {
       alias: { "@app": fileURLToPath(new URL("../src", import.meta.url)) },
     },
