@@ -161,5 +161,13 @@
     "signOutText": "Signs this browser out. Your account and your friends stay.",
     "deleteText": "Removes the account, your friends, your invites and your chats from the service.",
     "deleteBody": "Your account, your friends list, your invites and your chats are removed from the service. This cannot be undone."
+  },
+  "catalog": {
+    "game": "Game",
+    "playNote": "To play here, open JKNet on your PC.",
+    "installNote": "Install from JKNet on your PC.",
+    "communityLead": "Open a server to read its page or share it in a chat. Join from JKNet on your PC.",
+    "bundlesLead": "Ready-made client sets from JKNet Online. Install them in JKNet on your PC.",
+    "bundlesEmpty": "A bundle is a set of clients another player put together: engines, files and settings. Players publish them from JKNet on their PC."
   }
 }

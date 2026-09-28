@@ -161,5 +161,13 @@
     "signOutText": "Déconnecte ce navigateur. Votre compte et vos amis restent.",
     "deleteText": "Supprime du service le compte, vos amis, vos invitations et vos discussions.",
     "deleteBody": "Votre compte, votre liste d'amis, vos invitations et vos discussions sont supprimés du service. Cette action est irréversible."
+  },
+  "catalog": {
+    "game": "Jeu",
+    "playNote": "Pour jouer ici, ouvrez JKNet sur votre PC.",
+    "installNote": "Installez-le depuis JKNet sur votre PC.",
+    "communityLead": "Ouvrez un serveur pour lire sa page ou le partager dans une discussion. Rejoignez-le depuis JKNet sur votre PC.",
+    "bundlesLead": "Des ensembles de clients prêts à l’emploi de JKNet Online. Installez-les dans JKNet sur votre PC.",
+    "bundlesEmpty": "Un bundle est un ensemble de clients préparé par un autre joueur : moteurs, fichiers et réglages. Les joueurs les publient depuis JKNet sur leur PC."
   }
 }

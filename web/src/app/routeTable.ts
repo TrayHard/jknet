@@ -14,6 +14,9 @@
  * | `/friends/:userId`          | list, detail          | `/friends`           |
  * | `/community`, `/servers`, `/bundles`, `/jkhub` | list | —                  |
  * | their details               | list, detail          | the section root     |
+ *
+ * A bundle's page is `/bundles/:bundleId`: the service reads a bundle by its
+ * id, not by its slug.
  * | `/settings`                 | list (wide: `/settings/account`) | —         |
  * | `/settings/<page>`          | list, detail          | `/settings`          |
  */
@@ -88,7 +91,7 @@ export const ROUTES: readonly RouteSpec[] = [
   { path: "/servers", section: "servers", list: "serverList" },
   { path: "/servers/:game/:address", section: "servers", list: "serverList", detail: "serverDetails", parent: "/servers" },
   { path: "/bundles", section: "bundles", list: "bundles" },
-  { path: "/bundles/:slug", section: "bundles", list: "bundles", detail: "bundleDetails", parent: "/bundles" },
+  { path: "/bundles/:bundleId", section: "bundles", list: "bundles", detail: "bundleDetails", parent: "/bundles" },
   { path: "/jkhub", section: "jkhub", list: "jkhub" },
   { path: "/jkhub/:game/:fileId", section: "jkhub", list: "jkhub", detail: "jkhubDetails", parent: "/jkhub" },
   { path: "/settings", section: "settings", list: "settings", defaultDetail: "/settings/account" },

@@ -50,7 +50,7 @@ test("the parents of the table's routes", () => {
     ["/friends/01J8", "/friends"],
     ["/servers/jo/203.0.113.5%3A28070", "/servers"],
     ["/jkhub/ja/1234", "/jkhub"],
-    ["/bundles/clan-pack", "/bundles"],
+    ["/bundles/01J9Z3M2K4V8Q6R5T7W9X1Y2Z3", "/bundles"],
     ["/community/42", "/community"],
     ["/settings/sessions", "/settings"],
     ["/chats", undefined],

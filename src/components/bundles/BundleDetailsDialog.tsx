@@ -15,7 +15,7 @@ import {
 import { bundleCard } from "../../lib/chat/cardDrafts";
 import { useOpenClientWindow } from "../../lib/clientWindow";
 import { cn } from "../../lib/format";
-import type { BundleVersion, BundleVersionSummary } from "../../lib/ipc";
+import type { BundleVersion, BundleVersionSummary, ChatCard } from "../../lib/ipc";
 import {
   useAccountState,
   useBundle,
@@ -38,42 +38,20 @@ interface BundleDetailsDialogProps {
 }
 
 /**
- * --- slice: bundles ---
+ * --- slice: web app ---
  *
- * One bundle in full, and the way to install it.
- *
- * A wide dialog, as the JKHub record is: the record of a bundle is a list of
- * components, each a list of files with a badge each, and a third column
- * beside the grid would leave every column too narrow to read. The install
- * lives at the bottom of the body — a base name, a tick per component, a
- * word of trust when the bundle carries executables — and its bar and its
- * outcome are read out of `bundleJobs`, so closing the dialog and opening it
- * again shows the install where it got to.
+ * The record of one bundle as a screen reads it: the record itself, the
+ * language its text is shown in and the version on screen, with the ways to
+ * pick another. The dialog below holds one, and so does the web app's page
+ * of a bundle, which draws the same body inline instead of in a dialog.
  */
-export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogProps) {
+export function useBundleRecord(bundleId: string) {
   const { t } = useTranslation("bundles");
-  const { t: tCommon } = useTranslation("common");
-  const errorText = useErrorText();
-  const format = useFormat();
-  const basedOn = useBasedOnLine();
-
   const record = useBundle(bundleId);
-  const clients = useClients();
-  const account = useAccountState();
-  const like = useLikeBundle();
-  const install = useInstallBundle();
-  const openClientWindow = useOpenClientWindow();
-  // --- slice: chat cards --- **Share to chat**: the bundle as a card.
-  const share = useShareDialog();
-  const { t: tChat } = useTranslation("chat");
-  // --- slice: web app --- the web app browses the catalogue and shares from
-  // it; installing and the client windows stay with the launcher.
-  const caps = usePlatform();
 
   // The version on screen. `null` is the latest one, which came with the
   // record; another one is fetched with its manifest when picked.
   const [pickedVersionId, setPickedVersionId] = useState<string | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
 
   const details = record.data;
   const latest = details?.latest ?? null;
@@ -99,6 +77,119 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
     pickedVersionId === null || pickedVersionId === latest?.id
       ? latest
       : (picked.data ?? null);
+
+  const title =
+    text?.name ?? (record.isLoading ? t("details.loadingTitle") : t("details.fallbackTitle"));
+
+  return {
+    bundleId,
+    record,
+    details,
+    latest,
+    text,
+    title,
+    language,
+    languages,
+    pickLanguage: setPickedLanguage,
+    picked,
+    version,
+    pickVersion: setPickedVersionId,
+  };
+}
+
+/** What `useBundleRecord` answers. */
+export type BundleRecord = ReturnType<typeof useBundleRecord>;
+
+/** **Share to chat** of a record: the bundle as a card, `null` until the record is in. */
+export function bundleRecordCard(view: BundleRecord): ChatCard | null {
+  if (!view.details || !view.text) return null;
+  return bundleCard({ id: view.details.id, slug: view.details.slug, name: view.text.name, game: view.details.game });
+}
+
+/**
+ * --- slice: bundles ---
+ *
+ * One bundle in full, and the way to install it.
+ *
+ * A wide dialog, as the JKHub record is: the record of a bundle is a list of
+ * components, each a list of files with a badge each, and a third column
+ * beside the grid would leave every column too narrow to read. The install
+ * lives at the bottom of the body — a base name, a tick per component, a
+ * word of trust when the bundle carries executables — and its bar and its
+ * outcome are read out of `bundleJobs`, so closing the dialog and opening it
+ * again shows the install where it got to.
+ */
+export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogProps) {
+  const { t: tCommon } = useTranslation("common");
+  const view = useBundleRecord(bundleId);
+  // --- slice: chat cards --- **Share to chat**: the bundle as a card.
+  const share = useShareDialog();
+  const { t: tChat } = useTranslation("chat");
+  const card = bundleRecordCard(view);
+
+  return (
+    <>
+      <Dialog
+        title={view.title}
+        wide
+        onClose={onClose}
+        actions={
+          <>
+            {share.available && card !== null ? (
+              <Button
+                variant="ghost"
+                icon={<Share2 size={16} />}
+                onClick={() => share.open({ kind: "card", card })}
+              >
+                {tChat("share.action")}
+              </Button>
+            ) : null}
+            <Button variant="ghost" onClick={onClose}>
+              {tCommon("actions.close")}
+            </Button>
+          </>
+        }
+      >
+        <BundleDetailsBody view={view} contentClassName="pt-16 max-h-[60vh] overflow-y-auto pr-4" />
+      </Dialog>
+      {share.dialog}
+    </>
+  );
+}
+
+/**
+ * The body of a bundle's record: the head, the description, the components
+ * and their files, the versions and, where the platform has game clients,
+ * the install.
+ *
+ * --- slice: web app --- the web app browses the catalogue and shares from
+ * it; installing, the client windows and a look inside a file of the store
+ * stay with the launcher, so a platform without local files gets the
+ * manifest to read and no file actions.
+ */
+export function BundleDetailsBody({
+  view,
+  contentClassName,
+}: {
+  view: BundleRecord;
+  /** Added to the column of the record: the dialog bounds its height and scrolls it. */
+  contentClassName?: string;
+}) {
+  const { t } = useTranslation("bundles");
+  const { t: tCommon } = useTranslation("common");
+  const errorText = useErrorText();
+  const format = useFormat();
+  const basedOn = useBasedOnLine();
+
+  const { bundleId, record, details, latest, text, language, languages, picked, version } = view;
+  const clients = useClients();
+  const account = useAccountState();
+  const like = useLikeBundle();
+  const install = useInstallBundle();
+  const openClientWindow = useOpenClientWindow();
+  const caps = usePlatform();
+
+  const [failure, setFailure] = useState<string | null>(null);
   const job = useBundleInstallJob(version ? installJobKey(bundleId, version.id) : null);
 
   const signedIn = account.data?.onlineSignedIn === true;
@@ -129,9 +220,6 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
     ) ||
     (version?.manifest.shared.files ?? []).some((file) => isExecutable(file.kind));
 
-  const title =
-    text?.name ?? (record.isLoading ? t("details.loadingTitle") : t("details.fallbackTitle"));
-
   const runInstall = (
     baseName: string,
     componentIds: string[],
@@ -158,217 +246,189 @@ export function BundleDetailsDialog({ bundleId, onClose }: BundleDetailsDialogPr
 
   return (
     <>
-      <Dialog
-        title={title}
-        wide
-        onClose={onClose}
-        actions={
-          <>
-            {share.available && details && text ? (
-              <Button
-                variant="ghost"
-                icon={<Share2 size={16} />}
-                onClick={() =>
-                  share.open({
-                    kind: "card",
-                    card: bundleCard({ id: details.id, slug: details.slug, name: text.name, game: details.game }),
-                  })
-                }
-              >
-                {tChat("share.action")}
-              </Button>
+      {record.error ? (
+        <p role="alert" className="text-body-sm text-fg-danger pt-12">
+          {errorText(record.error)}
+        </p>
+      ) : null}
+      {failure ? (
+        <p role="alert" className="text-body-sm text-fg-danger pt-12">
+          {failure}
+        </p>
+      ) : null}
+
+      {details && text ? (
+        <div className={cn("flex flex-col gap-16", contentClassName)}>
+          {/* Head: who, which version, when; the languages; the engines; the counters; the tags; the links. */}
+          <div className="flex flex-col gap-8">
+            <div className="flex flex-wrap items-center gap-8 text-body-sm text-fg-muted">
+              <Avatar name={details.owner?.displayName ?? null} src={details.owner?.avatarUrl} size="sm" />
+              <span className="text-fg-secondary">
+                {details.owner?.displayName ?? t("card.ownerUnknown")}
+              </span>
+              {version ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{t("details.version", { label: version.label })}</span>
+                </>
+              ) : null}
+              {version?.publishedAt ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{t("details.published", { date: format.date(version.publishedAt) })}</span>
+                </>
+              ) : null}
+              {/* The switch stands only on a bundle with a translation. */}
+              <LanguageSwitch languages={languages} value={language} onChange={view.pickLanguage} className="ml-auto" />
+            </div>
+            {version && version.components.length > 0 ? (
+              <p className="text-body-sm text-fg-secondary">
+                {t("card.basedOn", { engines: basedOn(version.components) })}
+              </p>
             ) : null}
-            <Button variant="ghost" onClick={onClose}>
-              {tCommon("actions.close")}
-            </Button>
-          </>
-        }
-      >
-        {record.error ? (
-          <p role="alert" className="text-body-sm text-fg-danger pt-12">
-            {errorText(record.error)}
-          </p>
-        ) : null}
-        {failure ? (
-          <p role="alert" className="text-body-sm text-fg-danger pt-12">
-            {failure}
-          </p>
-        ) : null}
 
-        {details && text ? (
-          <div className="flex flex-col gap-16 pt-16 max-h-[60vh] overflow-y-auto pr-4">
-            {/* Head: who, which version, when; the languages; the engines; the counters; the tags; the links. */}
-            <div className="flex flex-col gap-8">
-              <div className="flex flex-wrap items-center gap-8 text-body-sm text-fg-muted">
-                <Avatar name={details.owner?.displayName ?? null} src={details.owner?.avatarUrl} size="sm" />
-                <span className="text-fg-secondary">
-                  {details.owner?.displayName ?? t("card.ownerUnknown")}
-                </span>
-                {version ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>{t("details.version", { label: version.label })}</span>
-                  </>
-                ) : null}
-                {version?.publishedAt ? (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>{t("details.published", { date: format.date(version.publishedAt) })}</span>
-                  </>
-                ) : null}
-                {/* The switch stands only on a bundle with a translation. */}
-                <LanguageSwitch languages={languages} value={language} onChange={setPickedLanguage} className="ml-auto" />
-              </div>
-              {version && version.components.length > 0 ? (
-                <p className="text-body-sm text-fg-secondary">
-                  {t("card.basedOn", { engines: basedOn(version.components) })}
-                </p>
+            <div className="flex flex-wrap items-center gap-8">
+              <button
+                type="button"
+                onClick={toggleLike}
+                disabled={!signedIn || like.isPending}
+                aria-pressed={details.likedByMe}
+                aria-label={details.likedByMe ? t("details.unlike") : t("details.like")}
+                title={signedIn ? (details.likedByMe ? t("details.unlike") : t("details.like")) : t("details.likeSignIn")}
+                className={cn(
+                  "inline-flex items-center gap-6 h-28 px-10 rounded-sm border select-none",
+                  "text-body-sm-medium transition-colors duration-150",
+                  "disabled:cursor-not-allowed disabled:text-fg-disabled",
+                  details.likedByMe
+                    ? "border-line-accent bg-accent-subtle text-fg-accent"
+                    : "border-line text-fg-secondary hover:bg-surface-hover cursor-pointer",
+                )}
+              >
+                <Heart size={14} fill={details.likedByMe ? "currentColor" : "none"} aria-hidden />
+                {t("details.likes", { count: details.likes })}
+              </button>
+              <span className="inline-flex items-center gap-4 text-body-sm text-fg-muted">
+                <Download size={14} aria-hidden />
+                {t("details.installs", { count: details.installs })}
+              </span>
+              {installedClients.length > 0 ? (
+                <Badge tone="success" icon={<Check size={12} />}>
+                  {t("card.installed")}
+                </Badge>
               ) : null}
-
-              <div className="flex flex-wrap items-center gap-8">
-                <button
-                  type="button"
-                  onClick={toggleLike}
-                  disabled={!signedIn || like.isPending}
-                  aria-pressed={details.likedByMe}
-                  aria-label={details.likedByMe ? t("details.unlike") : t("details.like")}
-                  title={signedIn ? (details.likedByMe ? t("details.unlike") : t("details.like")) : t("details.likeSignIn")}
-                  className={cn(
-                    "inline-flex items-center gap-6 h-28 px-10 rounded-sm border select-none",
-                    "text-body-sm-medium transition-colors duration-150",
-                    "disabled:cursor-not-allowed disabled:text-fg-disabled",
-                    details.likedByMe
-                      ? "border-line-accent bg-accent-subtle text-fg-accent"
-                      : "border-line text-fg-secondary hover:bg-surface-hover cursor-pointer",
-                  )}
-                >
-                  <Heart size={14} fill={details.likedByMe ? "currentColor" : "none"} aria-hidden />
-                  {t("details.likes", { count: details.likes })}
-                </button>
-                <span className="inline-flex items-center gap-4 text-body-sm text-fg-muted">
-                  <Download size={14} aria-hidden />
-                  {t("details.installs", { count: details.installs })}
-                </span>
-                {installedClients.length > 0 ? (
-                  <Badge tone="success" icon={<Check size={12} />}>
-                    {t("card.installed")}
-                  </Badge>
-                ) : null}
-                {details.featured ? (
-                  <Badge tone="accent" icon={<Star size={12} />}>
-                    {t("card.featured")}
-                  </Badge>
-                ) : null}
-                {hasExecutables ? (
-                  <Badge tone="warm" icon={<ShieldAlert size={12} />}>
-                    {t("card.executables")}
-                  </Badge>
-                ) : null}
-              </div>
-
-              {details.tags.length > 0 ? (
-                <div className="flex flex-wrap gap-6">
-                  {details.tags.map((tag) => (
-                    <Badge key={tag} tone="neutral">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
+              {details.featured ? (
+                <Badge tone="accent" icon={<Star size={12} />}>
+                  {t("card.featured")}
+                </Badge>
               ) : null}
-
-              {details.website || details.discord ? (
-                <div className="flex flex-wrap items-center gap-16 text-body-sm">
-                  {details.website ? (
-                    <ExternalAnchor href={details.website} className="text-fg-accent">
-                      <Globe size={14} aria-hidden />
-                      {t("details.website")}
-                    </ExternalAnchor>
-                  ) : null}
-                  {details.discord ? (
-                    <ExternalAnchor href={details.discord} className="text-fg-accent">
-                      <MessageCircle size={14} aria-hidden />
-                      {t("details.discord")}
-                    </ExternalAnchor>
-                  ) : null}
-                </div>
+              {hasExecutables ? (
+                <Badge tone="warm" icon={<ShieldAlert size={12} />}>
+                  {t("card.executables")}
+                </Badge>
               ) : null}
             </div>
 
-            {/* The description in the language picked, as the author wrote it in
-                Markdown; the summary stands in for an empty one. Keyed by the
-                language so a switch draws the other text from the top. */}
-            <MarkdownView
-              key={language}
-              markdown={text.description}
-              empty={
-                text.summary.trim() !== "" ? (
-                  <p className="text-body-sm text-fg-secondary">{text.summary}</p>
-                ) : (
-                  <p className="text-body-sm text-fg-muted">{t("details.noDescription")}</p>
-                )
-              }
-            />
-
-            {/* Components, shared files, shared configs. */}
-            {version === null ? (
-              <p className="text-body-sm text-fg-muted">
-                {picked.error ? errorText(picked.error) : tCommon("states.loading")}
-              </p>
-            ) : (
-              <BundleManifestView
-                manifest={version.manifest}
-                engineKnown={engineKnown}
-                source={{ kind: "bundle", bundleId, versionId: version.id }}
-              />
-            )}
-
-            {/* Versions */}
-            {details.versions.length > 0 ? (
-              <Section heading={t("details.versions")}>
-                <ul className="flex flex-col divide-y divide-line-subtle rounded-md border border-line-subtle">
-                  {details.versions.map((entry) => (
-                    <VersionRow
-                      key={entry.id}
-                      version={entry}
-                      selected={entry.id === (version?.id ?? latest?.id)}
-                      onSelect={() => setPickedVersionId(entry.id)}
-                    />
-                  ))}
-                </ul>
-                {picked.error ? (
-                  <p className="text-body-sm text-fg-danger">{errorText(picked.error)}</p>
-                ) : null}
-              </Section>
+            {details.tags.length > 0 ? (
+              <div className="flex flex-wrap gap-6">
+                {details.tags.map((tag) => (
+                  <Badge key={tag} tone="neutral">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
             ) : null}
 
-            {/* Install: a platform without game clients on the machine installs nothing. */}
-            {caps.localFiles ? (
-              <Section heading={t("details.install.heading")}>
-                {version === null ? (
-                  <p className="text-body-sm text-fg-muted">{t("details.install.noVersion")}</p>
-                ) : (
-                  <BundleInstallForm
-                    key={version.id}
-                    components={components}
-                    defaultName={text.name}
-                    hasExecutables={hasExecutables}
-                    job={job}
-                    installedClients={installedClients}
-                    onInstall={runInstall}
-                    onOpenClient={(clientId) => {
-                      setFailure(null);
-                      openClientWindow(clientId).catch((e: unknown) => setFailure(errorText(e)));
-                    }}
-                  />
-                )}
-              </Section>
+            {details.website || details.discord ? (
+              <div className="flex flex-wrap items-center gap-16 text-body-sm">
+                {details.website ? (
+                  <ExternalAnchor href={details.website} className="text-fg-accent">
+                    <Globe size={14} aria-hidden />
+                    {t("details.website")}
+                  </ExternalAnchor>
+                ) : null}
+                {details.discord ? (
+                  <ExternalAnchor href={details.discord} className="text-fg-accent">
+                    <MessageCircle size={14} aria-hidden />
+                    {t("details.discord")}
+                  </ExternalAnchor>
+                ) : null}
+              </div>
             ) : null}
           </div>
-        ) : record.isLoading ? (
-          <p className="text-body-sm text-fg-muted pt-16">{tCommon("states.loading")}</p>
-        ) : null}
-      </Dialog>
-      {share.dialog}
+
+          {/* The description in the language picked, as the author wrote it in
+              Markdown; the summary stands in for an empty one. Keyed by the
+              language so a switch draws the other text from the top. */}
+          <MarkdownView
+            key={language}
+            markdown={text.description}
+            empty={
+              text.summary.trim() !== "" ? (
+                <p className="text-body-sm text-fg-secondary">{text.summary}</p>
+              ) : (
+                <p className="text-body-sm text-fg-muted">{t("details.noDescription")}</p>
+              )
+            }
+          />
+
+          {/* Components, shared files, shared configs. */}
+          {version === null ? (
+            <p className="text-body-sm text-fg-muted">
+              {picked.error ? errorText(picked.error) : tCommon("states.loading")}
+            </p>
+          ) : (
+            <BundleManifestView
+              manifest={version.manifest}
+              engineKnown={engineKnown}
+              source={caps.localFiles ? { kind: "bundle", bundleId, versionId: version.id } : undefined}
+            />
+          )}
+
+          {/* Versions */}
+          {details.versions.length > 0 ? (
+            <Section heading={t("details.versions")}>
+              <ul className="flex flex-col divide-y divide-line-subtle rounded-md border border-line-subtle">
+                {details.versions.map((entry) => (
+                  <VersionRow
+                    key={entry.id}
+                    version={entry}
+                    selected={entry.id === (version?.id ?? latest?.id)}
+                    onSelect={() => view.pickVersion(entry.id)}
+                  />
+                ))}
+              </ul>
+              {picked.error ? (
+                <p className="text-body-sm text-fg-danger">{errorText(picked.error)}</p>
+              ) : null}
+            </Section>
+          ) : null}
+
+          {/* Install: a platform without game clients on the machine installs nothing. */}
+          {caps.localFiles ? (
+            <Section heading={t("details.install.heading")}>
+              {version === null ? (
+                <p className="text-body-sm text-fg-muted">{t("details.install.noVersion")}</p>
+              ) : (
+                <BundleInstallForm
+                  key={version.id}
+                  components={components}
+                  defaultName={text.name}
+                  hasExecutables={hasExecutables}
+                  job={job}
+                  installedClients={installedClients}
+                  onInstall={runInstall}
+                  onOpenClient={(clientId) => {
+                    setFailure(null);
+                    openClientWindow(clientId).catch((e: unknown) => setFailure(errorText(e)));
+                  }}
+                />
+              )}
+            </Section>
+          ) : null}
+        </div>
+      ) : record.isLoading ? (
+        <p className="text-body-sm text-fg-muted pt-16">{tCommon("states.loading")}</p>
+      ) : null}
     </>
   );
 }

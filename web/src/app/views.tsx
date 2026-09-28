@@ -13,7 +13,11 @@ import type { RouteView } from "./layouts/types.ts";
 import { parentOf, type RouteSpec, type ScreenId } from "./routeTable.ts";
 import { AboutScreen } from "./screens/AboutScreen.tsx";
 import { AccountScreen } from "./screens/AccountScreen.tsx";
+import { BundleDetailsScreen } from "./screens/BundleDetailsScreen.tsx";
+import { BundlesScreen } from "./screens/BundlesScreen.tsx";
 import { ChatListScreen } from "./screens/ChatListScreen.tsx";
+import { CommunityDetailsScreen } from "./screens/CommunityDetailsScreen.tsx";
+import { CommunityScreen } from "./screens/CommunityScreen.tsx";
 import { FriendDetailsScreen, FriendTitle } from "./screens/FriendDetailsScreen.tsx";
 import { FriendsScreen } from "./screens/FriendsScreen.tsx";
 import { GroupInfoScreen } from "./screens/GroupInfoScreen.tsx";
@@ -46,6 +50,14 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
       return <RequestsScreen />;
     case "friendDetails":
       return <FriendDetailsScreen key={params.userId} userId={params.userId ?? ""} />;
+    case "community":
+      return <CommunityScreen selectedId={params.serverId} />;
+    case "communityDetails":
+      return <CommunityDetailsScreen key={params.serverId} serverId={params.serverId ?? ""} />;
+    case "bundles":
+      return <BundlesScreen selectedId={params.bundleId} />;
+    case "bundleDetails":
+      return <BundleDetailsScreen key={params.bundleId} bundleId={params.bundleId ?? ""} />;
     case "settings":
       return <SettingsScreen current={spec.path.split("/")[2]} />;
     case "account":

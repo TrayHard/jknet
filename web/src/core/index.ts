@@ -258,7 +258,11 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     keep: (conversation) => chat.keep(conversation),
   });
 
-  const catalogs = createCatalogs({ http, signedIn: () => session.signedIn() });
+  const catalogs = createCatalogs({
+    http,
+    signedIn: () => session.signedIn(),
+    activeGame: () => settings.get().activeGame,
+  });
 
   const invoke = createRouter({
     apiBase: http.apiBase,

@@ -24,6 +24,7 @@
 .community-tabs button[aria-pressed=true] { color:var(--cm-accent); border-color:var(--cm-accent); }
 .community-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:18px; }
 .community-app .community-card { background:var(--cm-panel); padding:22px; display:flex; flex-direction:column; align-items:flex-start; text-align:left; gap:10px; border-radius:12px; }
+.community-app .community-card[aria-current=true] { border-color:var(--cm-accent); }
 .community-card strong { font-size:19px; overflow-wrap:anywhere; max-width:100%; }
 .community-card-icon { width:46px; height:46px; display:grid; place-items:center; color:var(--cm-accent); background:#233540; border-radius:10px; margin-bottom:4px; }
 .community-card-game { font-size:11px; color:var(--cm-muted); text-transform:uppercase; letter-spacing:1px; }

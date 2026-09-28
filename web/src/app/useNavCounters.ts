@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
 
+import { useActiveGame } from "../../../src/lib/game.ts";
 import { chatIpc, type ChatStateView } from "../../../src/lib/ipc.ts";
 import { chatKeys, useFriendsState } from "../../../src/lib/queries.ts";
+import { useCatalogCount } from "./catalog/counts.ts";
 import type { Section } from "./routeTable.ts";
 
 export interface NavCounter {
@@ -25,8 +27,10 @@ export interface NavCounters {
  *
  * A badge asks for attention: chats with unread messages (`@` when one of
  * them mentions me), incoming friend requests and live server invites. A
- * muted count only informs: friends online. A catalog's count appears once
- * its screen has loaded the list: no request is ever made for a counter.
+ * muted count only informs: friends online, the community servers, the
+ * bundles of the active game. A catalog's count appears once its screen has
+ * loaded the list (`catalog/counts.ts`): no request is ever made for a
+ * counter.
  *
  * The chat state is read from the query cache and never fetched here: the
  * chat's own provider loads and keeps it.
@@ -38,6 +42,9 @@ export function useNavCounters(): NavCounters {
     enabled: false,
   }).data;
   const friends = useFriendsState().data;
+  const game = useActiveGame();
+  const community = useCatalogCount("community");
+  const bundles = useCatalogCount(`bundles:${game}`);
 
   return useMemo(() => {
     const bySection: Partial<Record<Section, NavCounter>> = {};
@@ -64,12 +71,15 @@ export function useNavCounters(): NavCounters {
       bySection.friends = asks > 0 ? { badge: asks } : { count: online };
     }
 
+    if (community !== undefined) bySection.community = { count: community };
+    if (bundles !== undefined) bySection.bundles = { count: bundles };
+
     return {
       bySection,
       unreadChats,
       attention: bySection.chats?.badge !== undefined || bySection.friends?.badge !== undefined,
     };
-  }, [chat, friends]);
+  }, [chat, friends, community, bundles]);
 }
 
 /**

@@ -161,5 +161,13 @@
     "signOutText": "Kijelentkezteti ezt a böngészőt. A fiókod és a barátaid megmaradnak.",
     "deleteText": "Törli a szolgáltatásból a fiókot, a barátaidat, a meghívásaidat és a csevegéseidet.",
     "deleteBody": "A fiókod, a barátlistád, a meghívásaid és a csevegéseid törlődnek a szolgáltatásból. Ez nem vonható vissza."
+  },
+  "catalog": {
+    "game": "Játék",
+    "playNote": "Ha itt szeretne játszani, nyissa meg a JKNetet a számítógépén.",
+    "installNote": "Telepítse a számítógépen futó JKNetből.",
+    "communityLead": "Nyisson meg egy szervert, hogy elolvassa az oldalát, vagy megossza egy csevegésben. Csatlakozni a számítógépen futó JKNetből tud.",
+    "bundlesLead": "Kész kliensösszeállítások a JKNet Online-ról. Telepítse őket a számítógépen futó JKNetben.",
+    "bundlesEmpty": "A bundle egy másik játékos által összeállított klienskészlet: motorok, fájlok és beállítások. A játékosok a számítógépen futó JKNetből teszik közzé."
   }
 }

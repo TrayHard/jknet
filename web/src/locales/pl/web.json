@@ -161,5 +161,13 @@
     "signOutText": "Wylogowuje tę przeglądarkę. Konto i znajomi zostają.",
     "deleteText": "Usuwa z usługi konto, twoich znajomych, zaproszenia i czaty.",
     "deleteBody": "Twoje konto, lista znajomych, zaproszenia i czaty zostaną usunięte z usługi. Tego nie można cofnąć."
+  },
+  "catalog": {
+    "game": "Gra",
+    "playNote": "Aby tu zagrać, otwórz JKNet na komputerze.",
+    "installNote": "Instaluj z JKNet na komputerze.",
+    "communityLead": "Otwórz serwer, aby przeczytać jego stronę lub udostępnić go na czacie. Dołączaj z JKNet na komputerze.",
+    "bundlesLead": "Gotowe zestawy klientów z JKNet Online. Instaluj je w JKNet na komputerze.",
+    "bundlesEmpty": "Bundle to zestaw klientów przygotowany przez innego gracza: silniki, pliki i ustawienia. Gracze publikują je z JKNet na komputerze."
   }
 }

@@ -5,9 +5,9 @@
  * wrappers send. Three kinds of answer:
  *
  * - implemented: the account, the settings, the friends, the chat with its
- *   files and cards, the chats of friends' servers and the bundle record a
- *   card draws; the other catalogs, push and the sessions join as their
- *   slices land;
+ *   files and cards, the chats of friends' servers, and the reads of the
+ *   community servers and the bundles (plus a bundle's like); the server
+ *   list, JKHub, push and the sessions join as their slices land;
  * - neutral: read-only launcher state whose empty answer is true in a
  *   browser (`neutral.ts`), counted in `stats.neutral`;
  * - refused with `needs_launcher`: anything that needs the game, local files
@@ -213,8 +213,17 @@ export function createRouter(deps: RouterDeps): CommandRouter {
         return serverChats.join(text(args, "hostUserId"), text(args, "sessionId"));
 
       // -- Catalogs -------------------------------------------------------------
+      case "community_request":
+        return catalogs.community(text(args, "method"), text(args, "path"));
+      case "list_bundles":
+        return catalogs.bundles(args.query);
       case "get_bundle":
         return catalogs.bundle(text(args, "bundleId"));
+      case "get_bundle_version":
+        return catalogs.version(text(args, "bundleId"), text(args, "versionId"));
+      case "like_bundle":
+        requireAccount();
+        return catalogs.like(text(args, "bundleId"), args.liked === true);
 
       default: {
         const neutral = neutralAnswer(command, args);

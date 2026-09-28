@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useFormat } from "../../i18n/useFormat";
 import { bundleLanguages, localizedBundleText, useInterfaceLanguage } from "../../lib/bundleText";
+import { cn } from "../../lib/format";
 import type { BundleCard as BundleCardData } from "../../lib/ipc";
 import { EngineLogo } from "../EngineLogo";
 import { Avatar, Badge } from "../ui";
@@ -14,6 +15,8 @@ interface BundleCardProps {
   /** True when a client of this machine was installed from the bundle. */
   installed: boolean;
   onOpen: () => void;
+  /** --- slice: web app --- the bundle whose page is open beside the list. */
+  selected?: boolean;
 }
 
 /**
@@ -32,7 +35,7 @@ interface BundleCardProps {
  * The **Preview** section of the editor draws the same card out of a draft,
  * so an author sees what the catalogue will show.
  */
-export function BundleCard({ card, installed, onOpen }: BundleCardProps) {
+export function BundleCard({ card, installed, onOpen, selected = false }: BundleCardProps) {
   const { t } = useTranslation("bundles");
   const format = useFormat();
   const engineName = useEngineName();
@@ -57,10 +60,16 @@ export function BundleCard({ card, installed, onOpen }: BundleCardProps) {
         : "";
 
   return (
-    <li className="flex flex-col rounded-lg border border-line bg-surface overflow-hidden">
+    <li
+      className={cn(
+        "flex flex-col rounded-lg border bg-surface overflow-hidden",
+        selected ? "border-line-accent" : "border-line",
+      )}
+    >
       <button
         type="button"
         onClick={onOpen}
+        aria-current={selected ? "true" : undefined}
         aria-label={t("card.open", { name: text.name })}
         className="flex flex-col gap-8 p-12 text-left cursor-pointer hover:bg-surface-hover transition-colors duration-150 flex-1"
       >

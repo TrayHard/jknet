@@ -161,5 +161,13 @@
     "signOutText": "Meldet diesen Browser ab. Dein Konto und deine Freunde bleiben.",
     "deleteText": "Entfernt das Konto, deine Freunde, deine Einladungen und deine Chats vom Dienst.",
     "deleteBody": "Dein Konto, deine Freundesliste, deine Einladungen und deine Chats werden vom Dienst entfernt. Das lässt sich nicht rückgängig machen."
+  },
+  "catalog": {
+    "game": "Spiel",
+    "playNote": "Um hier zu spielen, öffnen Sie JKNet auf Ihrem PC.",
+    "installNote": "Installieren Sie über JKNet auf Ihrem PC.",
+    "communityLead": "Öffnen Sie einen Server, um seine Seite zu lesen oder ihn in einem Chat zu teilen. Beitreten können Sie über JKNet auf Ihrem PC.",
+    "bundlesLead": "Fertige Client-Sets von JKNet Online. Installieren Sie sie in JKNet auf Ihrem PC.",
+    "bundlesEmpty": "Ein Bundle ist ein Satz von Clients, den ein anderer Spieler zusammengestellt hat: Engines, Dateien und Einstellungen. Spieler veröffentlichen Bundles über JKNet auf ihrem PC."
   }
 }
