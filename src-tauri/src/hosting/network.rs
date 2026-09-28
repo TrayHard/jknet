@@ -100,7 +100,9 @@ fn adapters() -> Vec<(InterfaceKind, Ipv4Addr)> {
     }
     if !filled {
         // Adapters kept appearing between the calls: nothing was written.
-        log::warn!("GetAdaptersAddresses wanted a larger buffer three times; no local addresses this time");
+        log::warn!(
+            "GetAdaptersAddresses wanted a larger buffer three times; no local addresses this time"
+        );
         return Vec::new();
     }
 
@@ -152,7 +154,14 @@ mod tests {
 
     #[test]
     fn the_private_ranges_and_cgnat_stay_and_loopback_and_link_local_go() {
-        for kept in ["10.0.0.5", "172.16.0.1", "172.31.255.254", "192.168.1.23", "100.64.0.1", "100.127.255.254"] {
+        for kept in [
+            "10.0.0.5",
+            "172.16.0.1",
+            "172.31.255.254",
+            "192.168.1.23",
+            "100.64.0.1",
+            "100.127.255.254",
+        ] {
             assert!(is_lan_address(ip(kept)), "{kept}");
         }
         for dropped in [
@@ -183,7 +192,12 @@ mod tests {
         ]);
         assert_eq!(
             picked,
-            [ip("192.168.1.23"), ip("10.0.0.7"), ip("192.168.1.50"), ip("100.64.1.2")]
+            [
+                ip("192.168.1.23"),
+                ip("10.0.0.7"),
+                ip("192.168.1.50"),
+                ip("100.64.1.2")
+            ]
         );
     }
 

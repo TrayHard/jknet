@@ -1,4 +1,4 @@
-import { ArrowDownCircle, Check, Download } from "lucide-react";
+import { ArrowDownCircle, Check, Download, Share2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -37,6 +37,8 @@ interface JkhubCardProps {
   onInstall: () => void;
   /** Opens the file page of jkhub.org in the system browser. */
   onOpenSite: () => void;
+  /** Opens the shared-chat chooser for this JKHub file. */
+  onShare?: () => void;
   // --- slice: jkhub catalog ---
   /**
    * Searches the catalogue for everything by this author.
@@ -80,9 +82,11 @@ export function JkhubCard({
   onOpen,
   onInstall,
   onOpenSite,
+  onShare,
   onAuthor,
 }: JkhubCardProps) {
   const { t } = useTranslation("jkhub");
+  const { t: tChat } = useTranslation("chat");
   const format = useFormat();
   // The address that failed rather than a flag: a card reused for another file
   // gets its picture back without an effect to reset anything.
@@ -122,14 +126,27 @@ export function JkhubCard({
 
       <div className="flex flex-col gap-8 p-12 flex-1">
         <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onOpen}
-            title={card.title}
-            className="text-body-md-medium text-fg text-left truncate cursor-pointer hover:text-fg-accent"
-          >
-            {card.title}
-          </button>
+          <div className="flex items-start gap-4 min-w-0">
+            <button
+              type="button"
+              onClick={onOpen}
+              title={card.title}
+              className="flex-1 min-w-0 text-body-md-medium text-fg text-left truncate cursor-pointer hover:text-fg-accent"
+            >
+              {card.title}
+            </button>
+            {onShare ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Share2 size={14} />}
+                title={tChat("share.actionNamed", { name: card.title })}
+                aria-label={tChat("share.actionNamed", { name: card.title })}
+                onClick={onShare}
+                className="shrink-0"
+              />
+            ) : null}
+          </div>
           {/* --- slice: jkhub catalog ---
               The author is a button and the section beside it is not: a click
               on the name writes `by:"name"` into the search box of the screen,

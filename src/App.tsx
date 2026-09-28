@@ -47,6 +47,7 @@ import { LibraryPage } from "./pages/LibraryPage";
 import { OnboardingGate } from "./pages/onboarding/OnboardingGate";
 import { OnboardingPage } from "./pages/onboarding/OnboardingPage";
 import { ServersPage } from "./pages/ServersPage";
+import { ServerInstancesPage } from "./pages/ServerInstancesPage";
 import { CommunityPage } from "./pages/CommunityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -225,6 +226,7 @@ function getMainRouter() {
           <Route path="/community/:id" element={<CommunityPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/server-instances" element={<ServerInstancesPage />} />
           {/* --- slice: bundles --- the editor of one draft, a page of the main window. */}
           <Route path="/bundles/drafts/:id" element={<BundleEditorPage />} />
           <Route path="/player-profiles" element={<PlayerProfilesPage />} />

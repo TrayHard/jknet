@@ -494,16 +494,24 @@ impl OnlineClient {
             "provider": provider,
             "deviceName": device_name,
         });
-        self.call(ctx, Method::POST, "/v1/auth/login-sessions", Some(body), Auth::None)
-            .await?
-            .json()
+        self.call(
+            ctx,
+            Method::POST,
+            "/v1/auth/login-sessions",
+            Some(body),
+            Auth::None,
+        )
+        .await?
+        .json()
     }
 
     /// Reads a sign-in session. `token` and `user` arrive once, on the first
     /// read that finds it `done`.
     pub async fn poll_login_session(&self, ctx: &OnlineContext, id: &str) -> Result<LoginSession> {
         let path = format!("/v1/auth/login-sessions/{}", path_segment(id)?);
-        self.call(ctx, Method::GET, &path, None, Auth::None).await?.json()
+        self.call(ctx, Method::GET, &path, None, Auth::None)
+            .await?
+            .json()
     }
 
     /// Invalidates the token on the service. The launcher forgets it either way.
@@ -566,9 +574,15 @@ impl OnlineClient {
 
     /// Signs every device of the account out but this launcher.
     pub async fn revoke_other_sessions(&self, ctx: &OnlineContext) -> Result<()> {
-        self.call(ctx, Method::DELETE, "/v1/me/sessions?others=true", None, Auth::Required)
-            .await
-            .map(|_| ())
+        self.call(
+            ctx,
+            Method::DELETE,
+            "/v1/me/sessions?others=true",
+            None,
+            Auth::Required,
+        )
+        .await
+        .map(|_| ())
     }
 
     // -- Friends ------------------------------------------------------------
@@ -592,7 +606,13 @@ impl OnlineClient {
     ) -> Result<SendRequestResult> {
         let body = serde_json::json!({ "query": query });
         let response = self
-            .call(ctx, Method::POST, "/v1/friends/requests", Some(body), Auth::Required)
+            .call(
+                ctx,
+                Method::POST,
+                "/v1/friends/requests",
+                Some(body),
+                Auth::Required,
+            )
             .await?;
 
         if response.status == StatusCode::CREATED {
@@ -688,10 +708,16 @@ impl OnlineClient {
         preferred_nodes: &[String],
     ) -> Result<RelayGrant> {
         let body = serde_json::json!({ "game": game, "preferredNodes": preferred_nodes });
-        self.call(ctx, Method::POST, "/v1/relay/sessions", Some(body), Auth::Required)
-            .await
-            .map_err(relay_refusal)?
-            .json()
+        self.call(
+            ctx,
+            Method::POST,
+            "/v1/relay/sessions",
+            Some(body),
+            Auth::Required,
+        )
+        .await
+        .map_err(relay_refusal)?
+        .json()
     }
 
     /// Extends the ticket of a relay session. The same document with a later
@@ -715,8 +741,17 @@ impl OnlineClient {
 
     // -- Transport ----------------------------------------------------------
 
-    pub async fn community(&self, ctx: &OnlineContext, method: Method, path: &str, body: Option<Value>, auth: bool) -> Result<Value> {
-        self.call(ctx, method, path, body, auth.into()).await?.json()
+    pub async fn community(
+        &self,
+        ctx: &OnlineContext,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+        auth: bool,
+    ) -> Result<Value> {
+        self.call(ctx, method, path, body, auth.into())
+            .await?
+            .json()
     }
 
     // --- slice: bundles ---
@@ -1007,20 +1042,32 @@ impl OnlineClient {
     /// `GET /v1/chat/conversations`: every conversation, the group invites,
     /// the settings and the file quota.
     pub async fn chat_sync(&self, ctx: &OnlineContext) -> Result<ChatSyncDoc> {
-        self.request(ctx, Method::GET, "/v1/chat/conversations", None, Auth::Required)
-            .await
+        self.request(
+            ctx,
+            Method::GET,
+            "/v1/chat/conversations",
+            None,
+            Auth::Required,
+        )
+        .await
     }
 
     pub async fn chat_conversation(&self, ctx: &OnlineContext, id: &str) -> Result<Conversation> {
         let path = format!("/v1/chat/conversations/{}", path_segment(id)?);
-        self.request(ctx, Method::GET, &path, None, Auth::Required).await
+        self.request(ctx, Method::GET, &path, None, Auth::Required)
+            .await
     }
 
     /// `PUT /v1/chat/direct/{userId}`: the direct conversation with a friend,
     /// made on the first call and returned as it is on every later one.
-    pub async fn chat_open_direct(&self, ctx: &OnlineContext, user_id: &str) -> Result<Conversation> {
+    pub async fn chat_open_direct(
+        &self,
+        ctx: &OnlineContext,
+        user_id: &str,
+    ) -> Result<Conversation> {
         let path = format!("/v1/chat/direct/{}", path_segment(user_id)?);
-        self.request(ctx, Method::PUT, &path, None, Auth::Required).await
+        self.request(ctx, Method::PUT, &path, None, Auth::Required)
+            .await
     }
 
     /// `POST /v1/chat/groups`. The same `client_id` twice answers the group
@@ -1036,8 +1083,14 @@ impl OnlineClient {
         if let Some(title) = title {
             body["title"] = Value::String(title.to_string());
         }
-        self.request(ctx, Method::POST, "/v1/chat/groups", Some(body), Auth::Required)
-            .await
+        self.request(
+            ctx,
+            Method::POST,
+            "/v1/chat/groups",
+            Some(body),
+            Auth::Required,
+        )
+        .await
     }
 
     /// `PATCH /v1/chat/groups/{id}`: the title, the history setting, or both.
@@ -1057,8 +1110,14 @@ impl OnlineClient {
         if let Some(on) = history_for_new_members {
             body.insert("historyForNewMembers".into(), Value::Bool(on));
         }
-        self.request(ctx, Method::PATCH, &path, Some(Value::Object(body)), Auth::Required)
-            .await
+        self.request(
+            ctx,
+            Method::PATCH,
+            &path,
+            Some(Value::Object(body)),
+            Auth::Required,
+        )
+        .await
     }
 
     pub async fn chat_add_members(
@@ -1076,7 +1135,8 @@ impl OnlineClient {
     /// Accepts a pending group invite.
     pub async fn chat_join_group(&self, ctx: &OnlineContext, id: &str) -> Result<Conversation> {
         let path = format!("/v1/chat/groups/{}/join", path_segment(id)?);
-        self.request(ctx, Method::POST, &path, None, Auth::Required).await
+        self.request(ctx, Method::POST, &path, None, Auth::Required)
+            .await
     }
 
     /// Declines an invite addressed to `user_id` when that is the caller,
@@ -1092,7 +1152,8 @@ impl OnlineClient {
             path_segment(id)?,
             path_segment(user_id)?
         );
-        self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
+        self.request(ctx, Method::DELETE, &path, None, Auth::Required)
+            .await
     }
 
     /// Leaves a group or a server chat (`user_id` is the caller), or removes
@@ -1108,7 +1169,8 @@ impl OnlineClient {
             path_segment(id)?,
             path_segment(user_id)?
         );
-        self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
+        self.request(ctx, Method::DELETE, &path, None, Auth::Required)
+            .await
     }
 
     /// `PATCH /v1/chat/servers/{sessionId}`: the history setting of a server
@@ -1148,7 +1210,8 @@ impl OnlineClient {
             path.push('?');
             path.push_str(&query.join("&"));
         }
-        self.request(ctx, Method::GET, &path, None, Auth::Required).await
+        self.request(ctx, Method::GET, &path, None, Auth::Required)
+            .await
     }
 
     /// Sends a message. A replay of the same `clientId` answers the stored
@@ -1217,14 +1280,21 @@ impl OnlineClient {
             .await
     }
 
-    pub async fn chat_search(&self, ctx: &OnlineContext, query: &SearchQuery) -> Result<SearchPage> {
+    pub async fn chat_search(
+        &self,
+        ctx: &OnlineContext,
+        query: &SearchQuery,
+    ) -> Result<SearchPage> {
         let mut path = format!(
             "/v1/chat/search?q={}",
             utf8_percent_encode(query.q.trim(), NON_ALPHANUMERIC)
         );
         let mut push = |key: &str, value: Option<&str>| {
             if let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) {
-                path.push_str(&format!("&{key}={}", utf8_percent_encode(value, NON_ALPHANUMERIC)));
+                path.push_str(&format!(
+                    "&{key}={}",
+                    utf8_percent_encode(value, NON_ALPHANUMERIC)
+                ));
             }
         };
         push("conversationId", query.conversation_id.as_deref());
@@ -1234,7 +1304,8 @@ impl OnlineClient {
         if let Some(limit) = query.limit {
             path.push_str(&format!("&limit={}", limit.clamp(1, 50)));
         }
-        self.request(ctx, Method::GET, &path, None, Auth::Required).await
+        self.request(ctx, Method::GET, &path, None, Auth::Required)
+            .await
     }
 
     /// `POST /v1/chat/files`: registers a file for one conversation before its
@@ -1257,8 +1328,14 @@ impl OnlineClient {
         if let Some(meta) = meta {
             body["meta"] = to_value(meta)?;
         }
-        self.request(ctx, Method::POST, "/v1/chat/files", Some(body), Auth::Required)
-            .await
+        self.request(
+            ctx,
+            Method::POST,
+            "/v1/chat/files",
+            Some(body),
+            Auth::Required,
+        )
+        .await
     }
 
     /// `PUT /v1/chat/files/{id}/content`: the bytes of a registered file.
@@ -1299,8 +1376,14 @@ impl OnlineClient {
         patch: &ChatPrivacyPatch,
     ) -> Result<ChatPrivacy> {
         let body = to_value(patch)?;
-        self.request(ctx, Method::PATCH, "/v1/chat/settings", Some(body), Auth::Required)
-            .await
+        self.request(
+            ctx,
+            Method::PATCH,
+            "/v1/chat/settings",
+            Some(body),
+            Auth::Required,
+        )
+        .await
     }
 }
 
@@ -1315,7 +1398,8 @@ impl OnlineClient {
         session_id: &str,
     ) -> Result<Conversation> {
         let path = format!("/v1/chat/servers/{}", path_segment(session_id)?);
-        self.request(ctx, Method::PUT, &path, None, Auth::Required).await
+        self.request(ctx, Method::PUT, &path, None, Auth::Required)
+            .await
     }
 
     /// A guest joins the chat of a friend's server.
@@ -1334,7 +1418,8 @@ impl OnlineClient {
     /// The host ends the chat of its server. A second call is not an error.
     pub async fn chat_close_server(&self, ctx: &OnlineContext, session_id: &str) -> Result<()> {
         let path = format!("/v1/chat/servers/{}", path_segment(session_id)?);
-        self.request(ctx, Method::DELETE, &path, None, Auth::Required).await
+        self.request(ctx, Method::DELETE, &path, None, Auth::Required)
+            .await
     }
 }
 
@@ -1347,7 +1432,10 @@ pub fn is_retryable(error: &AppError) -> bool {
     match error {
         AppError::Network(_) => true,
         AppError::Online { code, .. } => {
-            matches!(code.as_str(), "rate_limited" | "internal" | "provider_error")
+            matches!(
+                code.as_str(),
+                "rate_limited" | "internal" | "provider_error"
+            )
         }
         _ => false,
     }
@@ -1363,7 +1451,11 @@ pub fn is_chat_unavailable(error: &AppError) -> bool {
 #[cfg(test)]
 pub(crate) fn chat_error_for_test(status: u16, body: &[u8]) -> AppError {
     let status = StatusCode::from_u16(status).expect("an HTTP status");
-    service_error(&format!("{CHAT_PREFIX}conversations/c/messages"), status, body)
+    service_error(
+        &format!("{CHAT_PREFIX}conversations/c/messages"),
+        status,
+        body,
+    )
 }
 
 /// The error of a refused request, by the path it was refused on.
@@ -1397,7 +1489,10 @@ fn chat_refusal(status: StatusCode, body: &[u8]) -> AppError {
         };
     }
     match refusal_reason(body) {
-        Some(reason) => AppError::Online { code: reason, message },
+        Some(reason) => AppError::Online {
+            code: reason,
+            message,
+        },
         None => AppError::Online { code, message },
     }
 }
@@ -1486,7 +1581,11 @@ fn online_error(status: StatusCode, body: &[u8]) -> AppError {
     }
 
     if let Ok(envelope) = serde_json::from_slice::<Envelope>(body) {
-        let Body { code, message, details } = envelope.error;
+        let Body {
+            code,
+            message,
+            details,
+        } = envelope.error;
         if !code.trim().is_empty() {
             let message = if message.trim().is_empty() {
                 message_for_status(status)
@@ -1573,7 +1672,9 @@ fn code_for_status(status: StatusCode) -> &'static str {
 /// in a log that also holds the server browser and the engine downloads.
 fn transport_error(method: &Method, path: &str, e: &reqwest::Error) -> AppError {
     if e.is_timeout() {
-        return AppError::Network(format!("the service did not answer {method} {path} within 10 s"));
+        return AppError::Network(format!(
+            "the service did not answer {method} {path} within 10 s"
+        ));
     }
     AppError::Network(format!("online {method} {path}: {e}"))
 }
@@ -1618,7 +1719,10 @@ const NAME_MAX: usize = 24;
 /// carries a Quake colour code.
 pub fn normalize_display_name(raw: &str) -> Result<String> {
     let without_colours = strip_colour_codes(raw);
-    let name = without_colours.split_whitespace().collect::<Vec<_>>().join(" ");
+    let name = without_colours
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let length = name.chars().count();
     if !(NAME_MIN..=NAME_MAX).contains(&length) {
@@ -1661,8 +1765,14 @@ mod tests {
 
     #[test]
     fn a_service_url_loses_its_trailing_slash_and_a_blank_one_falls_back() {
-        assert_eq!(normalize_online_url("http://127.0.0.1:8787/"), "http://127.0.0.1:8787");
-        assert_eq!(normalize_online_url("  https://online.jknet.gg  "), "https://online.jknet.gg");
+        assert_eq!(
+            normalize_online_url("http://127.0.0.1:8787/"),
+            "http://127.0.0.1:8787"
+        );
+        assert_eq!(
+            normalize_online_url("  https://online.jknet.gg  "),
+            "https://online.jknet.gg"
+        );
         assert_eq!(normalize_online_url("   "), default_online_url());
         // Joining must never produce a double slash: the service routes on the
         // exact path and `//v1/me` is a 404 on most frameworks.
@@ -1680,7 +1790,10 @@ mod tests {
         // be covered.
         assert_eq!(default_online_url_for(true), DEV_ONLINE_URL);
         assert_eq!(default_online_url_for(false), RELEASE_ONLINE_URL);
-        assert_eq!(default_online_url(), default_online_url_for(cfg!(debug_assertions)));
+        assert_eq!(
+            default_online_url(),
+            default_online_url_for(cfg!(debug_assertions))
+        );
 
         assert_eq!(RELEASE_ONLINE_URL, "https://api.jknet.app");
         assert!(online_configured(RELEASE_ONLINE_URL));
@@ -1733,16 +1846,22 @@ mod tests {
         };
         // The token travels in a header, never in the address.
         assert_eq!(
-            signed_in("http://127.0.0.1:8787").ws_url().expect("a socket"),
+            signed_in("http://127.0.0.1:8787")
+                .ws_url()
+                .expect("a socket"),
             "ws://127.0.0.1:8787/v1/ws"
         );
         assert_eq!(
-            signed_in("https://online.jknet.gg/").ws_url().expect("a socket"),
+            signed_in("https://online.jknet.gg/")
+                .ws_url()
+                .expect("a socket"),
             "wss://online.jknet.gg/v1/ws"
         );
         // A path prefix belongs to the service, so it stays in front of `/v1`.
         assert_eq!(
-            signed_in("https://example.test/online/").ws_url().expect("a socket"),
+            signed_in("https://example.test/online/")
+                .ws_url()
+                .expect("a socket"),
             "wss://example.test/online/v1/ws"
         );
 
@@ -1796,7 +1915,10 @@ mod tests {
 
     #[test]
     fn a_display_name_is_cleaned_before_it_is_judged() {
-        assert_eq!(normalize_display_name("  Kyle   Katarn ").expect("valid"), "Kyle Katarn");
+        assert_eq!(
+            normalize_display_name("  Kyle   Katarn ").expect("valid"),
+            "Kyle Katarn"
+        );
         assert_eq!(normalize_display_name("^1Kyle^7").expect("valid"), "Kyle");
         assert_eq!(normalize_display_name("Кайл_К").expect("valid"), "Кайл_К");
 
@@ -1825,7 +1947,11 @@ mod tests {
     fn a_relay_quota_refusal_keeps_its_details() {
         let body = br#"{"error":{"code":"relay_quota","message":"Your relay time for today is used up","details":{"reason":"daily_time","resetsAt":"2026-09-26T00:00:00Z"}}}"#;
         match online_error(StatusCode::FORBIDDEN, body) {
-            AppError::RelayQuota { message, quota, resets_at } => {
+            AppError::RelayQuota {
+                message,
+                quota,
+                resets_at,
+            } => {
                 assert_eq!(message, "Your relay time for today is used up");
                 assert_eq!(quota.as_deref(), Some("daily_time"));
                 assert_eq!(resets_at.as_deref(), Some("2026-09-26T00:00:00Z"));
@@ -1835,7 +1961,11 @@ mod tests {
         // Without details, or with details of another shape, the words stay.
         let body = br#"{"error":{"code":"relay_quota","message":"You already use the relay for another server","details":["active_session"]}}"#;
         match online_error(StatusCode::FORBIDDEN, body) {
-            AppError::RelayQuota { message, quota, resets_at } => {
+            AppError::RelayQuota {
+                message,
+                quota,
+                resets_at,
+            } => {
                 assert_eq!(message, "You already use the relay for another server");
                 assert_eq!((quota, resets_at), (None, None));
             }
@@ -1868,7 +1998,10 @@ mod tests {
     #[test]
     fn a_413_says_the_size_was_refused_with_or_without_a_document() {
         // A proxy answered on its own, without the contract's document.
-        match online_error(StatusCode::PAYLOAD_TOO_LARGE, b"<html>Request Entity Too Large</html>") {
+        match online_error(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            b"<html>Request Entity Too Large</html>",
+        ) {
             AppError::Online { code, message } => {
                 assert_eq!(code, "too_large");
                 assert_eq!(message, "the service refused the size of the request");
@@ -1890,7 +2023,10 @@ mod tests {
         }
         // The rendered form keeps the prefix the frontend strips.
         let rendered = online_error(StatusCode::PAYLOAD_TOO_LARGE, b"").to_string();
-        assert_eq!(rendered, "online too_large: the service refused the size of the request");
+        assert_eq!(
+            rendered,
+            "online too_large: the service refused the size of the request"
+        );
     }
 
     #[test]
@@ -1901,11 +2037,17 @@ mod tests {
         // The sign-out endpoint answers 401 for a token the service has already
         // forgotten. Acting on it would tell a player who pressed Sign out
         // that their session expired.
-        assert!(!refuses_the_token(StatusCode::UNAUTHORIZED, "/v1/auth/logout"));
+        assert!(!refuses_the_token(
+            StatusCode::UNAUTHORIZED,
+            "/v1/auth/logout"
+        ));
         // A token the service knows, doing something it will not allow.
         assert!(!refuses_the_token(StatusCode::FORBIDDEN, "/v1/friends"));
         assert!(!refuses_the_token(StatusCode::NOT_FOUND, "/v1/friends"));
-        assert!(!refuses_the_token(StatusCode::TOO_MANY_REQUESTS, "/v1/presence"));
+        assert!(!refuses_the_token(
+            StatusCode::TOO_MANY_REQUESTS,
+            "/v1/presence"
+        ));
     }
 
     #[test]
@@ -1935,13 +2077,15 @@ mod tests {
             other => panic!("expected a chat refusal, got {other:?}"),
         }
         // A reason that is not a code does not replace one.
-        let body = br#"{"error":{"code":"invalid","message":"x","details":{"reason":"Not A Code"}}}"#;
+        let body =
+            br#"{"error":{"code":"invalid","message":"x","details":{"reason":"Not A Code"}}}"#;
         match service_error("/v1/chat/files", StatusCode::BAD_REQUEST, body) {
             AppError::Online { code, .. } => assert_eq!(code, "invalid"),
             other => panic!("expected a chat refusal, got {other:?}"),
         }
         // Outside the chat API the details are left alone, as before.
-        let body = br#"{"error":{"code":"forbidden","message":"x","details":{"reason":"owner_only"}}}"#;
+        let body =
+            br#"{"error":{"code":"forbidden","message":"x","details":{"reason":"owner_only"}}}"#;
         match service_error("/v1/friends", StatusCode::FORBIDDEN, body) {
             AppError::Online { code, .. } => assert_eq!(code, "forbidden"),
             other => panic!("expected a service error, got {other:?}"),
@@ -1972,10 +2116,22 @@ mod tests {
     fn only_the_network_a_rate_limit_and_a_failing_service_are_retried() {
         assert!(is_retryable(&AppError::Network("reset".into())));
         for code in ["rate_limited", "internal", "provider_error"] {
-            assert!(is_retryable(&AppError::Online { code: code.into(), message: "x".into() }));
+            assert!(is_retryable(&AppError::Online {
+                code: code.into(),
+                message: "x".into()
+            }));
         }
-        for code in ["not_friends", "too_long", "unauthorized", "not_found", "file_gone"] {
-            assert!(!is_retryable(&AppError::Online { code: code.into(), message: "x".into() }));
+        for code in [
+            "not_friends",
+            "too_long",
+            "unauthorized",
+            "not_found",
+            "file_gone",
+        ] {
+            assert!(!is_retryable(&AppError::Online {
+                code: code.into(),
+                message: "x".into()
+            }));
         }
         assert!(!is_retryable(&AppError::SignedOut));
     }

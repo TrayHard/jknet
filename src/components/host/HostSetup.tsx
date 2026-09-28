@@ -1,8 +1,10 @@
-import { LogIn, Play, RefreshCw, Server } from "lucide-react";
-import { useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { ChevronDown, LogIn, Play, RefreshCw, Server, Settings2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useGametypeLabels } from "../../i18n/useGameLabels";
+import { useErrorText } from "../../i18n/errors";
+import { hostConfigCompatible, hostModId } from "../../lib/hostConfig";
 import { cn } from "../../lib/format";
 import {
   HOST_PASSWORD_PATTERN,
@@ -11,12 +13,14 @@ import {
   type HostNetwork,
   type HostOptions,
 } from "../../lib/ipc";
-import { useEngines } from "../../lib/queries";
+import { useEngines, useServerConfigs, useServerConfigCheck } from "../../lib/queries";
 import { EngineLogo } from "../EngineLogo";
-import { Button, Input, RadioCard, Select, Toggle, type SelectOption } from "../ui";
+import { Button, Input, Select, Toggle, type SelectOption } from "../ui";
+import { RadioRing } from "./Choice";
 import type { HostForm } from "./hostModel";
 import { MapPicker } from "./MapPicker";
 import { Notice } from "./Notice";
+import { HostConfigBar } from "./HostConfigBar";
 
 const MAX_PLAYERS = [2, 4, 6, 8, 10, 12, 16];
 const TIME_LIMITS = [0, 10, 15, 20, 30];
@@ -79,6 +83,13 @@ export function HostSetup({
   const { t: tCommon } = useTranslation("common");
   const labels = useGametypeLabels();
   const engines = useEngines().data;
+  const errorText = useErrorText();
+  const configs = useServerConfigs();
+  const documents = (configs.data ?? []).filter((document) => document.game === options.game);
+  const document = documents.find((entry) => entry.id === form.settings.serverConfigId);
+  const configCheck = useServerConfigCheck(document);
+  const [selectingConfig, setSelectingConfig] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const settings = form.settings;
   const set = useCallback(
@@ -96,8 +107,24 @@ export function HostSetup({
   const client: HostClientOption | undefined = options.clients.find(
     (entry) => entry.id === settings.clientId,
   );
-  const gametype = options.gametypes.find((entry) => entry.index === settings.gametype);
+  const mbii = hostModId(client) === "mbii";
+  const gameModes = options.gametypes.filter((entry) => !mbii || [3, 4, 7].includes(entry.index)).map((entry) =>
+    mbii ? { ...entry, scoreCvar: "fraglimit", defaultScore: 20 } : entry,
+  );
+  const gametype = gameModes.find((entry) => entry.index === settings.gametype);
   const relayAvailable = options.relay.available;
+  const configProblem = configs.error ? errorText(configs.error)
+    : settings.serverConfigId && !configs.isPending && !document ? t("setup.config.missing")
+      : document && !hostConfigCompatible(document, client) ? t("setup.config.incompatible")
+        : configCheck.error ? errorText(configCheck.error)
+          : configCheck.data?.issues.length ? t("setup.config.invalid", { count: configCheck.data.issues.length }) : null;
+
+  useEffect(() => {
+    if (mbii && ![3, 4, 7].includes(settings.gametype)) set({ gametype: 7, scoreLimit: 20, bots: 0 });
+  }, [mbii, settings.gametype, set]);
+  useEffect(() => {
+    if (mbii && settings.bots !== 0) set({ bots: 0 });
+  }, [mbii, settings.bots, set]);
 
   // A network mode that needs the relay cannot stay chosen once the relay is
   // off the table — a sign-out on another screen, say.
@@ -124,11 +151,11 @@ export function HostSetup({
 
   const gametypeOptions = useMemo<SelectOption[]>(
     () =>
-      options.gametypes.map((entry) => ({
+      options.gametypes.filter((entry) => !mbii || [3, 4, 7].includes(entry.index)).map((entry) => ({
         value: String(entry.index),
-        label: labels.label(options.game, entry.index, entry.label),
+        label: mbii && entry.index === 7 ? t("setup.config.mbiiMode") : labels.label(options.game, entry.index, entry.label),
       })),
-    [options.gametypes, options.game, labels.label],
+    [options.gametypes, options.game, labels.label, mbii, t],
   );
 
   const scoreValues = useMemo(() => {
@@ -144,6 +171,9 @@ export function HostSetup({
     client.canHost &&
     settings.map !== "" &&
     passwordValid &&
+    configProblem === null &&
+    (!settings.serverConfigId || configCheck.isSuccess) &&
+    !selectingConfig &&
     !starting;
 
   const clientBlocked =
@@ -158,233 +188,242 @@ export function HostSetup({
   const showFirewall =
     options.showFirewallNote && settings.network !== "internet" && client !== undefined;
 
+  useEffect(() => {
+    if (clientBlocked || !passwordValid) setAdvancedOpen(true);
+  }, [clientBlocked, passwordValid]);
+
+  const scoreLabel = mbii
+    ? t("setup.config.roundLimit")
+    : gametype?.scoreCvar === "capturelimit"
+      ? t("setup.scoreLimit.capture")
+      : t("setup.scoreLimit.frag");
+  const modeName = gametype
+    ? mbii && gametype.index === 7
+      ? t("setup.config.mbiiMode")
+      : labels.label(options.game, gametype.index, gametype.label)
+    : "";
+
   return (
     <div className="@container flex flex-col gap-12">
-      {/* Client and map. */}
-      <div className="grid grid-cols-1 gap-12 @min-[560px]:grid-cols-2 @min-[560px]:gap-16">
-        <div className="flex flex-col gap-6 min-w-0">
-          <FieldLabel>{t("setup.client.label")}</FieldLabel>
-          <Select
-            value={settings.clientId}
-            onChange={(clientId) => set({ clientId })}
-            options={clientOptions}
-            ariaLabel={t("setup.client.label")}
-            placeholder={t("setup.client.label")}
-            className="w-full"
-          />
-          <p className={cn("text-body-sm", clientBlocked ? "text-fg-danger" : "text-fg-muted")}>
-            {clientBlocked ?? t("setup.client.hint")}
-          </p>
-        </div>
-        <div className="flex flex-col gap-6 min-w-0">
-          <FieldLabel>{t("setup.map.label")}</FieldLabel>
-          <MapPicker
-            clientId={settings.clientId === "" ? null : settings.clientId}
-            gametype={settings.gametype}
-            value={settings.map}
-            onChange={onMap}
-            preferred={options.defaults.map}
-            className="w-full"
-            shareGame={options.game}
-          />
-        </div>
-      </div>
-
-      {/* The match: five selects, the bots hint under the last one. */}
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-wrap gap-12">
-          <SelectField label={t("setup.gametype.label")}>
-            <Select
-              value={String(settings.gametype)}
-              onChange={(value) => {
-                const index = Number(value);
-                const next = options.gametypes.find((entry) => entry.index === index);
-                set({ gametype: index, scoreLimit: next?.defaultScore ?? settings.scoreLimit });
-              }}
-              options={gametypeOptions}
-              ariaLabel={t("setup.gametype.label")}
-              className="w-full"
-            />
-          </SelectField>
-          <SelectField label={t("setup.maxPlayers.label")}>
-            <Select
-              value={String(settings.maxPlayers)}
-              onChange={(value) => set({ maxPlayers: Number(value) })}
-              options={MAX_PLAYERS.map((count) => ({ value: String(count), label: String(count) }))}
-              ariaLabel={t("setup.maxPlayers.label")}
-              className="w-full"
-            />
-          </SelectField>
-          <SelectField label={t("setup.timeLimit.label")}>
-            <Select
-              value={String(settings.timeLimit)}
-              onChange={(value) => set({ timeLimit: Number(value) })}
-              options={TIME_LIMITS.map((minutes) => ({
-                value: String(minutes),
-                label: minutes === 0 ? t("setup.noLimit") : tCommon("units.minutes", { value: minutes }),
-              }))}
-              ariaLabel={t("setup.timeLimit.label")}
-              className="w-full"
-            />
-          </SelectField>
-          {gametype?.scoreCvar ? (
-            <SelectField
-              label={
-                gametype.scoreCvar === "capturelimit"
-                  ? t("setup.scoreLimit.capture")
-                  : t("setup.scoreLimit.frag")
-              }
-            >
-              <Select
-                value={String(settings.scoreLimit)}
-                onChange={(value) => set({ scoreLimit: Number(value) })}
-                options={scoreValues.map((score) => ({
-                  value: String(score),
-                  label: score === 0 ? t("setup.noLimit") : String(score),
-                }))}
-                ariaLabel={
-                  gametype.scoreCvar === "capturelimit"
-                    ? t("setup.scoreLimit.capture")
-                    : t("setup.scoreLimit.frag")
-                }
+      <section className="overflow-hidden rounded-lg border border-line bg-surface">
+        <div className="flex flex-col gap-14 p-16">
+          <div className="flex flex-col gap-2">
+            <h2 className="text-heading-sm text-fg">{t("setup.sections.match")}</h2>
+            <p className="text-body-sm text-fg-muted">{t("setup.sections.matchHint")}</p>
+          </div>
+          <HostConfigBar game={options.game} documents={documents} client={client} form={form}
+            onChange={onChange} onSelecting={setSelectingConfig} problem={configProblem} loading={configs.isLoading} scoreCvar={gametype?.scoreCvar ?? null} />
+          <div className="grid grid-cols-1 gap-12 @min-[560px]:grid-cols-[minmax(220px,2fr)_minmax(132px,1fr)_minmax(112px,0.65fr)]">
+            <div className="flex flex-col gap-6 min-w-0">
+              <FieldLabel>{t("setup.map.label")}</FieldLabel>
+              <MapPicker
+                game={options.game}
+                gametypes={options.gametypes}
+                clientId={settings.clientId === "" ? null : settings.clientId}
+                value={settings.map}
+                onChange={onMap}
+                preferred={options.defaults.map}
                 className="w-full"
+                preserveSelection={!!settings.serverConfigId}
+              />
+            </div>
+            <SelectField label={t("setup.gametype.label")}>
+              <Select
+                value={String(settings.gametype)}
+                onChange={(value) => {
+                  const index = Number(value);
+                  const next = gameModes.find((entry) => entry.index === index);
+                  set({ gametype: index, scoreLimit: next?.defaultScore ?? settings.scoreLimit });
+                }}
+                options={gametypeOptions}
+                ariaLabel={t("setup.gametype.label")}
+                className="w-full h-52"
               />
             </SelectField>
-          ) : null}
-          <SelectField label={t("setup.bots.label")}>
-            <Select
-              value={String(settings.bots)}
-              onChange={(value) => set({ bots: Number(value) })}
-              options={BOTS.map((count) => ({
-                value: String(count),
-                label: count === 0 ? t("setup.bots.off") : t("setup.bots.fill", { count }),
-              }))}
-              ariaLabel={t("setup.bots.label")}
-              className="w-full"
-            />
-          </SelectField>
+            <SelectField label={t("setup.maxPlayers.label")}>
+              <Select
+                value={String(settings.maxPlayers)}
+                onChange={(value) => set({ maxPlayers: Number(value) })}
+                options={[...new Set([...MAX_PLAYERS, settings.maxPlayers])].sort((a, b) => a - b).map((count) => ({ value: String(count), label: String(count) }))}
+                ariaLabel={t("setup.maxPlayers.label")}
+                className="w-full h-52"
+              />
+            </SelectField>
+          </div>
         </div>
-        <p className="text-body-sm text-fg-muted text-right">{t("setup.bots.hint")}</p>
-      </div>
 
-      {/* Name and password. */}
-      <div className="grid grid-cols-1 gap-12 @min-[560px]:grid-cols-2 @min-[560px]:gap-16">
-        <div className="flex flex-col gap-6 min-w-0">
-          <div className="flex items-center h-24">
-            <FieldLabel>{t("setup.serverName.label")}</FieldLabel>
-          </div>
-          <Input
-            value={settings.serverName}
-            maxLength={32}
-            spellCheck={false}
-            aria-label={t("setup.serverName.label")}
-            placeholder={options.defaults.serverName}
-            onChange={(event) => set({ serverName: event.target.value })}
-          />
-        </div>
-        <div className="flex flex-col gap-6 min-w-0">
-          <div className="flex items-center gap-8 h-24">
-            <span className="flex-1 min-w-0 flex">
-              <FieldLabel>{t("setup.password.label")}</FieldLabel>
-            </span>
-            <Toggle
-              checked={form.requirePassword}
-              onChange={(requirePassword) => onChange((current) => ({ ...current, requirePassword }))}
-              label={t("setup.password.require")}
-            />
-            <span className="text-body-sm text-fg-secondary whitespace-nowrap">
-              {t("setup.password.require")}
-            </span>
-          </div>
-          <div className="flex items-center gap-8">
-            <Input
-              value={form.password}
-              maxLength={24}
-              spellCheck={false}
-              autoComplete="off"
-              disabled={!form.requirePassword}
-              invalid={!passwordValid}
-              aria-label={t("setup.password.label")}
-              onChange={(event) => {
-                const password = event.target.value;
-                onChange((current) => ({ ...current, password }));
-              }}
-              className="flex-1 min-w-0 [&_input]:font-mono [&_input]:text-[13px]"
-            />
-            <Button
-              icon={<RefreshCw size={16} />}
-              disabled={!form.requirePassword}
-              onClick={() => {
-                const password = newHostPassword();
-                onChange((current) => ({ ...current, password }));
-              }}
-            >
-              {t("setup.password.new")}
-            </Button>
-          </div>
-          <p className={cn("text-body-sm", passwordValid ? "text-fg-muted" : "text-fg-danger")}>
-            {passwordValid ? t("setup.password.hint") : t("setup.password.invalid")}
-          </p>
-        </div>
-      </div>
-
-      {/* Who can connect. */}
-      <div className="flex flex-col gap-6">
-        <FieldLabel>{t("setup.network.label")}</FieldLabel>
-        <div className="grid grid-cols-1 gap-8 @min-[600px]:grid-cols-3">
-          {NETWORKS.map((network) => (
-            <RadioCard
-              key={network}
-              name="host-network"
-              selected={settings.network === network}
-              onSelect={() => set({ network })}
-              disabled={network !== "lan" && !relayAvailable}
-              title={t(`setup.network.${network}.title`)}
-              className="justify-start"
-            >
-              <span className="block text-body-sm text-fg-secondary">
-                {t(`setup.network.${network}.text`)}
+        <div className="border-t border-line-subtle">
+          <button
+            type="button"
+            aria-expanded={advancedOpen}
+            onClick={() => setAdvancedOpen((open) => !open)}
+            className="flex w-full items-center gap-12 px-16 py-12 text-left cursor-pointer select-none hover:bg-hover-overlay"
+          >
+            <Settings2 size={16} aria-hidden className="shrink-0 text-fg-muted" />
+            <span className="flex-1 min-w-0 flex flex-col gap-2">
+              <span className="text-body-md-medium text-fg">{t("setup.sections.advanced")}</span>
+              <span className="truncate text-body-sm text-fg-muted">
+                {t("setup.sections.advancedSummary", {
+                  client: client?.name ?? t("setup.client.label"),
+                  score: gametype?.scoreCvar ? `${scoreLabel}: ${settings.scoreLimit || t("setup.noLimit")}` : t("setup.noLimit"),
+                  time: settings.timeLimit ? tCommon("units.minutes", { value: settings.timeLimit }) : t("setup.noLimit"),
+                  network: t(`setup.network.${settings.network}.title`),
+                  password: t(form.requirePassword ? "setup.sections.passwordOn" : "setup.sections.passwordOff"),
+                  access: t(`policy.${settings.joinPolicy}`),
+                })}
               </span>
-            </RadioCard>
-          ))}
+            </span>
+            <ChevronDown size={16} aria-hidden className={cn("shrink-0 text-fg-muted transition-transform", advancedOpen && "rotate-180")} />
+          </button>
+
+          {advancedOpen ? (
+            <div className="flex flex-col gap-18 border-t border-line-subtle px-16 py-16">
+              <SetupGroup title={t("setup.sections.client")}>
+                <div className="flex flex-col gap-6 min-w-0">
+                  <Select
+                    value={settings.clientId}
+                    onChange={(clientId) => set({ clientId, serverConfigId: null })}
+                    options={clientOptions}
+                    ariaLabel={t("setup.client.label")}
+                    placeholder={t("setup.client.label")}
+                    className="w-full"
+                  />
+                  <p className="text-body-sm text-fg-muted">{t("setup.client.hint")}</p>
+                  {clientBlocked ? <p className="text-body-sm text-fg-danger">{clientBlocked}</p> : null}
+                </div>
+              </SetupGroup>
+
+              <SetupGroup title={t("setup.sections.rules")}>
+                <div className="grid grid-cols-2 gap-12 @min-[560px]:grid-cols-3">
+                  <SelectField label={t("setup.timeLimit.label")}>
+                    <Select
+                      value={String(settings.timeLimit)}
+                      onChange={(value) => set({ timeLimit: Number(value) })}
+                      options={[...new Set([...TIME_LIMITS, settings.timeLimit])].sort((a, b) => a - b).map((minutes) => ({
+                        value: String(minutes),
+                        label: minutes === 0 ? t("setup.noLimit") : tCommon("units.minutes", { value: minutes }),
+                      }))}
+                      ariaLabel={t("setup.timeLimit.label")}
+                      className="w-full"
+                    />
+                  </SelectField>
+                  {gametype?.scoreCvar ? (
+                    <SelectField label={scoreLabel}>
+                      <Select
+                        value={String(settings.scoreLimit)}
+                        onChange={(value) => set({ scoreLimit: Number(value) })}
+                        options={scoreValues.map((score) => ({ value: String(score), label: score === 0 ? t("setup.noLimit") : String(score) }))}
+                        ariaLabel={scoreLabel}
+                        className="w-full"
+                      />
+                    </SelectField>
+                  ) : null}
+                  {!mbii ? (
+                    <SelectField label={t("setup.bots.label")}>
+                      <Select
+                        value={String(settings.bots)}
+                        onChange={(value) => set({ bots: Number(value) })}
+                        options={[...new Set([...BOTS, settings.bots])].sort((a, b) => a - b).map((count) => ({
+                          value: String(count),
+                          label: count === 0 ? t("setup.bots.off") : t("setup.bots.fill", { count }),
+                        }))}
+                        ariaLabel={t("setup.bots.label")}
+                        className="w-full"
+                      />
+                    </SelectField>
+                  ) : null}
+                </div>
+              </SetupGroup>
+
+              <SetupGroup title={t("setup.sections.server")}>
+                <div className="grid grid-cols-1 gap-12 @min-[900px]:grid-cols-2">
+                  <div className="flex flex-col gap-6 min-w-0">
+                    <FieldLabel>{t("setup.serverName.label")}</FieldLabel>
+                    <Input value={settings.serverName} maxLength={32} spellCheck={false}
+                      aria-label={t("setup.serverName.label")} placeholder={options.defaults.serverName}
+                      onChange={(event) => set({ serverName: event.target.value })} />
+                  </div>
+                  <div className="flex flex-col gap-6 min-w-0">
+                    <FieldLabel>{t("setup.password.label")}</FieldLabel>
+                    <div className="flex min-h-36 items-center gap-8">
+                      <Toggle checked={form.requirePassword}
+                        onChange={(requirePassword) => onChange((current) => ({ ...current, requirePassword }))}
+                        label={t("setup.password.require")} />
+                      <span className="text-body-sm text-fg-secondary whitespace-nowrap">{t("setup.password.require")}</span>
+                      <Input value={form.password} maxLength={24} spellCheck={false} autoComplete="off"
+                        disabled={!form.requirePassword} invalid={!passwordValid} aria-label={t("setup.password.label")}
+                        onChange={(event) => onChange((current) => ({ ...current, password: event.target.value }))}
+                        className="flex-1 min-w-0 [&_input]:font-mono [&_input]:text-[13px]" />
+                      <Button icon={<RefreshCw size={16} />} disabled={!form.requirePassword}
+                        onClick={() => onChange((current) => ({ ...current, password: newHostPassword() }))}>
+                        {t("setup.password.new")}
+                      </Button>
+                    </div>
+                    {!passwordValid ? <p className="text-body-sm text-fg-danger">{t("setup.password.invalid")}</p> : null}
+                  </div>
+                </div>
+              </SetupGroup>
+
+              <SetupGroup title={t("setup.network.label")}>
+                <div
+                  role="radiogroup"
+                  aria-label={t("setup.network.label")}
+                  className="grid grid-cols-1 gap-2 rounded-md border border-line bg-input p-4 @min-[600px]:grid-cols-3"
+                >
+                  {NETWORKS.map((network) => (
+                    <label
+                      key={network}
+                      className={cn(
+                        "flex min-w-0 items-center gap-8 rounded-sm px-10 py-8 select-none transition-colors",
+                        network !== "lan" && !relayAvailable
+                          ? "cursor-not-allowed opacity-50"
+                          : "cursor-pointer hover:bg-hover-overlay",
+                        settings.network === network && "bg-selected-overlay text-fg-accent",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="host-network"
+                        checked={settings.network === network}
+                        disabled={network !== "lan" && !relayAvailable}
+                        onChange={() => set({ network })}
+                        className="sr-only"
+                      />
+                      <RadioRing checked={settings.network === network} />
+                      <span className="min-w-0 text-body-sm-medium text-fg">{t(`setup.network.${network}.title`)}</span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-body-sm text-fg-muted">{t(`setup.network.${settings.network}.text`)}</p>
+              </SetupGroup>
+            </div>
+          ) : null}
         </div>
-      </div>
+      </section>
 
       {!signedIn && options.relay.reason === "signed_out" ? (
-        <Notice
-          tone="info"
-          action={
-            <Button size="sm" icon={<LogIn size={14} />} onClick={onSignIn}>
-              {t("setup.signIn.action")}
-            </Button>
-          }
-        >
+        <Notice tone="info" action={<Button size="sm" icon={<LogIn size={14} />} onClick={onSignIn}>{t("setup.signIn.action")}</Button>}>
           {t("setup.signIn.text")}
         </Notice>
       ) : null}
-      {showFirewall && client ? (
-        <Notice tone="warm">{t("setup.firewall", { engine: engineName(client.engineId) })}</Notice>
-      ) : null}
+      {showFirewall && client ? <Notice tone="warm">{t("setup.firewall", { engine: engineName(client.engineId) })}</Notice> : null}
 
-      <div className="flex flex-wrap items-center gap-8">
-        <Button
-          variant="primary"
-          size="lg"
-          icon={<Play size={20} />}
-          disabled={!canStart || gameRunning}
-          title={gameRunning ? t("setup.stopGameFirst") : undefined}
-          onClick={() => onStart(true)}
-        >
-          {starting ? tCommon("states.starting") : t("setup.startAndPlay")}
-        </Button>
-        <Button
-          size="lg"
-          icon={<Server size={20} />}
-          disabled={!canStart}
-          onClick={() => onStart(false)}
-        >
-          {t("setup.startServer")}
-        </Button>
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-12 rounded-lg border border-line bg-elevated p-12 shadow-popover">
+        <div className="flex-1 min-w-200 flex flex-col gap-2">
+          <span className="text-mono-sm text-fg truncate">{settings.map}</span>
+          <span className="text-body-sm text-fg-muted truncate">
+            {t("setup.sections.launchSummary", { mode: modeName, count: settings.maxPlayers, client: client?.name ?? "" })}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-8">
+          <Button size="lg" icon={<Server size={20} />} disabled={!canStart} onClick={() => onStart(false)}>
+            {t("setup.startServer")}
+          </Button>
+          <Button variant="primary" size="lg" icon={<Play size={20} />} disabled={!canStart || gameRunning}
+            title={gameRunning ? t("setup.stopGameFirst") : undefined} onClick={() => onStart(true)}>
+            {starting ? tCommon("states.starting") : t("setup.startAndPlay")}
+          </Button>
+        </div>
       </div>
       {gameRunning ? (
         <p className="text-body-sm text-fg-muted">{t("setup.stopGameFirst")}</p>
@@ -397,9 +436,18 @@ export function HostSetup({
 /** One of the five selects of the match row: 112 px at least, sharing the rest. */
 function SelectField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-6 flex-1 basis-0 min-w-112">
+    <div className="flex flex-col gap-6 min-w-0">
       <FieldLabel>{label}</FieldLabel>
       {children}
     </div>
+  );
+}
+
+function SetupGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-10">
+      <h3 className="text-label-xs text-fg-muted">{title}</h3>
+      {children}
+    </section>
   );
 }

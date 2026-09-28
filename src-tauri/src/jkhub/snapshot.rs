@@ -317,8 +317,8 @@ mod tests {
     fn the_bundled_snapshots_parse_and_name_their_own_game() {
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(RESOURCE_DIR);
         for game in Game::ALL {
-            let snapshot = read(&dir, game)
-                .unwrap_or_else(|| panic!("{} ships a snapshot", file_name(game)));
+            let snapshot =
+                read(&dir, game).unwrap_or_else(|| panic!("{} ships a snapshot", file_name(game)));
             assert_eq!(snapshot.game, game);
             assert!(!snapshot.generated_at.is_empty());
             // --- slice: jkhub catalog ---
@@ -375,8 +375,9 @@ mod tests {
                 "{} does not parse",
                 file_name(game)
             );
-            let index = crate::jkhub::index::read_from(&dir, game)
-                .unwrap_or_else(|| panic!("{} does not parse", crate::jkhub::index::file_name(game)));
+            let index = crate::jkhub::index::read_from(&dir, game).unwrap_or_else(|| {
+                panic!("{} does not parse", crate::jkhub::index::file_name(game))
+            });
             assert_eq!(index.game, game);
         }
     }
@@ -420,11 +421,8 @@ mod tests {
     /// A snapshot the installer leaves behind is a file nobody reads.
     #[test]
     fn the_bundle_carries_the_snapshot_folder() {
-        let text = std::fs::read_to_string(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tauri.conf.json"
-        ))
-        .expect("tauri.conf.json is readable");
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tauri.conf.json"))
+            .expect("tauri.conf.json is readable");
         let config: serde_json::Value =
             serde_json::from_str(&text).expect("tauri.conf.json is valid JSON");
         let resources = config["bundle"]["resources"]

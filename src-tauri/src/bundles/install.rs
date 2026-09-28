@@ -63,7 +63,9 @@ use crate::state::AppState;
 use crate::timestamp;
 
 use super::draft::{self, Draft};
-use super::manifest::{self, FileSource as ManifestSource, Manifest, ManifestComponent, ManifestFile};
+use super::manifest::{
+    self, FileSource as ManifestSource, Manifest, ManifestComponent, ManifestFile,
+};
 use super::types::{BundleDetails, BundleVersion};
 use super::{draft_key, sha256_of, version_key, BundlesGuard, BundlesState};
 
@@ -149,7 +151,9 @@ impl Job {
     /// The key of [`BundlesState`] the whole install holds.
     fn key(&self) -> String {
         match &self.origin {
-            JobOrigin::Catalogue { bundle, version } => version_key(&bundle.card.id, &version.summary.id),
+            JobOrigin::Catalogue { bundle, version } => {
+                version_key(&bundle.card.id, &version.summary.id)
+            }
             JobOrigin::Draft { draft } => draft_key(&draft.id),
         }
     }
@@ -163,24 +167,25 @@ impl Job {
 
     /// The link a client of `component` carries, `pending` or finished.
     fn link_for(&self, component: &ManifestComponent, pending: bool) -> ClientBundleLink {
-        let (bundle_id, bundle_slug, bundle_name, draft_id, version_id, version_label) = match &self.origin {
-            JobOrigin::Catalogue { bundle, version } => (
-                Some(bundle.card.id.clone()),
-                bundle.card.slug.clone(),
-                bundle.card.name.clone(),
-                None,
-                Some(version.summary.id.clone()),
-                version.summary.label.clone(),
-            ),
-            JobOrigin::Draft { draft } => (
-                draft.bundle_id.clone(),
-                draft.bundle_slug.clone().unwrap_or_default(),
-                draft.name.clone(),
-                Some(draft.id.clone()),
-                draft.last_version_id.clone(),
-                draft.version_label.clone(),
-            ),
-        };
+        let (bundle_id, bundle_slug, bundle_name, draft_id, version_id, version_label) =
+            match &self.origin {
+                JobOrigin::Catalogue { bundle, version } => (
+                    Some(bundle.card.id.clone()),
+                    bundle.card.slug.clone(),
+                    bundle.card.name.clone(),
+                    None,
+                    Some(version.summary.id.clone()),
+                    version.summary.label.clone(),
+                ),
+                JobOrigin::Draft { draft } => (
+                    draft.bundle_id.clone(),
+                    draft.bundle_slug.clone().unwrap_or_default(),
+                    draft.name.clone(),
+                    Some(draft.id.clone()),
+                    draft.last_version_id.clone(),
+                    draft.version_label.clone(),
+                ),
+            };
         ClientBundleLink {
             bundle_id,
             bundle_slug,
@@ -279,7 +284,11 @@ pub(crate) trait FileSource: Sync {
 pub(crate) trait InstallHost: Sync {
     /// Installs the release `tag` (or the newest one) into the client and
     /// answers with the updated record.
-    fn install_engine<'a>(&'a self, client_id: &'a str, tag: Option<&'a str>) -> BoxFuture<'a, Result<Client>>;
+    fn install_engine<'a>(
+        &'a self,
+        client_id: &'a str,
+        tag: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Client>>;
 
     /// Tells every window a client record changed.
     fn client_changed(&self, client_id: &str);
@@ -345,7 +354,9 @@ fn select(job: &Job, args: &InstallArgs) -> Result<(Game, Vec<Selected>)> {
         AppError::BundleUnavailable(format!("the game {:?} is not one of ours", manifest.game))
     })?;
     if args.base_name.trim().is_empty() {
-        return Err(AppError::InvalidInput("the base name of the clients is empty".into()));
+        return Err(AppError::InvalidInput(
+            "the base name of the clients is empty".into(),
+        ));
     }
     if args.base_name.trim().chars().count() > MAX_CLIENT_NAME {
         return Err(AppError::InvalidInput(format!(
@@ -360,7 +371,9 @@ fn select(job: &Job, args: &InstallArgs) -> Result<(Game, Vec<Selected>)> {
         }
     }
     if wanted.is_empty() {
-        return Err(AppError::InvalidInput("no component of the bundle is selected".into()));
+        return Err(AppError::InvalidInput(
+            "no component of the bundle is selected".into(),
+        ));
     }
     for id in &wanted {
         if manifest.component(id).is_none() {
@@ -378,10 +391,15 @@ fn select(job: &Job, args: &InstallArgs) -> Result<(Game, Vec<Selected>)> {
         }
     }
     let mut selected = Vec::with_capacity(wanted.len());
-    for component in manifest.components.iter().filter(|c| wanted.contains(&c.id.as_str())) {
-        let engine = engines::find(&component.engine.engine_id).ok_or_else(|| AppError::EngineUnknown {
-            engine_id: component.engine.engine_id.clone(),
-        })?;
+    for component in manifest
+        .components
+        .iter()
+        .filter(|c| wanted.contains(&c.id.as_str()))
+    {
+        let engine =
+            engines::find(&component.engine.engine_id).ok_or_else(|| AppError::EngineUnknown {
+                engine_id: component.engine.engine_id.clone(),
+            })?;
         if engine.game != game {
             return Err(AppError::BundleUnavailable(format!(
                 "the bundle says {} but the engine {} of {} plays {}",
@@ -422,7 +440,11 @@ fn client_name(base_name: &str, label: &str, alone: bool) -> String {
     } else {
         format!("{base}{NAME_SEPARATOR}{}", label.trim())
     };
-    name.chars().take(MAX_CLIENT_NAME).collect::<String>().trim().to_string()
+    name.chars()
+        .take(MAX_CLIENT_NAME)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 async fn install_inner(
@@ -446,10 +468,18 @@ async fn install_inner(
     let mut clients = Vec::with_capacity(selected.len());
     let mut warnings: Vec<String> = Vec::new();
 
-    for Selected { component, engine, modes } in &selected {
+    for Selected {
+        component,
+        engine,
+        modes,
+    } in &selected
+    {
         // 1. The client, new or continued, and its pending link.
         let link = job.link_for(component, true);
-        let existing = args.existing_client_ids.get(&component.id).map(String::as_str);
+        let existing = args
+            .existing_client_ids
+            .get(&component.id)
+            .map(String::as_str);
         let mut client = claim_client(
             bundles,
             state,
@@ -599,7 +629,12 @@ fn claim_client<'a>(
 }
 
 /// Whether an install of `link` may continue in `client`.
-fn check_existing_client(client: &Client, engine: &Engine, game: Game, link: &ClientBundleLink) -> Result<()> {
+fn check_existing_client(
+    client: &Client,
+    engine: &Engine,
+    game: Game,
+    link: &ClientBundleLink,
+) -> Result<()> {
     if client.engine_id != engine.id || client.game != game {
         return Err(AppError::State(format!(
             "{} runs {} for {}, and the component needs {} for {}",
@@ -625,7 +660,13 @@ fn check_existing_client(client: &Client, engine: &Engine, game: Game, link: &Cl
         (None, None) => false,
     };
     match &client.bundle {
-        Some(own) if same_origin(own) && own.component_id == link.component_id && own.role == ClientBundleLink::INSTALLED => Ok(()),
+        Some(own)
+            if same_origin(own)
+                && own.component_id == link.component_id
+                && own.role == ClientBundleLink::INSTALLED =>
+        {
+            Ok(())
+        }
         Some(own) if same_origin(own) => Err(AppError::InvalidInput(format!(
             "{} is the component {:?} of {what}, not {:?}. Install the bundle into new clients.",
             client.name, own.component_id, link.component_id
@@ -688,11 +729,27 @@ pub(crate) async fn lay_out_files<S: FileSource + ?Sized>(
         };
         say(0, file.size, "Fetching");
         let mut on_bytes = |downloaded: u64, total: u64| say(downloaded, total, "Fetching");
-        let fetched = fetch_file(source, cache_dir, file, &target, Some(client_dir), &mut on_bytes).await?;
+        let fetched = fetch_file(
+            source,
+            cache_dir,
+            file,
+            &target,
+            Some(client_dir),
+            &mut on_bytes,
+        )
+        .await?;
         if fetched.differs && !warnings.iter().any(|known| known == WARNING_JKHUB_DIFFERS) {
             warnings.push(WARNING_JKHUB_DIFFERS.to_string());
         }
-        say(file.size, file.size, if fetched.skipped { "Already there:" } else { "Installed" });
+        say(
+            file.size,
+            file.size,
+            if fetched.skipped {
+                "Already there:"
+            } else {
+                "Installed"
+            },
+        );
     }
     Ok(warnings)
 }
@@ -732,8 +789,11 @@ pub(crate) async fn fetch_file<S: FileSource + ?Sized>(
     match &file.source {
         ManifestSource::Jkhub { file_id, .. } if !source.holds_every_file() => {
             let (landed, sha256) =
-                fetch_jkhub_into(source, provenance_dir, *file_id, &file.path, target, report).await?;
-            let size = fs::metadata(&landed).map(|meta| meta.len()).unwrap_or(file.size);
+                fetch_jkhub_into(source, provenance_dir, *file_id, &file.path, target, report)
+                    .await?;
+            let size = fs::metadata(&landed)
+                .map(|meta| meta.len())
+                .unwrap_or(file.size);
             let differs = sha256 != file.sha256;
             if differs {
                 log::warn!(
@@ -749,7 +809,16 @@ pub(crate) async fn fetch_file<S: FileSource + ?Sized>(
             })
         }
         _ => {
-            fetch_blob_into(source, cache_dir, &file.sha256, file.size, target, &file.path, report).await?;
+            fetch_blob_into(
+                source,
+                cache_dir,
+                &file.sha256,
+                file.size,
+                target,
+                &file.path,
+                report,
+            )
+            .await?;
             Ok(Fetched {
                 size: file.size,
                 sha256: file.sha256.clone(),
@@ -813,7 +882,9 @@ async fn fetch_blob_into<S: FileSource + ?Sized>(
             let _ = fs::remove_file(&partial);
             0
         });
-    let fetched = source.fetch_blob(sha256, size, &partial, have, report).await;
+    let fetched = source
+        .fetch_blob(sha256, size, &partial, have, report)
+        .await;
     if let Err(e) = fetched {
         // A network failure leaves the partial file for the next run to
         // resume. An answer of the service does not: a file the service
@@ -868,29 +939,41 @@ async fn fetch_jkhub_into<S: FileSource + ?Sized>(
             reason: "a JKHub file lands in a folder of home, and the path names none".into(),
         });
     };
-    let downloaded = source.fetch_jkhub(file_id, report).await.map_err(|e| match e {
-        AppError::BundleFile { .. } => e,
-        other => AppError::BundleFile {
-            path: manifest_path.to_string(),
-            reason: other.to_string(),
-        },
-    })?;
+    let downloaded = source
+        .fetch_jkhub(file_id, report)
+        .await
+        .map_err(|e| match e {
+            AppError::BundleFile { .. } => e,
+            other => AppError::BundleFile {
+                path: manifest_path.to_string(),
+                reason: other.to_string(),
+            },
+        })?;
 
-    let contents = jkhub::install::read_archive(&downloaded.archive).map_err(|e| AppError::BundleFile {
-        path: manifest_path.to_string(),
-        reason: e.to_string(),
-    })?;
+    let contents =
+        jkhub::install::read_archive(&downloaded.archive).map_err(|e| AppError::BundleFile {
+            path: manifest_path.to_string(),
+            reason: e.to_string(),
+        })?;
     let Some(entry) = contents
         .pk3
         .iter()
         .find(|entry| entry.file_name.eq_ignore_ascii_case(file_name))
     else {
-        let inside: Vec<&str> = contents.pk3.iter().map(|entry| entry.file_name.as_str()).collect();
+        let inside: Vec<&str> = contents
+            .pk3
+            .iter()
+            .map(|entry| entry.file_name.as_str())
+            .collect();
         return Err(AppError::BundleFile {
             path: manifest_path.to_string(),
             reason: format!(
                 "JKHub record {file_id} holds no {file_name}; it holds: {}",
-                if inside.is_empty() { "no pk3 at all".to_string() } else { inside.join(", ") }
+                if inside.is_empty() {
+                    "no pk3 at all".to_string()
+                } else {
+                    inside.join(", ")
+                }
             ),
         });
     };
@@ -904,7 +987,11 @@ async fn fetch_jkhub_into<S: FileSource + ?Sized>(
     paths::create_dir(&target_folder)?;
     // The pk3 lands under the name the archive spells; on the disk the
     // client lives on, that is the file the manifest names.
-    let (archive, entry, folder_for_extract) = (downloaded.archive.clone(), entry.clone(), target_folder.clone());
+    let (archive, entry, folder_for_extract) = (
+        downloaded.archive.clone(),
+        entry.clone(),
+        target_folder.clone(),
+    );
     let written = tauri::async_runtime::spawn_blocking(move || {
         jkhub::install::extract(&archive, &[entry], &folder_for_extract)
     })
@@ -917,7 +1004,12 @@ async fn fetch_jkhub_into<S: FileSource + ?Sized>(
     let landed = target_folder.join(written.first().map(String::as_str).unwrap_or(file_name));
     let sha256 = hash_off_thread(&landed).await?;
     if let Some(client_dir) = provenance_dir {
-        jkhub::record(client_dir, folder, &[landed_name(&landed, file_name)], &downloaded.file)?;
+        jkhub::record(
+            client_dir,
+            folder,
+            &[landed_name(&landed, file_name)],
+            &downloaded.file,
+        )?;
     }
     source.forget_jkhub(file_id);
     Ok((landed, sha256))
@@ -1056,7 +1148,8 @@ impl FileSource for OnlineSource<'_> {
             let mut last = std::time::Instant::now();
             report(received, size);
             while let Some(chunk) = stream.next().await {
-                let chunk = chunk.map_err(|e| AppError::Network(format!("the download stopped: {e}")))?;
+                let chunk =
+                    chunk.map_err(|e| AppError::Network(format!("the download stopped: {e}")))?;
                 sink.write_all(&chunk)
                     .await
                     .map_err(|e| AppError::io_path("cannot write", partial, e))?;
@@ -1082,7 +1175,13 @@ impl FileSource for OnlineSource<'_> {
         file_id: u32,
         report: &'a mut (dyn FnMut(u64, u64) + Send),
     ) -> BoxFuture<'a, Result<JkhubArchive>> {
-        Box::pin(fetch_jkhub_archive(self.app, self.jkhub, &self.paths, file_id, report))
+        Box::pin(fetch_jkhub_archive(
+            self.app,
+            self.jkhub,
+            &self.paths,
+            file_id,
+            report,
+        ))
     }
 
     fn forget_jkhub(&self, file_id: u32) {
@@ -1141,7 +1240,8 @@ impl FileSource for DraftSource {
         Box::pin(async move {
             Err(AppError::BundleFile {
                 path: format!("jkhub:{file_id}"),
-                reason: "a draft holds its JKHub files itself and asks jkhub.org for nothing".into(),
+                reason: "a draft holds its JKHub files itself and asks jkhub.org for nothing"
+                    .into(),
             })
         })
     }
@@ -1159,8 +1259,18 @@ pub(crate) struct TauriHost<'a> {
 }
 
 impl InstallHost for TauriHost<'_> {
-    fn install_engine<'a>(&'a self, client_id: &'a str, tag: Option<&'a str>) -> BoxFuture<'a, Result<Client>> {
-        Box::pin(engine_install::install(self.app, self.installs, &self.paths, client_id, tag))
+    fn install_engine<'a>(
+        &'a self,
+        client_id: &'a str,
+        tag: Option<&'a str>,
+    ) -> BoxFuture<'a, Result<Client>> {
+        Box::pin(engine_install::install(
+            self.app,
+            self.installs,
+            &self.paths,
+            client_id,
+            tag,
+        ))
     }
 
     fn client_changed(&self, client_id: &str) {
@@ -1198,7 +1308,10 @@ mod tests {
     use super::*;
     use crate::bundles::draft::test_support::{component, empty_draft, put_draft_file};
     use crate::bundles::draft::{DraftConfig, DraftOrigin};
-    use crate::bundles::manifest::{FileKind, FileRoot, ManifestComponent, ManifestEngine, ManifestOverlay, ManifestShared, SCHEMA};
+    use crate::bundles::manifest::{
+        FileKind, FileRoot, ManifestComponent, ManifestEngine, ManifestOverlay, ManifestShared,
+        SCHEMA,
+    };
     use crate::bundles::test_support::sha256_hex;
     use crate::jkhub::types::JkhubGame;
 
@@ -1223,7 +1336,10 @@ mod tests {
             report: &'a mut (dyn FnMut(u64, u64) + Send),
         ) -> BoxFuture<'a, Result<()>> {
             Box::pin(async move {
-                self.requests.lock().unwrap().push((sha256.to_string(), have));
+                self.requests
+                    .lock()
+                    .unwrap()
+                    .push((sha256.to_string(), have));
                 let bytes = fs::read(self.root.join("blobs").join(sha256))
                     .map_err(|e| AppError::Network(format!("no such blob {sha256}: {e}")))?;
                 let (from, truncate) = if self.resumes && have > 0 {
@@ -1253,7 +1369,9 @@ mod tests {
             Box::pin(async move {
                 let archive = self.root.join("jkhub").join(format!("{file_id}.zip"));
                 if !archive.is_file() {
-                    return Err(AppError::JkhubDownload(format!("no archive for record {file_id}")));
+                    return Err(AppError::JkhubDownload(format!(
+                        "no archive for record {file_id}"
+                    )));
                 }
                 report(1, 1);
                 Ok(JkhubArchive {
@@ -1316,7 +1434,11 @@ mod tests {
     }
 
     impl InstallHost for TestHost {
-        fn install_engine<'a>(&'a self, client_id: &'a str, tag: Option<&'a str>) -> BoxFuture<'a, Result<Client>> {
+        fn install_engine<'a>(
+            &'a self,
+            client_id: &'a str,
+            tag: Option<&'a str>,
+        ) -> BoxFuture<'a, Result<Client>> {
             Box::pin(async move {
                 self.engines_installed
                     .lock()
@@ -1372,7 +1494,13 @@ mod tests {
         (hash, body.len() as u64)
     }
 
-    fn file(root: FileRoot, path: &str, size: u64, sha256: &str, source: ManifestSource) -> ManifestFile {
+    fn file(
+        root: FileRoot,
+        path: &str,
+        size: u64,
+        sha256: &str,
+        source: ManifestSource,
+    ) -> ManifestFile {
         ManifestFile {
             root,
             path: path.into(),
@@ -1396,8 +1524,11 @@ mod tests {
         let mut pk3 = Vec::new();
         {
             let mut writer = ZipWriter::new(std::io::Cursor::new(&mut pk3));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
-            writer.start_file("models/players/reborn/model.glm", options).expect("entry");
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            writer
+                .start_file("models/players/reborn/model.glm", options)
+                .expect("entry");
             writer.write_all(b"skin").expect("body");
             writer.finish().expect("closed");
         }
@@ -1405,7 +1536,10 @@ mod tests {
         // The JKHub record: the archive holds the pk3 next to a readme.
         write_zip(
             &source_root.join("jkhub").join("3937.zip"),
-            &[("JAPro/japro-assets.pk3", b"japro" as &[u8]), ("JAPro/readme.txt", b"read")],
+            &[
+                ("JAPro/japro-assets.pk3", b"japro" as &[u8]),
+                ("JAPro/readme.txt", b"read"),
+            ],
         );
         let manifest = Manifest {
             schema: SCHEMA,
@@ -1421,12 +1555,30 @@ mod tests {
                 fs_game: Some("taystjk".into()),
                 launch_args: String::new(),
                 overlay: ManifestOverlay {
-                    files: vec![file(FileRoot::Engine, "taystjk.x86.exe", exe_size, &exe_hash, ManifestSource::Blob)],
+                    files: vec![file(
+                        FileRoot::Engine,
+                        "taystjk.x86.exe",
+                        exe_size,
+                        &exe_hash,
+                        ManifestSource::Blob,
+                    )],
                     remove: Vec::new(),
                 },
                 files: vec![
-                    file(FileRoot::Home, "taystjk/autoexec.cfg", cfg_size, &cfg_hash, ManifestSource::Blob),
-                    file(FileRoot::Home, "base/zz_skin.pk3", pk3_size, &pk3_hash, ManifestSource::Blob),
+                    file(
+                        FileRoot::Home,
+                        "taystjk/autoexec.cfg",
+                        cfg_size,
+                        &cfg_hash,
+                        ManifestSource::Blob,
+                    ),
+                    file(
+                        FileRoot::Home,
+                        "base/zz_skin.pk3",
+                        pk3_size,
+                        &pk3_hash,
+                        ManifestSource::Blob,
+                    ),
                     file(
                         FileRoot::Home,
                         "taystjk/japro-assets.pk3",
@@ -1471,27 +1623,52 @@ mod tests {
         let client_dir = temp.path().join("clients").join("voip");
         let cache_dir = temp.path().join("cache").join("bundles");
         let mut steps = Vec::new();
-        let mut report = |step: FileStep| steps.push((step.index, step.count, step.path, step.message));
+        let mut report =
+            |step: FileStep| steps.push((step.index, step.count, step.path, step.message));
 
-        let warnings = run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report))
-            .expect("the files land");
+        let warnings = run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect("the files land");
         assert!(warnings.is_empty(), "{warnings:?}");
 
-        assert_eq!(fs::read(client_dir.join("engine").join("taystjk.x86.exe")).unwrap(), b"MZ custom build");
+        assert_eq!(
+            fs::read(client_dir.join("engine").join("taystjk.x86.exe")).unwrap(),
+            b"MZ custom build"
+        );
         assert_eq!(
             fs::read(client_dir.join("home").join("taystjk").join("autoexec.cfg")).unwrap(),
             b"seta cg_fov 97\n"
         );
-        assert_eq!(fs::read(client_dir.join("home").join("base").join("zz_skin.pk3")).unwrap(), pk3);
         assert_eq!(
-            fs::read(client_dir.join("home").join("taystjk").join("japro-assets.pk3")).unwrap(),
+            fs::read(client_dir.join("home").join("base").join("zz_skin.pk3")).unwrap(),
+            pk3
+        );
+        assert_eq!(
+            fs::read(
+                client_dir
+                    .join("home")
+                    .join("taystjk")
+                    .join("japro-assets.pk3")
+            )
+            .unwrap(),
             b"japro"
         );
         // Nothing but the pk3 came out of the JKHub archive.
-        assert!(!client_dir.join("home").join("taystjk").join("readme.txt").exists());
+        assert!(!client_dir
+            .join("home")
+            .join("taystjk")
+            .join("readme.txt")
+            .exists());
         // The provenance of the JKHub file is written the way the tab writes it.
         let provenance = provenance_of(&client_dir);
-        let origin = provenance.get("taystjk/japro-assets.pk3").expect("a provenance note");
+        let origin = provenance
+            .get("taystjk/japro-assets.pk3")
+            .expect("a provenance note");
         assert_eq!(origin.file_id, 3937);
         assert_eq!(origin.source, "jkhub");
         assert_eq!(origin.version.as_deref(), Some("1.6.5"));
@@ -1502,7 +1679,9 @@ mod tests {
         assert!(steps.iter().all(|(_, count, _, _)| *count == 4));
         assert_eq!(steps.first().map(|s| s.0), Some(1));
         assert_eq!(steps.last().map(|s| s.0), Some(4));
-        assert!(steps.iter().any(|(_, _, path, _)| path == "taystjk/japro-assets.pk3"));
+        assert!(steps
+            .iter()
+            .any(|(_, _, path, _)| path == "taystjk/japro-assets.pk3"));
     }
 
     #[test]
@@ -1512,7 +1691,14 @@ mod tests {
         let client_dir = temp.path().join("clients").join("voip");
         let cache_dir = temp.path().join("cache").join("bundles");
         let mut report = |_: FileStep| {};
-        run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report)).expect("first run");
+        run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect("first run");
         let first = source.requests.lock().unwrap().len();
         assert_eq!(first, 3, "three blobs, one JKHub file");
 
@@ -1524,16 +1710,32 @@ mod tests {
         let exe = &manifest.components[0].overlay.files[0];
         fs::write(cache_dir.join(format!("{}.part", exe.sha256)), b"MZ cus").unwrap();
 
-        let warnings = run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report))
-            .expect("second run");
+        let warnings = run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect("second run");
         assert!(warnings.is_empty());
         let requests = source.requests.lock().unwrap();
         let second: Vec<&(String, u64)> = requests.iter().skip(first).collect();
-        assert_eq!(second.len(), 2, "the pk3 in place was not fetched again: {second:?}");
-        assert!(second.contains(&&(exe.sha256.clone(), 6)), "the executable resumed at byte 6: {second:?}");
+        assert_eq!(
+            second.len(),
+            2,
+            "the pk3 in place was not fetched again: {second:?}"
+        );
+        assert!(
+            second.contains(&&(exe.sha256.clone(), 6)),
+            "the executable resumed at byte 6: {second:?}"
+        );
         assert!(second.contains(&&(manifest.components[0].files[0].sha256.clone(), 0)));
         drop(requests);
-        assert_eq!(fs::read(client_dir.join("engine").join("taystjk.x86.exe")).unwrap(), b"MZ custom build");
+        assert_eq!(
+            fs::read(client_dir.join("engine").join("taystjk.x86.exe")).unwrap(),
+            b"MZ custom build"
+        );
     }
 
     #[test]
@@ -1543,13 +1745,23 @@ mod tests {
         // The service holds a file under this hash whose bytes hash to
         // something else: a corrupted store, or a tampered one.
         manifest.components[0].files[0].sha256 = "0".repeat(64);
-        fs::write(source.root.join("blobs").join("0".repeat(64)), b"seta cg_fov 97\n").unwrap();
+        fs::write(
+            source.root.join("blobs").join("0".repeat(64)),
+            b"seta cg_fov 97\n",
+        )
+        .unwrap();
         let client_dir = temp.path().join("clients").join("voip");
         let cache_dir = temp.path().join("cache").join("bundles");
         let mut report = |_: FileStep| {};
 
-        let error = run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report))
-            .expect_err("the hash does not match");
+        let error = run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect_err("the hash does not match");
         match &error {
             AppError::BundleFile { path, reason } => {
                 assert_eq!(path, "taystjk/autoexec.cfg");
@@ -1560,7 +1772,11 @@ mod tests {
         assert_eq!(error.code(), "bundleFile");
         // The first file landed, the second did not, the cache is clean.
         assert!(client_dir.join("engine").join("taystjk.x86.exe").is_file());
-        assert!(!client_dir.join("home").join("taystjk").join("autoexec.cfg").exists());
+        assert!(!client_dir
+            .join("home")
+            .join("taystjk")
+            .join("autoexec.cfg")
+            .exists());
         assert!(!cache_dir.join(format!("{}.part", "0".repeat(64))).exists());
     }
 
@@ -1573,14 +1789,30 @@ mod tests {
         let cache_dir = temp.path().join("cache").join("bundles");
         let mut report = |_: FileStep| {};
 
-        let warnings = run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report))
-            .expect("a changed JKHub file still installs");
+        let warnings = run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect("a changed JKHub file still installs");
         assert_eq!(warnings, vec![WARNING_JKHUB_DIFFERS]);
-        assert!(client_dir.join("home").join("taystjk").join("japro-assets.pk3").is_file());
+        assert!(client_dir
+            .join("home")
+            .join("taystjk")
+            .join("japro-assets.pk3")
+            .is_file());
 
         manifest.components[0].files[2].path = "taystjk/other.pk3".into();
-        let error = run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report))
-            .expect_err("the archive holds no such pk3");
+        let error = run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect_err("the archive holds no such pk3");
         match error {
             AppError::BundleFile { path, reason } => {
                 assert_eq!(path, "taystjk/other.pk3");
@@ -1599,8 +1831,14 @@ mod tests {
         let cache_dir = temp.path().join("cache").join("bundles");
         let mut report = |_: FileStep| {};
 
-        let error = run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report))
-            .expect_err("refused");
+        let error = run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect_err("refused");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         assert!(source.requests.lock().unwrap().is_empty());
         assert!(!temp.path().join("clients").join("evil.exe").exists());
@@ -1608,11 +1846,15 @@ mod tests {
         // The same rule for a path of `overlay.remove`.
         let engine_dir = client_dir.join("engine");
         fs::create_dir_all(&engine_dir).unwrap();
-        let error = remove_overlay_paths(&engine_dir, &["../client.json".to_string()]).expect_err("refused");
+        let error = remove_overlay_paths(&engine_dir, &["../client.json".to_string()])
+            .expect_err("refused");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         fs::write(engine_dir.join("rd-vulkan_x86.dll"), b"vulkan").unwrap();
-        remove_overlay_paths(&engine_dir, &["rd-vulkan_x86.dll".to_string(), "gone.dll".to_string()])
-            .expect("a missing file is nothing to do");
+        remove_overlay_paths(
+            &engine_dir,
+            &["rd-vulkan_x86.dll".to_string(), "gone.dll".to_string()],
+        )
+        .expect("a missing file is nothing to do");
         assert!(!engine_dir.join("rd-vulkan_x86.dll").exists());
     }
 
@@ -1628,8 +1870,18 @@ mod tests {
         fs::write(cache_dir.join(format!("{}.part", exe.sha256)), b"garbage").unwrap();
         let mut report = |_: FileStep| {};
 
-        run(lay_out_files(&source, &client_dir, &cache_dir, &files_of(&manifest), &mut report)).expect("the run");
-        assert_eq!(fs::read(client_dir.join("engine").join("taystjk.x86.exe")).unwrap(), b"MZ custom build");
+        run(lay_out_files(
+            &source,
+            &client_dir,
+            &cache_dir,
+            &files_of(&manifest),
+            &mut report,
+        ))
+        .expect("the run");
+        assert_eq!(
+            fs::read(client_dir.join("engine").join("taystjk.x86.exe")).unwrap(),
+            b"MZ custom build"
+        );
     }
 
     #[test]
@@ -1641,12 +1893,19 @@ mod tests {
         let from = temp.path().join("cache").join("x.part");
         fs::create_dir_all(from.parent().unwrap()).unwrap();
         fs::write(&from, b"payload").unwrap();
-        let to = temp.path().join("clients").join("voip").join("home").join("x.pk3");
+        let to = temp
+            .path()
+            .join("clients")
+            .join("voip")
+            .join("home")
+            .join("x.pk3");
         fs::create_dir_all(to.parent().unwrap()).unwrap();
         fs::write(&to, b"an older file of the same name").unwrap();
 
         let across_volumes = |_: &Path, _: &Path| {
-            Err(std::io::Error::other("The system cannot move the file to a different disk drive."))
+            Err(std::io::Error::other(
+                "The system cannot move the file to a different disk drive.",
+            ))
         };
         move_with(&from, &to, across_volumes).expect("copied instead");
         assert_eq!(fs::read(&to).unwrap(), b"payload");
@@ -1661,7 +1920,10 @@ mod tests {
 
     #[test]
     fn client_names_join_the_base_name_and_the_label_within_the_limit() {
-        assert_eq!(client_name("RUJKA", "Multiplayer", false), "RUJKA · Multiplayer");
+        assert_eq!(
+            client_name("RUJKA", "Multiplayer", false),
+            "RUJKA · Multiplayer"
+        );
         assert_eq!(client_name(" RUJKA ", "Single player", true), "RUJKA");
         let long = client_name(&"x".repeat(40), "Single player", false);
         assert_eq!(long.chars().count(), MAX_CLIENT_NAME);
@@ -1678,8 +1940,11 @@ mod tests {
         let mut pk3 = Vec::new();
         {
             let mut writer = ZipWriter::new(std::io::Cursor::new(&mut pk3));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
-            writer.start_file("models/players/reborn/model.glm", options).expect("entry");
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            writer
+                .start_file("models/players/reborn/model.glm", options)
+                .expect("entry");
             writer.write_all(b"skin").expect("body");
             writer.finish().expect("closed");
         }
@@ -1803,7 +2068,15 @@ mod tests {
             existing_client_ids: HashMap::new(),
         };
 
-        let clients = run(install(&state, &bundles, &host, &source, draft_job(&draft), args)).expect("installed");
+        let clients = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args,
+        ))
+        .expect("installed");
         assert_eq!(clients.len(), 2);
         let (mp, sp) = (&clients[0], &clients[1]);
         assert_eq!(mp.name, "RUJKA · Multiplayer");
@@ -1814,7 +2087,10 @@ mod tests {
         assert_eq!(mp.launch_args, "+set cg_fov 97");
         assert_eq!(sp.fs_game, None);
         assert_eq!(mp.engine_version.as_deref(), Some("latest"));
-        assert_eq!(client_folders(&paths), ["rujka-multiplayer", "rujka-single-player"]);
+        assert_eq!(
+            client_folders(&paths),
+            ["rujka-multiplayer", "rujka-single-player"]
+        );
 
         // The links: draft, no bundle, no version, the component, finished.
         let link = mp.bundle.as_ref().expect("linked");
@@ -1832,21 +2108,50 @@ mod tests {
         // The overlay: the executable replaced, the renderer gone, the rest
         // of the release in place.
         let mp_dir = paths.client_dir(&mp.id);
-        assert_eq!(fs::read(mp_dir.join("engine").join("openjk.x86.exe")).unwrap(), b"MZ custom");
+        assert_eq!(
+            fs::read(mp_dir.join("engine").join("openjk.x86.exe")).unwrap(),
+            b"MZ custom"
+        );
         assert!(!mp_dir.join("engine").join("rd-vulkan_x86.dll").exists());
-        assert!(mp_dir.join("engine").join("base").join("cgamex86.dll").is_file());
+        assert!(mp_dir
+            .join("engine")
+            .join("base")
+            .join("cgamex86.dll")
+            .is_file());
         let sp_dir = paths.client_dir(&sp.id);
-        assert_eq!(fs::read(sp_dir.join("engine").join("openjk.x86.exe")).unwrap(), b"MZ release");
+        assert_eq!(
+            fs::read(sp_dir.join("engine").join("openjk.x86.exe")).unwrap(),
+            b"MZ release"
+        );
         assert!(sp_dir.join("engine").join("rd-vulkan_x86.dll").is_file());
         assert!(sp_dir.join("engine").join("openjk_sp.x86.exe").is_file());
 
         // The files of each component, and the shared file in both.
-        assert_eq!(fs::read(mp_dir.join("home").join("rujka").join("cgamex86.dll")).unwrap(), b"mod module");
-        assert_eq!(fs::read(mp_dir.join("home").join("rujka").join("japro-assets.pk3")).unwrap(), b"japro");
-        assert!(!mp_dir.join("home").join("base").join("autoexec_sp.cfg").exists());
-        assert_eq!(fs::read(sp_dir.join("home").join("base").join("autoexec_sp.cfg")).unwrap(), b"seta g_speed 250\n");
-        assert_eq!(fs::read(mp_dir.join("home").join("base").join("rus_sp.pk3")).unwrap(), pk3);
-        assert_eq!(fs::read(sp_dir.join("home").join("base").join("rus_sp.pk3")).unwrap(), pk3);
+        assert_eq!(
+            fs::read(mp_dir.join("home").join("rujka").join("cgamex86.dll")).unwrap(),
+            b"mod module"
+        );
+        assert_eq!(
+            fs::read(mp_dir.join("home").join("rujka").join("japro-assets.pk3")).unwrap(),
+            b"japro"
+        );
+        assert!(!mp_dir
+            .join("home")
+            .join("base")
+            .join("autoexec_sp.cfg")
+            .exists());
+        assert_eq!(
+            fs::read(sp_dir.join("home").join("base").join("autoexec_sp.cfg")).unwrap(),
+            b"seta g_speed 250\n"
+        );
+        assert_eq!(
+            fs::read(mp_dir.join("home").join("base").join("rus_sp.pk3")).unwrap(),
+            pk3
+        );
+        assert_eq!(
+            fs::read(sp_dir.join("home").join("base").join("rus_sp.pk3")).unwrap(),
+            pk3
+        );
         // A JKHub file of a draft came out of the draft, not of jkhub.org,
         // so no provenance note is written for it.
         assert!(provenance_of(&mp_dir).is_empty());
@@ -1855,18 +2160,30 @@ mod tests {
         // the password line gone.
         let mp_docs = configs::assigned_documents(&state, mp).unwrap();
         assert_eq!(
-            mp_docs.iter().map(|(_, doc)| doc.name.as_str()).collect::<Vec<_>>(),
+            mp_docs
+                .iter()
+                .map(|(_, doc)| doc.name.as_str())
+                .collect::<Vec<_>>(),
             ["RUJKA binds", "Shared binds"]
         );
         assert_eq!(mp_docs[0].1.text, "bind PGDN toggle cg_dismember 0 3\n");
         let sp_docs = configs::assigned_documents(&state, sp).unwrap();
-        assert_eq!(sp_docs.iter().map(|(_, doc)| doc.name.as_str()).collect::<Vec<_>>(), ["Shared binds"]);
+        assert_eq!(
+            sp_docs
+                .iter()
+                .map(|(_, doc)| doc.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Shared binds"]
+        );
 
         // The engines went in once each, and the events name the component
         // that runs.
         assert_eq!(
             *host.engines_installed.lock().unwrap(),
-            [(mp.id.clone(), Some("latest".into())), (sp.id.clone(), None)]
+            [
+                (mp.id.clone(), Some("latest".into())),
+                (sp.id.clone(), None)
+            ]
         );
         let phases = host.phases();
         assert_eq!(phases[0], (Some("mp".into()), "engine"));
@@ -1886,8 +2203,12 @@ mod tests {
         assert!(host.changed.lock().unwrap().contains(&mp.id));
 
         // The claims are free again.
-        bundles.claim(&mp.id, BundlesState::INSTALL).expect("released");
-        bundles.claim(&draft_key(&draft.id), BundlesState::INSTALL).expect("released");
+        bundles
+            .claim(&mp.id, BundlesState::INSTALL)
+            .expect("released");
+        bundles
+            .claim(&draft_key(&draft.id), BundlesState::INSTALL)
+            .expect("released");
     }
 
     #[test]
@@ -1904,7 +2225,15 @@ mod tests {
             component_ids: vec!["mp".into(), "sp".into()],
             existing_client_ids: HashMap::new(),
         };
-        let clients = run(install(&state, &bundles, &host, &source, draft_job(&draft), args)).expect("installed");
+        let clients = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args,
+        ))
+        .expect("installed");
         let (mp, sp) = (&clients[0], &clients[1]);
         let files_before = host
             .events
@@ -1917,18 +2246,47 @@ mod tests {
 
         // The player deleted a file of the first client; the second run
         // continues in both clients, puts it back and skips the rest.
-        fs::remove_file(paths.client_dir(&mp.id).join("home").join("rujka").join("cgamex86.dll")).unwrap();
+        fs::remove_file(
+            paths
+                .client_dir(&mp.id)
+                .join("home")
+                .join("rujka")
+                .join("cgamex86.dll"),
+        )
+        .unwrap();
         let host = TestHost::new(&paths);
         let args = InstallArgs {
             base_name: "RUJKA".into(),
             component_ids: vec!["mp".into(), "sp".into()],
-            existing_client_ids: HashMap::from([("mp".to_string(), mp.id.clone()), ("sp".to_string(), sp.id.clone())]),
+            existing_client_ids: HashMap::from([
+                ("mp".to_string(), mp.id.clone()),
+                ("sp".to_string(), sp.id.clone()),
+            ]),
         };
-        let again = run(install(&state, &bundles, &host, &source, draft_job(&draft), args)).expect("continued");
-        assert_eq!(again.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), [mp.id.as_str(), sp.id.as_str()]);
+        let again = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args,
+        ))
+        .expect("continued");
+        assert_eq!(
+            again.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            [mp.id.as_str(), sp.id.as_str()]
+        );
         assert_eq!(client_folders(&paths).len(), 2, "no third client");
-        assert!(host.engines_installed.lock().unwrap().is_empty(), "the engines were in place");
-        assert!(paths.client_dir(&mp.id).join("home").join("rujka").join("cgamex86.dll").is_file());
+        assert!(
+            host.engines_installed.lock().unwrap().is_empty(),
+            "the engines were in place"
+        );
+        assert!(paths
+            .client_dir(&mp.id)
+            .join("home")
+            .join("rujka")
+            .join("cgamex86.dll")
+            .is_file());
         let events = host.events.lock().unwrap();
         let installed: Vec<&str> = events
             .iter()
@@ -1953,28 +2311,59 @@ mod tests {
             component_ids: vec!["mp".into()],
             existing_client_ids: HashMap::from([("mp".to_string(), sp.id.clone())]),
         };
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args)).expect_err("the wrong client");
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args,
+        ))
+        .expect_err("the wrong client");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         assert!(error.to_string().contains("\"sp\""), "{error}");
         assert_eq!(host.events.lock().unwrap().last().unwrap().phase, "error");
         assert_eq!(client_folders(&paths).len(), 2);
 
         // A hand-made client, and one that is not selected, are refused too.
-        let plain = clients::create_record(&paths, "Plain", "openjk", Game::JediAcademy, None).unwrap();
+        let plain =
+            clients::create_record(&paths, "Plain", "openjk", Game::JediAcademy, None).unwrap();
         let args = InstallArgs {
             base_name: "RUJKA".into(),
             component_ids: vec!["mp".into()],
             existing_client_ids: HashMap::from([("mp".to_string(), plain.id.clone())]),
         };
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args)).expect_err("not linked");
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args,
+        ))
+        .expect_err("not linked");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        assert!(clients::read_record(&paths, &plain.id).unwrap().bundle.is_none(), "untouched");
+        assert!(
+            clients::read_record(&paths, &plain.id)
+                .unwrap()
+                .bundle
+                .is_none(),
+            "untouched"
+        );
         let args = InstallArgs {
             base_name: "RUJKA".into(),
             component_ids: vec!["sp".into()],
             existing_client_ids: HashMap::from([("mp".to_string(), mp.id.clone())]),
         };
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args)).expect_err("not selected");
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args,
+        ))
+        .expect_err("not selected");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
     }
 
@@ -1993,32 +2382,96 @@ mod tests {
             existing_client_ids: HashMap::new(),
         };
 
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args(&[], "RUJKA"))).unwrap_err();
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args(&[], "RUJKA"),
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args(&["ghost"], "RUJKA"))).unwrap_err();
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args(&["ghost"], "RUJKA"),
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args(&["mp"], "  "))).unwrap_err();
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args(&["mp"], "  "),
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
 
         // An engine the registry lacks, and a mode the engine lacks.
         let mut job = draft_job(&draft);
         job.manifest.components[0].engine.engine_id = "future-engine".into();
-        let error = run(install(&state, &bundles, &host, &source, job, args(&["mp"], "RUJKA"))).unwrap_err();
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            job,
+            args(&["mp"], "RUJKA"),
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::EngineUnknown { .. }), "{error}");
         let mut job = draft_job(&draft);
         job.manifest.components[1].engine.engine_id = "eternaljk".into();
-        let error = run(install(&state, &bundles, &host, &source, job, args(&["sp"], "RUJKA"))).unwrap_err();
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            job,
+            args(&["sp"], "RUJKA"),
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::BundleUnavailable(_)), "{error}");
-        assert!(client_folders(&paths).is_empty(), "nothing was made: {:?}", client_folders(&paths));
-        bundles.claim(&draft_key(&draft.id), BundlesState::INSTALL).expect("nothing held");
+        assert!(
+            client_folders(&paths).is_empty(),
+            "nothing was made: {:?}",
+            client_folders(&paths)
+        );
+        bundles
+            .claim(&draft_key(&draft.id), BundlesState::INSTALL)
+            .expect("nothing held");
 
         // A single selected component takes the base name alone, and an
         // install of the same draft is refused while one runs.
-        let held = bundles.claim(&draft_key(&draft.id), BundlesState::PUBLISH).unwrap();
-        let error = run(install(&state, &bundles, &host, &source, draft_job(&draft), args(&["sp"], "RUJKA"))).unwrap_err();
+        let held = bundles
+            .claim(&draft_key(&draft.id), BundlesState::PUBLISH)
+            .unwrap();
+        let error = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args(&["sp"], "RUJKA"),
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::Busy(_)), "{error}");
         drop(held);
-        let clients = run(install(&state, &bundles, &host, &source, draft_job(&draft), args(&["sp"], "RUJKA"))).unwrap();
+        let clients = run(install(
+            &state,
+            &bundles,
+            &host,
+            &source,
+            draft_job(&draft),
+            args(&["sp"], "RUJKA"),
+        ))
+        .unwrap();
         assert_eq!(clients.len(), 1);
         assert_eq!(clients[0].name, "RUJKA");
         assert_eq!(clients[0].modes, [LaunchMode::Single]);

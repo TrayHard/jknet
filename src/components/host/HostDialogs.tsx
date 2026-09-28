@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
+import { hostModId } from "../../lib/hostConfig";
 import type { HostSession } from "../../lib/ipc";
 import { useChangeHostMap, useHostOptions } from "../../lib/queries";
 import { Button, Dialog, Select } from "../ui";
@@ -69,7 +70,9 @@ export function ChangeMapDialog({
   const [map, setMap] = useState(session.settings.map);
   const onMap = useCallback((next: string) => setMap(next), []);
 
-  const gametypes = options.data?.gametypes ?? [];
+  const client = options.data?.clients.find((entry) => entry.id === session.settings.clientId);
+  const mbii = hostModId(client) === "mbii";
+  const gametypes = (options.data?.gametypes ?? []).filter((entry) => !mbii || [3, 4, 7].includes(entry.index));
   const unchanged = gametype === session.settings.gametype && map === session.settings.map;
 
   return (
@@ -84,7 +87,7 @@ export function ChangeMapDialog({
           </Button>
           <Button
             variant="primary"
-            disabled={unchanged || map === "" || change.isPending}
+            disabled={unchanged || map === "" || change.isPending || !options.isSuccess}
             onClick={() => change.mutate({ map, gametype }, { onSuccess: onClose })}
           >
             {t("changeMap.apply")}
@@ -100,7 +103,7 @@ export function ChangeMapDialog({
             onChange={(value) => setGametype(Number(value))}
             options={gametypes.map((entry) => ({
               value: String(entry.index),
-              label: labels.label(session.game, entry.index, entry.label),
+              label: mbii && entry.index === 7 ? t("setup.config.mbiiMode") : labels.label(session.game, entry.index, entry.label),
             }))}
             ariaLabel={t("setup.gametype.label")}
             className="w-full"
@@ -109,12 +112,14 @@ export function ChangeMapDialog({
         <div className="flex flex-col gap-6">
           <span className="text-label-xs text-fg-muted">{t("setup.map.label")}</span>
           <MapPicker
+            game={session.game}
+            gametypes={options.data?.gametypes ?? []}
             clientId={session.settings.clientId}
-            gametype={gametype}
             value={map}
             onChange={onMap}
             preferred={session.settings.map}
             className="w-full"
+            preserveSelection={!!session.settings.serverConfigId}
           />
         </div>
         {change.error ? (

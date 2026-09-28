@@ -227,7 +227,12 @@ pub enum CloseAction {
 
 /// The rule, pure: only the launcher window hides, only when the player
 /// wants it, only while the tray icon exists and never while quitting.
-pub fn close_action(label: &str, close_to_tray: bool, tray_ready: bool, quitting: bool) -> CloseAction {
+pub fn close_action(
+    label: &str,
+    close_to_tray: bool,
+    tray_ready: bool,
+    quitting: bool,
+) -> CloseAction {
     if label == MAIN_LABEL && close_to_tray && tray_ready && !quitting {
         CloseAction::Hide
     } else {
@@ -275,7 +280,9 @@ fn note_hidden(app: &AppHandle) {
     if seen || state.hint_shown.swap(true, Ordering::AcqRel) {
         return;
     }
-    if let Err(e) = Settings::edit(&app_state, |settings| settings.close_to_tray_hint_seen = true) {
+    if let Err(e) = Settings::edit(&app_state, |settings| {
+        settings.close_to_tray_hint_seen = true
+    }) {
         log::warn!("tray: cannot note that the hint was shown: {e}");
     }
     if let Err(e) = app.emit(EVENT_TRAY_HINT, ()) {
@@ -352,19 +359,25 @@ pub fn raise_from_second_start(app: &AppHandle, args: &[String]) {
 pub fn build(app: &AppHandle) {
     match try_build(app) {
         Ok(()) => {
-            app.state::<TrayState>().ready.store(true, Ordering::Release);
+            app.state::<TrayState>()
+                .ready
+                .store(true, Ordering::Release);
             log::info!("tray: icon ready");
         }
         Err(e) => log::error!("tray: cannot build the icon, closing the window will quit: {e}"),
     }
     // The check mark follows **Do not disturb**, whoever changed it.
     let handle = app.clone();
-    tauri::Listener::listen(app, crate::settings::CHAT_NOTIFICATIONS_EVENT, move |event| {
-        match serde_json::from_str::<crate::settings::ChatNotificationsChanged>(event.payload()) {
+    tauri::Listener::listen(
+        app,
+        crate::settings::CHAT_NOTIFICATIONS_EVENT,
+        move |event| match serde_json::from_str::<crate::settings::ChatNotificationsChanged>(
+            event.payload(),
+        ) {
             Ok(changed) => set_dnd_mark(&handle, changed.chat_notifications.dnd),
             Err(e) => log::debug!("tray: unreadable settings event: {e}"),
-        }
-    });
+        },
+    );
 }
 
 #[cfg(desktop)]
@@ -382,7 +395,14 @@ fn try_build(app: &AppHandle) -> tauri::Result<()> {
     let items = MenuItems {
         open: MenuItem::with_id(app, ITEM_OPEN, menu_text(&labels.open), true, None::<&str>)?,
         chat: MenuItem::with_id(app, ITEM_CHAT, menu_text(&labels.chat), true, None::<&str>)?,
-        dnd: CheckMenuItem::with_id(app, ITEM_DND, menu_text(&labels.dnd), true, dnd, None::<&str>)?,
+        dnd: CheckMenuItem::with_id(
+            app,
+            ITEM_DND,
+            menu_text(&labels.dnd),
+            true,
+            dnd,
+            None::<&str>,
+        )?,
         quit: MenuItem::with_id(app, ITEM_QUIT, menu_text(&labels.quit), true, None::<&str>)?,
     };
     let menu = Menu::with_items(
@@ -434,7 +454,14 @@ fn toggle_dnd(app: &AppHandle) {
         settings.chat_notifications.dnd = !settings.chat_notifications.dnd;
     }) {
         Ok(settings) => {
-            log::info!("tray: do not disturb {}", if settings.chat_notifications.dnd { "on" } else { "off" });
+            log::info!(
+                "tray: do not disturb {}",
+                if settings.chat_notifications.dnd {
+                    "on"
+                } else {
+                    "off"
+                }
+            );
             set_dnd_mark(app, settings.chat_notifications.dnd);
             crate::settings::emit_chat_notifications(app, &settings);
         }
@@ -649,7 +676,8 @@ pub async fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool> {
         } else {
             manager.disable()
         };
-        changed.map_err(|e| AppError::State(format!("cannot change the start with Windows: {e}")))?;
+        changed
+            .map_err(|e| AppError::State(format!("cannot change the start with Windows: {e}")))?;
         log::info!("start with Windows {}", if enabled { "on" } else { "off" });
         manager
             .is_enabled()
@@ -658,7 +686,9 @@ pub async fn set_autostart(app: AppHandle, enabled: bool) -> Result<bool> {
     #[cfg(not(desktop))]
     {
         let _ = (app, enabled);
-        Err(AppError::InvalidInput("this system has no start with the session".into()))
+        Err(AppError::InvalidInput(
+            "this system has no start with the session".into(),
+        ))
     }
 }
 
@@ -679,8 +709,14 @@ mod tests {
         for label in ["chat", "client-everyday"] {
             assert_eq!(close_action(label, true, true, false), Close, "{label}");
         }
-        assert_eq!(serde_json::to_string(&Hide).expect("serializes"), r#""hide""#);
-        assert_eq!(serde_json::to_string(&Close).expect("serializes"), r#""close""#);
+        assert_eq!(
+            serde_json::to_string(&Hide).expect("serializes"),
+            r#""hide""#
+        );
+        assert_eq!(
+            serde_json::to_string(&Close).expect("serializes"),
+            r#""close""#
+        );
     }
 
     #[test]
@@ -695,7 +731,10 @@ mod tests {
         let old = lifecycle.begin();
         let new = lifecycle.begin();
         lifecycle.lapse(old);
-        assert!(lifecycle.quitting(), "the older timer leaves the newer quit alone");
+        assert!(
+            lifecycle.quitting(),
+            "the older timer leaves the newer quit alone"
+        );
         lifecycle.lapse(new);
         assert!(!lifecycle.quitting());
 
@@ -704,15 +743,24 @@ mod tests {
         assert!(!lifecycle.quitting());
         let again = lifecycle.begin();
         lifecycle.lapse(cancelled);
-        assert!(lifecycle.quitting(), "a cancelled quit's timer does not end the next one");
+        assert!(
+            lifecycle.quitting(),
+            "a cancelled quit's timer does not end the next one"
+        );
         lifecycle.lapse(again);
     }
 
     #[test]
     fn only_a_start_with_windows_stays_in_the_tray() {
         assert!(starts_hidden(&["JKNet.exe", AUTOSTART_ARG], true));
-        assert!(!starts_hidden(&["JKNet.exe", AUTOSTART_ARG], false), "the player wants the window");
-        assert!(!starts_hidden(&["JKNet.exe"], true), "a start by hand opens the window");
+        assert!(
+            !starts_hidden(&["JKNet.exe", AUTOSTART_ARG], false),
+            "the player wants the window"
+        );
+        assert!(
+            !starts_hidden(&["JKNet.exe"], true),
+            "a start by hand opens the window"
+        );
         assert!(!starts_hidden::<&str>(&[], true));
     }
 
@@ -732,7 +780,9 @@ mod tests {
     #[test]
     fn the_badge_is_a_red_dot_in_the_top_right_corner() {
         let (width, height) = (32u32, 32u32);
-        let icon: Vec<u8> = (0..width * height).flat_map(|_| [0x20, 0x60, 0xE0, 0xFF]).collect();
+        let icon: Vec<u8> = (0..width * height)
+            .flat_map(|_| [0x20, 0x60, 0xE0, 0xFF])
+            .collect();
         let badged = with_badge(&icon, width, height);
         assert_eq!(badged.len(), icon.len());
         let pixel = |x: u32, y: u32| {

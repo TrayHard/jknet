@@ -148,10 +148,7 @@ pub enum AppError {
     /// not in it. The message names the game, because a launcher that serves
     /// two of them has two folders to be wrong about.
     #[error("{game} game files: {reason}")]
-    GameDataMissing {
-        game: &'static str,
-        reason: String,
-    },
+    GameDataMissing { game: &'static str, reason: String },
 
     /// A library command addressed a pk3 that belongs to the engine build,
     /// such as JK2MV's `assetsmv.pk3` mirrored into `home\base\`. Its own
@@ -183,7 +180,10 @@ pub enum AppError {
     /// so that `onlineErrorCode` in `src/lib/ipc.ts` reads it back like any other
     /// code — hence the doubled word: `online` is the envelope and
     /// [`ONLINE_NOT_CONFIGURED_CODE`] is the code inside it.
-    #[error("online {}: JKNet Online is not configured in this build", ONLINE_NOT_CONFIGURED_CODE)]
+    #[error(
+        "online {}: JKNet Online is not configured in this build",
+        ONLINE_NOT_CONFIGURED_CODE
+    )]
     OnlineNotConfigured,
 
     // --- slice: jkhub ---
@@ -254,7 +254,9 @@ pub enum AppError {
     HostNoDedicatedServer { engine: String },
 
     /// The engine ships one, but the file is not in `engine\` of the client.
-    #[error("the dedicated server of {engine} is missing. Reinstall the engine on the Clients screen.")]
+    #[error(
+        "the dedicated server of {engine} is missing. Reinstall the engine on the Clients screen."
+    )]
     HostEngineMissing { engine: String },
 
     /// The server process could not start or ended before it answered.
@@ -442,7 +444,11 @@ impl AppError {
             }
             AppError::HostInviteOnly { name } => json!({ "name": name }),
             AppError::RelayUnavailable(reason) => json!({ "reason": reason }),
-            AppError::RelayQuota { message, quota, resets_at } => {
+            AppError::RelayQuota {
+                message,
+                quota,
+                resets_at,
+            } => {
                 json!({ "reason": message, "quota": quota, "resetsAt": resets_at })
             }
         }
@@ -507,7 +513,10 @@ mod tests {
         .expect("an error serializes into an envelope");
 
         assert_eq!(value["code"], "gameDataMissing");
-        assert_eq!(value["message"], "Jedi Outcast game files: the folder is not set.");
+        assert_eq!(
+            value["message"],
+            "Jedi Outcast game files: the folder is not set."
+        );
         // Every value the rendered message interpolates is also a field of
         // `details`: a translated message cannot name the game otherwise.
         assert_eq!(value["details"]["game"], "Jedi Outcast");
@@ -535,7 +544,9 @@ mod tests {
             AppError::Path("x".into()),
             AppError::NotFound("x".into()),
             AppError::InvalidInput("x".into()),
-            AppError::UnsupportedEngineSystem { system: "macos (aarch64)".into() },
+            AppError::UnsupportedEngineSystem {
+                system: "macos (aarch64)".into(),
+            },
             AppError::AlreadyExists("x".into()),
             AppError::Busy("x".into()),
             AppError::State("x".into()),
@@ -546,30 +557,58 @@ mod tests {
             AppError::Launch("x".into()),
             AppError::Image("x".into()),
             AppError::SignedOut,
-            AppError::Online { code: "conflict".into(), message: "x".into() },
+            AppError::Online {
+                code: "conflict".into(),
+                message: "x".into(),
+            },
             AppError::OnlineNotConfigured,
             AppError::GameMismatch("x".into()),
-            AppError::GameDataMissing { game: "Jedi Academy", reason: "x".into() },
+            AppError::GameDataMissing {
+                game: "Jedi Academy",
+                reason: "x".into(),
+            },
             AppError::EngineFile("base/assetsmv.pk3".into()),
             AppError::BasepathOccupied(r"C:\clients\jk2mv\basepath\base".into()),
             AppError::JkhubUnavailable("x".into()),
             AppError::JkhubParse { what: "x".into() },
             AppError::JkhubDownload("x".into()),
-            AppError::ArchiveUnsupported { format: "rar".into() },
-            AppError::NoPk3Files { entries: "x".into() },
+            AppError::ArchiveUnsupported {
+                format: "rar".into(),
+            },
+            AppError::NoPk3Files {
+                entries: "x".into(),
+            },
             // --- slice: bundles ---
             AppError::BundleUnavailable("x".into()),
-            AppError::BundleFile { path: "home/base/x.pk3".into(), reason: "x".into() },
-            AppError::EngineUnknown { engine_id: "x".into() },
+            AppError::BundleFile {
+                path: "home/base/x.pk3".into(),
+                reason: "x".into(),
+            },
+            AppError::EngineUnknown {
+                engine_id: "x".into(),
+            },
             // --- slice: play with friends ---
             AppError::HostBusy,
             AppError::HostNotRunning,
-            AppError::HostNoDedicatedServer { engine: "jaMME".into() },
-            AppError::HostEngineMissing { engine: "OpenJK".into() },
-            AppError::HostStartFailed { reason: "x".into(), exit_code: Some(1) },
-            AppError::HostInviteOnly { name: "Kyle".into() },
+            AppError::HostNoDedicatedServer {
+                engine: "jaMME".into(),
+            },
+            AppError::HostEngineMissing {
+                engine: "OpenJK".into(),
+            },
+            AppError::HostStartFailed {
+                reason: "x".into(),
+                exit_code: Some(1),
+            },
+            AppError::HostInviteOnly {
+                name: "Kyle".into(),
+            },
             AppError::RelayUnavailable("x".into()),
-            AppError::RelayQuota { message: "x".into(), quota: None, resets_at: None },
+            AppError::RelayQuota {
+                message: "x".into(),
+                quota: None,
+                resets_at: None,
+            },
         ];
 
         for error in samples {

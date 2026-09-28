@@ -388,15 +388,15 @@
     "removeCard": "Retirer {{name}}",
     "tooManyCards": "Un message peut contenir jusqu’à {{max}} cartes.",
     "tooManyFiles": "Un message peut contenir jusqu’à {{max}} fichiers.",
-    "refusedTitle_one": "{{count}} fichier n’a pas été joint",
-    "refusedTitle_many": "{{count}} de fichiers n’ont pas été joints",
-    "refusedTitle_other": "{{count}} fichiers n’ont pas été joints",
     "refusedLine": "{{name}} : {{reason}}",
     "counter": "{{used}} / {{max}}",
     "tooLong": "Un message peut compter jusqu’à {{max}} caractères.",
     "notFriends": "Vous n’êtes plus amis. La discussion est en lecture seule ; si vous redevenez amis, elle reprendra là où elle s’est arrêtée.",
     "deletedPeer": "Ce compte a été supprimé. La discussion est en lecture seule et conservée jusqu’à la limite de 90 jours.",
-    "readOnly": "Vous ne pouvez pas envoyer de messages dans cette discussion."
+    "readOnly": "Vous ne pouvez pas envoyer de messages dans cette discussion.",
+    "refusedTitle_one": "{{count}} fichier n’a pas été joint",
+    "refusedTitle_many": "{{count}} de fichiers n’ont pas été joints",
+    "refusedTitle_other": "{{count}} fichiers n’ont pas été joints"
   },
   "attach": {
     "open": "Joindre",
@@ -876,5 +876,13 @@
     "tooltipUnread_one": "JKNet : {{count}} message non lu",
     "tooltipUnread_many": "JKNet : {{count}} messages non lus",
     "tooltipUnread_other": "JKNet : {{count}} messages non lus"
+  },
+  "serverConfig": {
+    "subtitle": "Server config · {{game}} · {{mod}}",
+    "open": "Open server editor",
+    "receiveTitle": "Save a server config",
+    "receiveHint": "Review the game, mod and rules. Saving adds a copy to your server configs. Choose it in Play with friends when you want to host.",
+    "save": "Save to server configs",
+    "sensitive": "Remove passwords or administration secrets before sharing."
   }
 }

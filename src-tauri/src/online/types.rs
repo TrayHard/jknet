@@ -968,7 +968,11 @@ where
             value
                 .as_str()
                 .or_else(|| value.get("id").and_then(serde_json::Value::as_str))
-                .or_else(|| value.pointer("/user/id").and_then(serde_json::Value::as_str))
+                .or_else(|| {
+                    value
+                        .pointer("/user/id")
+                        .and_then(serde_json::Value::as_str)
+                })
                 .map(str::to_string)
         })
         .collect())
@@ -1034,7 +1038,10 @@ mod tests {
             "server": null, "createdAt": "2026-09-26T10:00:00Z"
         });
         let conversation: Conversation = serde_json::from_value(wire.clone()).expect("parses");
-        assert_eq!(conversation.members[1].read_seq, None, "a hidden marker stays hidden");
+        assert_eq!(
+            conversation.members[1].read_seq, None,
+            "a hidden marker stays hidden"
+        );
         assert_eq!(conversation.members[0].read_seq, Some(40));
         let message = conversation.last_message.as_ref().expect("a last message");
         let reply = message.reply_to.as_ref().expect("a reply");
@@ -1044,10 +1051,20 @@ mod tests {
         // What reaches the frontend is what came off the wire, minus the
         // `avatarUrl: null` and `admin` of `User`, which is not chat's.
         let back = serde_json::to_value(&conversation).expect("writes");
-        for key in ["lastSeq", "readSeq", "unread", "unreadMentions", "notify", "canSend"] {
+        for key in [
+            "lastSeq",
+            "readSeq",
+            "unread",
+            "unreadMentions",
+            "notify",
+            "canSend",
+        ] {
             assert_eq!(back[key], wire[key], "{key}");
         }
-        assert_eq!(back["lastMessage"]["replyTo"], wire["lastMessage"]["replyTo"]);
+        assert_eq!(
+            back["lastMessage"]["replyTo"],
+            wire["lastMessage"]["replyTo"]
+        );
         assert_eq!(back["lastMessage"]["files"][0]["meta"]["width"], 1920);
         assert_eq!(back["lastMessage"]["cards"], wire["lastMessage"]["cards"]);
         assert_eq!(back["members"][1]["readSeq"], serde_json::Value::Null);
@@ -1064,10 +1081,9 @@ mod tests {
             serde_json::to_value(&missing).expect("writes"),
             json!({ "seq": 7, "missing": true })
         );
-        let present: ReplyRef = serde_json::from_value(
-            json!({ "seq": 8, "senderId": "01HKYLE", "excerpt": "duel?" }),
-        )
-        .expect("parses");
+        let present: ReplyRef =
+            serde_json::from_value(json!({ "seq": 8, "senderId": "01HKYLE", "excerpt": "duel?" }))
+                .expect("parses");
         assert_eq!(
             serde_json::to_value(&present).expect("writes"),
             json!({ "seq": 8, "senderId": "01HKYLE", "excerpt": "duel?" })
@@ -1134,7 +1150,8 @@ mod tests {
         .expect("parses");
         assert_eq!(result.added, ["01HKYLE", "01HJAN", "01HMARA"]);
         assert_eq!(result.refused[0].reason, "not_friend");
-        let added: AddResult = serde_json::from_value(json!({ "invited": ["01HLUKE"] })).expect("parses");
+        let added: AddResult =
+            serde_json::from_value(json!({ "invited": ["01HLUKE"] })).expect("parses");
         assert_eq!((added.added.len(), added.invited.len()), (0, 1));
     }
 
@@ -1174,7 +1191,10 @@ mod tests {
             "status": "online", "since": "2026-09-27T10:00:00Z", "via": "web", "device": "phone"
         }))
         .expect("parses");
-        assert_eq!((phone.via.as_deref(), phone.device.as_deref()), (Some("web"), Some("phone")));
+        assert_eq!(
+            (phone.via.as_deref(), phone.device.as_deref()),
+            (Some("web"), Some("phone"))
+        );
         let desktop: Presence = serde_json::from_value(json!({
             "status": "online", "since": "2026-09-27T10:00:00Z", "via": "web", "device": "desktop"
         }))
@@ -1189,12 +1209,21 @@ mod tests {
         }))
         .expect("parses");
         assert_eq!((launcher.via, launcher.device), (None, None));
-        let back = serde_json::to_value(Presence { status: Presence::ONLINE.into(), ..Presence::default() })
-            .expect("writes");
-        assert!(back.get("via").is_none() && back.get("device").is_none(), "{back}");
+        let back = serde_json::to_value(Presence {
+            status: Presence::ONLINE.into(),
+            ..Presence::default()
+        })
+        .expect("writes");
+        assert!(
+            back.get("via").is_none() && back.get("device").is_none(),
+            "{back}"
+        );
         // Nor does the heartbeat carry them: the service decides where a player is.
         let body = serde_json::to_value(PresenceUpdate::from(&phone)).expect("writes");
-        assert!(body.get("via").is_none() && body.get("device").is_none(), "{body}");
+        assert!(
+            body.get("via").is_none() && body.get("device").is_none(),
+            "{body}"
+        );
     }
 
     #[test]
@@ -1205,7 +1234,10 @@ mod tests {
                 "gametype": 0, "players": 1, "maxPlayers": 8, "lanAddresses": [],
                 "relayAddress": null, "joinPolicy": "friends", "canJoin": true
             });
-            value.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            value
+                .as_object_mut()
+                .unwrap()
+                .extend(extra.as_object().unwrap().clone());
             serde_json::from_value::<HostingInfo>(value).expect("parses")
         };
         // The service leaves the field out while the host keeps it on, and a

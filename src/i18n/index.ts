@@ -79,6 +79,9 @@ export const NAMESPACES = [
   "host",
   // --- slice: chat ---
   "chat",
+  "serverConfigs",
+  "serverConfigFields",
+  "serverInstances",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

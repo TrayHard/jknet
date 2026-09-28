@@ -83,7 +83,11 @@ pub fn choose(hosting: &HostingInfo, answered: Option<String>) -> Option<Route> 
             probe_failed: false,
         });
     }
-    if let Some(relay) = hosting.relay_address.as_deref().filter(|a| !a.trim().is_empty()) {
+    if let Some(relay) = hosting
+        .relay_address
+        .as_deref()
+        .filter(|a| !a.trim().is_empty())
+    {
         return Some(Route {
             address: relay.trim().to_string(),
             path: JoinPath::Relay,
@@ -112,7 +116,8 @@ pub async fn probe(addresses: &[String], session_id: &str) -> Option<String> {
                 .await
                 .ok()?;
             let info = parse_infostring(&reply.infostring);
-            (info.get("jknet_session").map(String::as_str) == Some(wanted.as_str())).then_some(address)
+            (info.get("jknet_session").map(String::as_str) == Some(wanted.as_str()))
+                .then_some(address)
         });
     }
     while let Some(done) = probes.join_next().await {
@@ -131,9 +136,8 @@ pub async fn route(hosting: &HostingInfo) -> Result<Route> {
     } else {
         probe(&hosting.lan_addresses, &hosting.session_id).await
     };
-    choose(hosting, answered).ok_or_else(|| {
-        AppError::Launch("the private server has no address to join yet".into())
-    })
+    choose(hosting, answered)
+        .ok_or_else(|| AppError::Launch("the private server has no address to join yet".into()))
 }
 
 /// Joins a private server with the default client of its game, and then its
@@ -147,7 +151,10 @@ pub async fn join_private(
     host_user_id: &str,
 ) -> Result<JoinResult> {
     let game = Game::from_id(&hosting.game).ok_or_else(|| {
-        AppError::InvalidInput(format!("the private server plays an unknown game {:?}", hosting.game))
+        AppError::InvalidInput(format!(
+            "the private server plays an unknown game {:?}",
+            hosting.game
+        ))
     })?;
     let client_id = crate::friends::default_client(state, game)?;
     let extra_args = password_args(hosting.password.as_deref())?;
@@ -159,7 +166,11 @@ pub async fn join_private(
     log::info!(
         "joining a private server over {:?}{}",
         route.path,
-        if route.probe_failed { ", the local network did not answer" } else { "" }
+        if route.probe_failed {
+            ", the local network did not answer"
+        } else {
+            ""
+        }
     );
     let running = launch::start_client(
         app,
@@ -245,7 +256,9 @@ mod tests {
         tokio::spawn(async move {
             let mut buffer = vec![0u8; 2048];
             while let Ok((read, from)) = socket.recv_from(&mut buffer).await {
-                let Some(payload) = oob_payload(&buffer[..read]) else { continue };
+                let Some(payload) = oob_payload(&buffer[..read]) else {
+                    continue;
+                };
                 let (_, challenge) = split_command(payload);
                 let challenge = String::from_utf8_lossy(challenge).to_string();
                 let reply = oob_packet(&format!(
@@ -263,22 +276,44 @@ mod tests {
         let stranger = server("ffffffffffffffff").await;
 
         // Our label answered: the local network.
-        let found = route(&hosting(&[stranger.clone(), ours.clone()], Some("203.0.113.5:29210")))
-            .await
-            .expect("a route");
-        assert_eq!(found, Route { address: ours, path: JoinPath::Lan, probe_failed: false });
+        let found = route(&hosting(
+            &[stranger.clone(), ours.clone()],
+            Some("203.0.113.5:29210"),
+        ))
+        .await
+        .expect("a route");
+        assert_eq!(
+            found,
+            Route {
+                address: ours,
+                path: JoinPath::Lan,
+                probe_failed: false
+            }
+        );
 
         // A stranger at the same address, or nobody: the relay.
-        let found = route(&hosting(&[stranger.clone(), "127.0.0.1:9".into()], Some("203.0.113.5:29210")))
-            .await
-            .expect("a route");
+        let found = route(&hosting(
+            &[stranger.clone(), "127.0.0.1:9".into()],
+            Some("203.0.113.5:29210"),
+        ))
+        .await
+        .expect("a route");
         assert_eq!(found.path, JoinPath::Relay);
         assert_eq!(found.address, "203.0.113.5:29210");
         assert!(!found.probe_failed);
 
         // No relay: the first address of the network, flagged.
-        let found = route(&hosting(std::slice::from_ref(&stranger), None)).await.expect("a route");
-        assert_eq!(found, Route { address: stranger, path: JoinPath::Lan, probe_failed: true });
+        let found = route(&hosting(std::slice::from_ref(&stranger), None))
+            .await
+            .expect("a route");
+        assert_eq!(
+            found,
+            Route {
+                address: stranger,
+                path: JoinPath::Lan,
+                probe_failed: true
+            }
+        );
 
         // Nothing at all.
         assert!(route(&hosting(&[], None)).await.is_err());

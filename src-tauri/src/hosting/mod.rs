@@ -6,7 +6,7 @@
 //! | `mod.rs` | [`HostState`], the commands, the `host:session` event, the life of a session and its auto-stop |
 //! | `server.rs` | the command line and `jknet-host.cfg`, readiness, polls, map changes, rcon |
 //! | `console.rs` | the process under a pseudo console, its Job Object, its output |
-//! | `maps.rs` | the maps of a client, out of its `.arena` files |
+//! | `maps.rs` | installed BSP maps with optional arena metadata |
 //! | `network.rs` | the addresses of this machine on its local network |
 //! | `wire.rs` | the messages of the relay protocol and their signature |
 //! | `tunnel.rs` | the tunnel between the relay node and the server |
@@ -149,6 +149,8 @@ impl JoinPolicy {
 #[serde(rename_all = "camelCase")]
 pub struct HostSettings {
     pub client_id: String,
+    #[serde(default)]
+    pub server_config_id: Option<String>,
     pub map: String,
     pub gametype: u32,
     pub max_players: u32,
@@ -183,6 +185,7 @@ impl std::fmt::Debug for HostSettings {
         // Every field named: a new one fails to build until it is listed here.
         let HostSettings {
             client_id,
+            server_config_id,
             map,
             gametype,
             max_players,
@@ -200,6 +203,7 @@ impl std::fmt::Debug for HostSettings {
         } = self;
         f.debug_struct("HostSettings")
             .field("client_id", client_id)
+            .field("server_config_id", server_config_id)
             .field("map", map)
             .field("gametype", gametype)
             .field("max_players", max_players)
@@ -232,6 +236,7 @@ pub struct HostClientOption {
     pub id: String,
     pub name: String,
     pub engine_id: String,
+    pub mod_folder: Option<String>,
     pub can_host: bool,
     pub reason: Option<ClientBlock>,
 }
@@ -307,7 +312,10 @@ pub enum SessionStatus {
 impl SessionStatus {
     /// Starting, running or stopping: the session holds the slot.
     pub fn is_active(self) -> bool {
-        matches!(self, SessionStatus::Starting | SessionStatus::Running | SessionStatus::Stopping)
+        matches!(
+            self,
+            SessionStatus::Starting | SessionStatus::Running | SessionStatus::Stopping
+        )
     }
 }
 
@@ -499,6 +507,7 @@ pub(crate) struct Live {
     finished: watch::Receiver<bool>,
     rcon_password: String,
     fs_game: Option<String>,
+    has_map_settings: bool,
 }
 
 impl Live {
@@ -550,12 +559,18 @@ impl HostState {
     /// Takes the slot for a start, or refuses with `hostBusy`.
     fn claim(&self) -> Result<Claim<'_>> {
         let mut slot = self.lock();
-        let active = slot.live.as_ref().is_some_and(|live| live.status().is_active());
+        let active = slot
+            .live
+            .as_ref()
+            .is_some_and(|live| live.status().is_active());
         if slot.claimed || active {
             return Err(AppError::HostBusy);
         }
         slot.claimed = true;
-        Ok(Claim { state: self, committed: false })
+        Ok(Claim {
+            state: self,
+            committed: false,
+        })
     }
 
     fn commit(&self, mut claim: Claim<'_>, live: Arc<Live>) {
@@ -594,7 +609,11 @@ impl HostState {
     /// Whether a server is starting, running or stopping.
     pub fn is_active(&self) -> bool {
         let slot = self.lock();
-        slot.claimed || slot.live.as_ref().is_some_and(|live| live.status().is_active())
+        slot.claimed
+            || slot
+                .live
+                .as_ref()
+                .is_some_and(|live| live.status().is_active())
     }
 }
 
@@ -604,7 +623,10 @@ impl HostState {
 
 /// The clients, modes and defaults of the setup form of one game.
 #[tauri::command]
-pub fn host_get_options(state: tauri::State<'_, AppState>, game: Option<Game>) -> Result<HostOptions> {
+pub fn host_get_options(
+    state: tauri::State<'_, AppState>,
+    game: Option<Game>,
+) -> Result<HostOptions> {
     let settings = state.settings()?;
     let paths = state.paths()?;
     let game = settings.game_or_active(game);
@@ -622,6 +644,11 @@ pub fn host_get_options(state: tauri::State<'_, AppState>, game: Option<Game>) -
                 None => Some(ClientBlock::EngineMissing),
             };
             HostClientOption {
+                mod_folder: client.fs_game.clone().or_else(|| {
+                    engine
+                        .and_then(|engine| engine.default_fs_game)
+                        .map(str::to_string)
+                }),
                 id: client.id,
                 name: client.name,
                 engine_id: client.engine_id,
@@ -643,7 +670,11 @@ fn options_of(settings: &Settings, game: Game, clients: Vec<HostClientOption>) -
         .map(|gametype| HostGametypeOption {
             index: gametype.index,
             id: gametype.arena_type,
-            label: spec.gametypes.get(usize::from(gametype.index)).copied().unwrap_or("?"),
+            label: spec
+                .gametypes
+                .get(usize::from(gametype.index))
+                .copied()
+                .unwrap_or("?"),
             score_cvar: gametype.score_cvar,
             default_score: gametype.default_score,
         })
@@ -651,26 +682,48 @@ fn options_of(settings: &Settings, game: Game, clients: Vec<HostClientOption>) -
 
     let ctx = OnlineContext::from_settings(settings);
     let relay = if !ctx.configured() {
-        RelayAvailability { available: false, reason: Some(RelayBlock::NotConfigured) }
+        RelayAvailability {
+            available: false,
+            reason: Some(RelayBlock::NotConfigured),
+        }
     } else if !ctx.signed_in() {
-        RelayAvailability { available: false, reason: Some(RelayBlock::SignedOut) }
+        RelayAvailability {
+            available: false,
+            reason: Some(RelayBlock::SignedOut),
+        }
     } else {
-        RelayAvailability { available: true, reason: None }
+        RelayAvailability {
+            available: true,
+            reason: None,
+        }
     };
 
-    let saved = settings.host_defaults.get(&game).cloned().unwrap_or_default();
-    let hostable = |id: &str| clients.iter().any(|client| client.id == id && client.can_host);
-    let default_client = settings
-        .default_client_ids
+    let saved = settings
+        .host_defaults
         .get(&game)
         .cloned()
-        .or_else(|| (game == Game::JediAcademy).then(|| settings.default_client_id.clone()).flatten());
+        .unwrap_or_default();
+    let hostable = |id: &str| {
+        clients
+            .iter()
+            .any(|client| client.id == id && client.can_host)
+    };
+    let default_client = settings.default_client_ids.get(&game).cloned().or_else(|| {
+        (game == Game::JediAcademy)
+            .then(|| settings.default_client_id.clone())
+            .flatten()
+    });
     let client_id = saved
         .client_id
         .clone()
         .filter(|id| hostable(id))
         .or_else(|| default_client.filter(|id| hostable(id)))
-        .or_else(|| clients.iter().find(|client| client.can_host).map(|client| client.id.clone()))
+        .or_else(|| {
+            clients
+                .iter()
+                .find(|client| client.can_host)
+                .map(|client| client.id.clone())
+        })
         .unwrap_or_default();
 
     let gametype = spec
@@ -685,7 +738,11 @@ fn options_of(settings: &Settings, game: Game, clients: Vec<HostClientOption>) -
         .unwrap_or_else(|| spec.hosting.default_map.to_string());
     let network = Network::parse(&saved.network)
         .filter(|network| relay.available || !network.uses_relay())
-        .unwrap_or(if relay.available { Network::InternetLan } else { Network::Lan });
+        .unwrap_or(if relay.available {
+            Network::InternetLan
+        } else {
+            Network::Lan
+        });
     let display_name = settings
         .online_user
         .as_ref()
@@ -700,14 +757,24 @@ fn options_of(settings: &Settings, game: Game, clients: Vec<HostClientOption>) -
         .or(display_name)
         .unwrap_or_else(|| "JKNet game".to_string());
     let use_password = saved.max_players == 0 || saved.use_password;
+    let mod_folder = clients
+        .iter()
+        .find(|client| client.id == client_id)
+        .and_then(|client| client.mod_folder.as_deref());
+    let score_cvar = crate::server_configs::score_cvar(game, mod_folder, gametype.index);
 
     let defaults = HostSettings {
         client_id,
+        server_config_id: saved.server_config_id,
         map,
         gametype: u32::from(gametype.index),
-        max_players: if (2..=16).contains(&saved.max_players) { u32::from(saved.max_players) } else { 8 },
+        max_players: if (2..=16).contains(&saved.max_players) {
+            u32::from(saved.max_players)
+        } else {
+            8
+        },
         time_limit: u32::from(saved.time_limit),
-        score_limit: if saved.max_players > 0 && gametype.score_cvar.is_some() {
+        score_limit: if saved.max_players > 0 && score_cvar.is_some() {
             u32::from(saved.score_limit)
         } else {
             u32::from(gametype.default_score)
@@ -735,8 +802,7 @@ fn options_of(settings: &Settings, game: Game, clients: Vec<HostClientOption>) -
     }
 }
 
-/// The maps a server of this client can load, only those of `gametype` when
-/// it is given.
+/// The maps a server of this client can load, regardless of game type.
 #[tauri::command]
 pub async fn host_list_maps(
     app: AppHandle,
@@ -749,10 +815,11 @@ pub async fn host_list_maps(
     let client = crate::clients::read_record(&paths, &client_id)?;
     let engine = crate::engines::find(&client.engine_id);
     let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
-    let fs_game = client
-        .fs_game
-        .clone()
-        .or_else(|| engine.and_then(|engine| engine.default_fs_game).map(str::to_string));
+    let fs_game = client.fs_game.clone().or_else(|| {
+        engine
+            .and_then(|engine| engine.default_fs_game)
+            .map(str::to_string)
+    });
     let roots = maps::MapRoots {
         game: client.game,
         game_data,
@@ -760,53 +827,91 @@ pub async fn host_list_maps(
         home_dir: paths.client_home_dir(&client.id),
         fs_game,
     };
-    let token = gametype
-        .and_then(|index| u8::try_from(index).ok())
-        .and_then(|index| client.game.spec().hosting.gametype(index))
-        .map(|gametype| gametype.arena_type);
     let found = tauri::async_runtime::spawn_blocking(move || maps::scan(&roots))
         .await
         .map_err(|e| AppError::State(format!("the map scan stopped: {e}")))?;
     let names: Vec<String> = found.iter().map(|map| map.name.clone()).collect();
     let pictures = crate::levelshots::cached_pictures(&app, &paths, client.game, &names);
-    Ok(found
+    Ok(host_maps(found, &pictures, gametype))
+}
+
+fn host_maps(
+    found: Vec<maps::MapEntry>,
+    pictures: &std::collections::HashMap<String, String>,
+    _gametype: Option<u32>,
+) -> Vec<HostMap> {
+    // Older callers still send a game type. Arena mode tags are metadata,
+    // not restrictions on which installed maps the host may choose.
+    found
         .into_iter()
-        .filter(|map| token.is_none_or(|token| map.gametypes.iter().any(|t| t == token)))
         .map(|map| HostMap {
             levelshot: pictures.get(&maps::map_key(&map.name)).cloned(),
-            source: if map.retail { MapSource::Game } else { MapSource::Client },
+            source: if map.retail {
+                MapSource::Game
+            } else {
+                MapSource::Client
+            },
             name: map.name,
             title: map.title,
             gametypes: map.gametypes,
         })
-        .collect())
+        .collect()
 }
 
 /// Checks the settings of a start and answers the cleaned ones.
-fn validate_settings(game: Game, settings: &HostSettings) -> Result<HostSettings> {
+fn validate_settings(
+    game: Game,
+    settings: &HostSettings,
+    mod_folder: Option<&str>,
+) -> Result<HostSettings> {
     let mut clean = settings.clone();
     let hosting = game.spec().hosting;
     let gametype = u8::try_from(settings.gametype)
         .ok()
         .and_then(|index| hosting.gametype(index))
         .ok_or_else(|| {
-            AppError::InvalidInput(format!("{} does not host game type {}", game.display_name(), settings.gametype))
+            AppError::InvalidInput(format!(
+                "{} does not host game type {}",
+                game.display_name(),
+                settings.gametype
+            ))
         })?;
+    if mod_folder.is_some_and(|folder| folder.eq_ignore_ascii_case("mbii"))
+        && !matches!(gametype.index, 3 | 4 | 7)
+    {
+        return Err(AppError::InvalidInput(
+            "Movie Battles II supports game types 3, 4 and 7".into(),
+        ));
+    }
     if !server::is_safe_map_name(settings.map.trim()) {
-        return Err(AppError::InvalidInput(format!("{:?} is not a map name", settings.map)));
+        return Err(AppError::InvalidInput(format!(
+            "{:?} is not a map name",
+            settings.map
+        )));
     }
     clean.map = settings.map.trim().to_string();
     if !(2..=16).contains(&settings.max_players) {
-        return Err(AppError::InvalidInput("a server takes 2 to 16 players".into()));
+        return Err(AppError::InvalidInput(
+            "a server takes 2 to 16 players".into(),
+        ));
     }
     if settings.time_limit > 999 || settings.score_limit > 999 {
-        return Err(AppError::InvalidInput("a limit above 999 is not a limit".into()));
+        return Err(AppError::InvalidInput(
+            "a limit above 999 is not a limit".into(),
+        ));
     }
-    if gametype.score_cvar.is_none() {
+    if crate::server_configs::score_cvar(game, mod_folder, gametype.index).is_none() {
         clean.score_limit = 0;
     }
     if settings.bots > settings.max_players {
-        return Err(AppError::InvalidInput("more bots than places on the server".into()));
+        return Err(AppError::InvalidInput(
+            "more bots than places on the server".into(),
+        ));
+    }
+    if settings.bots > 0 && mod_folder.is_some_and(|folder| folder.eq_ignore_ascii_case("mbii")) {
+        return Err(AppError::InvalidInput(
+            "bots are not supported for Movie Battles II hosting".into(),
+        ));
     }
     clean.server_name = server::clean_server_name(&settings.server_name);
     if clean.server_name.is_empty() {
@@ -820,10 +925,14 @@ fn validate_settings(game: Game, settings: &HostSettings) -> Result<HostSettings
         _ => None,
     };
     let mut seen = BTreeSet::new();
-    clean.join_user_ids.retain(|id| !id.trim().is_empty() && seen.insert(id.clone()));
+    clean
+        .join_user_ids
+        .retain(|id| !id.trim().is_empty() && seen.insert(id.clone()));
     clean.join_user_ids.truncate(200);
     let mut seen = BTreeSet::new();
-    clean.invite_user_ids.retain(|id| !id.trim().is_empty() && seen.insert(id.clone()));
+    clean
+        .invite_user_ids
+        .retain(|id| !id.trim().is_empty() && seen.insert(id.clone()));
     Ok(clean)
 }
 
@@ -840,12 +949,21 @@ pub async fn host_start(
     let launcher_settings = state.settings()?;
     let paths = state.paths()?;
     let client = crate::clients::read_record(&paths, &settings.client_id)?;
-    let settings = validate_settings(client.game, &settings)?;
+    let engine = crate::engines::find(&client.engine_id);
+    let mod_folder = client
+        .fs_game
+        .as_deref()
+        .or_else(|| engine.and_then(|engine| engine.default_fs_game));
+    let settings = validate_settings(client.game, &settings, mod_folder)?;
     let ctx = OnlineContext::from_settings(&launcher_settings);
     if settings.network == Network::Internet && !ctx.signed_in() {
         // A server on loopback that no relay carries is a server nobody but
         // the host can reach.
-        return Err(if ctx.configured() { AppError::SignedOut } else { AppError::OnlineNotConfigured });
+        return Err(if ctx.configured() {
+            AppError::SignedOut
+        } else {
+            AppError::OnlineNotConfigured
+        });
     }
 
     let prepared = {
@@ -861,8 +979,15 @@ pub async fn host_start(
     let session_id = server::new_session_id();
     let rcon_password = server::random_password(server::RCON_PASSWORD_LEN);
     let game = prepared.client.game;
+    let server_config_commands = crate::server_configs::for_host(
+        &state,
+        settings.server_config_id.as_deref(),
+        game,
+        prepared.fs_game.as_deref(),
+    )?;
     let config = ServerConfig {
         game,
+        mod_folder: prepared.fs_game.clone(),
         roots: prepared.roots.clone(),
         network: settings.network,
         port: game.spec().server_port,
@@ -876,10 +1001,9 @@ pub async fn host_start(
         server_name: settings.server_name.clone(),
         password: settings.password.clone(),
         rcon_password: rcon_password.clone(),
+        extra_commands: server_config_commands,
     };
-    let cfg_path = prepared.config_dir.join(server::CONFIG_FILE);
-    std::fs::write(&cfg_path, server::host_config(&config))
-        .map_err(|e| AppError::io_path("cannot write", &cfg_path, e))?;
+    let config_files = server::write_configs(&prepared.config_dir, &config)?;
 
     let output = Arc::new(ConsoleOutput::with_log(&paths.logs.join(LOG_FILE)));
     output.note(&format!(
@@ -896,13 +1020,12 @@ pub async fn host_start(
         config.port,
         settings.network.as_str()
     );
-    let process = match ServerProcess::spawn(&prepared.executable, &prepared.engine_dir, &args, output.clone()) {
-        Ok(process) => Arc::new(process),
-        Err(e) => {
-            let _ = std::fs::remove_file(&cfg_path);
-            return Err(e);
-        }
-    };
+    let process = Arc::new(ServerProcess::spawn(
+        &prepared.executable,
+        &prepared.engine_dir,
+        &args,
+        output.clone(),
+    )?);
     log::info!("hosting: pid {} ({:?})", process.pid(), process.method());
 
     let relay_wanted = settings.network.uses_relay();
@@ -910,11 +1033,21 @@ pub async fn host_start(
         id: session_id,
         status: SessionStatus::Starting,
         steps: vec![
-            HostStep { step: StepId::Server, state: StepState::Active },
-            HostStep { step: StepId::Map, state: StepState::Pending },
+            HostStep {
+                step: StepId::Server,
+                state: StepState::Active,
+            },
+            HostStep {
+                step: StepId::Map,
+                state: StepState::Pending,
+            },
             HostStep {
                 step: StepId::Relay,
-                state: if relay_wanted { StepState::Pending } else { StepState::Skipped },
+                state: if relay_wanted {
+                    StepState::Pending
+                } else {
+                    StepState::Skipped
+                },
             },
         ],
         settings: settings.clone(),
@@ -938,7 +1071,10 @@ pub async fn host_start(
         log_tail: Vec::new(),
     };
     if relay_wanted && !ctx.signed_in() {
-        view.relay = relay_error(RelayErrorCode::SignedOut, "sign in to JKNet Online to use the relay");
+        view.relay = relay_error(
+            RelayErrorCode::SignedOut,
+            "sign in to JKNet Online to use the relay",
+        );
         view.step(StepId::Relay, StepState::Failed);
     }
 
@@ -950,6 +1086,7 @@ pub async fn host_start(
         finished,
         rcon_password,
         fs_game: prepared.fs_game.clone(),
+        has_map_settings: config.map_settings().next().is_some(),
     });
     host.commit(claim, live.clone());
     remember_defaults(&state, game, &settings);
@@ -959,7 +1096,8 @@ pub async fn host_start(
         live,
         process,
         output,
-        cfg_path,
+        config_files,
+        map_settings_replay: server::MapSettingsReplay::default(),
         first_port: config.port,
         commands: receiver,
         cancel: Arc::new(AtomicBool::new(false)),
@@ -1006,6 +1144,7 @@ fn remember_defaults(state: &AppState, game: Game, settings: &HostSettings) {
 fn defaults_of(settings: &HostSettings) -> HostDefaults {
     HostDefaults {
         client_id: Some(settings.client_id.clone()),
+        server_config_id: settings.server_config_id.clone(),
         map: Some(settings.map.clone()),
         gametype: settings.gametype as u8,
         max_players: settings.max_players as u8,
@@ -1087,7 +1226,10 @@ fn join_own(
         &view.settings.client_id,
         Some(&address),
         &extra,
-        crate::profiles::ProfileChoice { id: profile_id, inline: None },
+        crate::profiles::ProfileChoice {
+            id: profile_id,
+            inline: None,
+        },
         crate::engines::LaunchMode::Multiplayer,
     )
 }
@@ -1109,14 +1251,23 @@ pub async fn host_change_map(
     let new_type = u8::try_from(gametype)
         .ok()
         .filter(|index| view.game.spec().hosting.gametype(*index).is_some())
+        .filter(|index| {
+            !live
+                .fs_game
+                .as_deref()
+                .is_some_and(|folder| folder.eq_ignore_ascii_case("mbii"))
+                || matches!(index, 3 | 4 | 7)
+        })
         .ok_or_else(|| AppError::InvalidInput(format!("game type {gametype} is not offered")))?;
     let port = view.port.ok_or(AppError::HostNotRunning)?;
     let commands = server::change_map_commands(
         view.game,
+        live.fs_game.as_deref(),
         view.settings.gametype as u8,
         view.settings.score_limit as u16,
         &map,
         new_type,
+        live.has_map_settings,
     );
     for command in &commands {
         server::rcon(port, &live.rcon_password, command).await?;
@@ -1154,7 +1305,12 @@ pub fn host_set_join_policy(
 ) -> Result<HostSession> {
     let live = host
         .live()
-        .filter(|live| matches!(live.status(), SessionStatus::Starting | SessionStatus::Running))
+        .filter(|live| {
+            matches!(
+                live.status(),
+                SessionStatus::Starting | SessionStatus::Running
+            )
+        })
         .ok_or(AppError::HostNotRunning)?;
     let mut seen = BTreeSet::new();
     let mut ids: Vec<String> = join_user_ids
@@ -1163,7 +1319,9 @@ pub fn host_set_join_policy(
         .filter(|id| !id.is_empty() && seen.insert(id.clone()))
         .collect();
     if ids.len() > 200 {
-        return Err(AppError::InvalidInput("at most 200 friends join without an invite".into()));
+        return Err(AppError::InvalidInput(
+            "at most 200 friends join without an invite".into(),
+        ));
     }
     ids.sort();
     let session = live.update(|view| {
@@ -1191,7 +1349,12 @@ pub fn host_set_chat_from_web(
 ) -> Result<HostSession> {
     let live = host
         .live()
-        .filter(|live| matches!(live.status(), SessionStatus::Starting | SessionStatus::Running))
+        .filter(|live| {
+            matches!(
+                live.status(),
+                SessionStatus::Starting | SessionStatus::Running
+            )
+        })
         .ok_or(AppError::HostNotRunning)?;
     let session = set_chat_from_web(&live, on);
     emit_session(&app, &session);
@@ -1223,10 +1386,15 @@ pub fn host_retry_relay(
         return Err(AppError::SignedOut);
     }
     if !live.snapshot().settings.network.uses_relay() {
-        return Err(AppError::InvalidInput("this server is open to the local network only".into()));
+        return Err(AppError::InvalidInput(
+            "this server is open to the local network only".into(),
+        ));
     }
     let session = live.update(|view| {
-        view.relay = HostRelay { status: RelayStatus::Connecting, ..HostRelay::off() };
+        view.relay = HostRelay {
+            status: RelayStatus::Connecting,
+            ..HostRelay::off()
+        };
         view.clone()
     });
     emit_session(&app, &session);
@@ -1269,7 +1437,9 @@ async fn send_invite(
         .relay_address
         .clone()
         .or_else(|| info.lan_addresses.first().cloned())
-        .ok_or_else(|| AppError::InvalidInput("the server has no address friends can use yet".into()))?;
+        .ok_or_else(|| {
+            AppError::InvalidInput("the server has no address friends can use yet".into())
+        })?;
     let invite = NewInvite {
         to_user_id: to_user_id.to_string(),
         server_address,
@@ -1355,7 +1525,10 @@ struct RelayRun {
 enum GrantOutcome {
     New(Result<RelayGrant>),
     /// The renewal of the relay session `id`, which may be gone by now.
-    Renewed { id: String, result: Result<RelayGrant> },
+    Renewed {
+        id: String,
+        result: Result<RelayGrant>,
+    },
 }
 
 /// What the readiness task watches.
@@ -1390,7 +1563,8 @@ struct Supervisor {
     live: Arc<Live>,
     process: Arc<ServerProcess>,
     output: Arc<ConsoleOutput>,
-    cfg_path: PathBuf,
+    config_files: server::ConfigFiles,
+    map_settings_replay: server::MapSettingsReplay,
     first_port: u16,
     commands: mpsc::UnboundedReceiver<Command>,
     cancel: Arc<AtomicBool>,
@@ -1428,7 +1602,10 @@ impl Supervisor {
         }
 
         let mut ready_task = {
-            let watch = ProcessWatch { process: self.process.clone(), cancel: self.cancel.clone() };
+            let watch = ProcessWatch {
+                process: self.process.clone(),
+                cancel: self.cancel.clone(),
+            };
             let session_id = self.live.snapshot().id;
             let first_port = self.first_port;
             tauri::async_runtime::spawn(async move {
@@ -1518,7 +1695,10 @@ impl Supervisor {
             return;
         };
         self.live.update(|view| {
-            view.relay = HostRelay { status: RelayStatus::Connecting, ..HostRelay::off() };
+            view.relay = HostRelay {
+                status: RelayStatus::Connecting,
+                ..HostRelay::off()
+            };
             view.step(StepId::Relay, StepState::Active);
         });
         self.publish();
@@ -1601,7 +1781,9 @@ impl Supervisor {
             Ok(grant) => {
                 use base64::Engine as _;
                 let relay = self.relay.as_mut()?;
-                match base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(grant.ticket.trim_end_matches('=')) {
+                match base64::engine::general_purpose::URL_SAFE_NO_PAD
+                    .decode(grant.ticket.trim_end_matches('='))
+                {
                     Ok(ticket) => relay.tunnel.renew(ticket),
                     Err(_) => log::warn!("hosting: the renewed relay ticket is not base64url"),
                 }
@@ -1619,10 +1801,18 @@ impl Supervisor {
                 // The node refused the old ticket and there is no later one:
                 // the relay is over, for the day when the quota says so.
                 let (code, message) = relay_error_of(&e);
-                let code = if code == RelayErrorCode::QuotaDaily { code } else { RelayErrorCode::Expired };
+                let code = if code == RelayErrorCode::QuotaDaily {
+                    code
+                } else {
+                    RelayErrorCode::Expired
+                };
                 self.close_relay().await;
-                self.relay_failed(code, format!("the relay ticket ran out and was not renewed: {message}"));
-                (!self.live.snapshot().settings.network.uses_lan()).then_some(StopReason::RelayExpired)
+                self.relay_failed(
+                    code,
+                    format!("the relay ticket ran out and was not renewed: {message}"),
+                );
+                (!self.live.snapshot().settings.network.uses_lan())
+                    .then_some(StopReason::RelayExpired)
             }
             Err(e) => {
                 // The relay keeps carrying the server until the ticket runs
@@ -1653,7 +1843,9 @@ impl Supervisor {
 
     async fn on_tunnel(&mut self, event: TunnelEvent) -> Option<StopReason> {
         match event {
-            TunnelEvent::Active { public, expires_at, .. } => {
+            TunnelEvent::Active {
+                public, expires_at, ..
+            } => {
                 let region = self.relay.as_ref().map(|relay| relay.region.clone());
                 if let Some(relay) = self.relay.as_mut() {
                     relay.expires_at = Some(expires_at).filter(|at| *at > 0).or(relay.expires_at);
@@ -1678,11 +1870,13 @@ impl Supervisor {
                 if let Some(relay) = self.relay.as_mut() {
                     relay.expires_at = Some(at);
                 }
-                self.live.update(|view| view.relay.expires_at = Some(timestamp::from_unix_seconds(at)));
+                self.live
+                    .update(|view| view.relay.expires_at = Some(timestamp::from_unix_seconds(at)));
                 self.publish();
             }
             TunnelEvent::Lost => {
-                self.live.update(|view| view.relay.status = RelayStatus::Lost);
+                self.live
+                    .update(|view| view.relay.status = RelayStatus::Lost);
                 self.publish();
             }
             TunnelEvent::TicketExpired => {
@@ -1701,7 +1895,9 @@ impl Supervisor {
                 };
                 self.close_relay().await;
                 self.relay_failed(code, message);
-                if code == RelayErrorCode::Expired && !self.live.snapshot().settings.network.uses_lan() {
+                if code == RelayErrorCode::Expired
+                    && !self.live.snapshot().settings.network.uses_lan()
+                {
                     return Some(StopReason::RelayExpired);
                 }
             }
@@ -1709,12 +1905,20 @@ impl Supervisor {
                 if reason == wire::close::EXPIRED || reason == wire::close::ADMIN {
                     self.close_relay().await;
                     let (code, message) = if reason == wire::close::EXPIRED {
-                        (RelayErrorCode::Expired, "the relay time ran out".to_string())
+                        (
+                            RelayErrorCode::Expired,
+                            "the relay time ran out".to_string(),
+                        )
                     } else {
-                        (RelayErrorCode::Unavailable, "the relay session was closed".to_string())
+                        (
+                            RelayErrorCode::Unavailable,
+                            "the relay session was closed".to_string(),
+                        )
                     };
                     self.relay_failed(code, message);
-                    if reason == wire::close::EXPIRED && !self.live.snapshot().settings.network.uses_lan() {
+                    if reason == wire::close::EXPIRED
+                        && !self.live.snapshot().settings.network.uses_lan()
+                    {
                         return Some(StopReason::RelayExpired);
                     }
                 }
@@ -1742,7 +1946,11 @@ impl Supervisor {
                 return;
             };
             let ctx = OnlineContext::from_settings(&settings);
-            if let Err(e) = app.state::<OnlineClient>().close_relay_session(&ctx, &id).await {
+            if let Err(e) = app
+                .state::<OnlineClient>()
+                .close_relay_session(&ctx, &id)
+                .await
+            {
                 log::debug!("hosting: cannot close the relay session {id}: {e}");
             }
         });
@@ -1753,7 +1961,10 @@ impl Supervisor {
     fn on_ready(&mut self, port: u16) {
         let network = self.live.snapshot().settings.network;
         let lan: Vec<String> = if network.uses_lan() {
-            network::lan_ipv4().into_iter().map(|ip| format!("{ip}:{port}")).collect()
+            network::lan_ipv4()
+                .into_iter()
+                .map(|ip| format!("{ip}:{port}"))
+                .collect()
         } else {
             Vec::new()
         };
@@ -1782,14 +1993,18 @@ impl Supervisor {
         if view.status != SessionStatus::Starting || view.port.is_none() {
             return;
         }
-        let relay_settled = !matches!(view.step_state(StepId::Relay), StepState::Active | StepState::Pending);
+        let relay_settled = !matches!(
+            view.step_state(StepId::Relay),
+            StepState::Active | StepState::Pending
+        );
         let grace_over = self
             .ready_instant
             .is_some_and(|ready| ready.elapsed() >= RELAY_GRACE);
         if !relay_settled && !grace_over {
             return;
         }
-        self.live.update(|view| view.status = SessionStatus::Running);
+        self.live
+            .update(|view| view.status = SessionStatus::Running);
         self.empty_instant = self.ready_instant;
         self.publish();
         self.publish_presence();
@@ -1835,11 +2050,23 @@ impl Supervisor {
         let (code, message) = match reason {
             NotReady::Exited(code) => {
                 self.live.update(|view| view.exit_code = Some(code));
-                (FailureCode::Exited, format!("the server closed during startup (exit code {code:#x})"))
+                (
+                    FailureCode::Exited,
+                    format!("the server closed during startup (exit code {code:#x})"),
+                )
             }
-            NotReady::PortsBusy => (FailureCode::PortsBusy, format!("no free port between {from} and {to}")),
-            NotReady::MapMissing => (FailureCode::MapMissing, format!("the server did not find {map}")),
-            NotReady::Timeout => (FailureCode::Timeout, format!("the server did not load {map} in 30 seconds")),
+            NotReady::PortsBusy => (
+                FailureCode::PortsBusy,
+                format!("no free port between {from} and {to}"),
+            ),
+            NotReady::MapMissing => (
+                FailureCode::MapMissing,
+                format!("the server did not find {map}"),
+            ),
+            NotReady::Timeout => (
+                FailureCode::Timeout,
+                format!("the server did not load {map} in 30 seconds"),
+            ),
             NotReady::Cancelled => (FailureCode::Timeout, "the start was cancelled".into()),
         };
         self.fail_start_with(code, message);
@@ -1856,7 +2083,12 @@ impl Supervisor {
     fn fail_start_with(&mut self, code: FailureCode, message: String) {
         log::warn!("hosting: {message}");
         self.live.update(|view| {
-            view.failure = Some(HostFailure { code, message, port_from: None, port_to: None });
+            view.failure = Some(HostFailure {
+                code,
+                message,
+                port_from: None,
+                port_to: None,
+            });
             for step in view.steps.iter_mut() {
                 if step.state == StepState::Active {
                     step.state = StepState::Failed;
@@ -1869,8 +2101,10 @@ impl Supervisor {
         let view = self.live.snapshot();
         if view.status == SessionStatus::Starting {
             // The steps follow the console while the server comes up.
-            if !ready_done && view.step_state(StepId::Server) == StepState::Active
-                && (self.output.saw(Marker::SocketOpened) || self.output.saw(Marker::GameInitialization))
+            if !ready_done
+                && view.step_state(StepId::Server) == StepState::Active
+                && (self.output.saw(Marker::SocketOpened)
+                    || self.output.saw(Marker::GameInitialization))
             {
                 self.live.update(|view| {
                     view.step(StepId::Server, StepState::Done);
@@ -1895,10 +2129,22 @@ impl Supervisor {
                     port_to: None,
                 });
             });
-            return Some(if was_running { StopReason::Crashed } else { StopReason::StartFailed });
+            return Some(if was_running {
+                StopReason::Crashed
+            } else {
+                StopReason::StartFailed
+            });
         }
         if self.live.status() != SessionStatus::Running {
             return None;
+        }
+
+        if self.live.has_map_settings {
+            self.map_settings_replay
+                .reapply_after(self.output.game_initializations(), || {
+                    self.process
+                        .type_line(&format!("exec {}", server::SETTINGS_FILE))
+                });
         }
 
         if self.last_poll.elapsed() >= POLL_EVERY {
@@ -1914,9 +2160,16 @@ impl Supervisor {
         let view = self.live.snapshot();
         if view.humans() == 0 {
             let since = self.empty_instant.get_or_insert_with(Instant::now);
-            let limit = if self.humans_ever { EMPTY_STOP } else { UNUSED_STOP };
+            let limit = if self.humans_ever {
+                EMPTY_STOP
+            } else {
+                UNUSED_STOP
+            };
             if since.elapsed() >= limit {
-                log::info!("hosting: nobody played for {} min, stopping", limit.as_secs() / 60);
+                log::info!(
+                    "hosting: nobody played for {} min, stopping",
+                    limit.as_secs() / 60
+                );
                 return Some(StopReason::Empty);
             }
         }
@@ -1955,7 +2208,11 @@ impl Supervisor {
         } else if self.empty_instant.is_none() {
             self.empty_instant = Some(Instant::now());
         }
-        let limit = if self.humans_ever { EMPTY_STOP } else { UNUSED_STOP };
+        let limit = if self.humans_ever {
+            EMPTY_STOP
+        } else {
+            UNUSED_STOP
+        };
         let (empty_since, auto_stop_at) = match self.empty_instant {
             Some(since) => {
                 let since_unix = now_unix.saturating_sub(since.elapsed().as_secs());
@@ -1979,7 +2236,9 @@ impl Supervisor {
                 view.auto_stop_at = auto_stop_at;
             }
             if let Some(map) = map.filter(|map| !map.is_empty()) {
-                if crate::levelshots::map_key(&map) != crate::levelshots::map_key(&view.settings.map) {
+                if crate::levelshots::map_key(&map)
+                    != crate::levelshots::map_key(&view.settings.map)
+                {
                     view.settings.map = map;
                 }
             }
@@ -1996,7 +2255,10 @@ impl Supervisor {
         let (Some(port), true) = (view.port, view.settings.network.uses_lan()) else {
             return;
         };
-        let lan: Vec<String> = network::lan_ipv4().into_iter().map(|ip| format!("{ip}:{port}")).collect();
+        let lan: Vec<String> = network::lan_ipv4()
+            .into_iter()
+            .map(|ip| format!("{ip}:{port}"))
+            .collect();
         if lan != view.lan_addresses {
             self.live.update(|view| view.lan_addresses = lan);
             self.publish();
@@ -2036,7 +2298,9 @@ impl Supervisor {
         tauri::async_runtime::spawn(async move {
             let result = async {
                 let ctx = OnlineContext::from_settings(&app.state::<AppState>().settings()?);
-                app.state::<OnlineClient>().renew_relay_session(&ctx, &id).await
+                app.state::<OnlineClient>()
+                    .renew_relay_session(&ctx, &id)
+                    .await
             }
             .await;
             let _ = grants.send(GrantOutcome::Renewed { id, result });
@@ -2047,7 +2311,8 @@ impl Supervisor {
 
     async fn stop(mut self, reason: StopReason) {
         let failed = matches!(reason, StopReason::Crashed | StopReason::StartFailed);
-        self.live.update(|view| view.status = SessionStatus::Stopping);
+        self.live
+            .update(|view| view.status = SessionStatus::Stopping);
         self.publish();
         // Friends stop seeing the server before it goes.
         crate::friends::presence::set_hosting(&self.app, None);
@@ -2077,35 +2342,45 @@ impl Supervisor {
         // this the service ends it at the next heartbeat.
         let session_id = self.live.snapshot().id;
         crate::chat::server::close(&self.app, &session_id).await;
-        if let Err(e) = std::fs::remove_file(&self.cfg_path) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                log::warn!("hosting: cannot delete {}: {e}", self.cfg_path.display());
-            }
-        }
-
+        self.config_files.cleanup();
         // The process goes last: dropping it closes the pseudo console and
         // joins the reader of the console, which is what makes the tail and
         // the log complete, and it may take a moment.
         let process = self.process.clone();
         let _ = tauri::async_runtime::spawn_blocking(move || process.close()).await;
-        let tail = if failed { self.output.tail(FAILED_TAIL) } else { Vec::new() };
+        let tail = if failed {
+            self.output.tail(FAILED_TAIL)
+        } else {
+            Vec::new()
+        };
 
         let joined = self.joined.len() as u32;
         self.live.update(|view| {
-            view.status = if failed { SessionStatus::Failed } else { SessionStatus::Stopped };
+            view.status = if failed {
+                SessionStatus::Failed
+            } else {
+                SessionStatus::Stopped
+            };
             view.stop_reason = Some(reason);
             view.stopped_at = Some(timestamp::now_rfc3339());
             view.exit_code = view.exit_code.or(exit_code);
             view.joined_count = view.joined_count.max(joined);
             view.log_tail = tail;
             view.auto_stop_at = None;
-            if matches!(view.relay.status, RelayStatus::Active | RelayStatus::Connecting | RelayStatus::Lost) {
+            if matches!(
+                view.relay.status,
+                RelayStatus::Active | RelayStatus::Connecting | RelayStatus::Lost
+            ) {
                 view.relay.status = RelayStatus::Off;
                 view.relay.address = None;
             }
             for step in view.steps.iter_mut() {
                 if matches!(step.state, StepState::Active | StepState::Pending) {
-                    step.state = if failed { StepState::Failed } else { StepState::Skipped };
+                    step.state = if failed {
+                        StepState::Failed
+                    } else {
+                        StepState::Skipped
+                    };
                 }
             }
         });
@@ -2135,28 +2410,43 @@ pub(crate) async fn tunnel_config(
     let decode = |text: &str| {
         base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(text.trim().trim_end_matches('='))
     };
-    let ticket = decode(&grant.ticket).map_err(|_| "the relay ticket is not base64url".to_string())?;
+    let ticket =
+        decode(&grant.ticket).map_err(|_| "the relay ticket is not base64url".to_string())?;
     let key: wire::HostKey = decode(&grant.host_key)
         .ok()
         .and_then(|bytes| bytes.try_into().ok())
         .ok_or_else(|| "the relay key is not 16 bytes of base64url".to_string())?;
     let session_id = u64::from_str_radix(grant.session_id.trim(), 16)
         .ok()
-        .or_else(|| ticket.get(2..10).and_then(|raw| raw.try_into().ok()).map(u64::from_be_bytes))
+        .or_else(|| {
+            ticket
+                .get(2..10)
+                .and_then(|raw| raw.try_into().ok())
+                .map(u64::from_be_bytes)
+        })
         .ok_or_else(|| "the relay session id is not 16 hex characters".to_string())?;
     let control = tunnel::resolve_control(&grant.node.control_address)
         .await
-        .ok_or_else(|| format!("cannot resolve the relay node {}", grant.node.control_address))?;
+        .ok_or_else(|| {
+            format!(
+                "cannot resolve the relay node {}",
+                grant.node.control_address
+            )
+        })?;
     Ok(tunnel::TunnelConfig {
         control,
         session_id,
         key,
         ticket,
         server_port,
-        max_guests: usize::try_from(grant.limits.max_guests).unwrap_or(16).clamp(1, 64),
+        max_guests: usize::try_from(grant.limits.max_guests)
+            .unwrap_or(16)
+            .clamp(1, 64),
         guest_bind: tunnel::GuestBind::PerGuest,
         timing: tunnel::Timing {
-            keepalive: Duration::from_secs(u64::from(grant.keepalive_secs.unwrap_or(15).clamp(5, 60))),
+            keepalive: Duration::from_secs(u64::from(
+                grant.keepalive_secs.unwrap_or(15).clamp(5, 60),
+            )),
             ..tunnel::Timing::default()
         },
     })
@@ -2188,7 +2478,8 @@ fn relay_error_of(error: &AppError) -> (RelayErrorCode, String) {
                 Some("active_session") => RelayErrorCode::QuotaActive,
                 _ => {
                     let lower = message.to_ascii_lowercase();
-                    if lower.contains("daily") || lower.contains("today") || lower.contains("time") {
+                    if lower.contains("daily") || lower.contains("today") || lower.contains("time")
+                    {
                         RelayErrorCode::QuotaDaily
                     } else {
                         RelayErrorCode::QuotaActive

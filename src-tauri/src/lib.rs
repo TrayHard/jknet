@@ -15,6 +15,7 @@
 //! | `engines`        | static registry of engine builds                |
 //! | `engine_install` | GitHub releases, downloads and archive unpacking |
 //! | `clients`        | named engine instances on disk                  |
+//! | `client_import`  | copying an existing portable client into JKNet  |
 //! | `client_window`  | the separate window that edits one client       |
 //! | `servers`        | master server queries, ping and the server cache |
 //! | `launch`         | starting a client and watching it run           |
@@ -31,6 +32,7 @@
 //! | `archive`        | one bounded walk over the entries of a pk3, for the modules that list one |
 //! | `pk3_editor`     | one pk3 archive open for editing, and the rewrite that saves it |
 //! | `hosting`        | a private server on this PC, its relay tunnel, and joining one |
+//! | `server_instances` | persistent dedicated servers, reusable engines and mods |
 //! | `chat`           | friends chat: summaries, the send queue, the `chat.*` frames, attachments, notifications |
 //! | `tray`           | the tray icon, closing into it, quitting, starting with Windows |
 
@@ -57,35 +59,38 @@ mod community;
 // owns the pk3 files of a client, this one looks inside them and inside the
 // retail archives of the game, which the library never touches.
 mod appearance;
-mod model_preview;
-mod file_preview;
 mod base_game;
+mod file_preview;
 mod file_preview_products;
+mod model_preview;
 // The files of a previewed archive beyond its finished objects — map
 // pictures, translations, fonts, shaders, text — by the taxonomy of
 // `docs/jknet/pk3-anatomy.md`, and the commands that read one of them.
+mod configs;
 mod file_preview_contents;
 mod media;
+mod server_configs;
+mod server_instances;
 mod user_files;
-mod configs;
 mod video;
 mod video_encoder;
 mod video_process;
-mod video_settings;
 mod video_progress;
+mod video_settings;
 // --- slice: client window ---
 // Opening, finding and closing the `client-<slug>` windows. Kept apart from
 // `clients` because it is about windows, not records, and `clients` has to
 // stay callable from a test with no Tauri runtime around it.
+mod client_import;
 mod client_window;
 mod clients;
 mod engine_install;
 mod engines;
-mod host_system;
 mod error;
 mod friends;
 mod game;
 mod game_files;
+mod host_system;
 // --- slice: play with friends ---
 // A private server on this PC: the dedicated server of a client under a
 // pseudo console, the tunnel to the relay, and the join of a guest.
@@ -268,6 +273,15 @@ pub fn run() {
                 // an open composer become attachments; the window hears
                 // `chat:files-staged`. Any other drop is the screen's own.
                 tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                    let url = window
+                        .get_webview_window(label)
+                        .and_then(|webview| webview.url().ok());
+                    if server_configs::handles_file_drop(
+                        label,
+                        url.as_ref().and_then(|url| url.fragment()),
+                    ) {
+                        return;
+                    }
                     chat::files::dropped(window.app_handle(), label, paths);
                     return;
                 }
@@ -463,6 +477,9 @@ pub fn run() {
         // with an install in flight is separate for the same reason.
         .manage(LaunchState::default())
         .manage(InstallState::default())
+        // Existing portable clients are copied on a blocking worker. A source
+        // folder may have only one such copy in flight, even from two windows.
+        .manage(client_import::ImportState::default())
         // --- slice: maps ---
         // One rebuild of the levelshot index at a time, and the set of maps
         // nothing on this disk has a picture for.
@@ -509,6 +526,9 @@ pub fn run() {
         // --- slice: play with friends ---
         // The one private server, its session and its supervisor.
         .manage(hosting::HostState::default())
+        // Persistent dedicated servers may run side by side. Each process is
+        // still held by the launcher's Job Object and ends with the app.
+        .manage(server_instances::ServerInstancesState::default())
         // --- slice: chat notifications ---
         // The tray icon's menu and words, and whether **Quit** is under way.
         .manage(tray::TrayState::default())
@@ -522,6 +542,32 @@ pub fn run() {
             video_settings::delete_video_preset,
             video::prepare_video_preview,
             configs::list_configs,
+            server_configs::server_configs_list,
+            server_configs::server_config_save,
+            server_configs::server_config_delete,
+            server_configs::server_config_check,
+            server_configs::server_config_read_file,
+            // --- persistent dedicated servers ---
+            server_instances::list_server_engines,
+            server_instances::install_server_engine,
+            server_instances::list_server_mods,
+            server_instances::add_server_mod_from_disk,
+            server_instances::add_server_mod_from_jkhub,
+            server_instances::delete_server_mod,
+            server_instances::list_server_instances,
+            server_instances::create_server_instance,
+            server_instances::clone_server_instance,
+            server_instances::update_server_instance,
+            server_instances::delete_server_instance,
+            server_instances::server_instance_open_folder,
+            server_instances::list_server_instance_files,
+            server_instances::read_server_instance_text,
+            server_instances::save_server_instance_text,
+            server_instances::add_server_instance_files,
+            server_instances::set_server_instance_file_template,
+            server_instances::delete_server_instance_file,
+            server_instances::start_server_instance,
+            server_instances::stop_server_instance,
             configs::save_config,
             configs::delete_config,
             configs::set_config_layers,
@@ -559,6 +605,8 @@ pub fn run() {
             engines::list_engines,
             clients::list_clients,
             clients::create_client,
+            client_import::inspect_client_import,
+            client_import::import_client,
             clients::update_client,
             clients::delete_client,
             // --- slice: clients page ---

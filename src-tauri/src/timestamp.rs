@@ -151,10 +151,25 @@ mod tests {
         // The expiry of the relay example in the plan: 2026-09-25T22:00:00Z.
         assert_eq!(parse_rfc3339("2026-09-25T22:00:00Z"), Some(1_790_373_600));
         // Fractions and offsets, which a service written elsewhere may print.
-        assert_eq!(parse_rfc3339("2026-09-25T22:00:00.123456Z"), Some(1_790_373_600));
-        assert_eq!(parse_rfc3339("2026-09-26T00:00:00+02:00"), Some(1_790_373_600));
-        assert_eq!(parse_rfc3339("2026-09-25T20:30:00-01:30"), Some(1_790_373_600));
-        for broken in ["", "2026-09-25", "2026-13-01T00:00:00Z", "yesterday", "1969-12-31T23:59:59Z"] {
+        assert_eq!(
+            parse_rfc3339("2026-09-25T22:00:00.123456Z"),
+            Some(1_790_373_600)
+        );
+        assert_eq!(
+            parse_rfc3339("2026-09-26T00:00:00+02:00"),
+            Some(1_790_373_600)
+        );
+        assert_eq!(
+            parse_rfc3339("2026-09-25T20:30:00-01:30"),
+            Some(1_790_373_600)
+        );
+        for broken in [
+            "",
+            "2026-09-25",
+            "2026-13-01T00:00:00Z",
+            "yesterday",
+            "1969-12-31T23:59:59Z",
+        ] {
             assert_eq!(parse_rfc3339(broken), None, "{broken}");
         }
     }

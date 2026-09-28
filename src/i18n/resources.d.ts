@@ -31,6 +31,9 @@ import type onboarding from "../locales/en/onboarding.json";
 import type pk3 from "../locales/en/pk3.json";
 import type servers from "../locales/en/servers.json";
 import type settings from "../locales/en/settings.json";
+import type serverConfigs from "../locales/en/serverConfigs.json";
+import type serverConfigFields from "../locales/en/serverConfigFields.json";
+import type serverInstances from "../locales/en/serverInstances.json";
 import type update from "../locales/en/update.json";
 // --- slice: web app --- the strings only the web app prints, kept outside
 // `src/locales` so the launcher never loads them. A type, no runtime import.
@@ -52,6 +55,9 @@ declare module "i18next" {
       friends: typeof friends;
       account: typeof account;
       settings: typeof settings;
+      serverConfigs: typeof serverConfigs;
+      serverConfigFields: typeof serverConfigFields;
+      serverInstances: typeof serverInstances;
       onboarding: typeof onboarding;
       errors: typeof errors;
       games: typeof games;

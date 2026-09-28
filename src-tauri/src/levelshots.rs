@@ -383,14 +383,24 @@ fn sorted_dir_names(dir: &Path) -> Vec<String> {
 
 /// Adds the sources of one mod folder: its loose pictures, then its archives.
 fn collect_from_folder(game: Game, folder: &Path, out: &mut Vec<Source>) {
-    collect_loose(game, &folder.join(ENTRY_PREFIX.trim_end_matches('/')), "", out);
+    collect_loose(
+        game,
+        &folder.join(ENTRY_PREFIX.trim_end_matches('/')),
+        "",
+        out,
+    );
 
     let Ok(entries) = fs::read_dir(folder) else {
         return;
     };
     let mut archives: Vec<((u8, String), PathBuf)> = entries
         .flatten()
-        .filter(|entry| entry.file_type().map(|kind| kind.is_file()).unwrap_or(false))
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map(|kind| kind.is_file())
+                .unwrap_or(false)
+        })
         .filter_map(|entry| {
             let name = entry.file_name().into_string().ok()?;
             if !name.to_ascii_lowercase().ends_with(".pk3") {
@@ -421,9 +431,14 @@ fn collect_loose(game: Game, dir: &Path, prefix: &str, out: &mut Vec<Source>) {
         let Ok(name) = entry.file_name().into_string() else {
             continue;
         };
-        let Ok(kind) = entry.file_type() else { continue };
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
         if kind.is_dir() {
-            folders.push((format!("{prefix}{}/", name.to_ascii_lowercase()), entry.path()));
+            folders.push((
+                format!("{prefix}{}/", name.to_ascii_lowercase()),
+                entry.path(),
+            ));
             continue;
         }
         if let Some((stem, _)) = entry_key(&format!("{ENTRY_PREFIX}{prefix}{name}")) {
@@ -838,7 +853,9 @@ fn find_one(
         .filter(|source| source.game() == game)
     {
         let outcome = match &source {
-            Source::Loose { path, key: loose, .. } if loose == key => {
+            Source::Loose {
+                path, key: loose, ..
+            } if loose == key => {
                 let mut maps = BTreeMap::new();
                 let stored = store_loose(path, key, &dir, &mut maps);
                 stored.map(|()| maps.remove(key))
@@ -1390,7 +1407,10 @@ mod tests {
         );
 
         let shot = resolve(&index, &dir, "ja/mp/ffa3").expect("the picture is on disk");
-        assert_eq!(shot.path, dir.join("ja__mp__ffa3.jpg").display().to_string());
+        assert_eq!(
+            shot.path,
+            dir.join("ja__mp__ffa3.jpg").display().to_string()
+        );
         assert_eq!(Path::new(&shot.path).parent(), Some(dir.as_path()));
 
         // A key the index has and the disk does not is no answer at all, so
@@ -1488,7 +1508,10 @@ mod tests {
         // Drop the second archive and the picture it left behind must go.
         fs::remove_file(base.join("zzz_pack.pk3")).expect("remove");
         let (index, _) = rebuild(&paths, &settings).expect("second rebuild");
-        assert_eq!(index.maps.get("ja/mp/ffa1").map(|shot| shot.width), Some(64));
+        assert_eq!(
+            index.maps.get("ja/mp/ffa1").map(|shot| shot.width),
+            Some(64)
+        );
 
         let files: Vec<String> = fs::read_dir(cache_dir(&paths))
             .expect("cache folder")
@@ -1528,7 +1551,10 @@ mod tests {
         assert_eq!(index_key(Game::JediAcademy, "MP/FFA1"), "ja/mp/ffa1");
         assert_eq!(index_key(Game::JediOutcast, "ffa_bespin"), "jo/ffa_bespin");
         // The map key rules still apply underneath.
-        assert_eq!(index_key(Game::JediOutcast, "maps\\CTF_Yavin.bsp"), "jo/ctf_yavin");
+        assert_eq!(
+            index_key(Game::JediOutcast, "maps\\CTF_Yavin.bsp"),
+            "jo/ctf_yavin"
+        );
         // A key of `ja/` names no map.
         assert_eq!(index_key(Game::JediAcademy, "  "), "");
     }
@@ -1554,7 +1580,10 @@ mod tests {
         let ja_base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         write_pk3(
             &ja_base.join("assets0.pk3"),
-            &[("levelshots/ffa_bespin.jpg", picture(64, 64, ImageFormat::Jpeg))],
+            &[(
+                "levelshots/ffa_bespin.jpg",
+                picture(64, 64, ImageFormat::Jpeg),
+            )],
         );
 
         let jo = _temp.path().join("JK2GameData");
@@ -1565,12 +1594,21 @@ mod tests {
             .insert(Game::JediOutcast, jo.display().to_string());
         write_pk3(
             &jo_base.join("assets0.pk3"),
-            &[("levelshots/ffa_bespin.jpg", picture(32, 16, ImageFormat::Jpeg))],
+            &[(
+                "levelshots/ffa_bespin.jpg",
+                picture(32, 16, ImageFormat::Jpeg),
+            )],
         );
 
         let (index, _) = rebuild(&paths, &settings).expect("rebuild");
-        let ja = index.maps.get("ja/ffa_bespin").expect("the Jedi Academy one");
-        let jo_shot = index.maps.get("jo/ffa_bespin").expect("the Jedi Outcast one");
+        let ja = index
+            .maps
+            .get("ja/ffa_bespin")
+            .expect("the Jedi Academy one");
+        let jo_shot = index
+            .maps
+            .get("jo/ffa_bespin")
+            .expect("the Jedi Outcast one");
         assert_eq!((ja.width, ja.height), (64, 64));
         assert_eq!((jo_shot.width, jo_shot.height), (32, 16));
         // Two keys, two files: the names differ by their prefix alone.
@@ -1588,7 +1626,10 @@ mod tests {
         let ja_base = Path::new(settings.game_data_path(Game::JediAcademy).unwrap()).join("base");
         write_pk3(
             &ja_base.join("assets0.pk3"),
-            &[("levelshots/ffa_bespin.jpg", picture(64, 64, ImageFormat::Jpeg))],
+            &[(
+                "levelshots/ffa_bespin.jpg",
+                picture(64, 64, ImageFormat::Jpeg),
+            )],
         );
         let jo = _temp.path().join("JK2GameData");
         fs::create_dir_all(jo.join("base")).expect("the Jedi Outcast folder");

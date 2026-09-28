@@ -40,8 +40,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::error::{AppError, Result};
 use crate::online::{
-    is_chat_unavailable, path_segment, ChatMessage, FileMeta, FileRef, OnlineClient,
-    OnlineContext,
+    is_chat_unavailable, path_segment, ChatMessage, FileMeta, FileRef, OnlineClient, OnlineContext,
 };
 use crate::paths::DataPaths;
 use crate::state::AppState;
@@ -98,10 +97,45 @@ const ORIGIN_CLIPBOARD: &str = "clipboard";
 
 /// Extensions the service classifies as programs whatever the bytes say.
 const PROGRAM_EXTENSIONS: &[&str] = &[
-    "exe", "com", "scr", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh",
-    "hta", "msi", "msp", "msix", "appx", "lnk", "url", "pif", "cpl", "dll", "sys", "inf", "reg",
-    "jar", "scf", "chm", "iso", "img", "vhd", "vhdx", "application", "gadget", "xll", "docm",
-    "xlsm", "pptm",
+    "exe",
+    "com",
+    "scr",
+    "bat",
+    "cmd",
+    "ps1",
+    "psm1",
+    "vbs",
+    "vbe",
+    "js",
+    "jse",
+    "wsf",
+    "wsh",
+    "hta",
+    "msi",
+    "msp",
+    "msix",
+    "appx",
+    "lnk",
+    "url",
+    "pif",
+    "cpl",
+    "dll",
+    "sys",
+    "inf",
+    "reg",
+    "jar",
+    "scf",
+    "chm",
+    "iso",
+    "img",
+    "vhd",
+    "vhdx",
+    "application",
+    "gadget",
+    "xll",
+    "docm",
+    "xlsm",
+    "pptm",
 ];
 
 /// Entries that make an archive a carrier of programs, on top of
@@ -285,7 +319,10 @@ pub(super) fn start(app: &AppHandle) {
         }
         match evict(&files, CACHE_LIMIT, None, SystemTime::now()) {
             Ok(removed) if !removed.is_empty() => {
-                log::info!("chat: {} cached file(s) removed to keep the cache small", removed.len());
+                log::info!(
+                    "chat: {} cached file(s) removed to keep the cache small",
+                    removed.len()
+                );
             }
             Ok(_) => {}
             Err(e) => log::warn!("chat: cannot tidy {}: {e}", files.display()),
@@ -328,7 +365,11 @@ pub fn dropped(app: &AppHandle, label: &str, paths: &[PathBuf]) {
                 }
             }
         }
-        if let Err(e) = app.emit_to(label.as_str(), EVENT_FILES_STAGED, FilesStaged { files, refused }) {
+        if let Err(e) = app.emit_to(
+            label.as_str(),
+            EVENT_FILES_STAGED,
+            FilesStaged { files, refused },
+        ) {
             log::debug!("cannot emit {EVENT_FILES_STAGED}: {e}");
         }
     });
@@ -415,7 +456,13 @@ pub async fn chat_stage_media(app: AppHandle, media_id: String) -> Result<Staged
             bytes = to_png(&bytes, format)?;
             name = format!("{}.png", item.name);
         }
-        stage_bytes(&staging_dir_of(&paths), &name, bytes, ORIGIN_MEDIA, secret.as_deref())
+        stage_bytes(
+            &staging_dir_of(&paths),
+            &name,
+            bytes,
+            ORIGIN_MEDIA,
+            secret.as_deref(),
+        )
     })
     .await?;
     keep_staged(&app, &file.handle, staged);
@@ -440,7 +487,13 @@ pub async fn chat_stage_clipboard_image(app: AppHandle) -> Result<StagedFile> {
         }
         let png = rgba_to_png(width, height, image.rgba().to_vec())?;
         let name = format!("clipboard-{}.png", stamp());
-        stage_bytes(&staging_dir_of(&paths), &name, png, ORIGIN_CLIPBOARD, secret.as_deref())
+        stage_bytes(
+            &staging_dir_of(&paths),
+            &name,
+            png,
+            ORIGIN_CLIPBOARD,
+            secret.as_deref(),
+        )
     })
     .await?;
     keep_staged(&app, &file.handle, staged);
@@ -460,7 +513,11 @@ pub async fn chat_unstage(app: AppHandle, handle: String) -> Result<()> {
 }
 
 /// Stages one file from disk off the async runtime and keeps it.
-async fn stage_from_disk(app: &AppHandle, source: PathBuf, origin: &'static str) -> Result<StagedFile> {
+async fn stage_from_disk(
+    app: &AppHandle,
+    source: PathBuf,
+    origin: &'static str,
+) -> Result<StagedFile> {
     let state = app.state::<AppState>();
     let config_root = state.config_root.clone();
     let paths = state.paths()?;
@@ -522,7 +579,11 @@ pub(super) fn settle_sent(app: &AppHandle, uploaded: Vec<(String, String)>) {
     tauri::async_runtime::spawn_blocking(move || {
         for (from, to) in moves {
             if let Err(e) = adopt(&from, &to) {
-                log::debug!("chat: cannot keep {} as {}: {e}", from.display(), to.display());
+                log::debug!(
+                    "chat: cannot keep {} as {}: {e}",
+                    from.display(),
+                    to.display()
+                );
                 remove_quietly(&from);
             }
         }
@@ -598,8 +659,7 @@ pub(crate) fn stage_bytes(
     };
     let sha256 = crate::bundles::sha256_hex(&bytes);
     let handle = new_client_id();
-    std::fs::create_dir_all(staging)
-        .map_err(|e| AppError::io_path("cannot create", staging, e))?;
+    std::fs::create_dir_all(staging).map_err(|e| AppError::io_path("cannot create", staging, e))?;
     let path = staging.join(&handle);
     std::fs::write(&path, &bytes).map_err(|e| AppError::io_path("cannot write", &path, e))?;
     let size = bytes.len() as u64;
@@ -659,7 +719,10 @@ fn check_size(name: &str, size: u64) -> Result<()> {
 fn file_size(path: &Path) -> Result<u64> {
     let meta = std::fs::metadata(path).map_err(|e| AppError::io_path("cannot read", path, e))?;
     if !meta.is_file() {
-        return Err(AppError::InvalidInput(format!("{} is not a file", display_name(path))));
+        return Err(AppError::InvalidInput(format!(
+            "{} is not a file",
+            display_name(path)
+        )));
     }
     Ok(meta.len())
 }
@@ -687,7 +750,10 @@ fn read_head(path: &Path, limit: u64) -> Result<Vec<u8>> {
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty() && haystack.windows(needle.len()).any(|window| window == needle)
+    !needle.is_empty()
+        && haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
 }
 
 /// `2026-09-26-143205` for the name of a clipboard picture.
@@ -742,7 +808,10 @@ pub(crate) fn sanitize_name(name: &str) -> String {
         .filter(|c| !is_unsafe_name_char(*c))
         .take(MAX_NAME_CHARS)
         .collect();
-    let cleaned = cleaned.trim_end_matches(['.', ' ']).trim_start().to_string();
+    let cleaned = cleaned
+        .trim_end_matches(['.', ' '])
+        .trim_start()
+        .to_string();
     let stem = cleaned
         .split('.')
         .next()
@@ -972,7 +1041,11 @@ fn exif_orientation(payload: &[u8]) -> Option<u16> {
     let u32_at = |at: usize| -> Option<u32> {
         let b = tiff.get(at..at + 4)?;
         let b = [b[0], b[1], b[2], b[3]];
-        Some(if big { u32::from_be_bytes(b) } else { u32::from_le_bytes(b) })
+        Some(if big {
+            u32::from_be_bytes(b)
+        } else {
+            u32::from_le_bytes(b)
+        })
     };
     let ifd = usize::try_from(u32_at(4)?).ok()?;
     let count = usize::from(u16_at(ifd)?);
@@ -1141,7 +1214,10 @@ pub(super) async fn upload(
             );
         }
     };
-    noted(app, put_staged(online, ctx, conversation_id, staged, on_chunk).await)
+    noted(
+        app,
+        put_staged(online, ctx, conversation_id, staged, on_chunk).await,
+    )
 }
 
 /// Registers a staged file and uploads its bytes unless the account stored
@@ -1242,7 +1318,9 @@ pub(crate) async fn ensure_cached(app: &AppHandle, file_id: &str) -> Result<Path
             break;
         }
         if started.elapsed() > DOWNLOAD_WAIT {
-            return Err(AppError::Busy(format!("the download of {file_id} takes too long")));
+            return Err(AppError::Busy(format!(
+                "the download of {file_id} takes too long"
+            )));
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
@@ -1298,7 +1376,10 @@ pub(crate) async fn ensure_cached(app: &AppHandle, file_id: &str) -> Result<Path
         Err(e) => {
             let status = status_after(&e);
             if status == LocalStatus::Gone {
-                app.state::<ChatState>().files().gone.insert(file_id.clone());
+                app.state::<ChatState>()
+                    .files()
+                    .gone
+                    .insert(file_id.clone());
                 log::info!("chat: the file {file_id} is no longer on the service");
             } else {
                 log::warn!("chat: cannot download {file_id}: {e}");
@@ -1335,7 +1416,10 @@ pub(crate) async fn fetch(
         .await
         .map_err(|e| AppError::io_path("cannot create", dir, e))?;
     let target = dir.join(file_id);
-    if tokio::fs::metadata(&target).await.is_ok_and(|meta| meta.is_file()) {
+    if tokio::fs::metadata(&target)
+        .await
+        .is_ok_and(|meta| meta.is_file())
+    {
         return Ok(target);
     }
     let partial = dir.join(format!("{file_id}{PART_SUFFIX}"));
@@ -1358,7 +1442,8 @@ pub(crate) async fn fetch(
     let resuming = have > 0 && response.status() == StatusCode::PARTIAL_CONTENT;
     let expected = etag_sha256(response.headers());
     let total = if resuming {
-        range_total(response.headers()).or_else(|| response.content_length().map(|rest| have + rest))
+        range_total(response.headers())
+            .or_else(|| response.content_length().map(|rest| have + rest))
     } else {
         response.content_length()
     };
@@ -1399,9 +1484,12 @@ pub(crate) async fn fetch(
     }
     if let Some(expected) = expected {
         let hashed = partial.clone();
-        let actual = tauri::async_runtime::spawn_blocking(move || crate::bundles::sha256_of(&hashed))
-            .await
-            .map_err(|e| AppError::State(format!("the hash of {file_id} did not finish: {e}")))??;
+        let actual =
+            tauri::async_runtime::spawn_blocking(move || crate::bundles::sha256_of(&hashed))
+                .await
+                .map_err(|e| {
+                    AppError::State(format!("the hash of {file_id} did not finish: {e}"))
+                })??;
         if actual != expected {
             let _ = tokio::fs::remove_file(&partial).await;
             return Err(AppError::Network(format!(
@@ -1599,7 +1687,12 @@ pub async fn chat_file_save(
         .save_file(move |chosen| {
             let _ = tx.send(chosen);
         });
-    let Some(target) = rx.await.ok().flatten().and_then(|path| path.into_path().ok()) else {
+    let Some(target) = rx
+        .await
+        .ok()
+        .flatten()
+        .and_then(|path| path.into_path().ok())
+    else {
         return Ok(None);
     };
     let saved = target.clone();
@@ -1640,7 +1733,10 @@ pub(crate) fn danger_reasons(path: &Path, name: &str, flagged: bool) -> Result<V
     }
     match inspect_archive(path, &head) {
         ArchiveVerdict::Programs(entries) => {
-            reasons.push(format!("the archive holds programs: {}", entries.join(", ")));
+            reasons.push(format!(
+                "the archive holds programs: {}",
+                entries.join(", ")
+            ));
         }
         ArchiveVerdict::Unreadable => {
             reasons.push("the archive cannot be looked into".to_string());
@@ -1677,7 +1773,8 @@ pub(crate) fn inspect_archive(path: &Path, head: &[u8]) -> ArchiveVerdict {
             crate::archive::names(&archive, crate::archive::MAX_ENTRIES)
         }
         Some("7z") => {
-            let Ok(reader) = sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty())
+            let Ok(reader) =
+                sevenz_rust2::ArchiveReader::open(path, sevenz_rust2::Password::empty())
             else {
                 return ArchiveVerdict::Unreadable;
             };
@@ -1719,7 +1816,11 @@ fn is_program_entry(name: &str) -> bool {
 /// it: `home\<mod folder>\demos\` or `home\<mod folder>\screenshots\`, the
 /// mod folder being the one the client plays. Answers the path.
 #[tauri::command]
-pub async fn chat_file_import(app: AppHandle, file_id: String, target: ImportTarget) -> Result<String> {
+pub async fn chat_file_import(
+    app: AppHandle,
+    file_id: String,
+    target: ImportTarget,
+) -> Result<String> {
     let file_id = path_segment(&file_id)?.to_string();
     let kind = match target.kind.as_str() {
         "demo" => ImportKind::Demo,
@@ -1794,7 +1895,9 @@ pub(crate) fn import_destination(
 ) -> Result<PathBuf> {
     let name = sanitize_name(name);
     let (stem, dot_extension) = match name.rsplit_once('.') {
-        Some((stem, extension)) if !stem.is_empty() => (stem.to_string(), extension.to_ascii_lowercase()),
+        Some((stem, extension)) if !stem.is_empty() => {
+            (stem.to_string(), extension.to_ascii_lowercase())
+        }
         _ => (name.clone(), String::new()),
     };
     let (folder, extension) = match kind {
@@ -1945,7 +2048,10 @@ pub(crate) mod test_support {
             .expect("encode");
         let mut out = plain[..2].to_vec();
         out.extend(segment(0xE1, &exif_with_gps(6)));
-        out.extend(segment(0xED, b"Photoshop 3.0\08BIM\x04\x04 caption: garage"));
+        out.extend(segment(
+            0xED,
+            b"Photoshop 3.0\08BIM\x04\x04 caption: garage",
+        ));
         out.extend(segment(0xFE, b"taken at home"));
         out.extend_from_slice(&plain[2..]);
         out.extend_from_slice(b"\xFF\xD8TRAILING-PICTURE-WITH-GPS");
@@ -1963,7 +2069,11 @@ mod tests {
         for byte in bytes {
             crc ^= u32::from(*byte);
             for _ in 0..8 {
-                crc = if crc & 1 == 1 { (crc >> 1) ^ 0xEDB8_8320 } else { crc >> 1 };
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xEDB8_8320
+                } else {
+                    crc >> 1
+                };
             }
         }
         !crc
@@ -2017,11 +2127,23 @@ mod tests {
         assert!(contains(&original, &GPS_RATIONALS));
         let stripped = strip_metadata(&original).expect("a JPEG");
 
-        assert!(!contains(&stripped, &GPS_RATIONALS), "the GPS position is gone");
-        assert!(!contains(&stripped, b"II*\0"), "the camera's Exif block is gone");
+        assert!(
+            !contains(&stripped, &GPS_RATIONALS),
+            "the GPS position is gone"
+        );
+        assert!(
+            !contains(&stripped, b"II*\0"),
+            "the camera's Exif block is gone"
+        );
         assert!(!contains(&stripped, b"Photoshop"), "APP13 is gone");
-        assert!(!contains(&stripped, b"taken at home"), "the comment is gone");
-        assert!(!contains(&stripped, b"TRAILING"), "what followed the end is gone");
+        assert!(
+            !contains(&stripped, b"taken at home"),
+            "the comment is gone"
+        );
+        assert!(
+            !contains(&stripped, b"TRAILING"),
+            "what followed the end is gone"
+        );
         assert!(stripped.ends_with(&[0xFF, 0xD9]));
 
         // The orientation survives as a block of its own.
@@ -2031,7 +2153,10 @@ mod tests {
             .position(|pair| pair == [0xFF, 0xE1])
             .expect("the orientation block");
         let length = usize::from(u16::from_be_bytes([stripped[app1 + 2], stripped[app1 + 3]]));
-        assert_eq!(exif_orientation(&stripped[app1 + 4..app1 + 2 + length]), Some(6));
+        assert_eq!(
+            exif_orientation(&stripped[app1 + 4..app1 + 2 + length]),
+            Some(6)
+        );
 
         let decoded = image::load_from_memory(&stripped).expect("still a picture");
         assert_eq!((decoded.width(), decoded.height()), (16, 8));
@@ -2045,7 +2170,10 @@ mod tests {
         // Replace the Exif block by one that says "upright".
         let upright = segment(0xE1, &exif_with_gps(1));
         let old = segment(0xE1, &exif_with_gps(6));
-        let at = turned.windows(old.len()).position(|w| w == old.as_slice()).expect("the block");
+        let at = turned
+            .windows(old.len())
+            .position(|w| w == old.as_slice())
+            .expect("the block");
         let picture = [&turned[..at], &upright[..], &turned[at + old.len()..]].concat();
         let stripped = strip_metadata(&picture).expect("a JPEG");
         assert!(!contains(&stripped, b"Exif"));
@@ -2059,16 +2187,30 @@ mod tests {
         let ihdr_end = PNG_SIGNATURE.len() + 25;
         let mut marked = plain[..ihdr_end].to_vec();
         marked.extend(png_chunk(b"tEXt", b"Comment\0shot at 55.75N 37.61E"));
-        marked.extend(png_chunk(b"iTXt", b"XML:com.adobe.xmp\0\0\0\0\0<x:xmpmeta/>"));
+        marked.extend(png_chunk(
+            b"iTXt",
+            b"XML:com.adobe.xmp\0\0\0\0\0<x:xmpmeta/>",
+        ));
         marked.extend(png_chunk(b"zTXt", b"Author\0\0x\x9c\x03\0\0\0\0\x01"));
         marked.extend(png_chunk(b"eXIf", &exif_with_gps(1)[6..]));
         marked.extend_from_slice(&plain[ihdr_end..]);
         marked.extend_from_slice(b"TRAILING");
 
         let stripped = strip_metadata(&marked).expect("a PNG");
-        let gone: [&[u8]; 6] = [b"tEXt", b"iTXt", b"zTXt", b"eXIf", b"TRAILING", &GPS_RATIONALS];
+        let gone: [&[u8]; 6] = [
+            b"tEXt",
+            b"iTXt",
+            b"zTXt",
+            b"eXIf",
+            b"TRAILING",
+            &GPS_RATIONALS,
+        ];
         for kind in gone {
-            assert!(!contains(&stripped, kind), "{:?} survived", String::from_utf8_lossy(kind));
+            assert!(
+                !contains(&stripped, kind),
+                "{:?} survived",
+                String::from_utf8_lossy(kind)
+            );
         }
         assert_eq!(stripped, plain, "exactly the picture the encoder wrote");
         let decoded = image::load_from_memory(&stripped).expect("still a picture");
@@ -2084,7 +2226,10 @@ mod tests {
 
     #[test]
     fn pictures_report_their_size() {
-        assert_eq!(picture_size(b"GIF89a\x40\x01\xF0\x00rest"), Some((320, 240)));
+        assert_eq!(
+            picture_size(b"GIF89a\x40\x01\xF0\x00rest"),
+            Some((320, 240))
+        );
         let mut lossy = b"RIFF\0\0\0\0WEBPVP8 \0\0\0\0\0\0\0\x9d\x01\x2a".to_vec();
         lossy.extend_from_slice(&640u16.to_le_bytes());
         lossy.extend_from_slice(&480u16.to_le_bytes());
@@ -2104,13 +2249,25 @@ mod tests {
 
     #[test]
     fn classes_follow_the_service() {
-        assert_eq!(classify("shot.png", b"MZ\x90\0"), "executable", "a program named .png");
+        assert_eq!(
+            classify("shot.png", b"MZ\x90\0"),
+            "executable",
+            "a program named .png"
+        );
         assert_eq!(classify("run.sh", b"#!/bin/sh"), "executable");
         assert_eq!(classify("tool", b"\xCF\xFA\xED\xFE"), "executable");
         assert_eq!(classify("notes.txt.lnk", b"L\0\0\0"), "executable");
-        assert_eq!(classify("setup.exe. ", b"text"), "executable", "Windows drops the dots");
+        assert_eq!(
+            classify("setup.exe. ", b"text"),
+            "executable",
+            "Windows drops the dots"
+        );
         assert_eq!(classify("shot.jpg", b"\xFF\xD8\xFF\xE0"), "image");
-        assert_eq!(classify("logo.svg", b"<svg xmlns"), "other", "an SVG is never a picture");
+        assert_eq!(
+            classify("logo.svg", b"<svg xmlns"),
+            "other",
+            "an SVG is never a picture"
+        );
         assert_eq!(classify("clip.mp4", b"\0\0\0\x20ftypisom"), "video");
         assert_eq!(classify("clip.webm", b"\x1A\x45\xDF\xA3"), "video");
         assert_eq!(classify("maps.pk3", b"PK\x03\x04"), "archive");
@@ -2118,20 +2275,33 @@ mod tests {
         assert_eq!(classify("duel.dm_26", b"\x01\x02"), "demo");
         assert_eq!(classify("binds.cfg", b"bind x \"say hi\"\n"), "config");
         assert_eq!(classify("binds.cfg", b"bind\0x"), "other");
-        assert_eq!(classify("ru.cfg", &"бинд".as_bytes()[..7]), "config", "a cut character is still text");
+        assert_eq!(
+            classify("ru.cfg", &"бинд".as_bytes()[..7]),
+            "config",
+            "a cut character is still text"
+        );
         assert_eq!(classify("readme", b"hello"), "other");
     }
 
     #[test]
     fn names_are_cleaned_like_the_service_cleans_them() {
-        assert_eq!(sanitize_name(r"..\..\evil/..\name.txt"), "....evil..name.txt");
-        assert_eq!(sanitize_name("report.pdf\u{202E}exe.txt"), "report.pdfexe.txt");
+        assert_eq!(
+            sanitize_name(r"..\..\evil/..\name.txt"),
+            "....evil..name.txt"
+        );
+        assert_eq!(
+            sanitize_name("report.pdf\u{202E}exe.txt"),
+            "report.pdfexe.txt"
+        );
         assert_eq!(sanitize_name("trailing. . "), "trailing");
         assert_eq!(sanitize_name("CON.txt"), "file");
         assert_eq!(sanitize_name("com7"), "file");
         assert_eq!(sanitize_name("compass.cfg"), "compass.cfg");
         assert_eq!(sanitize_name("  \u{0007} "), "file");
-        assert_eq!(sanitize_name(&"x".repeat(300)).chars().count(), MAX_NAME_CHARS);
+        assert_eq!(
+            sanitize_name(&"x".repeat(300)).chars().count(),
+            MAX_NAME_CHARS
+        );
     }
 
     #[test]
@@ -2145,19 +2315,33 @@ mod tests {
         assert!(is_session_file(&root, &root.join("settings.json")));
         assert!(is_session_file(&root, &root.join("SETTINGS.JSON")));
         assert!(is_session_file(&root, &root.join("settings.0123abcd.tmp")));
-        assert!(is_session_file(&root, &root.join(".").join("settings.json")));
+        assert!(is_session_file(
+            &root,
+            &root.join(".").join("settings.json")
+        ));
         assert!(!is_session_file(&root, &root.join("notes.txt")));
         // A settings.json elsewhere is somebody's file, not the session.
         std::fs::write(temp.path().join("settings.json"), b"{}").expect("a file");
         assert!(!is_session_file(&root, &temp.path().join("settings.json")));
 
         let paths = DataPaths::new(temp.path().join("data"));
-        let refused = stage_file(&paths, &root, None, &root.join("settings.json"), ORIGIN_FILE);
-        assert!(matches!(refused, Err(AppError::InvalidInput(ref reason)) if reason.contains("session")));
+        let refused = stage_file(
+            &paths,
+            &root,
+            None,
+            &root.join("settings.json"),
+            ORIGIN_FILE,
+        );
+        assert!(
+            matches!(refused, Err(AppError::InvalidInput(ref reason)) if reason.contains("session"))
+        );
         assert!(!staging_dir_of(&paths).exists(), "nothing was copied");
         let (staged, file) =
             stage_file(&paths, &root, None, &root.join("notes.txt"), ORIGIN_FILE).expect("staged");
-        assert_eq!((file.name.as_str(), file.class_guess.as_str(), file.size), ("notes.txt", "other", 2));
+        assert_eq!(
+            (file.name.as_str(), file.class_guess.as_str(), file.size),
+            ("notes.txt", "other", 2)
+        );
         assert_eq!(std::fs::read(&staged.path).expect("the copy"), b"{}");
     }
 
@@ -2166,7 +2350,13 @@ mod tests {
         let temp = tempfile::tempdir().expect("a temp dir");
         let secret = "0123456789abcdef0123456789abcdef";
         let copy = format!("{{\"onlineToken\": \"{secret}\"}}").into_bytes();
-        let refused = stage_bytes(temp.path(), "backup.txt", copy.clone(), ORIGIN_FILE, Some(secret));
+        let refused = stage_bytes(
+            temp.path(),
+            "backup.txt",
+            copy.clone(),
+            ORIGIN_FILE,
+            Some(secret),
+        );
         assert!(matches!(refused, Err(AppError::InvalidInput(_))));
         assert!(stage_bytes(temp.path(), "backup.txt", copy, ORIGIN_FILE, None).is_ok());
         assert!(stage_bytes(temp.path(), "empty.txt", Vec::new(), ORIGIN_FILE, None).is_err());
@@ -2177,23 +2367,42 @@ mod tests {
             .expect("a large file");
         let paths = DataPaths::new(temp.path().join("data"));
         let refused = stage_file(&paths, temp.path(), None, &big, ORIGIN_FILE);
-        assert!(matches!(refused, Err(AppError::InvalidInput(ref reason)) if reason.contains("25 MiB")));
-        assert!(stage_file(&paths, temp.path(), None, temp.path(), ORIGIN_FILE).is_err(), "a folder");
+        assert!(
+            matches!(refused, Err(AppError::InvalidInput(ref reason)) if reason.contains("25 MiB"))
+        );
+        assert!(
+            stage_file(&paths, temp.path(), None, temp.path(), ORIGIN_FILE).is_err(),
+            "a folder"
+        );
     }
 
     #[test]
     fn a_staged_picture_is_the_stripped_copy_and_its_hash() {
         let temp = tempfile::tempdir().expect("a temp dir");
         let original = jpeg_with_gps();
-        let (staged, file) =
-            stage_bytes(temp.path(), "IMG_0001.JPG", original.clone(), ORIGIN_CLIPBOARD, None)
-                .expect("staged");
+        let (staged, file) = stage_bytes(
+            temp.path(),
+            "IMG_0001.JPG",
+            original.clone(),
+            ORIGIN_CLIPBOARD,
+            None,
+        )
+        .expect("staged");
         let copy = std::fs::read(&staged.path).expect("the copy");
         assert_eq!(copy, strip_metadata(&original).expect("a JPEG"));
         assert_eq!(staged.sha256, crate::bundles::sha256_hex(&copy));
-        assert_eq!((staged.size, file.size), (copy.len() as u64, copy.len() as u64));
-        assert_eq!((file.width, file.height, file.class_guess.as_str()), (Some(16), Some(8), "image"));
-        assert_eq!(staged.meta.as_ref().and_then(|meta| meta.origin.as_deref()), Some("clipboard"));
+        assert_eq!(
+            (staged.size, file.size),
+            (copy.len() as u64, copy.len() as u64)
+        );
+        assert_eq!(
+            (file.width, file.height, file.class_guess.as_str()),
+            (Some(16), Some(8), "image")
+        );
+        assert_eq!(
+            staged.meta.as_ref().and_then(|meta| meta.origin.as_deref()),
+            Some("clipboard")
+        );
         assert_eq!(staged.path, temp.path().join(&file.handle));
         let wire = serde_json::to_value(&file).expect("serializes");
         assert_eq!(wire["classGuess"], "image");
@@ -2206,7 +2415,10 @@ mod tests {
         let decoded = image::load_from_memory(&png).expect("a picture");
         assert_eq!(decoded.color(), image::ColorType::Rgb8);
         let clear = rgba_to_png(2, 2, vec![0; 16]).expect("encoded");
-        assert_eq!(image::load_from_memory(&clear).expect("a picture").color(), image::ColorType::Rgba8);
+        assert_eq!(
+            image::load_from_memory(&clear).expect("a picture").color(),
+            image::ColorType::Rgba8
+        );
         assert!(rgba_to_png(2, 2, vec![0; 3]).is_err());
     }
 
@@ -2232,7 +2444,10 @@ mod tests {
             std::fs::write(&path, bytes).expect("a file");
             path
         };
-        let armed = write("mod.pk3", &zip_with(&["maps/duel.bsp", "jampgamex86.dll", "tools/setup.exe."]));
+        let armed = write(
+            "mod.pk3",
+            &zip_with(&["maps/duel.bsp", "jampgamex86.dll", "tools/setup.exe."]),
+        );
         let head = read_head(&armed, 4096).expect("the head");
         assert_eq!(
             inspect_archive(&armed, &head),
@@ -2242,15 +2457,32 @@ mod tests {
         assert_eq!(reasons.len(), 1);
         assert!(reasons[0].contains("jampgamex86.dll"), "{reasons:?}");
 
-        let clean = write("skins.pk3", &zip_with(&["models/players/kyle/model.glm", "shaders/k.shader"]));
-        assert_eq!(inspect_archive(&clean, &read_head(&clean, 4096).expect("head")), ArchiveVerdict::Clean);
-        assert!(danger_reasons(&clean, "skins.pk3", false).expect("checked").is_empty());
+        let clean = write(
+            "skins.pk3",
+            &zip_with(&["models/players/kyle/model.glm", "shaders/k.shader"]),
+        );
+        assert_eq!(
+            inspect_archive(&clean, &read_head(&clean, 4096).expect("head")),
+            ArchiveVerdict::Clean
+        );
+        assert!(danger_reasons(&clean, "skins.pk3", false)
+            .expect("checked")
+            .is_empty());
 
         let rar = write("mod.rar", b"Rar!\x1A\x07\x01\0rest");
-        assert_eq!(inspect_archive(&rar, b"Rar!\x1A\x07\x01\0"), ArchiveVerdict::Unreadable);
+        assert_eq!(
+            inspect_archive(&rar, b"Rar!\x1A\x07\x01\0"),
+            ArchiveVerdict::Unreadable
+        );
         let broken = write("broken.zip", b"PK\x03\x04 and nothing that opens");
-        assert_eq!(inspect_archive(&broken, b"PK\x03\x04"), ArchiveVerdict::Unreadable);
-        assert_eq!(inspect_archive(&clean, b"plain"), ArchiveVerdict::NotArchive);
+        assert_eq!(
+            inspect_archive(&broken, b"PK\x03\x04"),
+            ArchiveVerdict::Unreadable
+        );
+        assert_eq!(
+            inspect_archive(&clean, b"plain"),
+            ArchiveVerdict::NotArchive
+        );
     }
 
     #[test]
@@ -2258,12 +2490,24 @@ mod tests {
         let temp = tempfile::tempdir().expect("a temp dir");
         let program = temp.path().join("cached");
         std::fs::write(&program, b"MZ\x90\0\x03").expect("a file");
-        assert_eq!(danger_reasons(&program, "shot.png", false).expect("checked").len(), 1);
+        assert_eq!(
+            danger_reasons(&program, "shot.png", false)
+                .expect("checked")
+                .len(),
+            1
+        );
         let picture = temp.path().join("picture");
         std::fs::write(&picture, png(2, 2)).expect("a file");
-        assert!(danger_reasons(&picture, "shot.png", false).expect("checked").is_empty());
+        assert!(danger_reasons(&picture, "shot.png", false)
+            .expect("checked")
+            .is_empty());
         // The service's flag is enough on its own.
-        assert_eq!(danger_reasons(&picture, "shot.png", true).expect("checked").len(), 1);
+        assert_eq!(
+            danger_reasons(&picture, "shot.png", true)
+                .expect("checked")
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -2295,23 +2539,37 @@ mod tests {
         let removed = evict(dir, 150, None, SystemTime::now()).expect("tidied");
         assert_eq!(removed, vec![recent]);
         assert!(oldest.exists());
-        assert!(evict(&dir.join("missing"), 0, None, now).expect("nothing").is_empty());
+        assert!(evict(&dir.join("missing"), 0, None, now)
+            .expect("nothing")
+            .is_empty());
     }
 
     #[test]
     fn file_gone_and_not_found_leave_a_file_gone() {
-        let refusal = |code: &str| AppError::Online { code: code.into(), message: "x".into() };
+        let refusal = |code: &str| AppError::Online {
+            code: code.into(),
+            message: "x".into(),
+        };
         assert_eq!(status_after(&refusal("file_gone")), LocalStatus::Gone);
         assert_eq!(status_after(&refusal("not_found")), LocalStatus::Gone);
-        assert_eq!(status_after(&refusal("chat_unavailable")), LocalStatus::Remote);
-        assert_eq!(status_after(&AppError::Network("reset".into())), LocalStatus::Remote);
+        assert_eq!(
+            status_after(&refusal("chat_unavailable")),
+            LocalStatus::Remote
+        );
+        assert_eq!(
+            status_after(&AppError::Network("reset".into())),
+            LocalStatus::Remote
+        );
         assert_eq!(status_after(&gone_error()), LocalStatus::Gone);
         // A refused range starts over; a lost file does not.
         assert!(restarts(&refusal("internal")));
         assert!(!restarts(&refusal("file_gone")));
         assert!(!restarts(&AppError::Network("reset".into())));
-        let wire = serde_json::to_value(FileLocal { status: LocalStatus::Gone, path: None })
-            .expect("serializes");
+        let wire = serde_json::to_value(FileLocal {
+            status: LocalStatus::Gone,
+            path: None,
+        })
+        .expect("serializes");
         assert_eq!(wire, serde_json::json!({ "status": "gone", "path": null }));
     }
 
@@ -2319,14 +2577,26 @@ mod tests {
     fn the_hash_and_the_size_come_from_the_headers() {
         let mut headers = HeaderMap::new();
         let hash = "ab".repeat(32);
-        headers.insert(ETAG, format!("\"{}\"", hash.to_uppercase()).parse().expect("a header"));
-        headers.insert(CONTENT_RANGE, "bytes 100-199/200".parse().expect("a header"));
+        headers.insert(
+            ETAG,
+            format!("\"{}\"", hash.to_uppercase())
+                .parse()
+                .expect("a header"),
+        );
+        headers.insert(
+            CONTENT_RANGE,
+            "bytes 100-199/200".parse().expect("a header"),
+        );
         assert_eq!(etag_sha256(&headers), Some(hash.clone()));
         assert_eq!(range_total(&headers), Some(200));
         headers.insert(ETAG, format!("W/\"{hash}\"").parse().expect("a header"));
         assert_eq!(etag_sha256(&headers), Some(hash));
         headers.insert(ETAG, "\"v2\"".parse().expect("a header"));
-        assert_eq!(etag_sha256(&headers), None, "not a hash: nothing to check against");
+        assert_eq!(
+            etag_sha256(&headers),
+            None,
+            "not a hash: nothing to check against"
+        );
     }
 
     #[test]
@@ -2337,13 +2607,28 @@ mod tests {
         let demo = import_destination(&root, ImportKind::Demo, "duel.dm_26", b"\x01\x02", demos)
             .expect("a demo");
         assert_eq!(demo, root.join("demos").join("duel.dm_26"));
-        assert!(import_destination(&root, ImportKind::Demo, "duel.dm_15", b"\x01", demos).is_err(), "another game");
-        assert!(import_destination(&root, ImportKind::Demo, "duel.dm_26", b"MZ", demos).is_err(), "a program");
+        assert!(
+            import_destination(&root, ImportKind::Demo, "duel.dm_15", b"\x01", demos).is_err(),
+            "another game"
+        );
+        assert!(
+            import_destination(&root, ImportKind::Demo, "duel.dm_26", b"MZ", demos).is_err(),
+            "a program"
+        );
 
-        let shot = import_destination(&root, ImportKind::Screenshot, "shot.bin", b"\xFF\xD8\xFF\xE0", demos)
-            .expect("a screenshot");
+        let shot = import_destination(
+            &root,
+            ImportKind::Screenshot,
+            "shot.bin",
+            b"\xFF\xD8\xFF\xE0",
+            demos,
+        )
+        .expect("a screenshot");
         assert_eq!(shot, root.join("screenshots").join("shot.jpg"));
-        assert!(import_destination(&root, ImportKind::Screenshot, "shot.png", b"GIF89a", demos).is_err());
+        assert!(
+            import_destination(&root, ImportKind::Screenshot, "shot.png", b"GIF89a", demos)
+                .is_err()
+        );
 
         // The launcher's own prefix, and a taken name.
         std::fs::create_dir_all(root.join("demos")).expect("the folder");
@@ -2374,7 +2659,12 @@ mod tests {
     fn the_book_remembers_files_of_messages() {
         let mut book = FileBook::default();
         let message = ChatMessage {
-            files: vec![FileRef { id: "01F".into(), name: "a.exe".into(), danger: true, ..FileRef::default() }],
+            files: vec![FileRef {
+                id: "01F".into(),
+                name: "a.exe".into(),
+                danger: true,
+                ..FileRef::default()
+            }],
             ..ChatMessage::default()
         };
         book.remember_messages([&message]);

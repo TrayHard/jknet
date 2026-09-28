@@ -357,7 +357,11 @@ mod tests {
         );
         assert_eq!(
             candidates(&entries, &[]),
-            vec![(3, entries[3].clone()), (2, entries[2].clone()), (1, entries[1].clone())],
+            vec![
+                (3, entries[3].clone()),
+                (2, entries[2].clone()),
+                (1, entries[1].clone())
+            ],
             "a skin pack shows its portrait; the effects picture is never a cover"
         );
     }
@@ -378,10 +382,19 @@ mod tests {
         );
         let root = Temp::new();
         let path = root.0.join("pictures.pk3");
-        archive(&path, &[("levelshots/mp/ffa3.png", &png()), ("levelshots/academy1.jpg", b"broken")]);
+        archive(
+            &path,
+            &[
+                ("levelshots/mp/ffa3.png", &png()),
+                ("levelshots/academy1.jpg", b"broken"),
+            ],
+        );
         let (maps, cover) = inspect(&path, &root.0.join("cache"));
         assert!(maps.is_empty());
-        assert!(cover.is_some(), "the broken first picture falls through to the next");
+        assert!(
+            cover.is_some(),
+            "the broken first picture falls through to the next"
+        );
     }
     #[test]
     fn corruption_falls_through_and_cached_image_is_repaired() {

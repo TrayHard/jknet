@@ -1,10 +1,9 @@
 //! The maps a private server of one client can load.
 //!
-//! The engine learns its maps from `scripts/*.arena` and, in Jedi Outcast,
-//! from `scripts/arenas.txt` as well: each entry names a map, its long name
-//! and the modes it supports in the `type` key, `type "ffa team"`. A map with
-//! no entry is left off the list, and an entry whose `maps/<name>.bsp` is in no
-//! archive is left off too: the server would not find it.
+//! Maps come from `maps/**/*.bsp`, both in archives and as loose files.
+//! Arena entries in `scripts/*.arena` and `scripts/arenas.txt` add optional
+//! titles and mode tags. Neither a missing arena nor a mode tag restricts
+//! the list. An arena without an installed BSP does not add a map.
 //!
 //! The archives are read in the order the engine loads them, so a later one
 //! overrides an earlier entry of the same map. The roots come from the launch
@@ -108,34 +107,88 @@ pub fn scan(roots: &MapRoots) -> Vec<MapEntry> {
     let retail_folder = roots.game_data.join(crate::paths::BASE_FOLDER);
 
     let mut arenas: BTreeMap<String, ArenaEntry> = BTreeMap::new();
-    let mut bsp_anywhere: HashSet<String> = HashSet::new();
+    let mut bsp_anywhere: BTreeMap<String, String> = BTreeMap::new();
     let mut bsp_retail: HashSet<String> = HashSet::new();
 
     for folder in roots.folders() {
+        read_loose_maps(&folder, &mut bsp_anywhere);
         for archive in archives_in(&folder) {
             let is_retail = folder == retail_folder
                 && archive
                     .file_name()
                     .and_then(|name| name.to_str())
                     .is_some_and(|name| retail.contains(&name.to_ascii_lowercase()));
-            if let Err(e) = read_archive(&archive, is_retail, &mut arenas, &mut bsp_anywhere, &mut bsp_retail) {
+            if let Err(e) = read_archive(
+                &archive,
+                is_retail,
+                &mut arenas,
+                &mut bsp_anywhere,
+                &mut bsp_retail,
+            ) {
                 log::warn!("cannot read the maps of {}: {e}", archive.display());
             }
         }
     }
 
-    let mut maps: Vec<MapEntry> = arenas
+    let mut maps: Vec<MapEntry> = bsp_anywhere
         .into_iter()
-        .filter(|(key, _)| bsp_anywhere.contains(key))
-        .map(|(key, entry)| MapEntry {
-            name: entry.map,
-            title: entry.title,
-            gametypes: entry.types,
-            retail: bsp_retail.contains(&key),
+        .map(|(key, name)| {
+            let entry = arenas.remove(&key);
+            MapEntry {
+                name: entry
+                    .as_ref()
+                    .map(|entry| entry.map.clone())
+                    .unwrap_or(name),
+                title: entry.as_ref().and_then(|entry| entry.title.clone()),
+                gametypes: entry.map(|entry| entry.types).unwrap_or_default(),
+                retail: bsp_retail.contains(&key),
+            }
         })
         .collect();
     maps.sort_by_key(|map| map.name.to_ascii_lowercase());
     maps
+}
+
+/// Adds loose BSPs without following directory links or reading map bodies.
+fn read_loose_maps(folder: &Path, maps: &mut BTreeMap<String, String>) {
+    let root = folder.join("maps");
+    let mut pending = vec![root.clone()];
+    let mut visited = 0;
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if visited >= crate::archive::MAX_ENTRIES {
+                return;
+            }
+            visited += 1;
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_symlink() {
+                continue;
+            }
+            if kind.is_dir() {
+                pending.push(entry.path());
+            } else if kind.is_file() {
+                let path = entry.path();
+                let Ok(relative) = path.strip_prefix(&root) else {
+                    continue;
+                };
+                let Some(relative) = relative.to_str() else {
+                    continue;
+                };
+                let relative = relative.replace('\\', "/");
+                if relative.to_ascii_lowercase().ends_with(".bsp") {
+                    let name = &relative[..relative.len() - ".bsp".len()];
+                    if super::server::is_safe_map_name(name) {
+                        maps.insert(map_key(name), name.to_string());
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// The pk3 files of one folder in the order the engine loads them.
@@ -162,19 +215,28 @@ fn read_archive(
     path: &Path,
     is_retail: bool,
     arenas: &mut BTreeMap<String, ArenaEntry>,
-    bsp_anywhere: &mut HashSet<String>,
+    bsp_anywhere: &mut BTreeMap<String, String>,
     bsp_retail: &mut HashSet<String>,
 ) -> crate::error::Result<()> {
-    let file = File::open(path).map_err(|e| crate::error::AppError::io_path("cannot open", path, e))?;
+    let file =
+        File::open(path).map_err(|e| crate::error::AppError::io_path("cannot open", path, e))?;
     let mut archive = ZipArchive::new(BufReader::new(file))?;
 
     let mut arena_files = Vec::new();
     for (index, entry) in crate::archive::walk(&archive, crate::archive::MAX_ENTRIES) {
         let lower = entry.to_ascii_lowercase();
-        if let Some(map) = lower.strip_prefix("maps/").and_then(|rest| rest.strip_suffix(".bsp")) {
-            bsp_anywhere.insert(map.to_string());
-            if is_retail {
-                bsp_retail.insert(map.to_string());
+        if let Some(map) = lower
+            .strip_prefix("maps/")
+            .and_then(|rest| rest.strip_suffix(".bsp"))
+        {
+            if super::server::is_safe_map_name(map) {
+                bsp_anywhere.insert(
+                    map.to_string(),
+                    entry["maps/".len()..entry.len() - ".bsp".len()].to_string(),
+                );
+                if is_retail {
+                    bsp_retail.insert(map.to_string());
+                }
             }
         } else if lower.starts_with("scripts/")
             && !lower["scripts/".len()..].contains('/')
@@ -190,7 +252,10 @@ fn read_archive(
     for (index, name) in arena_files {
         let mut entry = archive.by_index(index)?;
         if entry.size() > MAX_ARENA_BYTES {
-            log::warn!("{name} in {} is too large to be an arena file", path.display());
+            log::warn!(
+                "{name} in {} is too large to be an arena file",
+                path.display()
+            );
             continue;
         }
         let mut bytes = Vec::with_capacity(entry.size() as usize);
@@ -341,9 +406,103 @@ mod tests {
             writer
                 .start_file(*name, SimpleFileOptions::default())
                 .expect("an entry starts");
-            writer.write_all(body.as_bytes()).expect("the entry is written");
+            writer
+                .write_all(body.as_bytes())
+                .expect("the entry is written");
         }
         writer.finish().expect("the pk3 is closed");
+    }
+
+    #[test]
+    fn every_installed_bsp_is_listed_with_optional_arena_metadata() {
+        let temp = tempfile::tempdir().expect("a temp dir");
+        let game_data = temp.path().join("GameData");
+        let engine = temp.path().join("engine");
+        let home = temp.path().join("home");
+        for folder in [
+            game_data.join("base"),
+            engine.join("base"),
+            home.join("base"),
+            home.join("japlus"),
+            home.join("othermod"),
+        ] {
+            std::fs::create_dir_all(folder).expect("a folder");
+        }
+        write_pk3(
+            &game_data.join("base/assets0.pk3"),
+            &[
+                ("maps/sp_map.bsp", "bsp"),
+                ("maps/mp/ffa3.bsp", "bsp"),
+                (
+                    "scripts/ffa.arena",
+                    "{ map mp/ffa3 longname Deathstar type ffa } { map missing type ffa }",
+                ),
+            ],
+        );
+        write_pk3(
+            &engine.join("base/engine.pk3"),
+            &[("maps/engine_only.bsp", "bsp")],
+        );
+        write_pk3(
+            &home.join("base/library.pk3"),
+            &[
+                ("maps/mp/duel1.bsp", "bsp"),
+                (
+                    "scripts/duel.arena",
+                    "{ map mp/duel1 longname Duel type duel }",
+                ),
+            ],
+        );
+        write_pk3(
+            &home.join("japlus/mod.pk3"),
+            &[("maps/mb_custom.bsp", "bsp")],
+        );
+        write_pk3(
+            &home.join("base/off.pk3.disabled"),
+            &[("maps/disabled.bsp", "bsp")],
+        );
+        write_pk3(
+            &home.join("othermod/hidden.pk3"),
+            &[("maps/inactive.bsp", "bsp")],
+        );
+        std::fs::create_dir_all(home.join("base/maps/Nested")).unwrap();
+        std::fs::write(home.join("base/maps/Nested/Loose.BSP"), "bsp").unwrap();
+        std::fs::write(home.join("base/maps/Nested/disabled.bsp.disabled"), "bsp").unwrap();
+        std::fs::create_dir_all(home.join("othermod/maps")).unwrap();
+        std::fs::write(home.join("othermod/maps/inactive_loose.bsp"), "bsp").unwrap();
+
+        let maps = scan(&MapRoots {
+            game: Game::JediAcademy,
+            game_data,
+            engine_dir: engine,
+            home_dir: home,
+            fs_game: Some("japlus".into()),
+        });
+        assert_eq!(
+            maps.iter().map(|map| map.name.as_str()).collect::<Vec<_>>(),
+            [
+                "engine_only",
+                "mb_custom",
+                "mp/duel1",
+                "mp/ffa3",
+                "Nested/Loose",
+                "sp_map"
+            ]
+        );
+        let ffa = &maps[3];
+        assert_eq!(ffa.title.as_deref(), Some("Deathstar"));
+        assert_eq!(ffa.gametypes, ["ffa"]);
+        assert!(ffa.retail);
+        assert_eq!(maps[2].gametypes, ["duel"]);
+        assert!(!maps[2].retail);
+        for index in [0, 1, 4, 5] {
+            assert_eq!(maps[index].title, None);
+            assert!(maps[index].gametypes.is_empty());
+        }
+        assert!(
+            maps[5].retail,
+            "retail BSPs do not need multiplayer metadata"
+        );
     }
 
     #[test]
@@ -352,7 +511,12 @@ mod tests {
         let game_data = temp.path().join("GameData");
         let engine = temp.path().join("engine");
         let home = temp.path().join("home");
-        for dir in [game_data.join("base"), engine.join("base"), home.join("base"), home.join("japlus")] {
+        for dir in [
+            game_data.join("base"),
+            engine.join("base"),
+            home.join("base"),
+            home.join("japlus"),
+        ] {
             std::fs::create_dir_all(dir).expect("a folder");
         }
         write_pk3(
@@ -366,14 +530,20 @@ mod tests {
         write_pk3(
             &home.join("base").join("zz_custom.pk3"),
             &[
-                ("scripts/custom.arena", "{ map \"mp/custom\" longname \"My Map\" type \"ffa duel\" }"),
+                (
+                    "scripts/custom.arena",
+                    "{ map \"mp/custom\" longname \"My Map\" type \"ffa duel\" }",
+                ),
                 ("maps/mp/custom.bsp", "bsp"),
             ],
         );
         // A mod folder overrides the retail entry of the same map.
         write_pk3(
             &home.join("japlus").join("override.pk3"),
-            &[("scripts/ffa.arena", "{ map \"MP/FFA3\" longname \"Deathstar (JA+)\" type \"ffa ctf\" }")],
+            &[(
+                "scripts/ffa.arena",
+                "{ map \"MP/FFA3\" longname \"Deathstar (JA+)\" type \"ffa ctf\" }",
+            )],
         );
 
         let roots = MapRoots {
@@ -393,8 +563,14 @@ mod tests {
         assert!(maps[1].retail, "the bsp is in a retail archive");
 
         // Without the mod folder the retail entry stands.
-        let plain = scan(&MapRoots { fs_game: None, ..roots });
-        let ffa3 = plain.iter().find(|map| map_key(&map.name) == "mp/ffa3").expect("ffa3");
+        let plain = scan(&MapRoots {
+            fs_game: None,
+            ..roots
+        });
+        let ffa3 = plain
+            .iter()
+            .find(|map| map_key(&map.name) == "mp/ffa3")
+            .expect("ffa3");
         assert_eq!(ffa3.title.as_deref(), Some("Deathstar"));
     }
 
@@ -404,17 +580,28 @@ mod tests {
         let game_data = temp.path().join("GameData");
         let engine = temp.path().join("engine");
         let home = temp.path().join("home");
-        for dir in [game_data.join("base"), engine.join("base"), home.join("base")] {
+        for dir in [
+            game_data.join("base"),
+            engine.join("base"),
+            home.join("base"),
+        ] {
             std::fs::create_dir_all(dir).expect("a folder");
         }
         write_pk3(
             &game_data.join("base").join("assets0.pk3"),
-            &[("scripts/arenas.txt", JO_ARENAS), ("maps/ffa_bespin.bsp", "bsp"), ("maps/duel_bay.bsp", "bsp")],
+            &[
+                ("scripts/arenas.txt", JO_ARENAS),
+                ("maps/ffa_bespin.bsp", "bsp"),
+                ("maps/duel_bay.bsp", "bsp"),
+            ],
         );
         // Not on the search path of a Jedi Outcast client.
         write_pk3(
             &engine.join("base").join("assetsmv.pk3"),
-            &[("scripts/extra.arena", "{ map \"ctf_bespin\" type \"ctf\" }"), ("maps/ctf_bespin.bsp", "bsp")],
+            &[
+                ("scripts/extra.arena", "{ map \"ctf_bespin\" type \"ctf\" }"),
+                ("maps/ctf_bespin.bsp", "bsp"),
+            ],
         );
         let maps = scan(&MapRoots {
             game: Game::JediOutcast,

@@ -372,9 +372,11 @@ impl<'a> HtmlSource<'a> {
                 return found.slug.clone();
             }
         }
-        String::new()
+        match (game, category_id) {
+            (Game::JediAcademy, 25) | (Game::JediOutcast, 43) => "server-side".into(),
+            _ => String::new(),
+        }
     }
-
 }
 
 /// Walks the tree of one game, one page per direct child of a root.
@@ -413,7 +415,9 @@ pub async fn crawl_tree(client: &JkhubClient, game: Game) -> Result<Vec<JkhubCat
         .await?;
     let roots = parse::parse_category_index(&index.body)?;
 
-    let home = client.fetch_html(&format!("{}/files/", parse::SITE)).await?;
+    let home = client
+        .fetch_html(&format!("{}/files/", parse::SITE))
+        .await?;
     let counts: BTreeMap<u32, u32> = parse::parse_subcategories(&home.body)
         .into_iter()
         .filter_map(|entry| entry.file_count.map(|count| (entry.id, count)))
@@ -649,6 +653,35 @@ mod tests {
         assert_eq!(
             source.listing_url(13, "free-for-all", JkhubSort::Name, 3),
             "https://jkhub.org/files/category/13-free-for-all/page/3/?sortby=file_name&sortdirection=asc"
+        );
+    }
+
+    #[test]
+    fn server_side_categories_keep_their_known_slugs_without_a_tree_cache() {
+        let client = JkhubClient::new().expect("a client");
+        let dir = tempfile::tempdir().expect("a temp dir");
+        let data = DataPaths::new(dir.path().to_path_buf());
+        let source = source(&client, &data);
+
+        assert_eq!(source.slug_of(Game::JediAcademy, 25), "server-side");
+        assert_eq!(source.slug_of(Game::JediOutcast, 43), "server-side");
+        assert_eq!(
+            source.listing_url(
+                25,
+                &source.slug_of(Game::JediAcademy, 25),
+                JkhubSort::RecentlyUpdated,
+                1,
+            ),
+            "https://jkhub.org/files/category/25-server-side/?sortby=file_updated&sortdirection=desc"
+        );
+        assert_eq!(
+            source.listing_url(
+                43,
+                &source.slug_of(Game::JediOutcast, 43),
+                JkhubSort::RecentlyUpdated,
+                1,
+            ),
+            "https://jkhub.org/files/category/43-server-side/?sortby=file_updated&sortdirection=desc"
         );
     }
 

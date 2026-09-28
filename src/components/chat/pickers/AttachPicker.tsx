@@ -18,12 +18,15 @@ import {
 import { clientsOfGame, useActiveGame, useDefaultClient } from "../../../lib/game";
 import type { ChatCard, ChatStagedFile, MediaItem } from "../../../lib/ipc";
 import { configBinds } from "../../../lib/quakeConfig";
+import { serverConfigEnvelope, serverConfigSensitiveKeys } from "../../../lib/serverConfig";
+import { MOD_CATALOG } from "../../../lib/serverConfigCatalog";
 import {
   useBundles,
   useCachedServers,
   useChatCardFromProfile,
   useClients,
   useConfigs,
+  useServerConfigs,
   useHostMaps,
   useJkhubSearch,
   useMedia,
@@ -267,6 +270,8 @@ function ConfigPicker({ onPick, onClose }: PickerProps) {
   const format = useFormat();
   const game = useActiveGame();
   const book = useConfigs();
+  const servers = useServerConfigs();
+  const serverDocuments = (servers.data ?? []).filter((document) => document.game === game);
   const documents = (book.data?.documents ?? []).filter((document) => document.game === game);
   const items: PickerItem[] = documents.map((document) => ({
     id: document.id,
@@ -279,15 +284,34 @@ function ConfigPicker({ onPick, onClose }: PickerProps) {
     ),
     disabledReason: fitsConfigCard(document.text) ? null : t("pickers.config.tooLarge"),
   }));
+  items.push(...serverDocuments.map((document) => ({
+    id: `server:${document.id}`,
+    title: document.name,
+    detail: t("serverConfig.subtitle", {
+      game: document.game === "ja" ? "Jedi Academy" : "Jedi Outcast",
+      mod: MOD_CATALOG.find((mod) => mod.id === document.modId)?.name ?? document.modId,
+    }),
+    lead: <Mark><Server size={16} /></Mark>,
+    disabledReason: serverConfigSensitiveKeys(document.text).length ? t("serverConfig.sensitive")
+      : fitsConfigCard(serverConfigEnvelope(document)) ? null : t("pickers.config.tooLarge"),
+  })));
   return (
     <PickerDialog
       title={t("pickers.config.title")}
       items={items}
-      loading={book.isPending}
-      error={book.error ? errorText(book.error) : null}
+      loading={book.isPending || servers.isPending}
+      error={book.error || servers.error ? errorText(book.error ?? servers.error) : null}
       emptyText={t("pickers.config.empty")}
       onClose={onClose}
       onPick={(id) => {
+        if (id.startsWith("server:")) {
+          const document = serverDocuments.find((entry) => entry.id === id.slice(7));
+          if (document && !serverConfigSensitiveKeys(document.text).length) {
+            const text = serverConfigEnvelope(document);
+            if (fitsConfigCard(text)) onPick({ card: configCard({ name: document.name, text }) });
+          }
+          return;
+        }
         const document = documents.find((entry) => entry.id === id);
         if (document) onPick({ card: configCard(document) });
       }}

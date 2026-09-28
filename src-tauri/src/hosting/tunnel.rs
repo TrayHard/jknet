@@ -145,7 +145,10 @@ pub enum TunnelEvent {
     /// The path to the node is gone; the tunnel keeps trying.
     Lost,
     /// The tunnel stopped for good.
-    Failed { failure: TunnelFailure, message: String },
+    Failed {
+        failure: TunnelFailure,
+        message: String,
+    },
     /// The node closed the session with this `CLOSE` reason.
     Closed { reason: u8 },
 }
@@ -179,7 +182,10 @@ impl TunnelHandle {
     pub async fn close(self) {
         let _ = self.commands.send(Command::Close);
         let mut task = self.task;
-        if tokio::time::timeout(Duration::from_secs(2), &mut task).await.is_err() {
+        if tokio::time::timeout(Duration::from_secs(2), &mut task)
+            .await
+            .is_err()
+        {
             task.abort();
         }
     }
@@ -405,11 +411,20 @@ impl Tunnel {
             return true;
         }
         match message {
-            Message::HelloAck { nonce, public_ip, public_port, expires_at, keepalive_secs, max_guests } => {
+            Message::HelloAck {
+                nonce,
+                public_ip,
+                public_port,
+                expires_at,
+                keepalive_secs,
+                max_guests,
+            } => {
                 // Any `HELLO` of the ones out may be the one answered: the
                 // retries of an attempt carry growing nonces.
                 match self.hello_pending_from {
-                    Some(from) if (from..=self.nonce).contains(&nonce) => self.hello_pending_from = None,
+                    Some(from) if (from..=self.nonce).contains(&nonce) => {
+                        self.hello_pending_from = None
+                    }
                     _ => return true,
                 }
                 let public = SocketAddrV4::new(public_ip, public_port);
@@ -425,11 +440,19 @@ impl Tunnel {
                 self.phase = Phase::Active;
                 if was != Phase::Active || self.public != Some(public) {
                     self.public = Some(public);
-                    self.emit(TunnelEvent::Active { public, expires_at, max_guests });
+                    self.emit(TunnelEvent::Active {
+                        public,
+                        expires_at,
+                        max_guests,
+                    });
                 }
                 self.note_expiry(expires_at);
             }
-            Message::KeepaliveAck { nonce, guests, expires_at } => {
+            Message::KeepaliveAck {
+                nonce,
+                guests,
+                expires_at,
+            } => {
                 if self.keepalive_pending != Some(nonce) {
                     return true;
                 }
@@ -487,12 +510,16 @@ impl Tunnel {
                     wire::error_code::SESSION_CLOSED => {
                         (TunnelFailure::Refused, "the relay session is closed")
                     }
-                    wire::error_code::WRONG_NODE => {
-                        (TunnelFailure::Refused, "the ticket belongs to another relay node")
-                    }
+                    wire::error_code::WRONG_NODE => (
+                        TunnelFailure::Refused,
+                        "the ticket belongs to another relay node",
+                    ),
                     _ => (TunnelFailure::Refused, "the relay node refused the session"),
                 };
-                self.emit(TunnelEvent::Failed { failure, message: message.into() });
+                self.emit(TunnelEvent::Failed {
+                    failure,
+                    message: message.into(),
+                });
                 return false;
             }
             // What a node never sends to a host.
@@ -540,8 +567,11 @@ impl Tunnel {
         };
         if !self.guests.contains_key(&guest_id) {
             if self.guests.len() >= self.config.max_guests {
-                self.send(&Message::GuestClose { guest_id, reason: wire::guest_close::LIMIT })
-                    .await;
+                self.send(&Message::GuestClose {
+                    guest_id,
+                    reason: wire::guest_close::LIMIT,
+                })
+                .await;
                 return;
             }
             match self.open_guest(guest_id, server_port).await {
@@ -589,7 +619,9 @@ impl Tunnel {
         };
         let socket = match socket {
             Some(socket) => socket,
-            None => UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)).await.ok()?,
+            None => UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))
+                .await
+                .ok()?,
         };
         socket.connect(server).await.ok()?;
         let socket = Arc::new(socket);
@@ -601,7 +633,11 @@ impl Tunnel {
                 loop {
                     match socket.recv(&mut buffer).await {
                         Ok(read) => {
-                            if replies.send((guest_id, buffer[..read].to_vec())).await.is_err() {
+                            if replies
+                                .send((guest_id, buffer[..read].to_vec()))
+                                .await
+                                .is_err()
+                            {
                                 return;
                             }
                         }
@@ -670,8 +706,11 @@ impl Tunnel {
             .collect();
         for guest_id in silent {
             self.guests.remove(&guest_id);
-            self.send(&Message::GuestClose { guest_id, reason: wire::guest_close::SILENT })
-                .await;
+            self.send(&Message::GuestClose {
+                guest_id,
+                reason: wire::guest_close::SILENT,
+            })
+            .await;
         }
         true
     }
@@ -685,14 +724,21 @@ impl Tunnel {
             return;
         }
         self.send_hello().await;
-        let pause = self.config.timing.hello_retries.get(self.hellos_sent).copied();
+        let pause = self
+            .config
+            .timing
+            .hello_retries
+            .get(self.hellos_sent)
+            .copied();
         self.hellos_sent += 1;
         self.next_hello = pause.map(|pause| now + pause);
     }
 
     async fn close(&mut self) {
         self.guests.clear();
-        let close = Message::Close { reason: wire::close::HOST_STOPPED };
+        let close = Message::Close {
+            reason: wire::close::HOST_STOPPED,
+        };
         for _ in 0..3 {
             self.send(&close).await;
             tokio::time::sleep(Duration::from_millis(15)).await;
@@ -784,9 +830,20 @@ mod tests {
                     assert_eq!(session, SESSION);
                     *control_node.last_from.lock().unwrap() = Some(from);
                     match message {
-                        Message::Hello { nonce, prev_port, ticket } => {
-                            control_node.hellos.lock().unwrap().push((nonce, prev_port, ticket.clone()));
-                            if !control_node.answer_hello.load(std::sync::atomic::Ordering::Relaxed) {
+                        Message::Hello {
+                            nonce,
+                            prev_port,
+                            ticket,
+                        } => {
+                            control_node.hellos.lock().unwrap().push((
+                                nonce,
+                                prev_port,
+                                ticket.clone(),
+                            ));
+                            if !control_node
+                                .answer_hello
+                                .load(std::sync::atomic::Ordering::Relaxed)
+                            {
                                 continue;
                             }
                             let refused = control_node
@@ -798,7 +855,10 @@ mod tests {
                                 .map(|(_, code)| *code);
                             if let Some(code) = refused {
                                 let error = Message::Error { code };
-                                let _ = control_node.control.send_to(&wire::encode(&error, SESSION, &KEY), from).await;
+                                let _ = control_node
+                                    .control
+                                    .send_to(&wire::encode(&error, SESSION, &KEY), from)
+                                    .await;
                                 continue;
                             }
                             *control_node.host.lock().unwrap() = Some(from);
@@ -811,16 +871,29 @@ mod tests {
                                 keepalive_secs: 0,
                                 max_guests: 16,
                             };
-                            let _ = control_node.control.send_to(&wire::encode(&ack, SESSION, &KEY), from).await;
+                            let _ = control_node
+                                .control
+                                .send_to(&wire::encode(&ack, SESSION, &KEY), from)
+                                .await;
                         }
                         Message::Keepalive { nonce } => {
                             control_node.keepalives.lock().unwrap().push(nonce);
-                            if !control_node.answer_keepalive.load(std::sync::atomic::Ordering::Relaxed) {
+                            if !control_node
+                                .answer_keepalive
+                                .load(std::sync::atomic::Ordering::Relaxed)
+                            {
                                 continue;
                             }
                             let guests = control_node.guests.lock().unwrap().len() as u16;
-                            let ack = Message::KeepaliveAck { nonce, guests, expires_at: 1_790_373_600 };
-                            let _ = control_node.control.send_to(&wire::encode(&ack, SESSION, &KEY), from).await;
+                            let ack = Message::KeepaliveAck {
+                                nonce,
+                                guests,
+                                expires_at: 1_790_373_600,
+                            };
+                            let _ = control_node
+                                .control
+                                .send_to(&wire::encode(&ack, SESSION, &KEY), from)
+                                .await;
                         }
                         Message::Data { guest_id, payload } => {
                             let target = control_node
@@ -851,9 +924,17 @@ mod tests {
                         let next = guests.len() as u16 + 1;
                         *guests.entry(from).or_insert(next)
                     };
-                    let Some(host) = *session_node.host.lock().unwrap() else { continue };
-                    let data = Message::Data { guest_id, payload: buffer[..read].to_vec() };
-                    let _ = session_node.control.send_to(&wire::encode(&data, SESSION, &KEY), host).await;
+                    let Some(host) = *session_node.host.lock().unwrap() else {
+                        continue;
+                    };
+                    let data = Message::Data {
+                        guest_id,
+                        payload: buffer[..read].to_vec(),
+                    };
+                    let _ = session_node
+                        .control
+                        .send_to(&wire::encode(&data, SESSION, &KEY), host)
+                        .await;
                 }
             });
             node
@@ -868,13 +949,21 @@ mod tests {
 
         async fn to_host(&self, message: &Message) {
             let host = self.host.lock().unwrap().expect("a host");
-            let _ = self.control.send_to(&wire::encode(message, SESSION, &KEY), host).await;
+            let _ = self
+                .control
+                .send_to(&wire::encode(message, SESSION, &KEY), host)
+                .await;
         }
 
         /// To wherever the host last spoke from, a new socket included.
         async fn to_last_sender(&self, message: &Message) {
-            let Some(to) = *self.last_from.lock().unwrap() else { return };
-            let _ = self.control.send_to(&wire::encode(message, SESSION, &KEY), to).await;
+            let Some(to) = *self.last_from.lock().unwrap() else {
+                return;
+            };
+            let _ = self
+                .control
+                .send_to(&wire::encode(message, SESSION, &KEY), to)
+                .await;
         }
     }
 
@@ -888,7 +977,9 @@ mod tests {
         tokio::spawn(async move {
             let mut buffer = vec![0u8; 65_535];
             loop {
-                let Ok((read, from)) = socket.recv_from(&mut buffer).await else { continue };
+                let Ok((read, from)) = socket.recv_from(&mut buffer).await else {
+                    continue;
+                };
                 record.lock().unwrap().insert(from);
                 let mut reply = b"echo:".to_vec();
                 reply.extend_from_slice(&buffer[..read]);
@@ -917,7 +1008,10 @@ mod tests {
 
     async fn guest_of(node: &FakeNode) -> UdpSocket {
         let guest = UdpSocket::bind("127.0.0.1:0").await.unwrap();
-        guest.connect(node.session.local_addr().unwrap()).await.unwrap();
+        guest
+            .connect(node.session.local_addr().unwrap())
+            .await
+            .unwrap();
         guest
     }
 
@@ -941,7 +1035,10 @@ mod tests {
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, None), events_tx);
 
-        let TunnelEvent::Active { public, max_guests, .. } = next_event(&mut events).await else {
+        let TunnelEvent::Active {
+            public, max_guests, ..
+        } = next_event(&mut events).await
+        else {
             panic!("the first event is the node's answer");
         };
         assert_eq!(public.port(), node.session.local_addr().unwrap().port());
@@ -987,7 +1084,10 @@ mod tests {
         let (server_port, _) = fake_server().await;
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, Some(server_port)), events_tx);
-        assert!(matches!(next_event(&mut events).await, TunnelEvent::Active { .. }));
+        assert!(matches!(
+            next_event(&mut events).await,
+            TunnelEvent::Active { .. }
+        ));
 
         node.to_host(&Message::Rehello).await;
         tokio::time::sleep(Duration::from_millis(300)).await;
@@ -995,7 +1095,11 @@ mod tests {
         assert!(hellos.len() >= 2, "{hellos:?}");
         let (first, second) = (&hellos[0], &hellos[hellos.len() - 1]);
         assert!(second.0 > first.0, "the nonce grows");
-        assert_eq!(second.1, node.session.local_addr().unwrap().port(), "prev_port");
+        assert_eq!(
+            second.1,
+            node.session.local_addr().unwrap().port(),
+            "prev_port"
+        );
         tunnel.close().await;
     }
 
@@ -1004,15 +1108,25 @@ mod tests {
         let node = FakeNode::start().await;
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, None), events_tx);
-        assert!(matches!(next_event(&mut events).await, TunnelEvent::Active { .. }));
+        assert!(matches!(
+            next_event(&mut events).await,
+            TunnelEvent::Active { .. }
+        ));
 
         // One keepalive answered, then the node goes quiet.
         tokio::time::sleep(Duration::from_millis(450)).await;
-        let old_keepalive = *node.keepalives.lock().unwrap().first().expect("a keepalive went out");
+        let old_keepalive = *node
+            .keepalives
+            .lock()
+            .unwrap()
+            .first()
+            .expect("a keepalive went out");
         let old_hello = node.hellos.lock().unwrap()[0].0;
         let port = node.session.local_addr().unwrap().port();
-        node.answer_keepalive.store(false, std::sync::atomic::Ordering::Relaxed);
-        node.answer_hello.store(false, std::sync::atomic::Ordering::Relaxed);
+        node.answer_keepalive
+            .store(false, std::sync::atomic::Ordering::Relaxed);
+        node.answer_hello
+            .store(false, std::sync::atomic::Ordering::Relaxed);
 
         // Someone on the path sends the old, genuinely signed answers again
         // and again, to the host's newest socket.
@@ -1020,8 +1134,11 @@ mod tests {
             let node = node.clone();
             tokio::spawn(async move {
                 loop {
-                    let keepalive_ack =
-                        Message::KeepaliveAck { nonce: old_keepalive, guests: 0, expires_at: 1_790_373_600 };
+                    let keepalive_ack = Message::KeepaliveAck {
+                        nonce: old_keepalive,
+                        guests: 0,
+                        expires_at: 1_790_373_600,
+                    };
                     node.to_last_sender(&keepalive_ack).await;
                     let hello_ack = Message::HelloAck {
                         nonce: old_hello,
@@ -1050,9 +1167,14 @@ mod tests {
         replayer.abort();
 
         // The node answering again does.
-        node.answer_hello.store(true, std::sync::atomic::Ordering::Relaxed);
-        node.answer_keepalive.store(true, std::sync::atomic::Ordering::Relaxed);
-        assert!(matches!(next_event(&mut events).await, TunnelEvent::Active { .. }));
+        node.answer_hello
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        node.answer_keepalive
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(matches!(
+            next_event(&mut events).await,
+            TunnelEvent::Active { .. }
+        ));
         tunnel.close().await;
     }
 
@@ -1062,12 +1184,18 @@ mod tests {
         let (server_port, seen) = fake_server().await;
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, Some(server_port)), events_tx);
-        assert!(matches!(next_event(&mut events).await, TunnelEvent::Active { .. }));
+        assert!(matches!(
+            next_event(&mut events).await,
+            TunnelEvent::Active { .. }
+        ));
 
         let guest = guest_of(&node).await;
         assert_eq!(ask(&guest, "hello").await, "echo:hello");
-        node.to_host(&Message::GuestClose { guest_id: 1, reason: wire::guest_close::BY_HOST })
-            .await;
+        node.to_host(&Message::GuestClose {
+            guest_id: 1,
+            reason: wire::guest_close::BY_HOST,
+        })
+        .await;
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(ask(&guest, "back").await, "echo:back");
         // Two different local sockets carried the same guest.
@@ -1078,7 +1206,8 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn a_silent_node_ends_the_attempt_with_a_failure() {
         let node = FakeNode::start().await;
-        node.answer_hello.store(false, std::sync::atomic::Ordering::Relaxed);
+        node.answer_hello
+            .store(false, std::sync::atomic::Ordering::Relaxed);
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, None), events_tx);
         match next_event(&mut events).await {
@@ -1096,16 +1225,27 @@ mod tests {
         let node = FakeNode::start().await;
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let _tunnel = spawn(config(&node, None), events_tx);
-        assert!(matches!(next_event(&mut events).await, TunnelEvent::Active { .. }));
-        node.to_host(&Message::Close { reason: wire::close::EXPIRED }).await;
+        assert!(matches!(
+            next_event(&mut events).await,
+            TunnelEvent::Active { .. }
+        ));
+        node.to_host(&Message::Close {
+            reason: wire::close::EXPIRED,
+        })
+        .await;
         assert_eq!(
             next_event(&mut events).await,
-            TunnelEvent::Closed { reason: wire::close::EXPIRED }
+            TunnelEvent::Closed {
+                reason: wire::close::EXPIRED
+            }
         );
 
         // A ticket for another node is not renewed: the tunnel ends.
         let node = FakeNode::start().await;
-        node.refuse.lock().unwrap().push((b"opaque ticket".to_vec(), wire::error_code::WRONG_NODE));
+        node.refuse
+            .lock()
+            .unwrap()
+            .push((b"opaque ticket".to_vec(), wire::error_code::WRONG_NODE));
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, None), events_tx);
         match next_event(&mut events).await {
@@ -1119,7 +1259,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn an_expired_ticket_waits_for_a_renewed_one_and_a_second_refusal_ends_the_tunnel() {
         let node = FakeNode::start().await;
-        node.refuse.lock().unwrap().push((b"opaque ticket".to_vec(), wire::error_code::TICKET_EXPIRED));
+        node.refuse
+            .lock()
+            .unwrap()
+            .push((b"opaque ticket".to_vec(), wire::error_code::TICKET_EXPIRED));
         let (events_tx, mut events) = mpsc::unbounded_channel();
         let tunnel = spawn(config(&node, None), events_tx);
         assert_eq!(next_event(&mut events).await, TunnelEvent::TicketExpired);
@@ -1129,18 +1272,34 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(150)).await;
         let asked = node.hellos.lock().unwrap().len();
         tokio::time::sleep(Duration::from_millis(1_100)).await;
-        assert_eq!(node.hellos.lock().unwrap().len(), asked, "HELLO waits for the ticket");
+        assert_eq!(
+            node.hellos.lock().unwrap().len(),
+            asked,
+            "HELLO waits for the ticket"
+        );
         assert!(events.try_recv().is_err(), "one request, no failure");
         assert!(!tunnel.is_finished());
 
         tunnel.renew(b"renewed ticket".to_vec());
-        assert!(matches!(next_event(&mut events).await, TunnelEvent::Active { .. }));
-        let last = node.hellos.lock().unwrap().last().cloned().expect("a HELLO");
+        assert!(matches!(
+            next_event(&mut events).await,
+            TunnelEvent::Active { .. }
+        ));
+        let last = node
+            .hellos
+            .lock()
+            .unwrap()
+            .last()
+            .cloned()
+            .expect("a HELLO");
         assert_eq!(last.2, b"renewed ticket");
 
         // Later the renewed ticket runs out as well: after a HELLO_ACK it may
         // be renewed again, but a renewal the node refuses too is the end.
-        node.refuse.lock().unwrap().push((b"renewed ticket".to_vec(), wire::error_code::TICKET_EXPIRED));
+        node.refuse
+            .lock()
+            .unwrap()
+            .push((b"renewed ticket".to_vec(), wire::error_code::TICKET_EXPIRED));
         node.to_host(&Message::Rehello).await;
         assert_eq!(next_event(&mut events).await, TunnelEvent::TicketExpired);
         tunnel.renew(b"renewed ticket".to_vec());

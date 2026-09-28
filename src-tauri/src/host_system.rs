@@ -11,7 +11,10 @@ pub struct HostSystem {
 
 impl HostSystem {
     pub fn current() -> Self {
-        Self { os: std::env::consts::OS, arch: native_arch() }
+        Self {
+            os: std::env::consts::OS,
+            arch: native_arch(),
+        }
     }
 
     pub fn supports_engines(self) -> bool {
@@ -47,9 +50,13 @@ fn native_arch() -> &'static str {
         // prevent the launcher from starting on an older Windows version.
         unsafe {
             let module = GetModuleHandleW(kernel.as_ptr());
-            if module.is_null() { return "unknown"; }
+            if module.is_null() {
+                return "unknown";
+            }
             let address = GetProcAddress(module, c"IsWow64Process2".as_ptr().cast());
-            if address.is_null() { return "unknown"; }
+            if address.is_null() {
+                return "unknown";
+            }
             let query: IsWow64Process2 = std::mem::transmute(address);
             let mut process = 0;
             let mut native = 0;
@@ -80,7 +87,10 @@ mod tests {
         for os in ["windows", "linux", "macos", "unknown"] {
             for arch in ["x86", "x86_64", "aarch64", "arm", "unknown"] {
                 let host = HostSystem { os, arch };
-                assert_eq!(host.supports_engines(), os == "windows" && matches!(arch, "x86" | "x86_64"));
+                assert_eq!(
+                    host.supports_engines(),
+                    os == "windows" && matches!(arch, "x86" | "x86_64")
+                );
             }
         }
     }
@@ -90,8 +100,14 @@ mod tests {
         let host = HostSystem::current();
         assert_eq!(host.os, std::env::consts::OS);
         assert!(!host.arch.is_empty());
-        let x86 = HostSystem { os: "windows", arch: "x86" };
-        let x64 = HostSystem { os: "windows", arch: "x86_64" };
+        let x86 = HostSystem {
+            os: "windows",
+            arch: "x86",
+        };
+        let x64 = HostSystem {
+            os: "windows",
+            arch: "x86_64",
+        };
         assert_ne!(x86.cache_key("openjk"), x64.cache_key("openjk"));
         assert_ne!(x86.cache_key("openjk"), x86.cache_key("taystjk"));
         eprintln!("Detected host: {}", host.label());

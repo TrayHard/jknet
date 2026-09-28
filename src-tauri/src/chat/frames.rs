@@ -142,9 +142,9 @@ pub fn parse(kind: &str, payload: Value) -> Result<Frame, serde_json::Error> {
     }
 
     Ok(match kind {
-        "chat.message" => {
-            Frame::Message(Box::new(serde_json::from_value::<MessagePayload>(payload)?.message))
-        }
+        "chat.message" => Frame::Message(Box::new(
+            serde_json::from_value::<MessagePayload>(payload)?.message,
+        )),
         "chat.read" => Frame::Read(serde_json::from_value(payload)?),
         "chat.typing" => Frame::Typing(serde_json::from_value(payload)?),
         "chat.reaction" => Frame::Reaction(serde_json::from_value(payload)?),
@@ -186,7 +186,10 @@ pub enum Effect {
     /// Read the whole sync document again.
     Resync,
     /// Emit `chat:typing` again for this conversation once the hint ran out.
-    TypingExpires { conversation_id: String, after: Duration },
+    TypingExpires {
+        conversation_id: String,
+        after: Duration,
+    },
     /// A message of somebody else arrived: decide whether it notifies. When
     /// its conversation is being fetched ([`Effect::Refresh`]), after that.
     Notify(Box<ChatMessage>),
@@ -232,7 +235,10 @@ pub fn apply(chat: &ChatState, me: Option<&str>, frame: Frame, now: Instant) -> 
                 let user_ids = chat.book().typing_in(&conversation_id, now);
                 effects.push(emit_effect(
                     super::EVENT_TYPING,
-                    &TypingNow { conversation_id, user_ids },
+                    &TypingNow {
+                        conversation_id,
+                        user_ids,
+                    },
                 ));
             }
             effects.insert(0, emit_effect(EVENT_MESSAGE, &*message));
@@ -342,7 +348,12 @@ pub fn handle(app: &AppHandle, kind: &str, payload: Value) {
         }
     };
     let me = my_id(app);
-    let effects = apply(&app.state::<ChatState>(), me.as_deref(), frame, Instant::now());
+    let effects = apply(
+        &app.state::<ChatState>(),
+        me.as_deref(),
+        frame,
+        Instant::now(),
+    );
     run(app, effects);
 }
 
@@ -391,7 +402,10 @@ pub(super) fn run(app: &AppHandle, effects: Vec<Effect>) {
                 });
             }
             Effect::Resync => app.state::<ChatState>().request_resync(),
-            Effect::TypingExpires { conversation_id, after } => {
+            Effect::TypingExpires {
+                conversation_id,
+                after,
+            } => {
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
                     // A little past the hint, so the entry has expired by the
@@ -401,7 +415,14 @@ pub(super) fn run(app: &AppHandle, effects: Vec<Effect>) {
                         .state::<ChatState>()
                         .book()
                         .typing_in(&conversation_id, Instant::now());
-                    emit(&handle, EVENT_TYPING, TypingNow { conversation_id, user_ids });
+                    emit(
+                        &handle,
+                        EVENT_TYPING,
+                        TypingNow {
+                            conversation_id,
+                            user_ids,
+                        },
+                    );
                 });
             }
         }
@@ -446,11 +467,16 @@ mod tests {
         let read = serde_json::json!({ "conversationId": "c", "userId": KYLE, "seq": 2 });
         assert!(matches!(parse("chat.read", read), Ok(Frame::Read(r)) if r.seq == 2));
         let typing = serde_json::json!({ "conversationId": "c", "userId": KYLE, "ttlMs": 6000 });
-        assert!(matches!(parse("chat.typing", typing), Ok(Frame::Typing(t)) if t.ttl_ms == Some(6000)));
+        assert!(
+            matches!(parse("chat.typing", typing), Ok(Frame::Typing(t)) if t.ttl_ms == Some(6000))
+        );
         let reaction = serde_json::json!({
             "conversationId": "c", "seq": 1, "userId": KYLE, "emoji": "👍", "on": true
         });
-        assert!(matches!(parse("chat.reaction", reaction), Ok(Frame::Reaction(_))));
+        assert!(matches!(
+            parse("chat.reaction", reaction),
+            Ok(Frame::Reaction(_))
+        ));
         let conversation = serde_json::json!({ "conversation": { "id": "c", "kind": "group" } });
         assert!(matches!(
             parse("chat.conversation", conversation),
@@ -465,7 +491,10 @@ mod tests {
             "conversationId": "g", "title": "Saber school", "invitedBy": user(KYLE),
             "memberCount": 3, "createdAt": "", "expiresAt": ""
         }});
-        assert!(matches!(parse("chat.groupInvite", invite), Ok(Frame::GroupInvite(_))));
+        assert!(matches!(
+            parse("chat.groupInvite", invite),
+            Ok(Frame::GroupInvite(_))
+        ));
         let gone = serde_json::json!({ "conversationId": "g" });
         assert!(matches!(
             parse("chat.groupInvite.removed", gone),
@@ -476,7 +505,10 @@ mod tests {
             parse("chat.settings", settings),
             Ok(Frame::Settings(s)) if !s.share_read_receipts && s.share_typing
         ));
-        assert_eq!(parse("chat.resync", serde_json::json!({})).ok(), Some(Frame::Resync));
+        assert_eq!(
+            parse("chat.resync", serde_json::json!({})).ok(),
+            Some(Frame::Resync)
+        );
         assert_eq!(
             parse("chat.somethingNew", serde_json::json!({ "x": 1 })).ok(),
             Some(Frame::Unknown("chat.somethingNew".into()))
@@ -495,7 +527,13 @@ mod tests {
             Instant::now(),
         );
         assert_eq!(emitted(&effects), [EVENT_MESSAGE]);
-        assert!(matches!(effects[0], Effect::Emit { event: EVENT_MESSAGE, .. }));
+        assert!(matches!(
+            effects[0],
+            Effect::Emit {
+                event: EVENT_MESSAGE,
+                ..
+            }
+        ));
         assert!(effects.contains(&Effect::State));
         assert_eq!(chat.book().get("c").map(|c| c.unread), Some(1));
     }
@@ -528,11 +566,19 @@ mod tests {
         chat.outbox().push(OutboxEntry::new(
             "01J0CLIENT",
             "c",
-            SendDraft { body: "gg".into(), ..SendDraft::default() },
+            SendDraft {
+                body: "gg".into(),
+                ..SendDraft::default()
+            },
         ));
         let mut own = message("c", 3, Some(ME));
         own.client_id = Some("01J0CLIENT".into());
-        let effects = apply(&chat, Some(ME), Frame::Message(Box::new(own)), Instant::now());
+        let effects = apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(own)),
+            Instant::now(),
+        );
         assert!(effects.contains(&Effect::Outbox("c".into())));
         assert!(chat.outbox().all().is_empty());
 
@@ -540,11 +586,19 @@ mod tests {
         chat.outbox().push(OutboxEntry::new(
             "01J0OTHER",
             "c",
-            SendDraft { body: "gg".into(), ..SendDraft::default() },
+            SendDraft {
+                body: "gg".into(),
+                ..SendDraft::default()
+            },
         ));
         let mut theirs = message("c", 4, Some(KYLE));
         theirs.client_id = Some("01J0OTHER".into());
-        apply(&chat, Some(ME), Frame::Message(Box::new(theirs)), Instant::now());
+        apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(theirs)),
+            Instant::now(),
+        );
         assert_eq!(chat.outbox().all().len(), 1);
     }
 
@@ -574,21 +628,46 @@ mod tests {
                 .count()
         };
         let chat = state_with(vec![conversation("c", 2, 2)]);
-        let fresh = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 3, Some(KYLE)))), Instant::now());
+        let fresh = apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(message("c", 3, Some(KYLE)))),
+            Instant::now(),
+        );
         assert_eq!(notifies(&fresh), 1);
         // The same message again (a replay after a reconnect) does not.
-        let replay = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 3, Some(KYLE)))), Instant::now());
+        let replay = apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(message("c", 3, Some(KYLE)))),
+            Instant::now(),
+        );
         assert_eq!(notifies(&replay), 0);
         // The player's own message, from this device or another, does not.
-        let own = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 4, Some(ME)))), Instant::now());
+        let own = apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(message("c", 4, Some(ME)))),
+            Instant::now(),
+        );
         assert_eq!(notifies(&own), 0);
         // A system message does not.
         let mut system = message("c", 5, None);
         system.kind = "system".into();
-        let system = apply(&chat, Some(ME), Frame::Message(Box::new(system)), Instant::now());
+        let system = apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(system)),
+            Instant::now(),
+        );
         assert_eq!(notifies(&system), 0);
         // A deleted account's message is somebody else's.
-        let deleted = apply(&chat, Some(ME), Frame::Message(Box::new(message("c", 6, None))), Instant::now());
+        let deleted = apply(
+            &chat,
+            Some(ME),
+            Frame::Message(Box::new(message("c", 6, None))),
+            Instant::now(),
+        );
         assert_eq!(notifies(&deleted), 1);
     }
 
@@ -596,7 +675,11 @@ mod tests {
     fn a_read_frame_is_emitted_and_a_partial_own_read_refreshes() {
         let chat = state_with(vec![conversation("c", 10, 2)]);
         chat.book().summaries.get_mut("c").expect("known").unread = 8;
-        let mark = ReadMark { conversation_id: "c".into(), user_id: ME.into(), seq: 5 };
+        let mark = ReadMark {
+            conversation_id: "c".into(),
+            user_id: ME.into(),
+            seq: 5,
+        };
         let effects = apply(&chat, Some(ME), Frame::Read(mark), Instant::now());
         assert_eq!(emitted(&effects), [EVENT_READ]);
         assert!(effects.contains(&Effect::Refresh("c".into())));
@@ -624,10 +707,16 @@ mod tests {
             after: Duration::from_secs(6),
         }));
         // The player's own hint from another device is not "somebody typing".
-        let own = TypingHint { user_id: ME.into(), ..hint.clone() };
+        let own = TypingHint {
+            user_id: ME.into(),
+            ..hint.clone()
+        };
         assert!(apply(&chat, Some(ME), Frame::Typing(own), now).is_empty());
         // Hiding typing hides everybody's (D8).
-        chat.book().set_privacy(ChatPrivacy { share_typing: false, ..ChatPrivacy::default() });
+        chat.book().set_privacy(ChatPrivacy {
+            share_typing: false,
+            ..ChatPrivacy::default()
+        });
         assert!(apply(&chat, Some(ME), Frame::Typing(hint), now).is_empty());
     }
 
@@ -637,13 +726,19 @@ mod tests {
         chat.outbox().push(OutboxEntry::new(
             "01J0CLIENT",
             "c",
-            SendDraft { body: "gg".into(), ..SendDraft::default() },
+            SendDraft {
+                body: "gg".into(),
+                ..SendDraft::default()
+            },
         ));
         chat.drafts().insert("c".into(), "draft".into());
         let effects = apply(
             &chat,
             Some(ME),
-            Frame::Removed(Removal { conversation_id: "c".into(), reason: "ended".into() }),
+            Frame::Removed(Removal {
+                conversation_id: "c".into(),
+                reason: "ended".into(),
+            }),
             Instant::now(),
         );
         assert_eq!(emitted(&effects), [EVENT_REMOVED]);
@@ -661,7 +756,10 @@ mod tests {
         chat.servers().plan_open(SESSION, |_| false);
         chat.servers().opened(SESSION, "c");
         let removal = |reason: &str| {
-            Frame::Removed(Removal { conversation_id: "c".into(), reason: reason.into() })
+            Frame::Removed(Removal {
+                conversation_id: "c".into(),
+                reason: reason.into(),
+            })
         };
         // The service ended it while the server runs: the next heartbeat
         // opens a new one.
@@ -673,13 +771,19 @@ mod tests {
         // The host left it: it stays ended.
         chat.servers().opened(SESSION, "c");
         apply(&chat, Some(ME), removal("left"), Instant::now());
-        assert_eq!(chat.servers().plan_open(SESSION, |_| false), OpenPlan::Nothing);
+        assert_eq!(
+            chat.servers().plan_open(SESSION, |_| false),
+            OpenPlan::Nothing
+        );
     }
 
     #[test]
     fn settings_that_flip_read_receipts_resync() {
         let chat = state_with(Vec::new());
-        let hidden = ChatPrivacy { share_read_receipts: false, ..ChatPrivacy::default() };
+        let hidden = ChatPrivacy {
+            share_read_receipts: false,
+            ..ChatPrivacy::default()
+        };
         let effects = apply(&chat, Some(ME), Frame::Settings(hidden), Instant::now());
         assert!(effects.contains(&Effect::Resync));
         assert!(effects.contains(&Effect::State));
@@ -697,7 +801,12 @@ mod tests {
         };
         apply(&chat, Some(ME), Frame::GroupInvite(invite), Instant::now());
         assert_eq!(chat.book().invites.len(), 1);
-        let effects = apply(&chat, Some(ME), Frame::GroupInviteRemoved("g".into()), Instant::now());
+        let effects = apply(
+            &chat,
+            Some(ME),
+            Frame::GroupInviteRemoved("g".into()),
+            Instant::now(),
+        );
         assert_eq!(effects, [Effect::State]);
         assert!(chat.book().invites.is_empty());
     }
@@ -777,7 +886,11 @@ mod tests {
         for case in cases {
             let state = case.state;
             // The fixtures name the two players of `test_support`.
-            assert!(state.me.as_deref().is_none_or(|me| me == ME), "{}", case.name);
+            assert!(
+                state.me.as_deref().is_none_or(|me| me == ME),
+                "{}",
+                case.name
+            );
             let chat = state_with(
                 state
                     .conversations
@@ -787,8 +900,9 @@ mod tests {
                         if let Some(unread) = entry.unread {
                             summary.unread = unread;
                         }
-                        summary.last_message =
-                            entry.last_message_seq.map(|seq| message(&entry.id, seq, Some(KYLE)));
+                        summary.last_message = entry
+                            .last_message_seq
+                            .map(|seq| message(&entry.id, seq, Some(KYLE)));
                         summary
                     })
                     .collect(),
@@ -808,7 +922,10 @@ mod tests {
                 chat.outbox().push(OutboxEntry::new(
                     &entry.client_id,
                     &entry.conversation_id,
-                    SendDraft { body: "gg".into(), ..SendDraft::default() },
+                    SendDraft {
+                        body: "gg".into(),
+                        ..SendDraft::default()
+                    },
                 ));
             }
             if let Some(privacy) = state.privacy {
@@ -823,7 +940,11 @@ mod tests {
             }
             let now = Instant::now();
             for hint in state.typing {
-                chat.book().set_typing(&hint.conversation_id, &hint.user_id, now + Duration::from_secs(6));
+                chat.book().set_typing(
+                    &hint.conversation_id,
+                    &hint.user_id,
+                    now + Duration::from_secs(6),
+                );
             }
 
             // A payload that does not read is dropped, as `handle` drops it.
@@ -842,6 +963,12 @@ mod tests {
     #[test]
     fn an_unknown_kind_does_nothing() {
         let chat = state_with(Vec::new());
-        assert!(apply(&chat, Some(ME), Frame::Unknown("chat.poll".into()), Instant::now()).is_empty());
+        assert!(apply(
+            &chat,
+            Some(ME),
+            Frame::Unknown("chat.poll".into()),
+            Instant::now()
+        )
+        .is_empty());
     }
 }

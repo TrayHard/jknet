@@ -132,9 +132,9 @@ async fn signs_in_reads_the_account_renames_it_and_signs_out() {
         .expect("the dev provider opens a session");
     assert_eq!(session.status, "pending");
     assert!(
-        session
-            .url
-            .starts_with(&format!("http://127.0.0.1:{PORT_SIGN_IN}/v1/auth/dev/start")),
+        session.url.starts_with(&format!(
+            "http://127.0.0.1:{PORT_SIGN_IN}/v1/auth/dev/start"
+        )),
         "{}",
         session.url
     );
@@ -317,5 +317,9 @@ async fn a_service_that_is_not_there_fails_without_hanging() {
         other => panic!("expected a network error, got {other:?}"),
     }
     // One connect, one retry, both refused: still nowhere near the timeout.
-    assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
 }

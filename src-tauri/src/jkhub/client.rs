@@ -232,11 +232,7 @@ impl JkhubClient {
     /// Two permits, always in this order: the lane's first, the shared one
     /// second. Nothing ever waits for a lane permit while holding a shared
     /// one, so the pair cannot deadlock.
-    pub async fn send_in(
-        &self,
-        lane: Lane,
-        request: reqwest::RequestBuilder,
-    ) -> Result<Response> {
+    pub async fn send_in(&self, lane: Lane, request: reqwest::RequestBuilder) -> Result<Response> {
         let _lane = self.limiter(lane).ticket().await?;
         let _all = self
             .all
@@ -432,9 +428,15 @@ mod tests {
             absolute("https://files.jkhub.org/jka/configs/x.zip", SITE),
             "https://files.jkhub.org/jka/configs/x.zip"
         );
-        assert_eq!(absolute("//jkhub.org/jk3files/", SITE), "https://jkhub.org/jk3files/");
         assert_eq!(
-            absolute("/files/category/13-free-for-all/", "https://jkhub.org/files/"),
+            absolute("//jkhub.org/jk3files/", SITE),
+            "https://jkhub.org/jk3files/"
+        );
+        assert_eq!(
+            absolute(
+                "/files/category/13-free-for-all/",
+                "https://jkhub.org/files/"
+            ),
             "https://jkhub.org/files/category/13-free-for-all/"
         );
         assert_eq!(
@@ -452,7 +454,10 @@ mod tests {
         );
         assert_eq!(max_age(&headers), Some(900));
 
-        headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache, no-store"));
+        headers.insert(
+            CACHE_CONTROL,
+            HeaderValue::from_static("no-cache, no-store"),
+        );
         assert_eq!(max_age(&headers), None);
         assert_eq!(max_age(&HeaderMap::new()), None);
     }

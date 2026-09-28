@@ -166,7 +166,12 @@ pub(crate) fn description_refs(description: &str) -> Vec<String> {
 // ---------------------------------------------------------------------------
 
 /// Where the copy of a picture lies: `images\<sha256>.<ext>`.
-pub(crate) fn image_path(paths: &DataPaths, draft_id: &str, sha256: &str, image_type: ImageType) -> PathBuf {
+pub(crate) fn image_path(
+    paths: &DataPaths,
+    draft_id: &str,
+    sha256: &str,
+    image_type: ImageType,
+) -> PathBuf {
     paths
         .bundle_draft_images_dir(draft_id)
         .join(format!("{sha256}.{}", image_type.extension()))
@@ -174,12 +179,14 @@ pub(crate) fn image_path(paths: &DataPaths, draft_id: &str, sha256: &str, image_
 
 /// The path of a listed picture, when its type is one this build knows.
 fn listed_path(paths: &DataPaths, draft_id: &str, image: &DraftImage) -> Option<PathBuf> {
-    ImageType::of_content_type(&image.content_type).map(|kind| image_path(paths, draft_id, &image.sha256, kind))
+    ImageType::of_content_type(&image.content_type)
+        .map(|kind| image_path(paths, draft_id, &image.sha256, kind))
 }
 
 /// Reads the first bytes of a file and says what picture it is.
 fn detect_file(source: &Path) -> Result<Option<ImageType>> {
-    let mut file = fs::File::open(source).map_err(|e| AppError::io_path("cannot open", source, e))?;
+    let mut file =
+        fs::File::open(source).map_err(|e| AppError::io_path("cannot open", source, e))?;
     let mut head = [0u8; SIGNATURE_BYTES];
     let mut read = 0;
     while read < head.len() {
@@ -208,9 +215,7 @@ fn check_picture(source: &Path, size: u64) -> Result<ImageType> {
         )));
     }
     detect_file(source)?.ok_or_else(|| {
-        AppError::InvalidInput(format!(
-            "{name} is not a PNG, JPEG, GIF or WebP picture"
-        ))
+        AppError::InvalidInput(format!("{name} is not a PNG, JPEG, GIF or WebP picture"))
     })
 }
 
@@ -219,7 +224,10 @@ fn check_picture(source: &Path, size: u64) -> Result<ImageType> {
 fn import_image(paths: &DataPaths, draft_id: &str, source: &Path) -> Result<DraftImage> {
     let meta = fs::metadata(source).map_err(|e| AppError::io_path("cannot read", source, e))?;
     if !meta.is_file() {
-        return Err(AppError::InvalidInput(format!("{} is not a file", source.display())));
+        return Err(AppError::InvalidInput(format!(
+            "{} is not a file",
+            source.display()
+        )));
     }
     let image_type = check_picture(source, meta.len())?;
     let sha256 = sha256_of(source)?;
@@ -244,7 +252,11 @@ fn import_image(paths: &DataPaths, draft_id: &str, source: &Path) -> Result<Draf
 
 /// Adds a picture to a draft, or answers with the one it already holds
 /// under the same hash.
-pub(crate) async fn add_image(paths: &DataPaths, draft_id: &str, source: PathBuf) -> Result<DraftImage> {
+pub(crate) async fn add_image(
+    paths: &DataPaths,
+    draft_id: &str,
+    source: PathBuf,
+) -> Result<DraftImage> {
     let draft = draft::read_draft(paths, draft_id)?;
     let full = || {
         AppError::InvalidInput(format!(
@@ -255,15 +267,25 @@ pub(crate) async fn add_image(paths: &DataPaths, draft_id: &str, source: PathBuf
         return Err(full());
     }
     let (paths_for_copy, draft_for_copy) = (paths.clone(), draft_id.to_string());
-    let imported = tauri::async_runtime::spawn_blocking(move || import_image(&paths_for_copy, &draft_for_copy, &source))
-        .await
-        .map_err(|e| AppError::State(format!("the file thread stopped: {e}")))??;
-    if let Some(known) = draft.images.iter().find(|image| image.sha256 == imported.sha256) {
+    let imported = tauri::async_runtime::spawn_blocking(move || {
+        import_image(&paths_for_copy, &draft_for_copy, &source)
+    })
+    .await
+    .map_err(|e| AppError::State(format!("the file thread stopped: {e}")))??;
+    if let Some(known) = draft
+        .images
+        .iter()
+        .find(|image| image.sha256 == imported.sha256)
+    {
         return Ok(known.clone());
     }
     let mut added = imported.clone();
     let recorded = draft::edit_draft(paths, draft_id, |draft| {
-        if let Some(known) = draft.images.iter().find(|image| image.sha256 == imported.sha256) {
+        if let Some(known) = draft
+            .images
+            .iter()
+            .find(|image| image.sha256 == imported.sha256)
+        {
             added = known.clone();
             return Ok(());
         }
@@ -298,7 +320,10 @@ pub(crate) fn remove_image(paths: &DataPaths, draft_id: &str, sha256: &str) -> R
         removed = Some(draft.images.remove(index));
         Ok(())
     })?;
-    if let Some(path) = removed.as_ref().and_then(|image| listed_path(paths, draft_id, image)) {
+    if let Some(path) = removed
+        .as_ref()
+        .and_then(|image| listed_path(paths, draft_id, image))
+    {
         match fs::remove_file(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -421,8 +446,9 @@ async fn fetch_image(
         }
         bytes.extend_from_slice(&chunk);
     }
-    let image_type = ImageType::detect(&bytes)
-        .ok_or_else(|| AppError::InvalidInput(format!("{sha256} is not a PNG, JPEG, GIF or WebP picture")))?;
+    let image_type = ImageType::detect(&bytes).ok_or_else(|| {
+        AppError::InvalidInput(format!("{sha256} is not a PNG, JPEG, GIF or WebP picture"))
+    })?;
     let actual = super::sha256_hex(&bytes);
     if actual != sha256 {
         return Err(AppError::BundleFile {
@@ -520,16 +546,29 @@ mod tests {
     #[test]
     fn the_four_picture_types_are_told_by_their_first_bytes() {
         assert_eq!(ImageType::detect(&png()), Some(ImageType::Png));
-        assert_eq!(ImageType::detect(&[0xFF, 0xD8, 0xFF, 0xE0, 0x00]), Some(ImageType::Jpeg));
+        assert_eq!(
+            ImageType::detect(&[0xFF, 0xD8, 0xFF, 0xE0, 0x00]),
+            Some(ImageType::Jpeg)
+        );
         assert_eq!(ImageType::detect(b"GIF89a\x01\x00"), Some(ImageType::Gif));
         assert_eq!(ImageType::detect(b"GIF87a\x01\x00"), Some(ImageType::Gif));
-        assert_eq!(ImageType::detect(b"RIFF\x24\x00\x00\x00WEBPVP8 "), Some(ImageType::Webp));
-        assert_eq!(ImageType::detect(b"RIFF\x24\x00\x00\x00WAVEfmt "), None, "a wave file is RIFF too");
+        assert_eq!(
+            ImageType::detect(b"RIFF\x24\x00\x00\x00WEBPVP8 "),
+            Some(ImageType::Webp)
+        );
+        assert_eq!(
+            ImageType::detect(b"RIFF\x24\x00\x00\x00WAVEfmt "),
+            None,
+            "a wave file is RIFF too"
+        );
         assert_eq!(ImageType::detect(b"PK\x03\x04"), None);
         assert_eq!(ImageType::detect(b""), None);
         assert_eq!(ImageType::detect(b"RIFF"), None, "too short to be WebP");
         assert_eq!(ImageType::Jpeg.extension(), "jpg");
-        assert_eq!(ImageType::of_content_type("image/webp"), Some(ImageType::Webp));
+        assert_eq!(
+            ImageType::of_content_type("image/webp"),
+            Some(ImageType::Webp)
+        );
         assert_eq!(ImageType::of_content_type("text/plain"), None);
     }
 
@@ -546,10 +585,21 @@ mod tests {
         // A hash typed in capitals is the same picture, the way the service
         // reads it; 63 digits are prose.
         assert_eq!(description_refs(&text), [a.clone(), b, c.clone()]);
-        let mixed = format!("![x](blob:{}{}) blob:{}", "A".repeat(32), "b".repeat(32), "C".repeat(64));
-        assert_eq!(description_refs(&mixed), [format!("{}{}", "a".repeat(32), "b".repeat(32)), c]);
+        let mixed = format!(
+            "![x](blob:{}{}) blob:{}",
+            "A".repeat(32),
+            "b".repeat(32),
+            "C".repeat(64)
+        );
+        assert_eq!(
+            description_refs(&mixed),
+            [format!("{}{}", "a".repeat(32), "b".repeat(32)), c]
+        );
         // 65 digits are not a hash either, and the scan goes on behind them.
-        assert_eq!(description_refs(&format!("blob:{}e blob:{a}", "f".repeat(64))), [a]);
+        assert_eq!(
+            description_refs(&format!("blob:{}e blob:{a}", "f".repeat(64))),
+            [a]
+        );
         assert!(description_refs("no pictures here").is_empty());
         assert!(description_refs("blob:").is_empty());
         assert!(description_refs("blob:blob:").is_empty());
@@ -583,12 +633,21 @@ mod tests {
         fs::write(&again, png()).unwrap();
         let repeated = run(add_image(&paths, &draft.id, again)).expect("the repeat is taken");
         assert_eq!(repeated, image);
-        assert_eq!(draft::read_draft(&paths, &draft.id).unwrap().images.len(), 1);
+        assert_eq!(
+            draft::read_draft(&paths, &draft.id).unwrap().images.len(),
+            1
+        );
 
         // The path for the editor.
         assert_eq!(path_of(&paths, &draft.id, &image.sha256).unwrap(), copy);
-        assert!(matches!(path_of(&paths, &draft.id, &"0".repeat(64)).unwrap_err(), AppError::NotFound(_)));
-        assert!(matches!(path_of(&paths, &draft.id, "../x").unwrap_err(), AppError::InvalidInput(_)));
+        assert!(matches!(
+            path_of(&paths, &draft.id, &"0".repeat(64)).unwrap_err(),
+            AppError::NotFound(_)
+        ));
+        assert!(matches!(
+            path_of(&paths, &draft.id, "../x").unwrap_err(),
+            AppError::InvalidInput(_)
+        ));
 
         // Not a picture, and too big a picture.
         let text = picked.join("notes.png");
@@ -602,7 +661,10 @@ mod tests {
         fs::write(&big, &bytes).unwrap();
         let error = run(add_image(&paths, &draft.id, big)).expect_err("too big");
         assert!(error.to_string().contains("bigger"), "{error}");
-        assert_eq!(draft::read_draft(&paths, &draft.id).unwrap().images.len(), 1);
+        assert_eq!(
+            draft::read_draft(&paths, &draft.id).unwrap().images.len(),
+            1
+        );
 
         // The twenty-first picture is refused before it is copied.
         let mut full = draft::read_draft(&paths, &draft.id).unwrap();

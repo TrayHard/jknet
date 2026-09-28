@@ -1,4 +1,4 @@
-import { Check, Download, RefreshCw, Wrench } from "lucide-react";
+import { Check, Download, Import, RefreshCw, Wrench } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -48,8 +48,11 @@ export function ClientEngineRow({
   // Files laid over the engine by a bundle: a release update would write
   // over them, so the row shows the badge and offers no check.
   const customBuild = client.bundle?.engineOverlay === true;
+  const imported = client.engineOrigin === "imported";
   const update = useEngineUpdate(
-    checkRequested && engine?.installable && !customBuild ? client.id : null,
+    checkRequested && engine?.installable && !customBuild && !imported
+      ? client.id
+      : null,
   );
   const installed = client.engineVersion !== null;
   const releases = useEngineReleases(installed || !engine?.installable ? null : client.engineId);
@@ -86,7 +89,9 @@ export function ClientEngineRow({
       <div className="flex items-center gap-8 flex-wrap">
         <span className="text-heading-sm text-fg">{engineName}</span>
         <Badge tone={installed ? "neutral" : "warm"}>
-          {client.engineVersion ?? t("card.engineNotInstalled")}
+          {imported
+            ? t("card.imported")
+            : (client.engineVersion ?? t("card.engineNotInstalled"))}
         </Badge>
         {installed && client.engineInstalledAt ? (
           <span className="text-mono-xs text-fg-muted">
@@ -101,7 +106,15 @@ export function ClientEngineRow({
         </p>
       ) : (
         <div className="flex items-center gap-8 flex-wrap">
-          {installed && customBuild ? (
+          {installed && imported ? (
+            <Badge
+              tone="neutral"
+              icon={<Import size={12} />}
+              title={t("card.importedHint")}
+            >
+              {t("card.imported")}
+            </Badge>
+          ) : installed && customBuild ? (
             <Badge
               tone="purple"
               icon={<Wrench size={12} />}

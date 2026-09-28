@@ -285,8 +285,8 @@ pub(crate) fn content_kind(name: &str) -> Option<ContentKind> {
             "efx" => ContentKind::Effect,
             "ibi" | "rof" => ContentKind::Script,
             "cfg" if folder.is_empty() || matches!(top, "configs" | "cfg") => ContentKind::Config,
-            "fontdat" | "mus" | "dat" | "sab" | "npc" | "veh" | "vwp" | "scl" | "team" | "arena"
-            | "bot" => ContentKind::Data,
+            "fontdat" | "mus" | "dat" | "sab" | "npc" | "veh" | "vwp" | "scl" | "team"
+            | "arena" | "bot" => ContentKind::Data,
             _ if picture => ContentKind::Image,
             _ => ContentKind::Other,
         },
@@ -341,7 +341,10 @@ pub(crate) fn encoding_of(name: &str, bytes: &[u8]) -> &'static str {
         return "utf-8";
     }
     let high = bytes.iter().filter(|byte| **byte >= 0x80).count();
-    let letters = bytes.iter().filter(|byte| byte.is_ascii_alphabetic()).count();
+    let letters = bytes
+        .iter()
+        .filter(|byte| byte.is_ascii_alphabetic())
+        .count();
     if high * 10 >= (high + letters) * 4 {
         return "windows-1251";
     }
@@ -561,7 +564,10 @@ fn font_atlas(stem: &str, names: &dyn Fn(&str) -> bool) -> Option<String> {
 /// One product per entry the taxonomy claims, with what its header says.
 /// The entries of a dependency archive are not part of the archive and
 /// stay out; so does everything a finished object consumes.
-pub(crate) fn products(sources: &[PathBuf], entries: &[PreviewEntry]) -> Result<Vec<PreviewProduct>> {
+pub(crate) fn products(
+    sources: &[PathBuf],
+    entries: &[PreviewEntry],
+) -> Result<Vec<PreviewProduct>> {
     let mut products = Vec::new();
     for (archive_id, path) in sources.iter().enumerate() {
         let mut claimed: Vec<(&PreviewEntry, ContentKind)> = entries
@@ -952,7 +958,11 @@ pub(crate) fn check_picture_request(name: &str, max_size: Option<u32>) -> Result
 
 /// The bytes of a picture as the webview can show them: the data URL of
 /// [`picture`], with the reading of the archive left to the caller.
-pub(crate) fn picture_from_bytes(name: &str, bytes: &[u8], max_size: Option<u32>) -> Result<PreviewImageData> {
+pub(crate) fn picture_from_bytes(
+    name: &str,
+    bytes: &[u8],
+    max_size: Option<u32>,
+) -> Result<PreviewImageData> {
     let format = picture_format(name, bytes)
         .ok_or_else(|| AppError::Image(format!("{name} has no picture format")))?;
     let (width, height) = image_size(format, bytes);
@@ -1034,7 +1044,8 @@ struct Thumbnails {
     bytes: usize,
 }
 
-static THUMBNAILS: LazyLock<Mutex<Thumbnails>> = LazyLock::new(|| Mutex::new(Thumbnails::default()));
+static THUMBNAILS: LazyLock<Mutex<Thumbnails>> =
+    LazyLock::new(|| Mutex::new(Thumbnails::default()));
 
 fn cached_thumbnail(key: &ThumbnailKey) -> Option<PreviewImageData> {
     THUMBNAILS.lock().ok()?.entries.get(key).cloned()
@@ -1045,7 +1056,8 @@ fn remember_thumbnail(key: ThumbnailKey, picture: &PreviewImageData) {
         return;
     };
     let cost = picture.data_url.len();
-    if cache.bytes + cost > THUMBNAIL_CACHE_BYTES || cache.entries.len() >= THUMBNAIL_CACHE_ENTRIES {
+    if cache.bytes + cost > THUMBNAIL_CACHE_BYTES || cache.entries.len() >= THUMBNAIL_CACHE_ENTRIES
+    {
         cache.entries.clear();
         cache.bytes = 0;
     }
@@ -1123,7 +1135,9 @@ mod tests {
     fn archive(path: &Path, entries: &[(&str, &[u8])]) {
         let mut writer = ZipWriter::new(File::create(path).unwrap());
         for (name, bytes) in entries {
-            writer.start_file(*name, SimpleFileOptions::default()).unwrap();
+            writer
+                .start_file(*name, SimpleFileOptions::default())
+                .unwrap();
             writer.write_all(bytes).unwrap();
         }
         writer.finish().unwrap();
@@ -1213,7 +1227,10 @@ mod tests {
             ("menu/art/unknownmap_mp.jpg", Some(ContentKind::MenuImage)),
             ("menu/new/crosshairb.tga", Some(ContentKind::MenuImage)),
             ("menu/medals/gold.png", Some(ContentKind::MenuImage)),
-            ("gfx/menus/main_background.jpg", Some(ContentKind::MenuImage)),
+            (
+                "gfx/menus/main_background.jpg",
+                Some(ContentKind::MenuImage),
+            ),
             ("gfx/2d/charsgrid_med.tga", Some(ContentKind::MenuImage)),
             ("gfx/mplevels/ffa3.jpg", Some(ContentKind::MenuImage)),
             ("gfx/mp/icon.png", Some(ContentKind::MenuImage)),
@@ -1225,13 +1242,28 @@ mod tests {
             ("gfx/emoji/cheers.png", Some(ContentKind::Image)),
             ("textures/common/caps.jpg", Some(ContentKind::Texture)),
             ("textures/yavin/video.roq", Some(ContentKind::Video)),
-            ("models/weapons2/detpack/pack.jpg", Some(ContentKind::Texture)),
-            ("models/players/kyle/icon_default.jpg", Some(ContentKind::Icon)),
-            ("models/players/kyle/kyle_torso.png", Some(ContentKind::Texture)),
+            (
+                "models/weapons2/detpack/pack.jpg",
+                Some(ContentKind::Texture),
+            ),
+            (
+                "models/players/kyle/icon_default.jpg",
+                Some(ContentKind::Icon),
+            ),
+            (
+                "models/players/kyle/kyle_torso.png",
+                Some(ContentKind::Texture),
+            ),
             ("models/players/kyle/model.glm", None),
             ("models/players/kyle/model_default.skin", None),
-            ("models/players/kyle/animation.cfg", Some(ContentKind::Other)),
-            ("models/weapons2/detpack/det_pack.qc", Some(ContentKind::Other)),
+            (
+                "models/players/kyle/animation.cfg",
+                Some(ContentKind::Other),
+            ),
+            (
+                "models/weapons2/detpack/det_pack.qc",
+                Some(ContentKind::Other),
+            ),
             ("maps/mp/ffa3.bsp", None),
             ("maps/mp/siege_hoth.siege", Some(ContentKind::Data)),
             ("maps/ffa3/lm_0000.tga", Some(ContentKind::Texture)),
@@ -1279,32 +1311,57 @@ mod tests {
     #[test]
     fn strings_files_count_their_keys_and_decode_by_their_folder() {
         let english = b"VERSION \"1\"\r\nREFERENCE PICKUPLINE\r\nLANG_ENGLISH \"Obtained\"\r\nREFERENCE\tOTHER\r\n  REFERENCE SPACED\r\nREFERENCES_NOT \"x\"\r\nreference LOWER\r\nReference MIXED\r\nENDMARKER\r\n";
-        assert_eq!(count_references(english), 5, "the keyword counts in any case, as the table of the frontend reads it");
+        assert_eq!(
+            count_references(english),
+            5,
+            "the keyword counts in any case, as the table of the frontend reads it"
+        );
         assert_eq!(count_lines(english), 9);
-        assert_eq!(count_references(b"referenced X\r\nREFERENCES \"x\"\r\n"), 0, "a longer word is not the keyword");
+        assert_eq!(
+            count_references(b"referenced X\r\nREFERENCES \"x\"\r\n"),
+            0,
+            "a longer word is not the keyword"
+        );
         assert_eq!(count_lines(b"one\ntwo"), 2);
         assert_eq!(count_lines(b""), 0);
         assert_eq!(encoding_of("strings/english/menus.str", english), "utf-8");
 
         // Windows-1251 bytes of the Russian word for "Obtained".
-        let russian = b"REFERENCE PICKUPLINE\r\nLANG_RUSSIAN \"\xCF\xEE\xEB\xF3\xF7\xE5\xED\xEE\"\r\n";
-        assert_eq!(encoding_of("strings/russian/mp_ingame.str", russian), "windows-1251");
+        let russian =
+            b"REFERENCE PICKUPLINE\r\nLANG_RUSSIAN \"\xCF\xEE\xEB\xF3\xF7\xE5\xED\xEE\"\r\n";
+        assert_eq!(
+            encoding_of("strings/russian/mp_ingame.str", russian),
+            "windows-1251"
+        );
         assert_eq!(
             decode_text(russian, "windows-1251"),
             "REFERENCE PICKUPLINE\r\nLANG_RUSSIAN \"Получено\"\r\n"
         );
 
         // A German umlaut in Windows-1252, one high byte among many letters.
-        let german = b"REFERENCE HELLO\r\nLANG_GERMAN \"Sch\xF6ne Gr\xFC\xDFe aus der Akademie\"\r\n";
-        assert_eq!(encoding_of("strings/german/menus.str", german), "windows-1252");
+        let german =
+            b"REFERENCE HELLO\r\nLANG_GERMAN \"Sch\xF6ne Gr\xFC\xDFe aus der Akademie\"\r\n";
+        assert_eq!(
+            encoding_of("strings/german/menus.str", german),
+            "windows-1252"
+        );
         assert!(decode_text(german, "windows-1252").contains("Schöne Grüße"));
-        assert_eq!(encoding_of("strings/polish/menus.str", b"\xB3\xF3d\xBC and letters"), "windows-1250");
+        assert_eq!(
+            encoding_of("strings/polish/menus.str", b"\xB3\xF3d\xBC and letters"),
+            "windows-1250"
+        );
 
         // Russian text kept in a French folder is still Russian, the way
         // `rus_sp.pk3` ships it.
         let hidden = b"LANG_FRENCH \"\xCF\xF0\xE8\xE2\xE5\xF2, \xE4\xF0\xF3\xE3\"\r\n";
-        assert_eq!(encoding_of("strings/french/menus.str", hidden), "windows-1251");
-        assert_eq!(encoding_of("shaders/gfx.shader", b"caf\xE9 { }"), "windows-1252");
+        assert_eq!(
+            encoding_of("strings/french/menus.str", hidden),
+            "windows-1251"
+        );
+        assert_eq!(
+            encoding_of("shaders/gfx.shader", b"caf\xE9 { }"),
+            "windows-1252"
+        );
 
         // A byte order mark names UTF-8 over the label.
         assert_eq!(decode_text(b"\xEF\xBB\xBFabc", "windows-1251"), "abc");
@@ -1352,7 +1409,10 @@ mod tests {
             ("maps/mp/ffa3.bsp", b"map"),
             ("sound/interface/click.wav", b"audio"),
             ("models/players/hero/model.glm", b"model"),
-            ("models/players/hero/model_default.skin", b"body,models/players/hero/body"),
+            (
+                "models/players/hero/model_default.skin",
+                b"body,models/players/hero/body",
+            ),
             ("models/players/hero/icon_default.jpg", &small_jpeg),
         ];
         archive(&path, &entries);
@@ -1374,24 +1434,42 @@ mod tests {
         assert_eq!(kind_count("skin"), 1);
         // The one sound of the archive goes with its one character, as before.
         assert_eq!(kind_count("sound"), 0);
-        assert_eq!(products.iter().find(|p| p.kind == "skin").unwrap().audio.len(), 1);
-        assert!(
-            !products
+        assert_eq!(
+            products
                 .iter()
-                .any(|p| p.kind != "skin" && (p.name.ends_with(".skin") || p.name.ends_with(".glm"))),
+                .find(|p| p.kind == "skin")
+                .unwrap()
+                .audio
+                .len(),
+            1
+        );
+        assert!(
+            !products.iter().any(
+                |p| p.kind != "skin" && (p.name.ends_with(".skin") || p.name.ends_with(".glm"))
+            ),
             "resources of finished objects are not listed twice"
         );
 
-        let ffa3 = products.iter().find(|p| p.name == "levelshots/mp/ffa3.jpg").unwrap();
+        let ffa3 = products
+            .iter()
+            .find(|p| p.name == "levelshots/mp/ffa3.jpg")
+            .unwrap();
         assert_eq!(ffa3.label, "ffa3");
         assert_eq!(ffa3.map.as_deref(), Some("mp/ffa3"));
         assert_eq!(ffa3.group.as_deref(), Some("levelshots/mp"));
         assert_eq!(ffa3.size, Some(entries[0].1.len() as u64));
         assert_eq!(
             ffa3.image,
-            Some(PreviewImage { width: 1024, height: 1024, format: "jpg".into() })
+            Some(PreviewImage {
+                width: 1024,
+                height: 1024,
+                format: "jpg".into()
+            })
         );
-        let academy = products.iter().find(|p| p.name == "levelshots/academy1.jpg").unwrap();
+        let academy = products
+            .iter()
+            .find(|p| p.name == "levelshots/academy1.jpg")
+            .unwrap();
         assert_eq!(academy.map.as_deref(), Some("academy1"));
         assert_eq!(academy.group.as_deref(), Some("levelshots"));
         let splash = products.iter().find(|p| p.kind == "splash").unwrap();
@@ -1403,16 +1481,29 @@ mod tests {
         assert_eq!(strings.group.as_deref(), Some("russian"));
         assert_eq!(
             strings.strings,
-            Some(PreviewStrings { language: "russian".into(), package: "mp_ingame".into(), keys: 2 })
+            Some(PreviewStrings {
+                language: "russian".into(),
+                package: "mp_ingame".into(),
+                keys: 2
+            })
         );
         assert_eq!(
             strings.text,
-            Some(PreviewText { lines: 6, encoding: "windows-1251".into() })
+            Some(PreviewText {
+                lines: 6,
+                encoding: "windows-1251".into()
+            })
         );
 
         let shader = products.iter().find(|p| p.kind == "shader").unwrap();
         assert_eq!(shader.label, "gfx.shader");
-        assert_eq!(shader.text, Some(PreviewText { lines: 3, encoding: "utf-8".into() }));
+        assert_eq!(
+            shader.text,
+            Some(PreviewText {
+                lines: 3,
+                encoding: "utf-8".into()
+            })
+        );
         assert_eq!(shader.group.as_deref(), Some("shaders"));
 
         let charsgrid = products.iter().find(|p| p.kind == "menuImage").unwrap();
@@ -1425,14 +1516,27 @@ mod tests {
         assert_eq!(font.label, "russian");
         assert_eq!(
             font.font,
-            Some(PreviewFont { point_size: 16, height: 18, atlas: Some("fonts/russian.tga".into()) })
+            Some(PreviewFont {
+                point_size: 16,
+                height: 18,
+                atlas: Some("fonts/russian.tga".into())
+            })
         );
 
         let readme = products.iter().find(|p| p.name == "readme.txt").unwrap();
         assert_eq!(readme.kind, "other");
         assert_eq!(readme.group, None);
-        assert_eq!(readme.text, Some(PreviewText { lines: 1, encoding: "utf-8".into() }));
-        let thumbs = products.iter().find(|p| p.name == "levelshots/thumbs.db").unwrap();
+        assert_eq!(
+            readme.text,
+            Some(PreviewText {
+                lines: 1,
+                encoding: "utf-8".into()
+            })
+        );
+        let thumbs = products
+            .iter()
+            .find(|p| p.name == "levelshots/thumbs.db")
+            .unwrap();
         assert_eq!(thumbs.text, None);
         assert_eq!(thumbs.image, None);
 
@@ -1450,17 +1554,32 @@ mod tests {
         let raw_jpeg = picture(source, "levelshots/mp/ffa3.jpg", None).unwrap();
         assert!(raw_jpeg.data_url.starts_with("data:image/jpeg;base64,"));
         assert_eq!((raw_jpeg.width, raw_jpeg.height), (1024, 1024));
-        assert!(matches!(picture(source, "readme.txt", None), Err(AppError::InvalidInput(_))));
-        assert!(matches!(picture(source, "levelshots/missing.jpg", None), Err(AppError::NotFound(_))));
-        assert!(matches!(picture(source, "menu/splash.jpg", Some(0)), Err(AppError::InvalidInput(_))));
+        assert!(matches!(
+            picture(source, "readme.txt", None),
+            Err(AppError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            picture(source, "levelshots/missing.jpg", None),
+            Err(AppError::NotFound(_))
+        ));
+        assert!(matches!(
+            picture(source, "menu/splash.jpg", Some(0)),
+            Err(AppError::InvalidInput(_))
+        ));
 
         let decoded = text(source, "strings/russian/mp_ingame.str").unwrap();
         assert_eq!(decoded.encoding, "windows-1251");
         assert!(!decoded.truncated);
         assert!(decoded.text.contains("\"Получено\""));
         assert!(decoded.text.contains("\"Два\""));
-        assert!(matches!(text_of(source, "levelshots/mp/ffa3.jpg"), Err(AppError::InvalidInput(_))));
-        assert!(matches!(text_of(source, "../secrets.txt"), Err(AppError::InvalidInput(_))));
+        assert!(matches!(
+            text_of(source, "levelshots/mp/ffa3.jpg"),
+            Err(AppError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            text_of(source, "../secrets.txt"),
+            Err(AppError::InvalidInput(_))
+        ));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1474,22 +1593,33 @@ mod tests {
         let dir = temp_dir("thumbnail");
         let path = dir.join("picture.pk3");
         let mut tga = Cursor::new(Vec::new());
-        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(64, 32, image::Rgba([255, 0, 0, 128])))
-            .write_to(&mut tga, image::ImageFormat::Tga)
-            .unwrap();
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            64,
+            32,
+            image::Rgba([255, 0, 0, 128]),
+        ))
+        .write_to(&mut tga, image::ImageFormat::Tga)
+        .unwrap();
         let mut jpeg = Cursor::new(Vec::new());
         image::DynamicImage::new_rgb8(300, 150)
             .write_to(&mut jpeg, image::ImageFormat::Jpeg)
             .unwrap();
         archive(
             &path,
-            &[("gfx/2d/crosshair.tga", tga.get_ref()), ("levelshots/wide.jpg", jpeg.get_ref())],
+            &[
+                ("gfx/2d/crosshair.tga", tga.get_ref()),
+                ("levelshots/wide.jpg", jpeg.get_ref()),
+            ],
         );
         let thumbnail = picture(&path, "gfx/2d/crosshair.tga", Some(16)).unwrap();
         assert!(thumbnail.data_url.starts_with("data:image/png;base64,"));
         assert_eq!((thumbnail.width, thumbnail.height), (16, 8));
         let png = base64::engine::general_purpose::STANDARD
-            .decode(thumbnail.data_url.trim_start_matches("data:image/png;base64,"))
+            .decode(
+                thumbnail
+                    .data_url
+                    .trim_start_matches("data:image/png;base64,"),
+            )
             .unwrap();
         let decoded = image::load_from_memory_with_format(&png, image::ImageFormat::Png).unwrap();
         assert_eq!((decoded.width(), decoded.height()), (16, 8));
@@ -1501,9 +1631,17 @@ mod tests {
         // A picture that already fits comes back as its own bytes.
         let same = picture(&path, "levelshots/wide.jpg", Some(400)).unwrap();
         assert_eq!((same.width, same.height), (300, 150));
-        assert_eq!(same.data_url.len(), 23 + jpeg.get_ref().len().div_ceil(3) * 4);
+        assert_eq!(
+            same.data_url.len(),
+            23 + jpeg.get_ref().len().div_ceil(3) * 4
+        );
 
-        let key = ("session".to_string(), 0, "gfx/2d/crosshair.tga".to_string(), 16);
+        let key = (
+            "session".to_string(),
+            0,
+            "gfx/2d/crosshair.tga".to_string(),
+            16,
+        );
         remember_thumbnail(key.clone(), &thumbnail);
         assert_eq!(cached_thumbnail(&key), Some(thumbnail));
         forget_session("session");
@@ -1531,7 +1669,10 @@ mod tests {
         assert_eq!((splash.width, splash.height), (64, 32));
         // A folder that is not a root of the game stays in the name.
         assert_eq!(text(&path, "mymod/readme.txt").unwrap().text, "first\n");
-        assert!(matches!(text(&path, "readme.txt"), Err(AppError::NotFound(_))));
+        assert!(matches!(
+            text(&path, "readme.txt"),
+            Err(AppError::NotFound(_))
+        ));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1539,7 +1680,12 @@ mod tests {
     fn a_long_text_is_cut_and_marked() {
         let dir = temp_dir("long");
         let path = dir.join("text.pk3");
-        let long: Vec<u8> = b"seta cg_fov 97\n".iter().cycle().take(MAX_TEXT_BYTES as usize + 100).copied().collect();
+        let long: Vec<u8> = b"seta cg_fov 97\n"
+            .iter()
+            .cycle()
+            .take(MAX_TEXT_BYTES as usize + 100)
+            .copied()
+            .collect();
         archive(&path, &[("autoexec.cfg", &long)]);
         let decoded = text(&path, "autoexec.cfg").unwrap();
         assert!(decoded.truncated);
@@ -1594,7 +1740,17 @@ mod tests {
         .to_vec();
         assert_eq!(
             features(&japro),
-            ["menu", "hud", "fonts", "strings:strip", "effects", "scripts", "videos", "configs", "modules"]
+            [
+                "menu",
+                "hud",
+                "fonts",
+                "strings:strip",
+                "effects",
+                "scripts",
+                "videos",
+                "configs",
+                "modules"
+            ]
         );
         assert!(features(&["ui/jahud.txt".to_string()]).contains(&"hud".to_string()));
         assert!(features(&[]).is_empty());
@@ -1602,7 +1758,12 @@ mod tests {
 
     #[test]
     fn the_badges_of_a_card_name_the_objects_the_preview_assembles() {
-        let names = |paths: &[&str]| paths.iter().map(|path| path.to_string()).collect::<Vec<_>>();
+        let names = |paths: &[&str]| {
+            paths
+                .iter()
+                .map(|path| path.to_string())
+                .collect::<Vec<_>>()
+        };
         // A character with its voice, a map with its music, an NPC.
         assert_eq!(
             features(&names(&[
@@ -1617,8 +1778,14 @@ mod tests {
             ["characters", "npcs", "maps", "music", "sounds"]
         );
         // A reskin ships pictures alone; the preview finds the model in the game.
-        assert_eq!(features(&names(&["models/players/kyle/kyle_torso.png"])), ["textures", "characters"]);
-        assert_eq!(features(&names(&["models/players/kyle/icon_default.jpg"])), ["characters"]);
+        assert_eq!(
+            features(&names(&["models/players/kyle/kyle_torso.png"])),
+            ["textures", "characters"]
+        );
+        assert_eq!(
+            features(&names(&["models/players/kyle/icon_default.jpg"])),
+            ["characters"]
+        );
         assert_eq!(features(&names(&["ext_data/npcs.cfg"])), ["npcs"]);
         // A vehicle is not a character, though its model lives with them.
         assert_eq!(
@@ -1630,12 +1797,22 @@ mod tests {
             ["vehicles"]
         );
         assert_eq!(
-            features(&names(&["ext_data/vehicles/swoop.veh", "models/players/swoop/model.glm", "models/players/reborn/model.glm"])),
+            features(&names(&[
+                "ext_data/vehicles/swoop.veh",
+                "models/players/swoop/model.glm",
+                "models/players/reborn/model.glm"
+            ])),
             ["characters", "vehicles"]
         );
-        assert_eq!(features(&names(&["models/map_objects/szico_vehicles/xwing.md3"])), ["vehicles"]);
+        assert_eq!(
+            features(&names(&["models/map_objects/szico_vehicles/xwing.md3"])),
+            ["vehicles"]
+        );
         // Hilts: by the folder, or by the `.sab` that describes them.
-        assert_eq!(features(&names(&["models/weapons2/saber_1/saber_1.glm"])), ["hilts"]);
+        assert_eq!(
+            features(&names(&["models/weapons2/saber_1/saber_1.glm"])),
+            ["hilts"]
+        );
         assert_eq!(
             features(&names(&[
                 "ext_data/sabers/cool.sab",
@@ -1646,12 +1823,27 @@ mod tests {
             "a hilt in a folder of its own is not a weapon"
         );
         // Weapons: a model or a reskin in a weapon folder, `noweap` aside.
-        assert_eq!(features(&names(&["models/weapons2/blaster_pistol/blaster_pistol.jpg"])), ["textures", "weapons"]);
-        assert_eq!(features(&names(&["Models\\Weapons2\\Thermal\\thermal.md3"])), ["weapons"]);
-        assert!(features(&names(&["models/weapons2/noweap/noweap.glm", "models/weapons2/readme.txt"])).is_empty());
+        assert_eq!(
+            features(&names(&[
+                "models/weapons2/blaster_pistol/blaster_pistol.jpg"
+            ])),
+            ["textures", "weapons"]
+        );
+        assert_eq!(
+            features(&names(&["Models\\Weapons2\\Thermal\\thermal.md3"])),
+            ["weapons"]
+        );
+        assert!(features(&names(&[
+            "models/weapons2/noweap/noweap.glm",
+            "models/weapons2/readme.txt"
+        ]))
+        .is_empty());
         // Music is under `music/`; every other audio file is a sound.
         assert_eq!(features(&names(&["music/mp/duel.mp3"])), ["music"]);
-        assert_eq!(features(&names(&["sound/interface/click.wav", "taunt.ogg"])), ["sounds"]);
+        assert_eq!(
+            features(&names(&["sound/interface/click.wav", "taunt.ogg"])),
+            ["sounds"]
+        );
     }
 
     #[test]
@@ -1684,23 +1876,42 @@ mod tests {
         .map(String::from)
         .to_vec();
         let codes = features(&everything);
-        assert_eq!(codes.len(), 21, "every fixed code and one language: {codes:?}");
-        assert!(codes.iter().all(|code| is_library_feature(code)), "{codes:?}");
+        assert_eq!(
+            codes.len(),
+            21,
+            "every fixed code and one language: {codes:?}"
+        );
+        assert!(
+            codes.iter().all(|code| is_library_feature(code)),
+            "{codes:?}"
+        );
         assert_eq!(codes.last().map(String::as_str), Some("sounds"));
         // A language folder outside the alphabet gets no badge, and only as
         // many languages as fit next to the fixed codes are named.
-        let mut many: Vec<String> = (0..20).map(|i| format!("strings/lang{i:02}/menus.str")).collect();
+        let mut many: Vec<String> = (0..20)
+            .map(|i| format!("strings/lang{i:02}/menus.str"))
+            .collect();
         many.push("strings/pt_br/menus.str".into());
         many.push("strings/Русский/menus.str".into());
         many.push(format!("strings/{}/menus.str", "l".repeat(30)));
         many.extend(everything.iter().cloned());
         let codes = features(&many);
         assert_eq!(codes.len(), MAX_LIBRARY_FEATURES, "{codes:?}");
-        let languages: Vec<_> = codes.iter().filter(|code| code.starts_with("strings:")).collect();
+        let languages: Vec<_> = codes
+            .iter()
+            .filter(|code| code.starts_with("strings:"))
+            .collect();
         assert_eq!(languages.len(), 12);
         assert_eq!(languages[0], "strings:lang00");
         assert_eq!(languages[11], "strings:lang11");
-        assert!(codes.iter().all(|code| is_library_feature(code)), "{codes:?}");
-        assert_eq!(codes.last().map(String::as_str), Some("sounds"), "a language never pushes a fixed code out");
+        assert!(
+            codes.iter().all(|code| is_library_feature(code)),
+            "{codes:?}"
+        );
+        assert_eq!(
+            codes.last().map(String::as_str),
+            Some("sounds"),
+            "a language never pushes a fixed code out"
+        );
     }
 }

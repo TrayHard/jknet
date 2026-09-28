@@ -2,6 +2,7 @@
   "title": "Klienci",
   "subtitle": "Klient to kompilacja silnika z własnymi plikami i ustawieniami. Nadaj mu nazwę i gotowe.",
   "newClient": "Nowy klient",
+  "importClient": "Import client",
   "list": {
     "heading": "Lista klientów",
     "emptyTitle": "Brak klientów {{game}}",
@@ -26,7 +27,10 @@
     "makeDefault": "Make default",
     "actions": "Client actions",
     "installedOn": "zainstalowano {{date}}",
-    "manualInstall": "Tę kompilację trzeba zainstalować ręcznie."
+    "manualInstall": "Tę kompilację trzeba zainstalować ręcznie.",
+    "imported": "Imported snapshot",
+    "importedHint": "JKNet keeps this copied engine exactly as it was imported and does not replace it with a release download.",
+    "importedBundleHint": "An imported snapshot cannot be published as a bundle engine."
   },
   "removeDialog": {
     "title": "Delete {{client}}?",
@@ -118,6 +122,33 @@
     "downloadSwitch": "Pobierz silnik zaraz po utworzeniu klienta",
     "create": "Utwórz klienta",
     "details": "Details"
+  },
+  "importDialog": {
+    "title": "Import client",
+    "text": "Choose an existing portable client. JKNet copies it with its mods and settings, then adds its screenshots and demos to Media.",
+    "pickTitle": "Select a client folder",
+    "folder": "Client folder",
+    "folderPlaceholder": "Choose the folder that contains the client executable",
+    "choose": "Choose folder",
+    "sourceUntouched": "JKNet never changes the selected folder. The imported client is an independent copy.",
+    "inspecting": "Reading the client folder…",
+    "detected": "Detected client",
+    "files": "Files to copy",
+    "fileSummary": "{{count}} · {{size}}",
+    "screenshots": "Screenshots",
+    "demos": "Demos",
+    "name": "Client name",
+    "modFolder": "Mod folder (fs_game)",
+    "baseGame": "Base game",
+    "launchArgs": "Extra launch arguments",
+    "launchArgsPlaceholder": "+set r_mode 4 +exec duel.cfg",
+    "import": "Import client",
+    "importing": "Importing…",
+    "mediaWarning": "The client was imported, but its existing screenshots and demos could not be added to Media. Refresh Media to try again.",
+    "done_one": "Imported {{client}} and added {{count}} item to Media.",
+    "done_few": "Imported {{client}} and added {{count}} items to Media.",
+    "done_many": "Imported {{client}} and added {{count}} items to Media.",
+    "done_other": "Imported {{client}} and added {{count}} items to Media."
   },
   "clientWindow": {
     "loading": "Client",

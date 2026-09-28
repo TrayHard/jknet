@@ -36,7 +36,9 @@ use crate::state::AppState;
 use super::draft;
 use super::install;
 use super::listing;
-use super::manifest::{self, FileKind, FileRoot, FileSource as ManifestSource, Manifest, ManifestFile, MAX_FILE_BYTES};
+use super::manifest::{
+    self, FileKind, FileRoot, FileSource as ManifestSource, Manifest, ManifestFile, MAX_FILE_BYTES,
+};
 use super::sha256_hex;
 use super::types::PreviewProgress;
 
@@ -66,10 +68,16 @@ pub(crate) async fn cached_blob_bytes(
         if sha256_hex(&bytes) == sha256 {
             return Ok(bytes);
         }
-        log::warn!("bundles: {} does not match its hash, fetching it again", target.display());
+        log::warn!(
+            "bundles: {} does not match its hash, fetching it again",
+            target.display()
+        );
     }
     let response = online.get_blob(ctx, sha256, 0).await?;
-    if response.content_length().is_some_and(|length| length > max_bytes) {
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes)
+    {
         return Err(too_big(sha256, max_bytes));
     }
     let mut bytes: Vec<u8> = Vec::new();
@@ -190,7 +198,12 @@ fn preview_path(paths: &DataPaths, file: &ManifestFile) -> PathBuf {
 // ---------------------------------------------------------------------------
 
 /// The file of a manifest at `path` of `scope` and `root`.
-pub(crate) fn manifest_file<'a>(manifest: &'a Manifest, scope: &str, root: FileRoot, path: &str) -> Result<&'a ManifestFile> {
+pub(crate) fn manifest_file<'a>(
+    manifest: &'a Manifest,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<&'a ManifestFile> {
     let list: &[ManifestFile] = if scope == manifest::SHARED_SCOPE {
         &manifest.shared.files
     } else {
@@ -261,10 +274,19 @@ async fn fetch_for_preview(
             }
             let _guard = jkhub.claim(file_id)?;
             let mut report = |_: u64, _: u64| {};
-            let archive = install::fetch_jkhub_archive(app, jkhub, paths, file_id, &mut report).await?;
-            let file_name = file.path.rsplit('/').next().unwrap_or(&file.path).to_string();
-            let staging = paths.bundle_preview_cache_dir().join(format!("jkhub-{file_id}"));
-            let (archive_path, target_for_move, manifest_path) = (archive.archive.clone(), target.clone(), file.path.clone());
+            let archive =
+                install::fetch_jkhub_archive(app, jkhub, paths, file_id, &mut report).await?;
+            let file_name = file
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&file.path)
+                .to_string();
+            let staging = paths
+                .bundle_preview_cache_dir()
+                .join(format!("jkhub-{file_id}"));
+            let (archive_path, target_for_move, manifest_path) =
+                (archive.archive.clone(), target.clone(), file.path.clone());
             tauri::async_runtime::spawn_blocking(move || -> Result<()> {
                 let contents = jkhub::install::read_archive(&archive_path)?;
                 let entry = contents
@@ -278,7 +300,8 @@ async fn fetch_for_preview(
                     })?;
                 paths::create_dir(&staging)?;
                 let written = jkhub::install::extract(&archive_path, &[entry], &staging)?;
-                let landed = staging.join(written.first().map(String::as_str).unwrap_or(&file_name));
+                let landed =
+                    staging.join(written.first().map(String::as_str).unwrap_or(&file_name));
                 if target_for_move.exists() {
                     let _ = fs::remove_file(&target_for_move);
                 }
@@ -297,24 +320,40 @@ async fn fetch_for_preview(
 
 /// Opens the preview session of an archive against the retail archives of
 /// the game, on a blocking thread, and allows its icons for the webview.
-async fn open_session(app: &AppHandle, state: &AppState, archive: PathBuf, game: Game) -> Result<FilePreview> {
+async fn open_session(
+    app: &AppHandle,
+    state: &AppState,
+    archive: PathBuf,
+    game: Game,
+) -> Result<FilePreview> {
     let data = state.paths()?;
     let deps = file_preview::dependencies(&data, &state.settings()?, None, game)?;
-    let preview = tauri::async_runtime::spawn_blocking(move || file_preview::prepare(&data, vec![archive], deps))
-        .await
-        .map_err(|e| AppError::State(e.to_string()))??;
+    let preview = tauri::async_runtime::spawn_blocking(move || {
+        file_preview::prepare(&data, vec![archive], deps)
+    })
+    .await
+    .map_err(|e| AppError::State(e.to_string()))??;
     file_preview::allow_icons(app, &preview);
     Ok(preview)
 }
 
 /// The archive of a draft to preview, checked to be a pk3 that is there.
-pub(crate) fn draft_archive(paths: &DataPaths, draft_id: &str, scope: &str, root: FileRoot, path: &str) -> Result<(PathBuf, Game)> {
+pub(crate) fn draft_archive(
+    paths: &DataPaths,
+    draft_id: &str,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<(PathBuf, Game)> {
     let draft = draft::read_draft(paths, draft_id)?;
     let file = listing::find_draft_file(&draft, scope, root, path)?;
     require_pk3(&file.path)?;
     let archive = draft::file_path(paths, draft_id, scope, root, &file.path)?;
     if !archive.is_file() {
-        return Err(AppError::NotFound(format!("the file {} of the draft", file.path)));
+        return Err(AppError::NotFound(format!(
+            "the file {} of the draft",
+            file.path
+        )));
     }
     Ok((archive, draft.game))
 }
@@ -333,7 +372,8 @@ pub async fn preview_draft_file(
     root: FileRoot,
     path: String,
 ) -> Result<FilePreview> {
-    let (archive, game) = draft_archive(&state.paths()?, &draft_id, scope.trim(), root, path.trim())?;
+    let (archive, game) =
+        draft_archive(&state.paths()?, &draft_id, scope.trim(), root, path.trim())?;
     open_session(&app, &state, archive, game).await
 }
 
@@ -355,7 +395,8 @@ pub async fn preview_bundle_file(
 ) -> Result<FilePreview> {
     let paths = state.paths()?;
     let ctx = OnlineContext::from_settings(&state.settings()?);
-    let (_, version) = super::fetch_version(&online, &ctx, bundle_id.trim(), version_id.trim()).await?;
+    let (_, version) =
+        super::fetch_version(&online, &ctx, bundle_id.trim(), version_id.trim()).await?;
     let manifest = &version.manifest;
     let game = Game::from_id(&manifest.game).ok_or_else(|| {
         AppError::BundleUnavailable(format!("the game {:?} is not one of ours", manifest.game))
@@ -384,13 +425,24 @@ mod tests {
     #[test]
     fn a_file_of_the_manifest_is_found_by_scope_root_and_path() {
         let manifest = design_manifest();
-        let japro = manifest_file(&manifest, "mp", FileRoot::Home, "ETERNALJK/japro-assets.pk3").expect("found");
-        assert!(matches!(japro.source, ManifestSource::Jkhub { file_id: 3937, .. }));
-        let exe = manifest_file(&manifest, "mp", FileRoot::Engine, "eternaljk.x86.exe").expect("the overlay");
+        let japro = manifest_file(
+            &manifest,
+            "mp",
+            FileRoot::Home,
+            "ETERNALJK/japro-assets.pk3",
+        )
+        .expect("found");
+        assert!(matches!(
+            japro.source,
+            ManifestSource::Jkhub { file_id: 3937, .. }
+        ));
+        let exe = manifest_file(&manifest, "mp", FileRoot::Engine, "eternaljk.x86.exe")
+            .expect("the overlay");
         assert_eq!(exe.kind, FileKind::Exe);
         assert!(require_pk3(&exe.path).is_err());
         require_pk3(&japro.path).expect("a pk3");
-        let shared = manifest_file(&manifest, "shared", FileRoot::Home, "base/rus_sp.pk3").expect("shared");
+        let shared =
+            manifest_file(&manifest, "shared", FileRoot::Home, "base/rus_sp.pk3").expect("shared");
         assert_eq!(shared.source, ManifestSource::Blob);
         assert!(matches!(
             manifest_file(&manifest, "mp", FileRoot::Home, "eternaljk.x86.exe").unwrap_err(),
@@ -405,10 +457,14 @@ mod tests {
         let paths = DataPaths::new(PathBuf::from("C:\\JKNet"));
         assert_eq!(
             preview_path(&paths, shared),
-            paths.bundle_preview_cache_dir().join(format!("{}.pk3", shared.sha256))
+            paths
+                .bundle_preview_cache_dir()
+                .join(format!("{}.pk3", shared.sha256))
         );
         let odd = file(FileRoot::Home, "base/README", ManifestSource::Blob);
-        assert!(preview_path(&paths, &odd).to_string_lossy().ends_with(".bin"));
+        assert!(preview_path(&paths, &odd)
+            .to_string_lossy()
+            .ends_with(".bin"));
     }
 
     #[test]
@@ -417,14 +473,23 @@ mod tests {
         let state = AppState::bootstrap(temp.path().to_path_buf());
         let paths = state.paths().unwrap();
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         let mut pk3 = Vec::new();
         {
             let mut writer = ZipWriter::new(std::io::Cursor::new(&mut pk3));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
             for (name, body) in [
                 ("models/players/hero/model.glm", b"model" as &[u8]),
-                ("models/players/hero/model_default.skin", b"body,models/players/hero/body"),
+                (
+                    "models/players/hero/model_default.skin",
+                    b"body,models/players/hero/body",
+                ),
                 ("sound/chars/hero/misc/taunt1.mp3", b"voice"),
                 ("maps/duel.bsp", b"map"),
                 ("scripts/duel.arena", b"{ map duel }"),
@@ -459,23 +524,32 @@ mod tests {
         ));
         draft::write_draft(&paths, &draft).unwrap();
 
-        let (archive, game) = draft_archive(&paths, &draft.id, "mp", FileRoot::Home, "base/HERO.pk3").expect("the archive");
+        let (archive, game) =
+            draft_archive(&paths, &draft.id, "mp", FileRoot::Home, "base/HERO.pk3")
+                .expect("the archive");
         assert_eq!(game, Game::JediAcademy);
         assert!(archive.is_file());
         // No game folder in the settings of a fresh state: the dependencies
         // are empty, and the session opens on the archive alone.
-        let deps = file_preview::dependencies(&paths, &state.settings().unwrap(), None, game).unwrap();
+        let deps =
+            file_preview::dependencies(&paths, &state.settings().unwrap(), None, game).unwrap();
         assert!(deps.is_empty());
-        let preview = file_preview::prepare(&paths, vec![archive], deps).expect("the session opens");
+        let preview =
+            file_preview::prepare(&paths, vec![archive], deps).expect("the session opens");
         assert_eq!(preview.archives, ["hero.pk3"]);
-        let kinds: Vec<&str> = preview.entries.iter().map(|entry| entry.kind.as_str()).collect();
+        let kinds: Vec<&str> = preview
+            .entries
+            .iter()
+            .map(|entry| entry.kind.as_str())
+            .collect();
         assert!(kinds.contains(&"skin"), "{kinds:?}");
         assert!(kinds.contains(&"map"), "{kinds:?}");
         file_preview::release_file_preview(preview.id).unwrap();
 
         // Not a pk3, not there, not a scope.
         assert!(matches!(
-            draft_archive(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg").unwrap_err(),
+            draft_archive(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg")
+                .unwrap_err(),
             AppError::InvalidInput(_)
         ));
         assert!(matches!(

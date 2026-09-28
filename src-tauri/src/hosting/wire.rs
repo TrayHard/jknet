@@ -250,14 +250,25 @@ pub fn encode(message: &Message, session_id: u64, key: &HostKey) -> Vec<u8> {
     out.extend_from_slice(&session_id.to_be_bytes());
 
     match message {
-        Message::Hello { nonce, prev_port, ticket } => {
+        Message::Hello {
+            nonce,
+            prev_port,
+            ticket,
+        } => {
             out.extend_from_slice(&nonce.to_be_bytes());
             out.extend_from_slice(&prev_port.to_be_bytes());
             let len = u16::try_from(ticket.len()).unwrap_or(u16::MAX);
             out.extend_from_slice(&len.to_be_bytes());
             out.extend_from_slice(&ticket[..usize::from(len)]);
         }
-        Message::HelloAck { nonce, public_ip, public_port, expires_at, keepalive_secs, max_guests } => {
+        Message::HelloAck {
+            nonce,
+            public_ip,
+            public_port,
+            expires_at,
+            keepalive_secs,
+            max_guests,
+        } => {
             out.extend_from_slice(&nonce.to_be_bytes());
             out.extend_from_slice(&public_ip.octets());
             out.extend_from_slice(&public_port.to_be_bytes());
@@ -266,7 +277,11 @@ pub fn encode(message: &Message, session_id: u64, key: &HostKey) -> Vec<u8> {
             out.extend_from_slice(&max_guests.to_be_bytes());
         }
         Message::Keepalive { nonce } => out.extend_from_slice(&nonce.to_be_bytes()),
-        Message::KeepaliveAck { nonce, guests, expires_at } => {
+        Message::KeepaliveAck {
+            nonce,
+            guests,
+            expires_at,
+        } => {
             out.extend_from_slice(&nonce.to_be_bytes());
             out.extend_from_slice(&guests.to_be_bytes());
             out.extend_from_slice(&expires_at.to_be_bytes());
@@ -285,7 +300,11 @@ pub fn encode(message: &Message, session_id: u64, key: &HostKey) -> Vec<u8> {
             out.extend_from_slice(&nonce.to_be_bytes());
             out.resize(PING_LEN, 0);
         }
-        Message::Pong { nonce, load, node_id } => {
+        Message::Pong {
+            nonce,
+            load,
+            node_id,
+        } => {
             out.extend_from_slice(&nonce.to_be_bytes());
             out.push(*load);
             let id = &node_id.as_bytes()[..node_id.len().min(32)];
@@ -346,7 +365,11 @@ pub fn decode(bytes: &[u8], key: &HostKey) -> Result<(u64, Message), WireError> 
             let len = usize::from(reader.u16()?);
             let ticket = reader.take(len)?.to_vec();
             reader.end()?;
-            Message::Hello { nonce, prev_port, ticket }
+            Message::Hello {
+                nonce,
+                prev_port,
+                ticket,
+            }
         }
         0x02 => {
             let nonce = reader.u64()?;
@@ -357,7 +380,14 @@ pub fn decode(bytes: &[u8], key: &HostKey) -> Result<(u64, Message), WireError> 
             let keepalive_secs = reader.u16()?;
             let max_guests = reader.u16()?;
             reader.end()?;
-            Message::HelloAck { nonce, public_ip, public_port, expires_at, keepalive_secs, max_guests }
+            Message::HelloAck {
+                nonce,
+                public_ip,
+                public_port,
+                expires_at,
+                keepalive_secs,
+                max_guests,
+            }
         }
         0x03 => {
             let nonce = reader.u64()?;
@@ -369,7 +399,11 @@ pub fn decode(bytes: &[u8], key: &HostKey) -> Result<(u64, Message), WireError> 
             let guests = reader.u16()?;
             let expires_at = reader.u64()?;
             reader.end()?;
-            Message::KeepaliveAck { nonce, guests, expires_at }
+            Message::KeepaliveAck {
+                nonce,
+                guests,
+                expires_at,
+            }
         }
         0x05 => {
             reader.end()?;
@@ -395,7 +429,9 @@ pub fn decode(bytes: &[u8], key: &HostKey) -> Result<(u64, Message), WireError> 
             if bytes.len() != PING_LEN {
                 return Err(WireError::Length);
             }
-            Message::Ping { nonce: reader.u64()? }
+            Message::Ping {
+                nonce: reader.u64()?,
+            }
         }
         0x31 => {
             let nonce = reader.u64()?;
@@ -403,7 +439,11 @@ pub fn decode(bytes: &[u8], key: &HostKey) -> Result<(u64, Message), WireError> 
             let len = usize::from(reader.u8()?);
             let node_id = String::from_utf8_lossy(reader.take(len)?).into_owned();
             reader.end()?;
-            Message::Pong { nonce, load, node_id }
+            Message::Pong {
+                nonce,
+                load,
+                node_id,
+            }
         }
         0x3f => {
             let code = reader.u8()?;
@@ -485,8 +525,9 @@ mod tests {
         let key: HostKey = hex(doc["hostKey"]["hex"].as_str().expect("hostKey.hex"))
             .try_into()
             .expect("16 bytes");
-        let session = u64::from_str_radix(doc["hostKey"]["sessionId"].as_str().expect("sessionId"), 16)
-            .expect("a u64");
+        let session =
+            u64::from_str_radix(doc["hostKey"]["sessionId"].as_str().expect("sessionId"), 16)
+                .expect("a u64");
         let vectors = doc["messages"].as_array().expect("messages").clone();
         (key, session, vectors)
     }
@@ -509,13 +550,19 @@ mod tests {
             },
             "HELLO_ACK" => Message::HelloAck {
                 nonce: number(&fields["nonce"]),
-                public_ip: fields["publicIpv4"].as_str().expect("ip").parse().expect("an IPv4"),
+                public_ip: fields["publicIpv4"]
+                    .as_str()
+                    .expect("ip")
+                    .parse()
+                    .expect("an IPv4"),
                 public_port: number(&fields["publicPort"]) as u16,
                 expires_at: number(&fields["expiresAt"]),
                 keepalive_secs: number(&fields["keepaliveSecs"]) as u16,
                 max_guests: number(&fields["maxGuests"]) as u16,
             },
-            "KEEPALIVE" => Message::Keepalive { nonce: number(&fields["nonce"]) },
+            "KEEPALIVE" => Message::Keepalive {
+                nonce: number(&fields["nonce"]),
+            },
             "KEEPALIVE_ACK" => Message::KeepaliveAck {
                 nonce: number(&fields["nonce"]),
                 guests: number(&fields["guests"]) as u16,
@@ -530,9 +577,15 @@ mod tests {
                 guest_id: number(&fields["guestId"]) as u16,
                 reason: number(&fields["reason"]) as u8,
             },
-            "CLOSE" => Message::Close { reason: number(&fields["reason"]) as u8 },
-            "ERROR" => Message::Error { code: number(&fields["code"]) as u8 },
-            "PING" => Message::Ping { nonce: number(&fields["nonce"]) },
+            "CLOSE" => Message::Close {
+                reason: number(&fields["reason"]) as u8,
+            },
+            "ERROR" => Message::Error {
+                code: number(&fields["code"]) as u8,
+            },
+            "PING" => Message::Ping {
+                nonce: number(&fields["nonce"]),
+            },
             "PONG" => Message::Pong {
                 nonce: number(&fields["nonce"]),
                 load: number(&fields["load"]) as u8,
@@ -546,14 +599,30 @@ mod tests {
     #[test]
     fn every_message_encodes_to_the_bytes_of_the_shared_vectors() {
         let (key, session, vectors) = fixture();
-        let names: std::collections::BTreeSet<&str> =
-            vectors.iter().filter_map(|vector| vector["name"].as_str()).collect();
-        assert_eq!(names.len(), 11, "every message type has a vector: {names:?}");
+        let names: std::collections::BTreeSet<&str> = vectors
+            .iter()
+            .filter_map(|vector| vector["name"].as_str())
+            .collect();
+        assert_eq!(
+            names.len(),
+            11,
+            "every message type has a vector: {names:?}"
+        );
         for vector in &vectors {
             let expected = hex(vector["hex"].as_str().expect("hex"));
             let message = message_of(vector);
-            assert_eq!(u64::from(message.code()), number(&vector["type"]), "{}", vector["name"]);
-            assert_eq!(message.is_signed(), vector["signed"] == true, "{}", vector["name"]);
+            assert_eq!(
+                u64::from(message.code()),
+                number(&vector["type"]),
+                "{}",
+                vector["name"]
+            );
+            assert_eq!(
+                message.is_signed(),
+                vector["signed"] == true,
+                "{}",
+                vector["name"]
+            );
             assert_eq!(
                 encode(&message, session, &key),
                 expected,
@@ -562,8 +631,9 @@ mod tests {
             );
             let (decoded_session, decoded) = decode(&expected, &key).expect("the vector decodes");
             assert_eq!(decoded, message, "{}", vector["name"]);
-            let expected_session = u64::from_str_radix(vector["sessionId"].as_str().expect("sessionId"), 16)
-                .expect("a u64");
+            let expected_session =
+                u64::from_str_radix(vector["sessionId"].as_str().expect("sessionId"), 16)
+                    .expect("a u64");
             assert_eq!(decoded_session, expected_session, "{}", vector["name"]);
             let expected_session = if message.is_signed() { session } else { 0 };
             assert_eq!(decoded_session, expected_session, "{}", vector["name"]);
@@ -664,7 +734,11 @@ mod tests {
 
         // A HELLO whose ticket length claims more than it carries.
         let mut short = encode(
-            &Message::Hello { nonce: 1, prev_port: 0, ticket: vec![1, 2, 3] },
+            &Message::Hello {
+                nonce: 1,
+                prev_port: 0,
+                ticket: vec![1, 2, 3],
+            },
             5,
             &key,
         );
@@ -685,7 +759,10 @@ mod tests {
     fn the_overhead_of_data_is_24_bytes_so_a_full_guest_packet_fits_one_datagram() {
         let key: HostKey = [9; KEY_LEN];
         let data = encode(
-            &Message::Data { guest_id: 1, payload: vec![0; MAX_GUEST_PACKET] },
+            &Message::Data {
+                guest_id: 1,
+                payload: vec![0; MAX_GUEST_PACKET],
+            },
             1,
             &key,
         );
@@ -699,7 +776,11 @@ mod tests {
         let key: HostKey = [0; KEY_LEN];
         let other: HostKey = [1; KEY_LEN];
         let pong = encode(
-            &Message::Pong { nonce: 1, load: 50, node_id: "x".repeat(40) },
+            &Message::Pong {
+                nonce: 1,
+                load: 50,
+                node_id: "x".repeat(40),
+            },
             99,
             &key,
         );

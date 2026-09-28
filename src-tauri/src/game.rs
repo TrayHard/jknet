@@ -53,7 +53,10 @@ pub enum Game {
 
 impl Game {
     pub fn demo_extensions(self) -> &'static [&'static str] {
-        match self { Game::JediAcademy => &["dm_25", "dm_26"], Game::JediOutcast => &["dm_15", "dm_16"] }
+        match self {
+            Game::JediAcademy => &["dm_25", "dm_26"],
+            Game::JediOutcast => &["dm_15", "dm_16"],
+        }
     }
     /// Both games, in the order the interface lists them.
     pub const ALL: [Game; 2] = [Game::JediAcademy, Game::JediOutcast];
@@ -385,7 +388,9 @@ pub struct HostGametype {
 impl HostingSpec {
     /// The game type with this `g_gametype`, if the screen offers it.
     pub fn gametype(&self, index: u8) -> Option<&'static HostGametype> {
-        self.gametypes.iter().find(|gametype| gametype.index == index)
+        self.gametypes
+            .iter()
+            .find(|gametype| gametype.index == index)
     }
 }
 
@@ -408,15 +413,60 @@ pub const SCORE_CVARS: [(&str, u16); 3] = [
 /// Jedi Academy: the modes of `gametype_t` a host can pick. Single Player (5)
 /// is not a multiplayer mode.
 static JA_HOST_GAMETYPES: [HostGametype; 9] = [
-    HostGametype { index: 0, arena_type: "ffa", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 1, arena_type: "holocron", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 2, arena_type: "jedimaster", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 3, arena_type: "duel", score_cvar: Some("duel_fraglimit"), default_score: 10 },
-    HostGametype { index: 4, arena_type: "powerduel", score_cvar: Some("duel_fraglimit"), default_score: 10 },
-    HostGametype { index: 6, arena_type: "team", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 7, arena_type: "siege", score_cvar: None, default_score: 0 },
-    HostGametype { index: 8, arena_type: "ctf", score_cvar: Some("capturelimit"), default_score: 8 },
-    HostGametype { index: 9, arena_type: "cty", score_cvar: Some("capturelimit"), default_score: 8 },
+    HostGametype {
+        index: 0,
+        arena_type: "ffa",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 1,
+        arena_type: "holocron",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 2,
+        arena_type: "jedimaster",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 3,
+        arena_type: "duel",
+        score_cvar: Some("duel_fraglimit"),
+        default_score: 10,
+    },
+    HostGametype {
+        index: 4,
+        arena_type: "powerduel",
+        score_cvar: Some("duel_fraglimit"),
+        default_score: 10,
+    },
+    HostGametype {
+        index: 6,
+        arena_type: "team",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 7,
+        arena_type: "siege",
+        score_cvar: None,
+        default_score: 0,
+    },
+    HostGametype {
+        index: 8,
+        arena_type: "ctf",
+        score_cvar: Some("capturelimit"),
+        default_score: 8,
+    },
+    HostGametype {
+        index: 9,
+        arena_type: "cty",
+        score_cvar: Some("capturelimit"),
+        default_score: 8,
+    },
 ];
 
 /// Jedi Outcast: no Power Duel and no Siege, Single Player (4) and Saga (6)
@@ -424,13 +474,48 @@ static JA_HOST_GAMETYPES: [HostGametype; 9] = [
 /// `assets0.pk3` uses: `type "ffa holocron jedimaster team"`, `"ctf cty team
 /// ffa holocron jedimaster"`, `"duel"` (read on 2026-09-25).
 static JO_HOST_GAMETYPES: [HostGametype; 7] = [
-    HostGametype { index: 0, arena_type: "ffa", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 1, arena_type: "holocron", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 2, arena_type: "jedimaster", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 3, arena_type: "duel", score_cvar: Some("duel_fraglimit"), default_score: 10 },
-    HostGametype { index: 5, arena_type: "team", score_cvar: Some("fraglimit"), default_score: 20 },
-    HostGametype { index: 7, arena_type: "ctf", score_cvar: Some("capturelimit"), default_score: 8 },
-    HostGametype { index: 8, arena_type: "cty", score_cvar: Some("capturelimit"), default_score: 8 },
+    HostGametype {
+        index: 0,
+        arena_type: "ffa",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 1,
+        arena_type: "holocron",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 2,
+        arena_type: "jedimaster",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 3,
+        arena_type: "duel",
+        score_cvar: Some("duel_fraglimit"),
+        default_score: 10,
+    },
+    HostGametype {
+        index: 5,
+        arena_type: "team",
+        score_cvar: Some("fraglimit"),
+        default_score: 20,
+    },
+    HostGametype {
+        index: 7,
+        arena_type: "ctf",
+        score_cvar: Some("capturelimit"),
+        default_score: 8,
+    },
+    HostGametype {
+        index: 8,
+        arena_type: "cty",
+        score_cvar: Some("capturelimit"),
+        default_score: 8,
+    },
 ];
 
 /// Jedi Academy: the game JKNet was built for.
@@ -441,10 +526,22 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
     short_name: "JA",
 
     assets: &[
-        AssetSpec { name: "assets0.pk3", required: true },
-        AssetSpec { name: "assets1.pk3", required: true },
-        AssetSpec { name: "assets2.pk3", required: true },
-        AssetSpec { name: "assets3.pk3", required: true },
+        AssetSpec {
+            name: "assets0.pk3",
+            required: true,
+        },
+        AssetSpec {
+            name: "assets1.pk3",
+            required: true,
+        },
+        AssetSpec {
+            name: "assets2.pk3",
+            required: true,
+        },
+        AssetSpec {
+            name: "assets3.pk3",
+            required: true,
+        },
     ],
     versions: &[],
     wanted_version: None,
@@ -481,7 +578,13 @@ static JEDI_ACADEMY: GameSpec = GameSpec {
     hosting: HostingSpec {
         gametypes: &JA_HOST_GAMETYPES,
         default_map: "mp/ffa3",
-        master_cvars: &["sv_master1", "sv_master2", "sv_master3", "sv_master4", "sv_master5"],
+        master_cvars: &[
+            "sv_master1",
+            "sv_master2",
+            "sv_master3",
+            "sv_master4",
+            "sv_master5",
+        ],
     },
 };
 
@@ -499,22 +602,38 @@ static JEDI_OUTCAST: GameSpec = GameSpec {
     short_name: "JO",
 
     assets: &[
-        AssetSpec { name: "assets0.pk3", required: true },
-        AssetSpec { name: "assets1.pk3", required: true },
-        AssetSpec { name: "assets2.pk3", required: false },
-        AssetSpec { name: "assets5.pk3", required: false },
+        AssetSpec {
+            name: "assets0.pk3",
+            required: true,
+        },
+        AssetSpec {
+            name: "assets1.pk3",
+            required: true,
+        },
+        AssetSpec {
+            name: "assets2.pk3",
+            required: false,
+        },
+        AssetSpec {
+            name: "assets5.pk3",
+            required: false,
+        },
     ],
     versions: &[
-        VersionSpec { label: "1.03", marker: "assets2.pk3" },
-        VersionSpec { label: "1.04", marker: "assets5.pk3" },
+        VersionSpec {
+            label: "1.03",
+            marker: "assets2.pk3",
+        },
+        VersionSpec {
+            label: "1.04",
+            marker: "assets5.pk3",
+        },
     ],
     wanted_version: Some("1.04"),
     steam_app_id: 6030,
     install_dir_hints: &["jedi outcast"],
     gog_product_id: Some("1428935917"),
-    gog_uninstall_key: Some(
-        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\1428935917_is1",
-    ),
+    gog_uninstall_key: Some(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\1428935917_is1"),
 
     // Raven's `masterjk2.ravensoft.com` is deliberately absent: it is dead, and
     // a dead master costs a refresh its whole timeout budget.
@@ -722,7 +841,10 @@ mod tests {
     #[test]
     fn jedi_academy_demands_four_archives_and_jedi_outcast_two() {
         let ja: Vec<&str> = Game::JediAcademy.spec().required_assets().collect();
-        assert_eq!(ja, ["assets0.pk3", "assets1.pk3", "assets2.pk3", "assets3.pk3"]);
+        assert_eq!(
+            ja,
+            ["assets0.pk3", "assets1.pk3", "assets2.pk3", "assets3.pk3"]
+        );
 
         let jo: Vec<&str> = Game::JediOutcast.spec().required_assets().collect();
         assert_eq!(jo, ["assets0.pk3", "assets1.pk3"]);
@@ -731,7 +853,10 @@ mod tests {
     #[test]
     fn the_jedi_outcast_version_follows_the_archives_a_patch_adds() {
         let spec = Game::JediOutcast.spec();
-        assert_eq!(spec.detect_version(&["assets0.pk3", "assets1.pk3"]), Some("1.02"));
+        assert_eq!(
+            spec.detect_version(&["assets0.pk3", "assets1.pk3"]),
+            Some("1.02")
+        );
         assert_eq!(
             spec.detect_version(&["assets0.pk3", "assets1.pk3", "assets2.pk3"]),
             Some("1.03")
@@ -752,7 +877,10 @@ mod tests {
     fn jedi_academy_does_not_claim_to_know_its_patch_level() {
         // 1.00 and 1.01 carry the same four archives. Naming one would be a
         // guess printed as a fact.
-        assert_eq!(Game::JediAcademy.spec().detect_version(&["assets0.pk3"]), None);
+        assert_eq!(
+            Game::JediAcademy.spec().detect_version(&["assets0.pk3"]),
+            None
+        );
         assert_eq!(Game::JediAcademy.spec().wanted_version, None);
     }
 
@@ -804,7 +932,10 @@ mod tests {
         // Same role, different name: Quake 3's `fs_cdpath` in a Jedi Academy
         // engine, JK2MV's own `fs_assetspath` in Jedi Outcast.
         assert_eq!(Game::JediAcademy.spec().game_data_cvar, Some("fs_cdpath"));
-        assert_eq!(Game::JediOutcast.spec().game_data_cvar, Some("fs_assetspath"));
+        assert_eq!(
+            Game::JediOutcast.spec().game_data_cvar,
+            Some("fs_assetspath")
+        );
     }
 
     #[test]
@@ -897,7 +1028,10 @@ mod tests {
         );
         // No port, a port that is not a number, and an empty string: nothing
         // to read, so the answer is the default game rather than a refusal.
-        assert_eq!(Game::from_server_address("203.0.113.136"), Game::JediAcademy);
+        assert_eq!(
+            Game::from_server_address("203.0.113.136"),
+            Game::JediAcademy
+        );
         assert_eq!(Game::from_server_address("host:port"), Game::JediAcademy);
         assert_eq!(Game::from_server_address(""), Game::JediAcademy);
     }
@@ -947,7 +1081,12 @@ mod tests {
                 .iter()
                 .find(|gametype| gametype.arena_type == token)
                 .unwrap_or_else(|| panic!("{} offers no {token}", spec.display_name));
-            assert_eq!(spec.gametype_label(gametype.index), label, "{} {token}", spec.display_name);
+            assert_eq!(
+                spec.gametype_label(gametype.index),
+                label,
+                "{} {token}",
+                spec.display_name
+            );
         }
     }
 

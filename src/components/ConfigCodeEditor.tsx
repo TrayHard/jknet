@@ -39,6 +39,7 @@ export function ConfigCodeEditor({
   height = 420,
   ariaLabel,
   marks,
+  completions,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -51,15 +52,19 @@ export function ConfigCodeEditor({
    * came in a chat. Read when the editor is created.
    */
   marks?: { line: number; message: string }[];
+  /** A server schema replaces the client cvar and key catalog. */
+  completions?: { label: string; detail?: string }[];
 }) {
   const { t } = useTranslation("common"),
     host = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
     callback = useRef(onChange),
     // --- slice: chat cards --- read by the linter on every pass.
-    marked = useRef(marks ?? []);
+    marked = useRef(marks ?? []),
+    completionCatalog = useRef(completions);
   callback.current = onChange;
   marked.current = marks ?? [];
+  completionCatalog.current = completions;
   useEffect(() => {
     if (!host.current) return;
     const language = StreamLanguage.define({
@@ -128,17 +133,17 @@ export function ConfigCodeEditor({
                 return {
                   from: word.from,
                   options: [
-                    ...SCRIPT_COMMANDS.map((label) => ({
+                    ...(completionCatalog.current ? ["set", "seta", "map"] : SCRIPT_COMMANDS).map((label) => ({
                       label,
                       type: "keyword",
                     })),
-                    ...catalog.map((c) => ({
-                      label: c.name,
+                    ...(completionCatalog.current ?? catalog.map(c => ({ label: c.name, detail: c.defaultValue }))).map((c) => ({
+                      label: c.label,
                       type: "variable",
-                      detail: c.defaultValue,
+                      detail: c.detail,
                     })),
                     ...vars.map((label) => ({ label, type: "variable" })),
-                    ...[...new Set(GAME_KEYS.map((k) => k.token))].map(
+                    ...[...new Set(completionCatalog.current ? [] : GAME_KEYS.map((k) => k.token))].map(
                       (label) => ({ label, type: "constant" }),
                     ),
                   ],

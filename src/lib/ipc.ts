@@ -107,6 +107,28 @@ export const modelPreviewIpc = {
 export interface MediaOrigin { clientId: string; clientName: string; source: string; createdAt: number; modifiedAt: number; size: number; dateIsModified: boolean }
 export interface MediaItem { id: string; name: string; kind: "demos" | "screenshots" | "videos"; game: Game; extension: string; tags: string[]; origins: MediaOrigin[]; size: number; preview: string | null; sourceDemo: string | null }
 export interface ConfigDocument { id: string; name: string; game: Game; text: string; sourceClient: string | null; sourceFile: string | null }
+/** Authored server rules, separate from configurations executed by game clients. */
+export interface ServerConfigDocument {
+  id: string;
+  name: string;
+  game: Game;
+  modId: string;
+  text: string;
+}
+export interface ServerConfigCheck {
+  settings: Partial<Pick<HostSettings, "map" | "gametype" | "maxPlayers" | "timeLimit" | "scoreLimit" | "bots" | "serverName">>;
+  issues: Array<{ line: number; message: string }>;
+  notices: Array<{ line: number; kind: "managed_setting" | "map_rotation" | "unsupported_command"; name: string }>;
+  compatibleModFolders: string[];
+}
+export interface ServerConfigImportFile { name: string; text: string }
+export const serverConfigsIpc = {
+  list: () => call<ServerConfigDocument[]>("server_configs_list"),
+  save: (document: ServerConfigDocument) => call<ServerConfigDocument>("server_config_save", { document }),
+  remove: (id: string) => call<void>("server_config_delete", { id }),
+  check: (document: ServerConfigDocument) => call<ServerConfigCheck>("server_config_check", { document }),
+  readFile: (path: string) => call<ServerConfigImportFile>("server_config_read_file", { path }),
+};
 export interface ConfigLayer { configId: string; priority: number; enabled: boolean }
 export interface ConfigBook { documents: ConfigDocument[]; clients: Record<string, ConfigLayer[]>; defaults: Record<string, string> }
 export interface ClientConfigContext { sources: ClientConfigFile[]; unresolved: string[] }
@@ -155,6 +177,150 @@ export const configsIpc = {
 
 /** `src-tauri/src/game.rs`: `ja` is Jedi Academy, `jo` is Jedi Outcast. */
 export type Game = "ja" | "jo";
+
+// --- slice: dedicated server instances ---
+
+export interface ServerEngineInstall {
+  engineId: string;
+  version: string;
+  publishedAt: string;
+  installedAt: string;
+}
+
+export interface ServerEngineView {
+  engineId: string;
+  name: string;
+  game: Game;
+  canHost: boolean;
+  installable: boolean;
+  installed: ServerEngineInstall | null;
+}
+
+export interface ServerEngineProgress {
+  engineId: string;
+  phase: string;
+  downloaded: number;
+  total: number;
+  message: string;
+}
+
+export type ServerModSource =
+  | { kind: "disk"; path: string }
+  | { kind: "jkhub"; fileId: number; url: string };
+
+export interface ServerMod {
+  id: string;
+  name: string;
+  game: Game;
+  folder: string;
+  source: ServerModSource;
+  files: string[];
+  createdAt: string;
+}
+
+export interface ServerTemplateFile {
+  path: string;
+  source: string;
+}
+
+export interface ServerProcessStatus {
+  state: "running" | "stopped";
+  pid: number | null;
+  startedAt: string | null;
+  exitCode: number | null;
+  logTail: string[];
+}
+
+export interface ServerInstance {
+  id: string;
+  name: string;
+  game: Game;
+  engineId: string;
+  modId: string | null;
+  modFolder: string | null;
+  port: number;
+  public: boolean;
+  startupConfig: string;
+  engineArgs: string;
+  modArgs: string;
+  templateFiles: ServerTemplateFile[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ServerInstanceView extends ServerInstance {
+  status: ServerProcessStatus;
+}
+
+export interface ServerFile {
+  path: string;
+  size: number;
+  kind: string;
+  template: boolean;
+  source: string | null;
+}
+
+export interface CreateServerInstanceInput {
+  name: string;
+  game: Game;
+  engineId: string;
+  modId: string | null;
+  port: number | null;
+  public: boolean | null;
+}
+
+export interface UpdateServerInstanceInput {
+  name: string;
+  engineId: string;
+  modId: string | null;
+  port: number;
+  public: boolean;
+  startupConfig: string;
+  engineArgs: string;
+  modArgs: string;
+}
+
+export const serverInstanceEvents = {
+  changed: "server-instances:changed",
+  engineProgress: "server-instances:engine-progress",
+} as const;
+
+export const serverInstancesIpc = {
+  engines: () => call<ServerEngineView[]>("list_server_engines"),
+  installEngine: (engineId: string, tag: string | null = null) =>
+    call<ServerEngineInstall>("install_server_engine", { engineId, tag }),
+  mods: () => call<ServerMod[]>("list_server_mods"),
+  addModFromDisk: (input: { name: string; game: Game; folder: string; sourcePath: string }) =>
+    call<ServerMod>("add_server_mod_from_disk", input),
+  addModFromJkhub: (input: { fileId: number; name: string; game: Game; folder: string }) =>
+    call<ServerMod>("add_server_mod_from_jkhub", input),
+  deleteMod: (modId: string) => call<void>("delete_server_mod", { modId }),
+  list: () => call<ServerInstanceView[]>("list_server_instances"),
+  create: (input: CreateServerInstanceInput) =>
+    call<ServerInstanceView>("create_server_instance", { input }),
+  clone: (serverId: string, name: string) =>
+    call<ServerInstanceView>("clone_server_instance", { serverId, name }),
+  update: (serverId: string, input: UpdateServerInstanceInput) =>
+    call<ServerInstanceView>("update_server_instance", { serverId, input }),
+  remove: (serverId: string) => call<void>("delete_server_instance", { serverId }),
+  openFolder: (serverId: string) => call<void>("server_instance_open_folder", { serverId }),
+  files: (serverId: string) =>
+    call<ServerFile[]>("list_server_instance_files", { serverId }),
+  readText: (serverId: string, path: string) =>
+    call<string>("read_server_instance_text", { serverId, path }),
+  saveText: (serverId: string, path: string, text: string, template: boolean) =>
+    call<ServerFile>("save_server_instance_text", { serverId, path, text, template }),
+  addFiles: (serverId: string, destination: string, sourcePaths: string[]) =>
+    call<ServerFile[]>("add_server_instance_files", { serverId, destination, sourcePaths }),
+  setTemplate: (serverId: string, path: string, template: boolean) =>
+    call<ServerFile>("set_server_instance_file_template", { serverId, path, template }),
+  deleteFile: (serverId: string, path: string) =>
+    call<void>("delete_server_instance_file", { serverId, path }),
+  start: (serverId: string) =>
+    call<ServerProcessStatus>("start_server_instance", { serverId }),
+  stop: (serverId: string) =>
+    call<ServerProcessStatus>("stop_server_instance", { serverId }),
+} as const;
 
 /** Both games, in the order the interface lists them. */
 export const GAMES: readonly Game[] = ["ja", "jo"];
@@ -598,6 +764,8 @@ export interface Client {
   /** The game this client plays, always the game of its engine. */
   game: Game;
   engineVersion: string | null;
+  /** Managed releases may be updated; imported snapshots are preserved. */
+  engineOrigin?: "managed" | "imported";
   createdAt: string;
   /** RFC 3339 time the engine was unpacked. */
   engineInstalledAt: string | null;
@@ -627,6 +795,28 @@ export interface Client {
    * is every client written before the field existed.
    */
   bundle?: ClientBundleLink | null;
+}
+
+/** What JKNet found in a portable client folder before copying it. */
+export interface ClientImportPreview {
+  sourcePath: string;
+  suggestedName: string;
+  engineId: string;
+  engineName: string;
+  game: Game;
+  fileCount: number;
+  sizeBytes: number;
+  screenshotCount: number;
+  demoCount: number;
+  modFolders: string[];
+  recommendedFsGame: string | null;
+}
+
+/** The imported client and the media recovered from its snapshot. */
+export interface ClientImportResult {
+  client: Client;
+  mediaImported: number;
+  mediaWarning: string | null;
 }
 
 // --- slice: client window ---
@@ -714,6 +904,16 @@ export const ipc = {
   listClients: () => call<Client[]>("list_clients"),
   createClient: (name: string, engineId: string, game: Game) =>
     call<Client>("create_client", { name, engineId, game }),
+  /** Inspects a portable client folder without changing it. */
+  inspectClientImport: (sourcePath: string) =>
+    call<ClientImportPreview>("inspect_client_import", { sourcePath }),
+  /** Copies a portable client into JKNet and imports its demos and screenshots. */
+  importClient: (input: {
+    sourcePath: string;
+    name: string;
+    fsGame: string | null;
+    launchArgs: string;
+  }) => call<ClientImportResult>("import_client", input),
   /**
    * Changes the name, the mod folder, the launch arguments, or any of them. A
    * field left out keeps its value; an empty `fsGame` clears it back to the
@@ -2081,6 +2281,8 @@ export type HostJoinPolicy = "friends" | "selected" | "invite";
 /** What `host_start` is given. */
 export interface HostSettings {
   clientId: string;
+  /** A saved server config; the visible match fields override its match defaults. */
+  serverConfigId?: string | null;
   /** `mp/ffa3`, the name `host_list_maps` answered with. */
   map: string;
   /** `g_gametype`, one of `HostOptions.gametypes[].index`. */
@@ -2116,6 +2318,7 @@ export interface HostSettings {
  */
 export interface HostDefaults {
   clientId: string | null;
+  serverConfigId?: string | null;
   map: string | null;
   gametype: number;
   maxPlayers: number;
@@ -2144,6 +2347,8 @@ export interface HostClientOption {
   id: string;
   name: string;
   engineId: string;
+  /** The client's fs_game, empty for the unmodified game. */
+  modFolder?: string | null;
   canHost: boolean;
   /** `no_dedicated_server`: the engine ships none (jaMME). `engine_missing`: the file is not in `engine\`. */
   reason: HostClientBlock | null;
@@ -2413,9 +2618,9 @@ function callHost<T>(command: string, args?: Record<string, unknown>): Promise<T
 export const hostIpc = {
   /** The clients, modes and defaults of the form. `game` defaults to the active game. */
   getOptions: (game?: Game) => callHost<HostOptions>("host_get_options", { game: game ?? null }),
-  /** The maps of one client; with `gametype` only the maps that offer that mode. */
-  listMaps: (clientId: string, gametype?: number) =>
-    callHost<HostMap[]>("host_list_maps", { clientId, gametype: gametype ?? null }),
+  /** All maps installed for this client; game modes never filter the list. */
+  listMaps: (clientId: string) =>
+    callHost<HostMap[]>("host_list_maps", { clientId, gametype: null }),
   /**
    * Starts the server. Answers at once with the session in `starting`; the
    * rest arrives as `host:session`. Refused with `hostBusy` while one runs.

@@ -43,11 +43,11 @@
 //! `friends:changed` is a nudge, not a payload: the window answers it by
 //! calling [`get_friends_state`], which keeps one writer for the three lists.
 
+pub mod live;
 /// `pub(crate)` for its sign-in helper: the chat walk against the real
 /// service signs its two players in the same way.
 #[cfg(test)]
 pub(crate) mod online_tests;
-pub mod live;
 pub mod presence;
 
 use std::collections::hash_map::DefaultHasher;
@@ -212,7 +212,8 @@ impl FriendsState {
     /// Notes that the live socket has just opened. `send_modify` rather than
     /// `send`: nobody may be listening yet, which must not lose the count.
     pub fn bump_epoch(&self) {
-        self.connected_epoch.send_modify(|epoch| *epoch = epoch.wrapping_add(1));
+        self.connected_epoch
+            .send_modify(|epoch| *epoch = epoch.wrapping_add(1));
     }
 
     /// A receiver that resolves whenever the live socket opens again.
@@ -431,19 +432,20 @@ pub async fn send_invite(
             "an invite needs a server address".into(),
         ));
     }
-    online.create_invite(
-        &ctx,
-        &NewInvite {
-            to_user_id,
-            server_address: server_address.to_string(),
-            server_name: blank_to_none(server_name),
-            message: blank_to_none(message),
-            // --- slice: play with friends --- a private server invites
-            // through `host_invite`, which carries its `hosting`.
-            hosting: None,
-        },
-    )
-    .await
+    online
+        .create_invite(
+            &ctx,
+            &NewInvite {
+                to_user_id,
+                server_address: server_address.to_string(),
+                server_name: blank_to_none(server_name),
+                message: blank_to_none(message),
+                // --- slice: play with friends --- a private server invites
+                // through `host_invite`, which carries its `hosting`.
+                hosting: None,
+            },
+        )
+        .await
 }
 
 // --- slice: play with friends ---
@@ -519,7 +521,12 @@ fn invited_hosting(invites: Vec<Invite>, host_id: &str, session_id: &str) -> Opt
         .into_iter()
         .filter(|invite| invite.from.id == host_id)
         .filter_map(|invite| invite.hosting)
-        .find(|hosting| hosting.session_id.trim().eq_ignore_ascii_case(session_id.trim()))
+        .find(|hosting| {
+            hosting
+                .session_id
+                .trim()
+                .eq_ignore_ascii_case(session_id.trim())
+        })
 }
 
 /// The hosting of an invite with the addresses of the live presence of the
@@ -732,7 +739,9 @@ fn joinable_address(friends: &[Friend], user_id: &str) -> Result<String> {
         .filter(|address| !address.is_empty())
         .map(str::to_string)
         .ok_or_else(|| {
-            AppError::Launch(format!("{name} is playing, but not on a server you can join"))
+            AppError::Launch(format!(
+                "{name} is playing, but not on a server you can join"
+            ))
         })
 }
 
@@ -891,7 +900,10 @@ mod tests {
         assert_eq!(merged.password.as_deref(), Some("k7m2q9xa"));
 
         // Another session of the same host: the invite stands as it was.
-        let other = HostingInfo { session_id: "ffffffffffffffff".into(), ..live };
+        let other = HostingInfo {
+            session_id: "ffffffffffffffff".into(),
+            ..live
+        };
         assert_eq!(freshest(invited.clone(), Some(&other)), invited);
         assert_eq!(freshest(invited.clone(), None), invited);
     }
@@ -901,7 +913,10 @@ mod tests {
     fn a_host_card_joins_through_the_invite_of_its_host_and_session() {
         let invite = |id: &str, from: &str, session: Option<&str>| Invite {
             id: id.into(),
-            from: OnlineUser { id: from.into(), ..OnlineUser::default() },
+            from: OnlineUser {
+                id: from.into(),
+                ..OnlineUser::default()
+            },
             hosting: session.map(|session| HostingInfo {
                 session_id: session.into(),
                 password: Some("k7m2q9xa".into()),
@@ -927,7 +942,10 @@ mod tests {
 
     #[test]
     fn the_live_hosting_is_the_one_of_that_friend() {
-        let hosting = HostingInfo { session_id: "5e0b7c1f9a2d4c38".into(), ..HostingInfo::default() };
+        let hosting = HostingInfo {
+            session_id: "5e0b7c1f9a2d4c38".into(),
+            ..HostingInfo::default()
+        };
         let mut list = friends();
         list[0].presence.hosting = Some(hosting.clone());
         assert_eq!(live_hosting(&list, "in-game"), Some(&hosting));
@@ -957,7 +975,10 @@ mod tests {
     fn a_blank_server_name_is_no_server_name() {
         assert_eq!(blank_to_none(Some("  ".into())), None);
         assert_eq!(blank_to_none(None), None);
-        assert_eq!(blank_to_none(Some("EU FFA".into())).as_deref(), Some("EU FFA"));
+        assert_eq!(
+            blank_to_none(Some("EU FFA".into())).as_deref(),
+            Some("EU FFA")
+        );
     }
 
     #[test]
@@ -1055,7 +1076,10 @@ mod tests {
     #[tokio::test]
     async fn a_frame_goes_out_only_while_the_socket_is_up() {
         let state = FriendsState::default();
-        assert!(!state.send_frame("{\"type\":\"chat.typing\"}".into()), "no socket");
+        assert!(
+            !state.send_frame("{\"type\":\"chat.typing\"}".into()),
+            "no socket"
+        );
 
         let (sender, mut receiver) = mpsc::channel(1);
         state.set_outbound(Some(sender));

@@ -155,7 +155,10 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
     // The service strips the colour codes of the engine before it stores a server
     // name, which is why the launcher never has to.
     if moved.presence.server_name.as_deref() != Some("JKNet Test FFA") {
-        return Err(format!("unexpected server name {:?}", moved.presence.server_name));
+        return Err(format!(
+            "unexpected server name {:?}",
+            moved.presence.server_name
+        ));
     }
 
     // -- and the list agrees with the socket -------------------------------
@@ -274,7 +277,10 @@ async fn try_sign_in(
         Err(crate::error::AppError::Online { code, .. }) if code == "rate_limited" => return None,
         other => other.expect("the service is running with JKNET_ONLINE_DEV_PROVIDER=1"),
     };
-    println!("POST /v1/auth/login-sessions -> {} {}", session.id, session.status);
+    println!(
+        "POST /v1/auth/login-sessions -> {} {}",
+        session.id, session.status
+    );
 
     let form = browser
         .get(&session.url)
@@ -306,7 +312,9 @@ async fn try_sign_in(
         .poll_login_session(anonymous, &session.id)
         .await
         .expect("the session reads back");
-    let token = polled.token.expect("the first read after done carries a token");
+    let token = polled
+        .token
+        .expect("the first read after done carries a token");
     let user = polled.user.expect("and the account it belongs to");
     println!(
         "GET /v1/auth/login-sessions/{} -> {} as {}",
@@ -327,8 +335,16 @@ async fn try_sign_in(
         "GET /v1/auth/login-sessions/{} again -> {}, token {}, user {}",
         session.id,
         again.status,
-        if again.token.is_some() { "present" } else { "absent" },
-        if again.user.is_some() { "present" } else { "absent" },
+        if again.token.is_some() {
+            "present"
+        } else {
+            "absent"
+        },
+        if again.user.is_some() {
+            "present"
+        } else {
+            "absent"
+        },
     );
 
     Some(Player {
@@ -351,5 +367,7 @@ fn hidden_state(form: &str) -> Option<&str> {
 /// Percent-encodes the two characters a display name can hold that a query
 /// string cannot: a space and an ampersand.
 fn encode(name: &str) -> String {
-    name.replace('%', "%25").replace(' ', "%20").replace('&', "%26")
+    name.replace('%', "%25")
+        .replace(' ', "%20")
+        .replace('&', "%26")
 }

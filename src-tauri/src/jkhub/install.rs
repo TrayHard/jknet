@@ -469,7 +469,11 @@ mod tests {
         );
         let contents = read_archive(&archive).expect("the zip opens");
         assert_eq!(
-            contents.pk3.iter().map(|e| e.path.as_str()).collect::<Vec<_>>(),
+            contents
+                .pk3
+                .iter()
+                .map(|e| e.path.as_str())
+                .collect::<Vec<_>>(),
             vec!["CircaZoomScript/pack/nested.pk3"],
             "__MACOSX and dot files are junk, a nested pk3 is not"
         );
@@ -478,7 +482,10 @@ mod tests {
         fs::create_dir_all(&target).expect("the target exists");
         let written = extract(&archive, &contents.pk3, &target).expect("it extracts");
         assert_eq!(written, vec!["nested.pk3".to_string()]);
-        assert_eq!(fs::read(target.join("nested.pk3")).expect("written"), b"real");
+        assert_eq!(
+            fs::read(target.join("nested.pk3")).expect("written"),
+            b"real"
+        );
     }
 
     #[test]
@@ -621,7 +628,9 @@ mod tests {
             assert!(conflicts(&entries, &target).is_empty(), "{name}");
         }
         assert_eq!(
-            fs::read_dir(&target).expect("the folder is readable").count(),
+            fs::read_dir(&target)
+                .expect("the folder is readable")
+                .count(),
             0,
             "nothing was written"
         );
@@ -662,7 +671,13 @@ mod tests {
 
         let mut landed: Vec<String> = fs::read_dir(&target)
             .expect("the folder is readable")
-            .map(|entry| entry.expect("an entry").file_name().to_string_lossy().to_string())
+            .map(|entry| {
+                entry
+                    .expect("an entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .to_string()
+            })
             .collect();
         landed.sort();
         assert_eq!(landed, ["drive.pk3", "foo.pk3", "parent.pk3", "up.pk3"]);

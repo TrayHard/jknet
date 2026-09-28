@@ -847,5 +847,13 @@
     "summary": "Messages: {{messages}}, chats: {{chats}}",
     "hintTitle": "JKNet is still running",
     "hint": "Closing the window keeps JKNet in the tray, so chats and your private server stay online. Quit it from the tray icon."
+  },
+  "serverConfig": {
+    "subtitle": "Server config · {{game}} · {{mod}}",
+    "open": "Open server editor",
+    "receiveTitle": "Save a server config",
+    "receiveHint": "Review the game, mod and rules. Saving adds a copy to your server configs. Choose it in Play with friends when you want to host.",
+    "save": "Save to server configs",
+    "sensitive": "Remove passwords or administration secrets before sharing."
   }
 }

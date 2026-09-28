@@ -480,7 +480,10 @@ fn is_under(path: &str, folder: &str) -> bool {
 /// The name a card shows for a pk3: its file name without the extension.
 fn display_name_of(path: &str) -> String {
     let name = path.rsplit('/').next().unwrap_or(path);
-    name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(name).to_string()
+    name.rsplit_once('.')
+        .map(|(stem, _)| stem)
+        .unwrap_or(name)
+        .to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -565,10 +568,17 @@ fn read_records(path: &Path) -> Result<Vec<Record>> {
         if budget == 0 {
             break;
         }
-        if !matches!(entry_kind(&record.path), Pk3EntryKind::Image | Pk3EntryKind::Text) {
+        if !matches!(
+            entry_kind(&record.path),
+            Pk3EntryKind::Image | Pk3EntryKind::Text
+        ) {
             continue;
         }
-        let index = record.source.as_ref().map(|source| source.index).unwrap_or(0);
+        let index = record
+            .source
+            .as_ref()
+            .map(|source| source.index)
+            .unwrap_or(0);
         let want = HEADER_BYTES.min(budget);
         match read_prefix(&mut zip, index, want) {
             Ok((bytes, _)) => {
@@ -627,7 +637,10 @@ fn stage_bytes(session: &mut Session, at: usize, bytes: &[u8]) -> Result<()> {
     }
     fs::write(&target, bytes).map_err(|e| AppError::io_path("cannot write", &target, e))?;
     let record = &mut session.entries[at];
-    let (image, text) = probe(&record.path, &bytes[..bytes.len().min(HEADER_BYTES as usize)]);
+    let (image, text) = probe(
+        &record.path,
+        &bytes[..bytes.len().min(HEADER_BYTES as usize)],
+    );
     record.staged = Some(target);
     record.size = bytes.len() as u64;
     record.removed = false;
@@ -687,7 +700,13 @@ fn record_for(session: &mut Session, path: &str) -> Result<usize> {
         session.entries[at].removed = false;
         return Ok(at);
     }
-    if session.entries.iter().filter(|record| !record.removed).count() >= MAX_ENTRIES {
+    if session
+        .entries
+        .iter()
+        .filter(|record| !record.removed)
+        .count()
+        >= MAX_ENTRIES
+    {
         return Err(AppError::InvalidInput(format!(
             "a pk3 the editor writes holds at most {MAX_ENTRIES} entries"
         )));
@@ -735,7 +754,8 @@ fn convert_picture(bytes: &[u8], from: &str, to: &str) -> Result<Vec<u8>> {
     let mut out = Cursor::new(Vec::new());
     match to {
         "jpg" => {
-            let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY);
+            let encoder =
+                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY);
             picture
                 .to_rgb8()
                 .write_with_encoder(encoder)
@@ -801,7 +821,9 @@ fn resolve(data: &DataPaths, target: &Pk3EditorTarget) -> Result<(PathBuf, bool)
             listing::find_draft_file(&draft, scope, *root, path)?;
             let archive = draft::file_path(data, draft_id, scope, *root, path)?;
             if !archive.is_file() {
-                return Err(AppError::NotFound(format!("{path} of the draft {draft_id}")));
+                return Err(AppError::NotFound(format!(
+                    "{path} of the draft {draft_id}"
+                )));
             }
             Ok((archive, false))
         }
@@ -994,7 +1016,10 @@ fn replace(session: &mut Session, path: &str, source: &Path) -> Result<()> {
         )));
     }
     let bytes = read_head(source, MAX_IMAGE_BYTES)?;
-    let name = source.file_name().and_then(|name| name.to_str()).unwrap_or("");
+    let name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
     let Some(source_format) = picture_format(name, &bytes) else {
         return Err(AppError::InvalidInput(format!(
             "{} is not a picture, and {path} is one",
@@ -1101,7 +1126,9 @@ fn rename(session: &mut Session, from: &str, to: &str) -> Result<()> {
             )));
         }
         let moved: Vec<usize> = (0..session.entries.len())
-            .filter(|at| !session.entries[*at].removed && is_under(&session.entries[*at].path, &from))
+            .filter(|at| {
+                !session.entries[*at].removed && is_under(&session.entries[*at].path, &from)
+            })
             .collect();
         if moved.is_empty() {
             return Err(AppError::NotFound(format!("{from}/ in the archive")));
@@ -1142,8 +1169,7 @@ fn move_entry(session: &mut Session, at: usize, path: String) -> Result<()> {
         if let Some(parent) = target.parent() {
             paths::create_dir(parent)?;
         }
-        fs::rename(&staged, &target)
-            .map_err(|e| AppError::io_path("cannot move", &target, e))?;
+        fs::rename(&staged, &target).map_err(|e| AppError::io_path("cannot move", &target, e))?;
         session.entries[at].staged = Some(target);
     }
     // The kind of an entry follows its extension, so a rename can turn a
@@ -1650,7 +1676,10 @@ pub async fn pk3_editor_discard(
 
 /// Ends the session and deletes what it kept beside the archive.
 #[tauri::command]
-pub fn pk3_editor_close(editor: tauri::State<'_, Pk3EditorState>, session_id: String) -> Result<()> {
+pub fn pk3_editor_close(
+    editor: tauri::State<'_, Pk3EditorState>,
+    session_id: String,
+) -> Result<()> {
     close_session(&editor.sessions, session_id.trim())
 }
 
@@ -1726,9 +1755,11 @@ mod tests {
             archive_path: archive_path.to_path_buf(),
             work_dir: root.join("pk3-editor").join(id),
             read_only: false,
-            bytes: fs::metadata(archive_path).map(|meta| meta.len()).unwrap_or(0),
+            bytes: fs::metadata(archive_path)
+                .map(|meta| meta.len())
+                .unwrap_or(0),
             entries: read_records(archive_path).expect("the archive reads"),
-            }
+        }
     }
 
     fn paths_of(root: &Path) -> DataPaths {
@@ -1783,7 +1814,10 @@ mod tests {
                 Pk3EntryKind::Text,
             ]
         );
-        assert!(view.entries.iter().all(|e| e.state == Pk3EntryState::Unchanged));
+        assert!(view
+            .entries
+            .iter()
+            .all(|e| e.state == Pk3EntryState::Unchanged));
         assert_eq!(view.entries[0].size, 8);
 
         // The header of a picture and the code page of a text file come off
@@ -1908,7 +1942,11 @@ mod tests {
             fs::read(out.join("maps2").join("duel.bsp")).expect("the map"),
             b"map"
         );
-        assert!(out.join("maps2").join("sub").join("duel.lightmap").is_file());
+        assert!(out
+            .join("maps2")
+            .join("sub")
+            .join("duel.lightmap")
+            .is_file());
         assert!(out.join("README.txt").is_file());
         assert!(!out.join("levelshots").exists());
 
@@ -1942,7 +1980,10 @@ mod tests {
             "a//b.txt",
         ] {
             let refused = write_text(&mut session, path, "x").expect_err(path);
-            assert!(matches!(refused, AppError::InvalidInput(_)), "{path}: {refused}");
+            assert!(
+                matches!(refused, AppError::InvalidInput(_)),
+                "{path}: {refused}"
+            );
         }
         let long = format!("{}.txt", "x".repeat(manifest::MAX_PATH_LEN));
         assert!(write_text(&mut session, &long, "x").is_err());
@@ -1998,12 +2039,17 @@ mod tests {
         let mut session = session_on(temp.path(), &archive);
 
         write_text(&mut session, "strings/russian/menus.str", "Реборн").expect("the strings file");
-        let at = session.find_live("strings/russian/menus.str").expect("the entry");
+        let at = session
+            .find_live("strings/russian/menus.str")
+            .expect("the entry");
         let staged = session.entries[at].staged.clone().expect("the staged file");
         let bytes = fs::read(&staged).expect("the bytes");
         // Windows-1251, one byte a letter, and nothing of UTF-8 in it.
         assert_eq!(bytes.len(), 6);
-        assert_eq!(bytes, encoding_rs::WINDOWS_1251.encode("Реборн").0.into_owned());
+        assert_eq!(
+            bytes,
+            encoding_rs::WINDOWS_1251.encode("Реборн").0.into_owned()
+        );
         assert_eq!(
             session.entries[at].text,
             Some(Pk3EntryText {
@@ -2012,7 +2058,9 @@ mod tests {
         );
         // And it reads back as what was typed.
         assert_eq!(
-            read_text(&session, "strings/russian/menus.str").expect("the text").text,
+            read_text(&session, "strings/russian/menus.str")
+                .expect("the text")
+                .text,
             "Реборн"
         );
 
@@ -2020,7 +2068,10 @@ mod tests {
         write_text(&mut session, "scripts/kyle.shader", "// Реборн").expect("the shader");
         let at = session.find_live("scripts/kyle.shader").expect("the entry");
         let staged = session.entries[at].staged.clone().expect("the staged file");
-        assert_eq!(fs::read(&staged).expect("the bytes"), "// Реборн".as_bytes());
+        assert_eq!(
+            fs::read(&staged).expect("the bytes"),
+            "// Реборн".as_bytes()
+        );
 
         // Bytes that are not a text file are not written as one.
         let refused = write_text(&mut session, "maps/duel.bsp", "x").expect_err("a map");
@@ -2062,7 +2113,10 @@ mod tests {
         write_pk3(
             &archive,
             &[
-                ("models/players/kyle/body.jpg", b"\xFF\xD8not a real jpeg" as &[u8]),
+                (
+                    "models/players/kyle/body.jpg",
+                    b"\xFF\xD8not a real jpeg" as &[u8],
+                ),
                 ("README.txt", b"read me"),
             ],
         );
@@ -2071,19 +2125,23 @@ mod tests {
         let mut session = session_on(temp.path(), &archive);
 
         replace(&mut session, "models/players/kyle/body.jpg", &source).expect("the replacement");
-        let at = session.find_live("models/players/kyle/body.jpg").expect("the entry");
+        let at = session
+            .find_live("models/players/kyle/body.jpg")
+            .expect("the entry");
         assert_eq!(session.entries[at].state(), Pk3EntryState::Modified);
         let image = session.entries[at].image.clone().expect("a header");
         assert_eq!(image.format, "jpg", "the entry keeps its own format");
         assert_eq!((image.width, image.height), (1, 1));
         let staged = session.entries[at].staged.clone().expect("the staged file");
-        assert!(fs::read(&staged).expect("the bytes").starts_with(&[0xFF, 0xD8]));
+        assert!(fs::read(&staged)
+            .expect("the bytes")
+            .starts_with(&[0xFF, 0xD8]));
 
         // A file that is not a picture cannot stand in for one.
         let text = temp.path().join("notes.txt");
         fs::write(&text, b"not a picture").expect("the text file");
-        let refused =
-            replace(&mut session, "models/players/kyle/body.jpg", &text).expect_err("not a picture");
+        let refused = replace(&mut session, "models/players/kyle/body.jpg", &text)
+            .expect_err("not a picture");
         assert!(matches!(refused, AppError::InvalidInput(_)), "{refused}");
 
         // An entry that is not a picture takes any file as it is.
@@ -2283,7 +2341,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("a folder");
         let data = paths_of(temp.path());
         let mut draft = empty_draft(&data, Game::JediAcademy, "Duel night");
-        draft.components.push(component("mp", "Duel", "openjk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Duel",
+            "openjk",
+            &[LaunchMode::Multiplayer],
+        ));
 
         // A pk3 of the draft that came out of the library of a client, with
         // the note that says JKHub served it.
@@ -2348,7 +2411,10 @@ mod tests {
         assert_ne!(file.sha256, before);
         assert_eq!(file.kind, FileKind::Pk3);
         let library = file.library.as_ref().expect("a library card");
-        assert_eq!(library.display_name, "Kyle skin", "the name the author gave it stays");
+        assert_eq!(
+            library.display_name, "Kyle skin",
+            "the name the author gave it stays"
+        );
         assert_eq!(library.entries, 2);
         let listing = file.listing.as_ref().expect("a listing");
         assert!(listing::draft_listing_path(&data, &draft.id, &file.sha256).is_file());
@@ -2443,7 +2509,10 @@ mod tests {
         update_owner(&data, &target, &archive).expect("the owner is updated");
 
         let items = library::read_library(&data, "duel").expect("the library reads");
-        let item = items.iter().find(|item| item.id == "base/skin.pk3").expect("the item");
+        let item = items
+            .iter()
+            .find(|item| item.id == "base/skin.pk3")
+            .expect("the item");
         assert_eq!(item.size, saved.size);
         assert_eq!(item.sha1.as_deref().map(str::len), Some(40));
     }
@@ -2453,7 +2522,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("a folder");
         let data = paths_of(temp.path());
         let mut draft = empty_draft(&data, Game::JediAcademy, "Duel night");
-        draft.components.push(component("mp", "Duel", "openjk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Duel",
+            "openjk",
+            &[LaunchMode::Multiplayer],
+        ));
         draft::write_draft(&data, &draft).expect("the draft is written");
 
         let cfg = Pk3EditorTarget::Draft {
@@ -2524,9 +2598,10 @@ mod tests {
                 path: "base/skin.pk3".into(),
             }
         );
-        let library: Pk3EditorTarget =
-            serde_json::from_str(r#"{"kind":"library","clientId":"duel","itemId":"base/skin.pk3"}"#)
-                .expect("the other target");
+        let library: Pk3EditorTarget = serde_json::from_str(
+            r#"{"kind":"library","clientId":"duel","itemId":"base/skin.pk3"}"#,
+        )
+        .expect("the other target");
 
         let session = Pk3EditorSession {
             id: "s1".into(),
@@ -2566,7 +2641,10 @@ mod tests {
         assert_eq!(entry["image"]["width"], 256);
         assert_eq!(entry["image"]["format"], "png");
         assert_eq!(entry["renamedFrom"], "gfx/menus/old.png");
-        assert!(entry.get("text").is_none(), "a field with nothing in it is left out");
+        assert!(
+            entry.get("text").is_none(),
+            "a field with nothing in it is left out"
+        );
 
         let saved = serde_json::to_value(Pk3EditorSaved {
             sha256: "ab".into(),
@@ -2638,7 +2716,10 @@ mod tests {
         let data = paths_of(temp.path());
         let home = data.client_dir("duel").join("home").join("base");
         fs::create_dir_all(&home).expect("the client home");
-        write_pk3(&home.join("skin.pk3"), &[("README.txt", b"read me" as &[u8])]);
+        write_pk3(
+            &home.join("skin.pk3"),
+            &[("README.txt", b"read me" as &[u8])],
+        );
 
         // A folder left behind by a launcher that was killed with the dialog
         // open.
@@ -2654,6 +2735,9 @@ mod tests {
         let second = open_session(&sessions, &data, target).expect("the same archive again");
         assert_eq!(first.id, second.id);
         assert_eq!(sessions.lock().unwrap().len(), 1);
-        assert!(!stale.exists(), "the stale folder is swept on the first open");
+        assert!(
+            !stale.exists(),
+            "the stale folder is swept on the first open"
+        );
     }
 }

@@ -377,7 +377,10 @@ mod tests {
 
     #[test]
     fn removing_a_cvar_written_without_a_setter_leaves_nothing_behind() {
-        assert_eq!(write_cvar("+r_mode 3 +exec duel.cfg", "r_mode", None), "+exec duel.cfg");
+        assert_eq!(
+            write_cvar("+r_mode 3 +exec duel.cfg", "r_mode", None),
+            "+exec duel.cfg"
+        );
     }
 
     #[test]

@@ -79,9 +79,8 @@ const FRAME_TIMEOUT: Duration = Duration::from_secs(15);
 /// How long the scenario listens for a frame that must not come.
 const QUIET: Duration = Duration::from_secs(3);
 
-type Socket = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 #[tokio::test]
 #[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1 and chat"]
@@ -148,18 +147,28 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
         .chat_send(
             &beta.ctx,
             &dm.id,
-            &NewMessage { client_id: new_client_id(), body: "hello there".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                body: "hello there".into(),
+                ..NewMessage::default()
+            },
         )
         .await
         .map_err(|e| format!("POST messages as B: {e}"))?;
-    println!("POST /v1/chat/conversations/{{id}}/messages -> seq {}", sent.seq);
+    println!(
+        "POST /v1/chat/conversations/{{id}}/messages -> seq {}",
+        sent.seq
+    );
 
     let heard = wait_for(&mut socket_a, FRAME_TIMEOUT, |frame| {
         frame.kind == "chat.message" && frame.payload["message"]["seq"] == sent.seq
     })
     .await?
     .ok_or("A never heard the message")?;
-    println!("chat.message on A's socket -> {}", heard.payload["message"]["body"]);
+    println!(
+        "chat.message on A's socket -> {}",
+        heard.payload["message"]["body"]
+    );
     if heard.payload["message"]["senderId"] != beta.user.id.as_str() {
         return Err("the message came from somebody else".into());
     }
@@ -193,7 +202,10 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
     client
         .chat_update_settings(
             &alpha.ctx,
-            &ChatPrivacyPatch { share_read_receipts: Some(false), ..ChatPrivacyPatch::default() },
+            &ChatPrivacyPatch {
+                share_read_receipts: Some(false),
+                ..ChatPrivacyPatch::default()
+            },
         )
         .await
         .map_err(|e| format!("PATCH /v1/chat/settings as A: {e}"))?;
@@ -213,14 +225,21 @@ async fn run(client: &OnlineClient, alpha: &Player, beta: &Player) -> Result<(),
             .find(|member| member.user.id == other.user.id)
             .map(|member| member.read_seq);
         if marker != Some(None) {
-            return Err(format!("{} still sees the marker of {}: {marker:?}", viewer.name, other.name));
+            return Err(format!(
+                "{} still sees the marker of {}: {marker:?}",
+                viewer.name, other.name
+            ));
         }
     }
     let second = client
         .chat_send(
             &beta.ctx,
             &dm.id,
-            &NewMessage { client_id: new_client_id(), body: "still there?".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                body: "still there?".into(),
+                ..NewMessage::default()
+            },
         )
         .await
         .map_err(|e| format!("POST messages as B: {e}"))?;
@@ -288,8 +307,14 @@ async fn send_a_file(
         .map_err(|e| format!("PUT /v1/chat/direct as A: {e}"))?;
 
     let original = jpeg_with_gps();
-    let (staged, _) = files::stage_bytes(&temp.join("staging"), "IMG_0001.JPG", original, "file", None)
-        .map_err(|e| format!("staging: {e}"))?;
+    let (staged, _) = files::stage_bytes(
+        &temp.join("staging"),
+        "IMG_0001.JPG",
+        original,
+        "file",
+        None,
+    )
+    .map_err(|e| format!("staging: {e}"))?;
     let stripped = std::fs::read(&staged.path).map_err(|e| format!("the staged copy: {e}"))?;
     let file_id = files::put_staged(client, &alpha.ctx, &dm.id, &staged, |_| {})
         .await
@@ -308,9 +333,15 @@ async fn send_a_file(
         .await
         .map_err(|e| format!("POST messages as A: {e}"))?;
     let file = message.files.first().ok_or("the message carries no file")?;
-    println!("the service classified {} as {} ({})", file.name, file.class, file.media_type);
+    println!(
+        "the service classified {} as {} ({})",
+        file.name, file.class, file.media_type
+    );
     if file.class != "image" || file.danger {
-        return Err(format!("a photo came back as {} with danger {}", file.class, file.danger));
+        return Err(format!(
+            "a photo came back as {} with danger {}",
+            file.class, file.danger
+        ));
     }
 
     let mut quiet = |_: u64, _: u64| {};
@@ -321,12 +352,25 @@ async fn send_a_file(
     if received != stripped {
         return Err("B's copy differs from the staged one".into());
     }
-    if received.windows(files::test_support::GPS_RATIONALS.len()).any(|w| w == files::test_support::GPS_RATIONALS) {
+    if received
+        .windows(files::test_support::GPS_RATIONALS.len())
+        .any(|w| w == files::test_support::GPS_RATIONALS)
+    {
         return Err("the GPS position reached B".into());
     }
-    println!("B downloaded {} bytes, the stripped copy, without the GPS position", received.len());
+    println!(
+        "B downloaded {} bytes, the stripped copy, without the GPS position",
+        received.len()
+    );
 
-    let refused = files::fetch(client, &stranger.ctx, &temp.join("stranger"), &file_id, &mut quiet).await;
+    let refused = files::fetch(
+        client,
+        &stranger.ctx,
+        &temp.join("stranger"),
+        &file_id,
+        &mut quiet,
+    )
+    .await;
     match refused {
         Err(e) if files::status_after(&e) == LocalStatus::Gone => {
             println!("a stranger's download -> {e}");
@@ -430,9 +474,13 @@ async fn host_a_server(
         .chat_open_server(&alpha.ctx, &session)
         .await
         .map_err(|e| format!("PUT /v1/chat/servers as A: {e}"))?;
-    println!("PUT /v1/chat/servers/{{session}} -> {} ({})", chat.id, chat.kind);
+    println!(
+        "PUT /v1/chat/servers/{{session}} -> {} ({})",
+        chat.id, chat.kind
+    );
     let host = chat.server.as_ref().map(|server| server.host_id.as_str());
-    if chat.kind != "server" || host != Some(alpha.user.id.as_str()) || chat.history_for_new_members {
+    if chat.kind != "server" || host != Some(alpha.user.id.as_str()) || chat.history_for_new_members
+    {
         return Err(format!("the chat of the server came back as {chat:?}"));
     }
     let again = client
@@ -446,7 +494,11 @@ async fn host_a_server(
         .chat_send(
             &alpha.ctx,
             &chat.id,
-            &NewMessage { client_id: new_client_id(), body: "warming up".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                body: "warming up".into(),
+                ..NewMessage::default()
+            },
         )
         .await
         .map_err(|e| format!("POST messages as A: {e}"))?;
@@ -454,7 +506,9 @@ async fn host_a_server(
     // -- B: refused while the server is invite-only, then in -----------------
     let refused = code_of(join_as(beta).await);
     if refused != "forbidden" {
-        return Err(format!("B joined an invite-only server's chat without an invite: {refused}"));
+        return Err(format!(
+            "B joined an invite-only server's chat without an invite: {refused}"
+        ));
     }
     println!("POST /v1/chat/servers/{{session}}/join as B, invite only -> {refused}");
     heartbeat(client, alpha, Some(hosting_of(&session, "friends"))).await?;
@@ -484,7 +538,8 @@ async fn host_a_server(
     }
     println!("B sees {events:?}");
     wait_for(&mut socket_a, FRAME_TIMEOUT, |frame| {
-        frame.kind == "chat.message" && frame.payload["message"]["system"]["event"] == "memberJoined"
+        frame.kind == "chat.message"
+            && frame.payload["message"]["system"]["event"] == "memberJoined"
     })
     .await?
     .ok_or("A never heard B join")?;
@@ -501,9 +556,15 @@ async fn host_a_server(
 
     // -- The history switch is A's (D1) --------------------------------------
     let by_guest = code_of(client.chat_patch_server(&beta.ctx, &session, true).await);
-    let by_stranger = code_of(client.chat_patch_server(&stranger.ctx, &session, true).await);
+    let by_stranger = code_of(
+        client
+            .chat_patch_server(&stranger.ctx, &session, true)
+            .await,
+    );
     if (by_guest.as_str(), by_stranger.as_str()) != ("owner_only", "not_found") {
-        return Err(format!("the switch by a guest: {by_guest}, by a stranger: {by_stranger}"));
+        return Err(format!(
+            "the switch by a guest: {by_guest}, by a stranger: {by_stranger}"
+        ));
     }
     let on = client
         .chat_patch_server(&alpha.ctx, &session, true)
@@ -530,7 +591,8 @@ async fn host_a_server(
         return Err(format!("B still reads the chat after leaving: {gone}"));
     }
     let left = wait_for(&mut socket_b, FRAME_TIMEOUT, |frame| {
-        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == chat.id.as_str()
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == chat.id.as_str()
     })
     .await?
     .ok_or("B's devices never heard B leave")?;
@@ -541,19 +603,29 @@ async fn host_a_server(
         .await
         .map_err(|e| format!("the second join as B: {e}"))?;
     if rejoined.visible_from_seq != 0 {
-        return Err(format!("B joined again and sees from {}", rejoined.visible_from_seq));
+        return Err(format!(
+            "B joined again and sees from {}",
+            rejoined.visible_from_seq
+        ));
     }
 
     // -- The stop ends it for B ----------------------------------------------
     server::close_on_service(client, &alpha.ctx, &session).await;
     let ended = wait_for(&mut socket_b, FRAME_TIMEOUT, |frame| {
-        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == chat.id.as_str()
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == chat.id.as_str()
     })
     .await?
     .ok_or("B never heard the chat end")?;
-    println!("chat.conversation.removed on B's socket -> {}", ended.payload["reason"]);
+    println!(
+        "chat.conversation.removed on B's socket -> {}",
+        ended.payload["reason"]
+    );
     if ended.payload["reason"] != "ended" {
-        return Err(format!("the stop ended the chat with {}", ended.payload["reason"]));
+        return Err(format!(
+            "the stop ended the chat with {}",
+            ended.payload["reason"]
+        ));
     }
     let after = code_of(client.chat_conversation(&beta.ctx, &chat.id).await);
     if after != "not_found" {
@@ -617,7 +689,9 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .await
         .map_err(|e| format!("PUT /v1/chat/direct as B: {e}"))?;
     if same.id != dm.id || dm.kind != "direct" || !dm.can_send || dm.history_for_new_members {
-        return Err(format!("the direct conversation came back as {dm:?} and {same:?}"));
+        return Err(format!(
+            "the direct conversation came back as {dm:?} and {same:?}"
+        ));
     }
     lossless::<Conversation>(
         "GET /v1/chat/conversations/{id}",
@@ -625,15 +699,27 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
     )?;
 
     // -- A mention: B names A ------------------------------------------------
-    let hello = send(client, beta, &dm.id, &format!("ready for a duel, <@{}>?", alpha.user.id)).await?;
+    let hello = send(
+        client,
+        beta,
+        &dm.id,
+        &format!("ready for a duel, <@{}>?", alpha.user.id),
+    )
+    .await?;
     if hello.mentions != [alpha.user.id.clone()] {
-        return Err(format!("the mention of A came back as {:?}", hello.mentions));
+        return Err(format!(
+            "the mention of A came back as {:?}",
+            hello.mentions
+        ));
     }
     expect_frame(&mut socket_a, "A hears the mention", |frame| {
         frame.kind == "chat.message" && frame.payload["message"]["seq"] == hello.seq
     })
     .await?;
-    let doc: ChatSyncDoc = lossless("A's sync document", &raw(client, alpha, "/v1/chat/conversations").await?)?;
+    let doc: ChatSyncDoc = lossless(
+        "A's sync document",
+        &raw(client, alpha, "/v1/chat/conversations").await?,
+    )?;
     let summary = find(&doc.conversations, &dm.id)?;
     if (summary.unread, summary.unread_mentions) != (1, 1) {
         return Err(format!(
@@ -665,7 +751,10 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         return Err(format!("the reply quotes {quoted:?}"));
     }
     if !reply.mentions.contains(&beta.user.id) {
-        return Err(format!("a reply to B does not mention B: {:?}", reply.mentions));
+        return Err(format!(
+            "a reply to B does not mention B: {:?}",
+            reply.mentions
+        ));
     }
     expect_frame(&mut socket_b, "B hears the reply", |frame| {
         frame.kind == "chat.message" && frame.payload["message"]["seq"] == reply.seq
@@ -686,7 +775,10 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .await
         .map_err(|e| format!("the replay of B: {e}"))?;
     if again.seq != hello.seq || again.body != hello.body {
-        return Err(format!("a replay answered seq {} ({:?})", again.seq, again.body));
+        return Err(format!(
+            "a replay answered seq {} ({:?})",
+            again.seq, again.body
+        ));
     }
 
     // -- Reactions -------------------------------------------------------------
@@ -694,20 +786,33 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .chat_react(&beta.ctx, &dm.id, reply.seq, "👍", true)
         .await
         .map_err(|e| format!("the reaction of B: {e}"))?;
-    if reactions.len() != 1 || reactions[0].emoji != "👍" || reactions[0].user_ids != [beta.user.id.clone()] {
-        return Err(format!("the reactions after B's came back as {reactions:?}"));
+    if reactions.len() != 1
+        || reactions[0].emoji != "👍"
+        || reactions[0].user_ids != [beta.user.id.clone()]
+    {
+        return Err(format!(
+            "the reactions after B's came back as {reactions:?}"
+        ));
     }
     expect_frame(&mut socket_a, "A hears the reaction", |frame| {
-        frame.kind == "chat.reaction" && frame.payload["seq"] == reply.seq && frame.payload["on"] == true
+        frame.kind == "chat.reaction"
+            && frame.payload["seq"] == reply.seq
+            && frame.payload["on"] == true
     })
     .await?;
     client
         .chat_react(&beta.ctx, &dm.id, reply.seq, "👍", true)
         .await
         .map_err(|e| format!("the same reaction twice: {e}"))?;
-    let not_emoji = code_of(client.chat_react(&beta.ctx, &dm.id, reply.seq, "no", true).await);
+    let not_emoji = code_of(
+        client
+            .chat_react(&beta.ctx, &dm.id, reply.seq, "no", true)
+            .await,
+    );
     if not_emoji != "emoji" {
-        return Err(format!("a reaction that is not an emoji answered {not_emoji}"));
+        return Err(format!(
+            "a reaction that is not an emoji answered {not_emoji}"
+        ));
     }
     let off = client
         .chat_react(&beta.ctx, &dm.id, reply.seq, "👍", false)
@@ -720,10 +825,18 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
     // -- History pages ---------------------------------------------------------
     let page: MessagePage = lossless(
         "a page of history",
-        &raw(client, beta, &format!("/v1/chat/conversations/{}/messages", dm.id)).await?,
+        &raw(
+            client,
+            beta,
+            &format!("/v1/chat/conversations/{}/messages", dm.id),
+        )
+        .await?,
     )?;
     if page.messages.iter().map(|m| m.seq).collect::<Vec<_>>() != [hello.seq, reply.seq] {
-        return Err(format!("the history holds {:?}", page.messages.iter().map(|m| m.seq).collect::<Vec<_>>()));
+        return Err(format!(
+            "the history holds {:?}",
+            page.messages.iter().map(|m| m.seq).collect::<Vec<_>>()
+        ));
     }
     let before = client
         .chat_messages(&beta.ctx, &dm.id, PageAnchor::Before(reply.seq), Some(1))
@@ -738,7 +851,10 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .await
         .map_err(|e| format!("a page around: {e}"))?;
     let seqs = |page: &MessagePage| page.messages.iter().map(|m| m.seq).collect::<Vec<_>>();
-    if seqs(&before) != [hello.seq] || seqs(&after) != [reply.seq] || seqs(&around) != [hello.seq, reply.seq] {
+    if seqs(&before) != [hello.seq]
+        || seqs(&after) != [reply.seq]
+        || seqs(&around) != [hello.seq, reply.seq]
+    {
         return Err(format!(
             "pages before {:?}, after {:?}, around {:?}",
             seqs(&before),
@@ -753,7 +869,9 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .await
         .map_err(|e| format!("B reads: {e}"))?;
     expect_frame(&mut socket_a, "A hears B read", |frame| {
-        frame.kind == "chat.read" && frame.payload["userId"] == beta.user.id.as_str() && frame.payload["seq"] == reply.seq
+        frame.kind == "chat.read"
+            && frame.payload["userId"] == beta.user.id.as_str()
+            && frame.payload["seq"] == reply.seq
     })
     .await?;
 
@@ -770,7 +888,10 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
     let hidden = client
         .chat_update_settings(
             &alpha.ctx,
-            &ChatPrivacyPatch { share_typing: Some(false), ..ChatPrivacyPatch::default() },
+            &ChatPrivacyPatch {
+                share_typing: Some(false),
+                ..ChatPrivacyPatch::default()
+            },
         )
         .await
         .map_err(|e| format!("A hides typing: {e}"))?;
@@ -794,7 +915,10 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
     client
         .chat_update_settings(
             &alpha.ctx,
-            &ChatPrivacyPatch { share_typing: Some(true), ..ChatPrivacyPatch::default() },
+            &ChatPrivacyPatch {
+                share_typing: Some(true),
+                ..ChatPrivacyPatch::default()
+            },
         )
         .await
         .map_err(|e| format!("A shows typing again: {e}"))?;
@@ -810,7 +934,10 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
     client
         .chat_update_settings(
             &alpha.ctx,
-            &ChatPrivacyPatch { share_read_receipts: Some(false), ..ChatPrivacyPatch::default() },
+            &ChatPrivacyPatch {
+                share_read_receipts: Some(false),
+                ..ChatPrivacyPatch::default()
+            },
         )
         .await
         .map_err(|e| format!("A hides read receipts: {e}"))?;
@@ -820,10 +947,16 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .await
         .map_err(|e| format!("B reads again: {e}"))?;
     expect_frame(&mut socket_b, "B's own devices hear B read", |frame| {
-        frame.kind == "chat.read" && frame.payload["userId"] == beta.user.id.as_str() && frame.payload["seq"] == late.seq
+        frame.kind == "chat.read"
+            && frame.payload["userId"] == beta.user.id.as_str()
+            && frame.payload["seq"] == late.seq
     })
     .await?;
-    if quiet(&mut socket_a, |frame| frame.kind == "chat.read" && frame.payload["userId"] == beta.user.id.as_str()).await? {
+    if quiet(&mut socket_a, |frame| {
+        frame.kind == "chat.read" && frame.payload["userId"] == beta.user.id.as_str()
+    })
+    .await?
+    {
         return Err("A, who hides read receipts, still hears B read".into());
     }
     let seen_by_a = client
@@ -837,8 +970,13 @@ async fn direct_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
             .find(|member| member.user.id == user_id)
             .map(|member| member.read_seq)
     };
-    if marker(&seen_by_a, &beta.user.id) != Some(None) || marker(&seen_by_a, &alpha.user.id).flatten().is_none() {
-        return Err(format!("with receipts hidden A sees the markers {:?}", seen_by_a.members));
+    if marker(&seen_by_a, &beta.user.id) != Some(None)
+        || marker(&seen_by_a, &alpha.user.id).flatten().is_none()
+    {
+        return Err(format!(
+            "with receipts hidden A sees the markers {:?}",
+            seen_by_a.members
+        ));
     }
 
     // -- The notification level is A's own ------------------------------------------
@@ -895,7 +1033,10 @@ async fn group_flow(
     let asks = client
         .chat_update_settings(
             &asker.ctx,
-            &ChatPrivacyPatch { group_add: Some("ask".into()), ..ChatPrivacyPatch::default() },
+            &ChatPrivacyPatch {
+                group_add: Some("ask".into()),
+                ..ChatPrivacyPatch::default()
+            },
         )
         .await
         .map_err(|e| format!("PATCH /v1/chat/settings as C: {e}"))?;
@@ -906,13 +1047,20 @@ async fn group_flow(
     // -- Created: M added, C invited, a stranger refused ----------------------------
     let stranger = new_client_id();
     let client_id = new_client_id();
-    let ids = [member.user.id.clone(), asker.user.id.clone(), stranger.clone()];
+    let ids = [
+        member.user.id.clone(),
+        asker.user.id.clone(),
+        stranger.clone(),
+    ];
     let created = client
         .chat_create_group(&owner.ctx, &client_id, Some("Duel night"), &ids)
         .await
         .map_err(|e| format!("POST /v1/chat/groups: {e}"))?;
     let group = created.conversation.clone();
-    println!("POST /v1/chat/groups -> {} added {:?} invited {:?} refused {:?}", group.id, created.added, created.invited, created.refused);
+    println!(
+        "POST /v1/chat/groups -> {} added {:?} invited {:?} refused {:?}",
+        group.id, created.added, created.invited, created.refused
+    );
     if created.added != [member.user.id.clone()]
         || created.invited != [asker.user.id.clone()]
         || created.refused.len() != 1
@@ -930,29 +1078,49 @@ async fn group_flow(
         return Err(format!("the new group reads {group:?}"));
     }
     match group.last_message.as_ref().and_then(|m| m.system.as_ref()) {
-        Some(system) if system.event == "created" && system.by.as_deref() == Some(owner.user.id.as_str()) => {}
+        Some(system)
+            if system.event == "created"
+                && system.by.as_deref() == Some(owner.user.id.as_str()) => {}
         other => return Err(format!("the group starts with {other:?}")),
     }
     let replayed = client
         .chat_create_group(&owner.ctx, &client_id, Some("Duel night"), &ids)
         .await
         .map_err(|e| format!("the replay of the creation: {e}"))?;
-    if replayed.conversation.id != group.id || !replayed.added.is_empty() || !replayed.invited.is_empty() {
+    if replayed.conversation.id != group.id
+        || !replayed.added.is_empty()
+        || !replayed.invited.is_empty()
+    {
         return Err(format!("the replay answered {replayed:?}"));
     }
     expect_frame(&mut socket_m, "M hears the group", |frame| {
-        frame.kind == "chat.conversation" && frame.payload["conversation"]["id"] == group.id.as_str()
+        frame.kind == "chat.conversation"
+            && frame.payload["conversation"]["id"] == group.id.as_str()
     })
     .await?;
-    let invite = expect_frame(&mut socket_c, "C hears the invite", |frame| frame.kind == "chat.groupInvite").await?;
+    let invite = expect_frame(&mut socket_c, "C hears the invite", |frame| {
+        frame.kind == "chat.groupInvite"
+    })
+    .await?;
     if invite.payload["invite"]["conversationId"] != group.id.as_str()
         || invite.payload["invite"]["invitedBy"]["id"] != owner.user.id.as_str()
     {
         return Err(format!("the invite reads {}", invite.payload));
     }
-    let doc: ChatSyncDoc = lossless("C's sync document", &raw(client, asker, "/v1/chat/conversations").await?)?;
-    if doc.group_invites.iter().all(|invite| invite.conversation_id != group.id) || doc.settings.group_add != "ask" {
-        return Err(format!("C's sync document lists the invites {:?}", doc.group_invites));
+    let doc: ChatSyncDoc = lossless(
+        "C's sync document",
+        &raw(client, asker, "/v1/chat/conversations").await?,
+    )?;
+    if doc
+        .group_invites
+        .iter()
+        .all(|invite| invite.conversation_id != group.id)
+        || doc.settings.group_add != "ask"
+    {
+        return Err(format!(
+            "C's sync document lists the invites {:?}",
+            doc.group_invites
+        ));
     }
 
     // -- C joins after the group spoke: only from the join on (D1) ---------------------
@@ -962,29 +1130,47 @@ async fn group_flow(
         .await
         .map_err(|e| format!("POST /v1/chat/groups/{{id}}/join as C: {e}"))?;
     if joined.visible_from_seq + 1 != joined.last_seq {
-        return Err(format!("C sees from {} of {}", joined.visible_from_seq, joined.last_seq));
+        return Err(format!(
+            "C sees from {} of {}",
+            joined.visible_from_seq, joined.last_seq
+        ));
     }
     let seen = events_of(client, asker, &group.id).await?;
     if seen != ["memberJoined"] {
         return Err(format!("C sees {seen:?}"));
     }
     expect_frame(&mut socket_c, "C hears the invite go", |frame| {
-        frame.kind == "chat.groupInvite.removed" && frame.payload["conversationId"] == group.id.as_str()
+        frame.kind == "chat.groupInvite.removed"
+            && frame.payload["conversationId"] == group.id.as_str()
     })
     .await?;
     let join = expect_frame(&mut socket_o, "O hears C join", |frame| {
-        frame.kind == "chat.message" && frame.payload["message"]["system"]["event"] == "memberJoined"
+        frame.kind == "chat.message"
+            && frame.payload["message"]["system"]["event"] == "memberJoined"
     })
     .await?;
     if join.payload["message"]["system"]["userId"] != asker.user.id.as_str() {
-        return Err(format!("the join names {}", join.payload["message"]["system"]));
+        return Err(format!(
+            "the join names {}",
+            join.payload["message"]["system"]
+        ));
     }
 
     // -- The owner renames and switches history; nobody else does (D5, D1) --------------
-    let by_member = code_of(client.chat_patch_group(&member.ctx, &group.id, Some("Mine now"), None).await);
-    let history_by_member = code_of(client.chat_patch_group(&member.ctx, &group.id, None, Some(true)).await);
+    let by_member = code_of(
+        client
+            .chat_patch_group(&member.ctx, &group.id, Some("Mine now"), None)
+            .await,
+    );
+    let history_by_member = code_of(
+        client
+            .chat_patch_group(&member.ctx, &group.id, None, Some(true))
+            .await,
+    );
     if (by_member.as_str(), history_by_member.as_str()) != ("owner_only", "owner_only") {
-        return Err(format!("a member's rename answered {by_member}, the switch {history_by_member}"));
+        return Err(format!(
+            "a member's rename answered {by_member}, the switch {history_by_member}"
+        ));
     }
     let renamed = client
         .chat_patch_group(&owner.ctx, &group.id, Some("Duel night 2"), None)
@@ -998,7 +1184,10 @@ async fn group_flow(
     })
     .await?;
     if rename.payload["message"]["system"]["title"] != "Duel night 2" {
-        return Err(format!("the rename reads {}", rename.payload["message"]["system"]));
+        return Err(format!(
+            "the rename reads {}",
+            rename.payload["message"]["system"]
+        ));
     }
     let history = client
         .chat_patch_group(&owner.ctx, &group.id, None, Some(true))
@@ -1018,11 +1207,18 @@ async fn group_flow(
         .await
         .map_err(|e| format!("GET the group as C: {e}"))?;
     if kept.visible_from_seq != joined.visible_from_seq || !kept.history_for_new_members {
-        return Err(format!("C's view moved with the switch: {}", kept.visible_from_seq));
+        return Err(format!(
+            "C's view moved with the switch: {}",
+            kept.visible_from_seq
+        ));
     }
 
     // -- Only the owner removes; C goes, and comes back with the history ---------------
-    let by_member = code_of(client.chat_remove_member(&member.ctx, &group.id, &asker.user.id).await);
+    let by_member = code_of(
+        client
+            .chat_remove_member(&member.ctx, &group.id, &asker.user.id)
+            .await,
+    );
     if by_member != "owner_only" {
         return Err(format!("a member removing C answered {by_member}"));
     }
@@ -1031,25 +1227,37 @@ async fn group_flow(
         .await
         .map_err(|e| format!("the owner removes C: {e}"))?;
     let removed = expect_frame(&mut socket_c, "C hears the removal", |frame| {
-        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == group.id.as_str()
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == group.id.as_str()
     })
     .await?;
     if removed.payload["reason"] != "removed" {
-        return Err(format!("the removal reached C as {}", removed.payload["reason"]));
+        return Err(format!(
+            "the removal reached C as {}",
+            removed.payload["reason"]
+        ));
     }
     let removal = expect_frame(&mut socket_m, "M hears C removed", |frame| {
-        frame.kind == "chat.message" && frame.payload["message"]["system"]["event"] == "memberRemoved"
+        frame.kind == "chat.message"
+            && frame.payload["message"]["system"]["event"] == "memberRemoved"
     })
     .await?;
     if removal.payload["message"]["system"]["by"] != owner.user.id.as_str() {
-        return Err(format!("the removal reads {}", removal.payload["message"]["system"]));
+        return Err(format!(
+            "the removal reads {}",
+            removal.payload["message"]["system"]
+        ));
     }
     let gone = code_of(client.chat_conversation(&asker.ctx, &group.id).await);
     if gone != "not_found" {
         return Err(format!("C still reads the group: {gone}"));
     }
     let again = client
-        .chat_add_members(&owner.ctx, &group.id, &[asker.user.id.clone(), member.user.id.clone()])
+        .chat_add_members(
+            &owner.ctx,
+            &group.id,
+            &[asker.user.id.clone(), member.user.id.clone()],
+        )
         .await
         .map_err(|e| format!("the owner adds C again: {e}"))?;
     if again.invited != [asker.user.id.clone()]
@@ -1059,19 +1267,30 @@ async fn group_flow(
     {
         return Err(format!("adding C again answered {again:?}"));
     }
-    expect_frame(&mut socket_c, "C hears the second invite", |frame| frame.kind == "chat.groupInvite").await?;
+    expect_frame(&mut socket_c, "C hears the second invite", |frame| {
+        frame.kind == "chat.groupInvite"
+    })
+    .await?;
     let back = client
         .chat_join_group(&asker.ctx, &group.id)
         .await
         .map_err(|e| format!("C joins again: {e}"))?;
     let seen = events_of(client, asker, &group.id).await?;
     if back.visible_from_seq != 0 || seen.first().map(String::as_str) != Some("created") {
-        return Err(format!("with history on C joined at {} and sees {seen:?}", back.visible_from_seq));
+        return Err(format!(
+            "with history on C joined at {} and sees {seen:?}",
+            back.visible_from_seq
+        ));
     }
 
     // -- A declined invite keeps the group from asking again for a day ------------------
     let scrims = client
-        .chat_create_group(&owner.ctx, &new_client_id(), Some("Scrims"), std::slice::from_ref(&asker.user.id))
+        .chat_create_group(
+            &owner.ctx,
+            &new_client_id(),
+            Some("Scrims"),
+            std::slice::from_ref(&asker.user.id),
+        )
         .await
         .map_err(|e| format!("the second group: {e}"))?;
     let scrims_id = scrims.conversation.id.clone();
@@ -1092,7 +1311,11 @@ async fn group_flow(
         .chat_sync(&asker.ctx)
         .await
         .map_err(|e| format!("C's sync document: {e}"))?;
-    if doc.group_invites.iter().any(|invite| invite.conversation_id == scrims_id) {
+    if doc
+        .group_invites
+        .iter()
+        .any(|invite| invite.conversation_id == scrims_id)
+    {
         return Err("a declined invite is still listed".into());
     }
     client
@@ -1109,14 +1332,19 @@ async fn group_flow(
         .await
         .map_err(|e| format!("the owner leaves: {e}"))?;
     let left = expect_frame(&mut socket_o, "O hears O leave", |frame| {
-        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == group.id.as_str()
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == group.id.as_str()
     })
     .await?;
     if left.payload["reason"] != "left" {
-        return Err(format!("the owner's leave reached the owner as {}", left.payload["reason"]));
+        return Err(format!(
+            "the owner's leave reached the owner as {}",
+            left.payload["reason"]
+        ));
     }
     let (seen, found) = frames_until(&mut socket_m, FRAME_TIMEOUT, |frame| {
-        frame.kind == "chat.message" && frame.payload["message"]["system"]["event"] == "ownerChanged"
+        frame.kind == "chat.message"
+            && frame.payload["message"]["system"]["event"] == "ownerChanged"
     })
     .await?;
     if !found {
@@ -1127,7 +1355,11 @@ async fn group_flow(
     let order: Vec<String> = seen
         .iter()
         .filter(|frame| frame.kind == "chat.message")
-        .filter_map(|frame| frame.payload["message"]["system"]["event"].as_str().map(str::to_string))
+        .filter_map(|frame| {
+            frame.payload["message"]["system"]["event"]
+                .as_str()
+                .map(str::to_string)
+        })
         .filter(|event| event == "memberLeft" || event == "ownerChanged")
         .collect();
     if order != ["memberLeft", "ownerChanged"] {
@@ -1141,15 +1373,26 @@ async fn group_flow(
         .chat_conversation(&member.ctx, &group.id)
         .await
         .map_err(|e| format!("GET the group as M: {e}"))?;
-    let role = now.members.iter().find(|m| m.user.id == member.user.id).map(|m| m.role.as_str());
+    let role = now
+        .members
+        .iter()
+        .find(|m| m.user.id == member.user.id)
+        .map(|m| m.role.as_str());
     if now.owner_id.as_deref() != Some(member.user.id.as_str()) || role != Some("owner") {
-        return Err(format!("after the handover the group reads owner {:?}, role {role:?}", now.owner_id));
+        return Err(format!(
+            "after the handover the group reads owner {:?}, role {role:?}",
+            now.owner_id
+        ));
     }
     client
         .chat_patch_group(&member.ctx, &group.id, Some("M's night"), None)
         .await
         .map_err(|e| format!("the new owner renames: {e}"))?;
-    let by_asker = code_of(client.chat_patch_group(&asker.ctx, &group.id, Some("C's night"), None).await);
+    let by_asker = code_of(
+        client
+            .chat_patch_group(&asker.ctx, &group.id, Some("C's night"), None)
+            .await,
+    );
     if by_asker != "owner_only" {
         return Err(format!("C's rename after the handover answered {by_asker}"));
     }
@@ -1210,7 +1453,11 @@ async fn file_limits(
         .chat_send(
             &alpha.ctx,
             &dm.id,
-            &NewMessage { client_id: new_client_id(), file_ids: vec![file_id.clone()], ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                file_ids: vec![file_id.clone()],
+                ..NewMessage::default()
+            },
         )
         .await
         .map_err(|e| format!("sending 25 MiB: {e}"))?;
@@ -1231,7 +1478,11 @@ async fn file_limits(
     let resumed = temp.join("resumed");
     std::fs::create_dir_all(&resumed).map_err(|e| e.to_string())?;
     let head = std::fs::read(&staged.path).map_err(|e| e.to_string())?;
-    std::fs::write(resumed.join(format!("{file_id}.part")), &head[..1024 * 1024]).map_err(|e| e.to_string())?;
+    std::fs::write(
+        resumed.join(format!("{file_id}.part")),
+        &head[..1024 * 1024],
+    )
+    .map_err(|e| e.to_string())?;
     let mut first = None;
     let mut record = |received: u64, _: u64| {
         first.get_or_insert(received);
@@ -1239,13 +1490,22 @@ async fn file_limits(
     let whole = files::fetch(client, &beta.ctx, &resumed, &file_id, &mut record)
         .await
         .map_err(|e| format!("the resumed download: {e}"))?;
-    if first != Some(1024 * 1024) || crate::bundles::sha256_of(&whole).map_err(|e| e.to_string())? != staged.sha256 {
+    if first != Some(1024 * 1024)
+        || crate::bundles::sha256_of(&whole).map_err(|e| e.to_string())? != staged.sha256
+    {
         return Err(format!("the resumed download started at {first:?}"));
     }
 
     // -- The same bytes again cost no upload; B may not send A's file ------------------------
     let again = client
-        .chat_register_file(&alpha.ctx, &dm.id, "again.dm_26", staged.size, &staged.sha256, None)
+        .chat_register_file(
+            &alpha.ctx,
+            &dm.id,
+            "again.dm_26",
+            staged.size,
+            &staged.sha256,
+            None,
+        )
         .await
         .map_err(|e| format!("registering the same bytes: {e}"))?;
     if again.needs_upload {
@@ -1256,7 +1516,11 @@ async fn file_limits(
             .chat_send(
                 &beta.ctx,
                 &dm.id,
-                &NewMessage { client_id: new_client_id(), file_ids: vec![again.file.id.clone()], ..NewMessage::default() },
+                &NewMessage {
+                    client_id: new_client_id(),
+                    file_ids: vec![again.file.id.clone()],
+                    ..NewMessage::default()
+                },
             )
             .await,
     );
@@ -1272,7 +1536,14 @@ async fn file_limits(
     }
     let refused = code_of(
         client
-            .chat_register_file(&alpha.ctx, &dm.id, "over.dm_26", files::MAX_FILE_BYTES + 1, &"ab".repeat(32), None)
+            .chat_register_file(
+                &alpha.ctx,
+                &dm.id,
+                "over.dm_26",
+                files::MAX_FILE_BYTES + 1,
+                &"ab".repeat(32),
+                None,
+            )
             .await,
     );
     if refused != "file_too_large" {
@@ -1282,12 +1553,24 @@ async fn file_limits(
     // -- Bytes that are not the registered ones -----------------------------------------------
     let small = b"not the bytes of the registration".to_vec();
     let registered = client
-        .chat_register_file(&alpha.ctx, &dm.id, "note.txt", small.len() as u64, &"cd".repeat(32), None)
+        .chat_register_file(
+            &alpha.ctx,
+            &dm.id,
+            "note.txt",
+            small.len() as u64,
+            &"cd".repeat(32),
+            None,
+        )
         .await
         .map_err(|e| format!("registering a note: {e}"))?;
     let mismatch = code_of(
         client
-            .chat_upload_file(&alpha.ctx, &registered.file.id, small.len() as u64, small.clone().into())
+            .chat_upload_file(
+                &alpha.ctx,
+                &registered.file.id,
+                small.len() as u64,
+                small.clone().into(),
+            )
             .await,
     );
     if mismatch != "hash_mismatch" {
@@ -1323,8 +1606,14 @@ async fn file_limits(
     }
 
     // -- The quota counts the demo ------------------------------------------------------------------
-    let doc: ChatSyncDoc = lossless("A's sync document", &raw(client, alpha, "/v1/chat/conversations").await?)?;
-    if doc.quota.used_bytes < files::MAX_FILE_BYTES || doc.quota.quota_bytes == 0 || doc.quota.next_free_at.is_none() {
+    let doc: ChatSyncDoc = lossless(
+        "A's sync document",
+        &raw(client, alpha, "/v1/chat/conversations").await?,
+    )?;
+    if doc.quota.used_bytes < files::MAX_FILE_BYTES
+        || doc.quota.quota_bytes == 0
+        || doc.quota.next_free_at.is_none()
+    {
         return Err(format!("the quota reads {:?}", doc.quota));
     }
     Ok(())
@@ -1362,28 +1651,63 @@ async fn search_flow(
         send(client, alpha, &dm.id, &format!("duel{word} round {n}")).await?;
     }
 
-    let query = |q: &str| SearchQuery { q: q.into(), ..SearchQuery::default() };
+    let query = |q: &str| SearchQuery {
+        q: q.into(),
+        ..SearchQuery::default()
+    };
     let path = format!("/v1/chat/search?q={}", word.to_uppercase());
-    let page: crate::online::SearchPage = lossless("GET /v1/chat/search", &raw(client, alpha, &path).await?)?;
+    let page: crate::online::SearchPage =
+        lossless("GET /v1/chat/search", &raw(client, alpha, &path).await?)?;
     // The word is a substring of the three rounds too, and the newest comes
     // first.
     let found: Vec<u64> = page.results.iter().map(|hit| hit.message.seq).collect();
-    let oldest = page.results.last().map(|hit| hit.message.sender_id.as_deref());
-    if found.len() != 4 || found.last() != Some(&hit.seq) || oldest != Some(Some(beta.user.id.as_str())) {
+    let oldest = page
+        .results
+        .last()
+        .map(|hit| hit.message.sender_id.as_deref());
+    if found.len() != 4
+        || found.last() != Some(&hit.seq)
+        || oldest != Some(Some(beta.user.id.as_str()))
+    {
         return Err(format!("A's search for {word} found {found:?}"));
     }
-    let by_sender = |sender: &Player| SearchQuery { sender_id: Some(sender.user.id.clone()), ..query(&word) };
-    let from_b = client.chat_search(&alpha.ctx, &by_sender(beta)).await.map_err(|e| e.to_string())?;
-    let from_a = client.chat_search(&alpha.ctx, &by_sender(alpha)).await.map_err(|e| e.to_string())?;
+    let by_sender = |sender: &Player| SearchQuery {
+        sender_id: Some(sender.user.id.clone()),
+        ..query(&word)
+    };
+    let from_b = client
+        .chat_search(&alpha.ctx, &by_sender(beta))
+        .await
+        .map_err(|e| e.to_string())?;
+    let from_a = client
+        .chat_search(&alpha.ctx, &by_sender(alpha))
+        .await
+        .map_err(|e| e.to_string())?;
     if from_b.results.len() != 1 || from_a.results.len() != 3 {
-        return Err(format!("by sender: B {}, A {}", from_b.results.len(), from_a.results.len()));
+        return Err(format!(
+            "by sender: B {}, A {}",
+            from_b.results.len(),
+            from_a.results.len()
+        ));
     }
-    let cyrillic = client.chat_search(&beta.ctx, &query("БОЙ НА")).await.map_err(|e| e.to_string())?;
+    let cyrillic = client
+        .chat_search(&beta.ctx, &query("БОЙ НА"))
+        .await
+        .map_err(|e| e.to_string())?;
     if cyrillic.results.len() != 1 {
-        return Err(format!("a Cyrillic search found {}", cyrillic.results.len()));
+        return Err(format!(
+            "a Cyrillic search found {}",
+            cyrillic.results.len()
+        ));
     }
     let links = client
-        .chat_search(&beta.ctx, &SearchQuery { has: Some("link".into()), ..query("jknet") })
+        .chat_search(
+            &beta.ctx,
+            &SearchQuery {
+                has: Some("link".into()),
+                ..query("jknet")
+            },
+        )
         .await
         .map_err(|e| e.to_string())?;
     if links.results.len() != 1 || !links.results[0].message.body.contains("https://") {
@@ -1392,17 +1716,44 @@ async fn search_flow(
 
     // -- Pages, newest first -----------------------------------------------------------
     let first = client
-        .chat_search(&alpha.ctx, &SearchQuery { limit: Some(2), ..query(&format!("duel{word}")) })
+        .chat_search(
+            &alpha.ctx,
+            &SearchQuery {
+                limit: Some(2),
+                ..query(&format!("duel{word}"))
+            },
+        )
         .await
         .map_err(|e| e.to_string())?;
-    let cursor = first.next_cursor.clone().ok_or("a first page of two of three has no next cursor")?;
+    let cursor = first
+        .next_cursor
+        .clone()
+        .ok_or("a first page of two of three has no next cursor")?;
     let second = client
-        .chat_search(&alpha.ctx, &SearchQuery { limit: Some(2), before: Some(cursor), ..query(&format!("duel{word}")) })
+        .chat_search(
+            &alpha.ctx,
+            &SearchQuery {
+                limit: Some(2),
+                before: Some(cursor),
+                ..query(&format!("duel{word}"))
+            },
+        )
         .await
         .map_err(|e| e.to_string())?;
-    let seqs: Vec<u64> = first.results.iter().chain(&second.results).map(|hit| hit.message.seq).collect();
-    if seqs.len() != 3 || !seqs.windows(2).all(|pair| pair[0] > pair[1]) || second.next_cursor.is_some() {
-        return Err(format!("the pages hold {seqs:?}, then {:?}", second.next_cursor));
+    let seqs: Vec<u64> = first
+        .results
+        .iter()
+        .chain(&second.results)
+        .map(|hit| hit.message.seq)
+        .collect();
+    if seqs.len() != 3
+        || !seqs.windows(2).all(|pair| pair[0] > pair[1])
+        || second.next_cursor.is_some()
+    {
+        return Err(format!(
+            "the pages hold {seqs:?}, then {:?}",
+            second.next_cursor
+        ));
     }
 
     // -- Short queries need a conversation; strangers find nothing ------------------------
@@ -1411,7 +1762,13 @@ async fn search_flow(
         return Err(format!("a two-letter search everywhere answered {short}"));
     }
     let scoped = client
-        .chat_search(&alpha.ctx, &SearchQuery { conversation_id: Some(dm.id.clone()), ..query("my") })
+        .chat_search(
+            &alpha.ctx,
+            &SearchQuery {
+                conversation_id: Some(dm.id.clone()),
+                ..query("my")
+            },
+        )
         .await
         .map_err(|e| format!("a two-letter search in one conversation: {e}"))?;
     if scoped.results.is_empty() {
@@ -1419,13 +1776,24 @@ async fn search_flow(
     }
     let foreign = code_of(
         client
-            .chat_search(&outsider.ctx, &SearchQuery { conversation_id: Some(dm.id.clone()), ..query(&word) })
+            .chat_search(
+                &outsider.ctx,
+                &SearchQuery {
+                    conversation_id: Some(dm.id.clone()),
+                    ..query(&word)
+                },
+            )
             .await,
     );
     if foreign != "not_found" {
-        return Err(format!("a stranger's search in the conversation answered {foreign}"));
+        return Err(format!(
+            "a stranger's search in the conversation answered {foreign}"
+        ));
     }
-    let nothing = client.chat_search(&outsider.ctx, &query(&word)).await.map_err(|e| e.to_string())?;
+    let nothing = client
+        .chat_search(&outsider.ctx, &query(&word))
+        .await
+        .map_err(|e| e.to_string())?;
     if !nothing.results.is_empty() {
         return Err("a stranger found the conversation's messages".into());
     }
@@ -1459,22 +1827,36 @@ async fn unfriend_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> 
         .await
         .map_err(|e| format!("DELETE /v1/friends/{{B}} as A: {e}"))?;
     for (socket, who) in [(&mut socket_a, "A"), (&mut socket_b, "B")] {
-        expect_frame(socket, &format!("{who} hears the conversation go read-only"), |frame| {
-            frame.kind == "chat.conversation"
-                && frame.payload["conversation"]["id"] == dm.id.as_str()
-                && frame.payload["conversation"]["canSend"] == false
-        })
+        expect_frame(
+            socket,
+            &format!("{who} hears the conversation go read-only"),
+            |frame| {
+                frame.kind == "chat.conversation"
+                    && frame.payload["conversation"]["id"] == dm.id.as_str()
+                    && frame.payload["conversation"]["canSend"] == false
+            },
+        )
         .await?;
     }
-    let refused = code_of(client.chat_send(&beta.ctx, &dm.id, &text_message("still there?")).await);
-    let reaction = code_of(client.chat_react(&beta.ctx, &dm.id, hello.seq, "👍", true).await);
+    let refused = code_of(
+        client
+            .chat_send(&beta.ctx, &dm.id, &text_message("still there?"))
+            .await,
+    );
+    let reaction = code_of(
+        client
+            .chat_react(&beta.ctx, &dm.id, hello.seq, "👍", true)
+            .await,
+    );
     let file = code_of(
         client
             .chat_register_file(&beta.ctx, &dm.id, "shot.png", 10, &"ef".repeat(32), None)
             .await,
     );
     if [refused.as_str(), reaction.as_str(), file.as_str()] != ["not_friends"; 3] {
-        return Err(format!("a read-only conversation answered {refused}, {reaction}, {file}"));
+        return Err(format!(
+            "a read-only conversation answered {refused}, {reaction}, {file}"
+        ));
     }
     let kept = client
         .chat_open_direct(&beta.ctx, &alpha.user.id)
@@ -1485,15 +1867,22 @@ async fn unfriend_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> 
         .await
         .map_err(|e| format!("the history after unfriending: {e}"))?;
     if kept.id != dm.id || kept.can_send || history.messages.len() != 1 {
-        return Err(format!("after unfriending: {kept:?}, {} messages", history.messages.len()));
+        return Err(format!(
+            "after unfriending: {kept:?}, {} messages",
+            history.messages.len()
+        ));
     }
 
     befriend(client, beta, alpha).await?;
-    expect_frame(&mut socket_a, "A hears the conversation open again", |frame| {
-        frame.kind == "chat.conversation"
-            && frame.payload["conversation"]["id"] == dm.id.as_str()
-            && frame.payload["conversation"]["canSend"] == true
-    })
+    expect_frame(
+        &mut socket_a,
+        "A hears the conversation open again",
+        |frame| {
+            frame.kind == "chat.conversation"
+                && frame.payload["conversation"]["id"] == dm.id.as_str()
+                && frame.payload["conversation"]["canSend"] == true
+        },
+    )
     .await?;
     send(client, beta, &dm.id, "friends again").await?;
     let _ = socket_a.close(None).await;
@@ -1534,8 +1923,14 @@ async fn deletion_flow(
         .await
         .map_err(|e| format!("PUT /v1/chat/direct as A: {e}"))?;
     let original = send(client, leaver, &dm.id, "remember me").await?;
-    let (picture, _) = files::stage_bytes(&temp.join("staging"), "last.jpg", jpeg_with_gps(), "file", None)
-        .map_err(|e| format!("staging: {e}"))?;
+    let (picture, _) = files::stage_bytes(
+        &temp.join("staging"),
+        "last.jpg",
+        jpeg_with_gps(),
+        "file",
+        None,
+    )
+    .map_err(|e| format!("staging: {e}"))?;
     let file_id = files::put_staged(client, &leaver.ctx, &dm.id, &picture, |_| {})
         .await
         .map_err(|e| format!("A uploads: {e}"))?;
@@ -1543,7 +1938,11 @@ async fn deletion_flow(
         .chat_send(
             &leaver.ctx,
             &dm.id,
-            &NewMessage { client_id: new_client_id(), file_ids: vec![file_id.clone()], ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                file_ids: vec![file_id.clone()],
+                ..NewMessage::default()
+            },
         )
         .await
         .map_err(|e| format!("A sends the picture: {e}"))?;
@@ -1583,15 +1982,21 @@ async fn deletion_flow(
     println!("DELETE /v1/me for {} -> 204", leaver.name);
 
     // -- The direct conversation stays, read-only, for B (D3) ----------------------
-    let kept = expect_frame(&mut socket_b, "B hears the conversation go read-only", |frame| {
-        frame.kind == "chat.conversation"
-            && frame.payload["conversation"]["id"] == dm.id.as_str()
-            && frame.payload["conversation"]["canSend"] == false
-    })
+    let kept = expect_frame(
+        &mut socket_b,
+        "B hears the conversation go read-only",
+        |frame| {
+            frame.kind == "chat.conversation"
+                && frame.payload["conversation"]["id"] == dm.id.as_str()
+                && frame.payload["conversation"]["canSend"] == false
+        },
+    )
     .await?;
     let kept: Conversation = lossless("chat.conversation", &kept.payload["conversation"])?;
     if kept.can_send || kept.members.len() != 1 || kept.members[0].user.id != beta.user.id {
-        return Err(format!("after the deletion B's conversation reads {kept:?}"));
+        return Err(format!(
+            "after the deletion B's conversation reads {kept:?}"
+        ));
     }
     let page = client
         .chat_messages(&beta.ctx, &dm.id, PageAnchor::Latest, None)
@@ -1603,34 +2008,71 @@ async fn deletion_flow(
         return Err(format!("the deleted account's message reads {left:?}"));
     }
     let answered = by_seq(reply.seq).ok_or("B's reply went")?;
-    let quote = answered.reply_to.as_ref().ok_or("the reply lost its quote")?;
+    let quote = answered
+        .reply_to
+        .as_ref()
+        .ok_or("the reply lost its quote")?;
     if quote.sender_id.is_some() || quote.missing || !answered.body.contains("<@deleted>") {
-        return Err(format!("B's reply reads {:?} quoting {quote:?}", answered.body));
+        return Err(format!(
+            "B's reply reads {:?} quoting {quote:?}",
+            answered.body
+        ));
     }
     let mut quiet_progress = |_: u64, _: u64| {};
-    files::fetch(client, &beta.ctx, &temp.join("beta"), &file_id, &mut quiet_progress)
-        .await
-        .map_err(|e| format!("B downloads the deleted account's picture: {e}"))?;
-    let refused = code_of(client.chat_send(&beta.ctx, &dm.id, &text_message("hello?")).await);
+    files::fetch(
+        client,
+        &beta.ctx,
+        &temp.join("beta"),
+        &file_id,
+        &mut quiet_progress,
+    )
+    .await
+    .map_err(|e| format!("B downloads the deleted account's picture: {e}"))?;
+    let refused = code_of(
+        client
+            .chat_send(&beta.ctx, &dm.id, &text_message("hello?"))
+            .await,
+    );
     let reopened = code_of(client.chat_open_direct(&beta.ctx, &leaver.user.id).await);
     if (refused.as_str(), reopened.as_str()) != ("not_friends", "not_found") {
-        return Err(format!("writing to a deleted account answered {refused}, reopening {reopened}"));
+        return Err(format!(
+            "writing to a deleted account answered {refused}, reopening {reopened}"
+        ));
     }
     let found = client
-        .chat_search(&beta.ctx, &SearchQuery { q: "remember me".into(), ..SearchQuery::default() })
+        .chat_search(
+            &beta.ctx,
+            &SearchQuery {
+                q: "remember me".into(),
+                ..SearchQuery::default()
+            },
+        )
         .await
         .map_err(|e| format!("B's search: {e}"))?;
-    if found.results.first().map(|hit| hit.message.sender_id.is_none()) != Some(true) {
+    if found
+        .results
+        .first()
+        .map(|hit| hit.message.sender_id.is_none())
+        != Some(true)
+    {
         return Err("the search lost the deleted account's message".into());
     }
 
     // -- The empty conversation with C goes -------------------------------------------
-    let removed = expect_frame(&mut socket_c, "C hears the empty conversation go", |frame| {
-        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == empty.id.as_str()
-    })
+    let removed = expect_frame(
+        &mut socket_c,
+        "C hears the empty conversation go",
+        |frame| {
+            frame.kind == "chat.conversation.removed"
+                && frame.payload["conversationId"] == empty.id.as_str()
+        },
+    )
     .await?;
     if removed.payload["reason"] != "account_deleted" {
-        return Err(format!("the empty conversation went with {}", removed.payload["reason"]));
+        return Err(format!(
+            "the empty conversation went with {}",
+            removed.payload["reason"]
+        ));
     }
 
     // -- The group passes to B (D4) ---------------------------------------------------
@@ -1646,12 +2088,16 @@ async fn deletion_flow(
     let systems: Vec<&Value> = seen
         .iter()
         .filter(|frame| {
-            frame.kind == "chat.message" && frame.payload["message"]["conversationId"] == group.id.as_str()
+            frame.kind == "chat.message"
+                && frame.payload["message"]["conversationId"] == group.id.as_str()
         })
         .map(|frame| &frame.payload["message"]["system"])
         .filter(|system| !system.is_null())
         .collect();
-    let events: Vec<&str> = systems.iter().filter_map(|system| system["event"].as_str()).collect();
+    let events: Vec<&str> = systems
+        .iter()
+        .filter_map(|system| system["event"].as_str())
+        .collect();
     if events != ["memberLeft", "ownerChanged"]
         || !systems[0]["userId"].is_null()
         || systems[1]["userId"] != beta.user.id.as_str()
@@ -1683,7 +2129,11 @@ async fn a_host_invite_card_lets_a_guest_in_and_the_chat_ends_with_the_hosting()
     outcome.expect("the scenario");
 }
 
-async fn host_invite_flow(client: &OnlineClient, host: &Player, guest: &Player) -> Result<(), String> {
+async fn host_invite_flow(
+    client: &OnlineClient,
+    host: &Player,
+    guest: &Player,
+) -> Result<(), String> {
     use super::cards::{self, Card};
 
     befriend(client, host, guest).await?;
@@ -1701,19 +2151,31 @@ async fn host_invite_flow(client: &OnlineClient, host: &Player, guest: &Player) 
         .chat_open_direct(&host.ctx, &guest.user.id)
         .await
         .map_err(|e| format!("PUT /v1/chat/direct as H: {e}"))?;
-    let built = cards::prepare(&[json!({ "type": "hostInvite", "sessionId": session, "name": "Duel night" })])
-        .map_err(|e| format!("the launcher builds a host invite: {e}"))?;
+    let built = cards::prepare(&[
+        json!({ "type": "hostInvite", "sessionId": session, "name": "Duel night" }),
+    ])
+    .map_err(|e| format!("the launcher builds a host invite: {e}"))?;
     let sent = client
         .chat_send(
             &host.ctx,
             &dm.id,
-            &NewMessage { client_id: new_client_id(), cards: built, ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                cards: built,
+                ..NewMessage::default()
+            },
         )
         .await
         .map_err(|e| format!("H sends the card: {e}"))?;
     let stored = sent.cards.first().ok_or("the card went missing")?;
     let text = stored.to_string();
-    for secret in ["password", "lanAddresses", "relayAddress", "k7m2q9xa", "192.168.1.23"] {
+    for secret in [
+        "password",
+        "lanAddresses",
+        "relayAddress",
+        "k7m2q9xa",
+        "192.168.1.23",
+    ] {
         if text.contains(secret) {
             return Err(format!("the stored card carries {secret}: {text}"));
         }
@@ -1724,7 +2186,11 @@ async fn host_invite_flow(client: &OnlineClient, host: &Player, guest: &Player) 
                 && card.game.as_deref() == Some("ja")
                 && card.map.as_deref() == Some("mp/ffa3")
                 && card.session_id == session => {}
-        other => return Err(format!("the stored card reads {other:?} in the launcher: {text}")),
+        other => {
+            return Err(format!(
+                "the stored card reads {other:?} in the launcher: {text}"
+            ))
+        }
     }
     expect_frame(&mut socket_g, "G hears the invite of the card", |frame| {
         frame.kind == "invite"
@@ -1738,7 +2204,12 @@ async fn host_invite_flow(client: &OnlineClient, host: &Player, guest: &Player) 
         .iter()
         .find(|invite| invite.from.id == host.user.id)
         .ok_or("the card sent G no invite")?;
-    if invite.hosting.as_ref().map(|hosting| hosting.session_id.as_str()) != Some(session.as_str()) {
+    if invite
+        .hosting
+        .as_ref()
+        .map(|hosting| hosting.session_id.as_str())
+        != Some(session.as_str())
+    {
         return Err(format!("the invite leads to {:?}", invite.hosting));
     }
 
@@ -1752,21 +2223,34 @@ async fn host_invite_flow(client: &OnlineClient, host: &Player, guest: &Player) 
     }
     lossless::<Conversation>(
         "a server chat",
-        &raw(client, guest, &format!("/v1/chat/conversations/{}", chat.id)).await?,
+        &raw(
+            client,
+            guest,
+            &format!("/v1/chat/conversations/{}", chat.id),
+        )
+        .await?,
     )?;
 
     // -- Hosting ends: the chat ends for both ---------------------------------------------
     heartbeat(client, host, None).await?;
     for (socket, who) in [(&mut socket_h, "H"), (&mut socket_g, "G")] {
         let ended = expect_frame(socket, &format!("{who} hears the chat end"), |frame| {
-            frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == chat.id.as_str()
+            frame.kind == "chat.conversation.removed"
+                && frame.payload["conversationId"] == chat.id.as_str()
         })
         .await?;
         if ended.payload["reason"] != "ended" {
-            return Err(format!("the chat ended for {who} with {}", ended.payload["reason"]));
+            return Err(format!(
+                "the chat ended for {who} with {}",
+                ended.payload["reason"]
+            ));
         }
     }
-    let after = code_of(client.chat_join_server(&guest.ctx, &session, &host.user.id).await);
+    let after = code_of(
+        client
+            .chat_join_server(&guest.ctx, &session, &host.user.id)
+            .await,
+    );
     if after != "not_found" {
         return Err(format!("a join after the hosting ended answered {after}"));
     }
@@ -1788,11 +2272,15 @@ async fn host_invite_flow(client: &OnlineClient, host: &Player, guest: &Player) 
         .map_err(|e| format!("H leaves its own chat: {e}"))?;
     for (socket, who, reason) in [(&mut socket_h, "H", "left"), (&mut socket_g, "G", "ended")] {
         let ended = expect_frame(socket, &format!("{who} hears the host leave"), |frame| {
-            frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == second.id.as_str()
+            frame.kind == "chat.conversation.removed"
+                && frame.payload["conversationId"] == second.id.as_str()
         })
         .await?;
         if ended.payload["reason"] != reason {
-            return Err(format!("the host's leave reached {who} as {}", ended.payload["reason"]));
+            return Err(format!(
+                "the host's leave reached {who} as {}",
+                ended.payload["reason"]
+            ));
         }
     }
     heartbeat(client, host, None).await?;
@@ -1839,14 +2327,26 @@ async fn card_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Resu
             .chat_send(
                 &alpha.ctx,
                 &dm.id,
-                &NewMessage { client_id: new_client_id(), cards: built.clone(), ..NewMessage::default() },
+                &NewMessage {
+                    client_id: new_client_id(),
+                    cards: built.clone(),
+                    ..NewMessage::default()
+                },
             )
             .await
             .map_err(|e| format!("the service refuses the card {}: {e}", built[0]))?;
         if sent.cards != built {
-            return Err(format!("the card went out as {}\nand came back as {}", built[0], sent.cards[0]));
+            return Err(format!(
+                "the card went out as {}\nand came back as {}",
+                built[0], sent.cards[0]
+            ));
         }
-        cards::check(&sent.cards[0]).map_err(|e| format!("the launcher refuses the stored card {}: {e}", sent.cards[0]))?;
+        cards::check(&sent.cards[0]).map_err(|e| {
+            format!(
+                "the launcher refuses the stored card {}: {e}",
+                sent.cards[0]
+            )
+        })?;
     }
 
     // Cards the launcher refuses are refused by the service as well, with the
@@ -1865,12 +2365,18 @@ async fn card_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Resu
                 .chat_send(
                     &alpha.ctx,
                     &dm.id,
-                    &NewMessage { client_id: new_client_id(), cards: vec![card.clone()], ..NewMessage::default() },
+                    &NewMessage {
+                        client_id: new_client_id(),
+                        cards: vec![card.clone()],
+                        ..NewMessage::default()
+                    },
                 )
                 .await,
         );
         if (launcher.as_str(), service.as_str()) != ("card", "card") {
-            return Err(format!("{card}: the launcher answered {launcher}, the service {service}"));
+            return Err(format!(
+                "{card}: the launcher answered {launcher}, the service {service}"
+            ));
         }
     }
     // Whether the sender hosts the server is the service's to say.
@@ -1881,15 +2387,19 @@ async fn card_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Resu
                 &dm.id,
                 &NewMessage {
                     client_id: new_client_id(),
-                    cards: cards::prepare(&[json!({ "type": "hostInvite", "sessionId": "0123456789abcdef" })])
-                        .map_err(|e| format!("the launcher builds a host invite: {e}"))?,
+                    cards: cards::prepare(&[
+                        json!({ "type": "hostInvite", "sessionId": "0123456789abcdef" }),
+                    ])
+                    .map_err(|e| format!("the launcher builds a host invite: {e}"))?,
                     ..NewMessage::default()
                 },
             )
             .await,
     );
     if not_hosting != "card" {
-        return Err(format!("a host invite of a server nobody hosts answered {not_hosting}"));
+        return Err(format!(
+            "a host invite of a server nobody hosts answered {not_hosting}"
+        ));
     }
     Ok(())
 }
@@ -1916,7 +2426,10 @@ async fn opt_in_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
         .await
         .map_err(|e| format!("PUT /v1/chat/direct as B: {e}"))?;
     send(client, beta, &dm.id, "hi").await?;
-    expect_frame(&mut modern, "the chat socket hears the message", |frame| frame.kind == "chat.message").await?;
+    expect_frame(&mut modern, "the chat socket hears the message", |frame| {
+        frame.kind == "chat.message"
+    })
+    .await?;
     if quiet(&mut older, |frame| frame.kind.starts_with("chat.")).await? {
         return Err("a socket without X-JKNet-Features: chat heard chat".into());
     }
@@ -1927,10 +2440,19 @@ async fn opt_in_flow(client: &OnlineClient, alpha: &Player, beta: &Player) -> Re
     }
     // A friend event still reaches the old socket after the chat traffic.
     client
-        .put_presence(&beta.ctx, &PresenceUpdate { status: "online".into(), ..PresenceUpdate::default() })
+        .put_presence(
+            &beta.ctx,
+            &PresenceUpdate {
+                status: "online".into(),
+                ..PresenceUpdate::default()
+            },
+        )
         .await
         .map_err(|e| format!("PUT /v1/presence as B: {e}"))?;
-    expect_frame(&mut older, "the old socket hears the friend", |frame| frame.kind == "presence.updated").await?;
+    expect_frame(&mut older, "the old socket hears the friend", |frame| {
+        frame.kind == "presence.updated"
+    })
+    .await?;
     Ok(())
 }
 
@@ -1959,7 +2481,11 @@ async fn delete_all(client: &OnlineClient, players: &[&Player]) {
 }
 
 fn text_message(body: &str) -> NewMessage {
-    NewMessage { client_id: new_client_id(), body: body.into(), ..NewMessage::default() }
+    NewMessage {
+        client_id: new_client_id(),
+        body: body.into(),
+        ..NewMessage::default()
+    }
 }
 
 async fn send(
@@ -1982,7 +2508,11 @@ fn find<'a>(conversations: &'a [Conversation], id: &str) -> Result<&'a Conversat
 }
 
 /// The system events and bodies of the newest page the player sees.
-async fn events_of(client: &OnlineClient, player: &Player, conversation_id: &str) -> Result<Vec<String>, String> {
+async fn events_of(
+    client: &OnlineClient,
+    player: &Player,
+    conversation_id: &str,
+) -> Result<Vec<String>, String> {
     let page = client
         .chat_messages(&player.ctx, conversation_id, PageAnchor::Latest, None)
         .await
@@ -2010,9 +2540,10 @@ async fn raw(client: &OnlineClient, player: &Player, path: &str) -> Result<Value
 /// the windows, so a field it does not know, or reads under another name,
 /// never reaches them. `null` and an absent field count as the same.
 fn lossless<T: DeserializeOwned + Serialize>(what: &str, sent: &Value) -> Result<T, String> {
-    let parsed: T =
-        serde_json::from_value(sent.clone()).map_err(|e| format!("{what} does not parse in the launcher: {e}\n{sent}"))?;
-    let mut forwarded = serde_json::to_value(&parsed).map_err(|e| format!("{what} does not serialize: {e}"))?;
+    let parsed: T = serde_json::from_value(sent.clone())
+        .map_err(|e| format!("{what} does not parse in the launcher: {e}\n{sent}"))?;
+    let mut forwarded =
+        serde_json::to_value(&parsed).map_err(|e| format!("{what} does not serialize: {e}"))?;
     let mut sent = sent.clone();
     drop_nulls(&mut sent);
     drop_nulls(&mut forwarded);
@@ -2055,14 +2586,15 @@ fn drop_admin_false(value: &mut Value) {
 /// Where two documents first differ, as a JSON path.
 fn first_difference(a: &Value, b: &Value, at: &str) -> Option<String> {
     match (a, b) {
-        (Value::Object(left), Value::Object(right)) => left
-            .keys()
-            .chain(right.keys())
-            .find_map(|key| match (left.get(key), right.get(key)) {
-                (Some(x), Some(y)) => first_difference(x, y, &format!("{at}.{key}")),
-                (Some(_), None) => Some(format!("{at}.{key} (only the service sends it)")),
-                _ => Some(format!("{at}.{key} (only the launcher has it)")),
-            }),
+        (Value::Object(left), Value::Object(right)) => {
+            left.keys()
+                .chain(right.keys())
+                .find_map(|key| match (left.get(key), right.get(key)) {
+                    (Some(x), Some(y)) => first_difference(x, y, &format!("{at}.{key}")),
+                    (Some(_), None) => Some(format!("{at}.{key} (only the service sends it)")),
+                    _ => Some(format!("{at}.{key} (only the launcher has it)")),
+                })
+        }
         (Value::Array(left), Value::Array(right)) if left.len() == right.len() => left
             .iter()
             .zip(right)
@@ -2083,18 +2615,23 @@ fn check_frame(frame: &LiveFrame) -> Result<(), String> {
         return Ok(());
     }
     let what = format!("the frame {}", frame.kind);
-    let parsed =
-        frames::parse(&frame.kind, frame.payload.clone()).map_err(|e| format!("{what} does not parse: {e}\n{}", frame.payload))?;
+    let parsed = frames::parse(&frame.kind, frame.payload.clone())
+        .map_err(|e| format!("{what} does not parse: {e}\n{}", frame.payload))?;
     let payload = &frame.payload;
     let only = |keys: &[&str]| -> Result<(), String> {
-        let mut sent: Vec<&str> = payload.as_object().map(|map| map.keys().map(String::as_str).collect()).unwrap_or_default();
+        let mut sent: Vec<&str> = payload
+            .as_object()
+            .map(|map| map.keys().map(String::as_str).collect())
+            .unwrap_or_default();
         sent.sort_unstable();
         let mut wanted = keys.to_vec();
         wanted.sort_unstable();
         if sent == wanted {
             Ok(())
         } else {
-            Err(format!("{what} carries {sent:?}, the launcher reads {wanted:?}"))
+            Err(format!(
+                "{what} carries {sent:?}, the launcher reads {wanted:?}"
+            ))
         }
     };
     match frame.kind.as_str() {
@@ -2115,7 +2652,10 @@ fn check_frame(frame: &LiveFrame) -> Result<(), String> {
         }
         "chat.conversation.removed" => {
             let removal: Removal = lossless(&what, payload)?;
-            if !matches!(removal.reason.as_str(), "left" | "removed" | "ended" | "account_deleted") {
+            if !matches!(
+                removal.reason.as_str(),
+                "left" | "removed" | "ended" | "account_deleted"
+            ) {
                 return Err(format!("{what} names the reason {:?}", removal.reason));
             }
         }
@@ -2155,7 +2695,11 @@ async fn open(player: &Player) -> Result<Socket, String> {
     let (socket, response) = tokio_tungstenite::connect_async(request)
         .await
         .map_err(|e| format!("GET /v1/ws as {}: {e}", player.name))?;
-    println!("GET /v1/ws as {} -> {}", player.name, response.status().as_u16());
+    println!(
+        "GET /v1/ws as {} -> {}",
+        player.name,
+        response.status().as_u16()
+    );
     Ok(socket)
 }
 

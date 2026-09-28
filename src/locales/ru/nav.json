@@ -9,9 +9,10 @@
     "servers": "Серверы",
     "library": "Библиотека",
     "clients": "Клиенты",
+    "serverInstances": "Серверы",
     "friends": "Друзья",
     "settings": "Настройки",
-    "playerProfiles": "Профили игроков",
+    "playerProfiles": "Игровые профили",
     "media": "Медиа",
     "configs": "Конфиги"
   },

@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 import { useFormat } from "../../i18n/useFormat";
 import { useGametypeLabels } from "../../i18n/useGameLabels";
 import { hostInviteCard } from "../../lib/chat/cardDrafts";
+import { hostModId } from "../../lib/hostConfig";
 import type { HostSession } from "../../lib/ipc";
+import { useHostOptions } from "../../lib/queries";
 import { HostChatCard } from "../chat/HostChatCard";
 import { useShareDialog } from "../chat/ShareToChatDialog";
 import { Badge, Button } from "../ui";
@@ -63,6 +65,8 @@ export function HostRunning({
   const { t: tChat } = useTranslation("chat");
   const format = useFormat();
   const labels = useGametypeLabels();
+  const options = useHostOptions(session.game);
+  const mbii = hostModId(options.data?.clients.find((entry) => entry.id === session.settings.clientId)) === "mbii";
   // --- slice: chat cards --- **Share to chat**: an invitation card of this
   // server, the session and the name alone; the service fills in the rest.
   const share = useShareDialog();
@@ -127,7 +131,7 @@ export function HostRunning({
         <p className="text-body-md text-fg-secondary">
           {t("running.details", {
             map: settings.map,
-            gametype: labels.label(session.game, settings.gametype),
+            gametype: mbii && settings.gametype === 7 ? t("setup.config.mbiiMode") : labels.label(session.game, settings.gametype),
             players: humans,
             max: settings.maxPlayers,
           })}
@@ -238,4 +242,3 @@ export function HostRunning({
     </>
   );
 }
-

@@ -129,6 +129,16 @@ describe("bundle, JKHub, map and config cards", () => {
     assert.equal(jkhubModCard({ id: 1, slug: "a", title: "A", game: "ja" }, "jo").game, "ja");
   });
 
+  test("uses the Library game for a JKHub listing", () => {
+    // A catalogue row has no game field of its own. Library adds the game it
+    // is browsing before it passes the row to the shared-card factory.
+    const listing = { id: 4391, slug: "legends-hilt-pack", title: "Legends hilt pack" };
+    const card = jkhubModCard({ ...listing, game: "jo" }, "jo");
+    assert.equal(card.game, "jo");
+    assert.equal(card.fileId, listing.id);
+    assert.equal(card.title, listing.title);
+  });
+
   test("mapCard with and without a title", () => {
     assert.deepEqual(mapCard({ name: "mp/duel5", title: "Duel Temple" }, "ja"), {
       type: "map",

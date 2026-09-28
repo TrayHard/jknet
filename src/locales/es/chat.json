@@ -388,15 +388,15 @@
     "removeCard": "Quitar {{name}}",
     "tooManyCards": "Un mensaje puede llevar hasta {{max}} tarjetas.",
     "tooManyFiles": "Un mensaje puede llevar hasta {{max}} archivos.",
-    "refusedTitle_one": "{{count}} archivo no se adjuntó",
-    "refusedTitle_many": "{{count}} de archivos no se adjuntaron",
-    "refusedTitle_other": "{{count}} archivos no se adjuntaron",
     "refusedLine": "{{name}}: {{reason}}",
     "counter": "{{used}} / {{max}}",
     "tooLong": "Un mensaje puede tener hasta {{max}} caracteres.",
     "notFriends": "Ya no son amigos. El chat es de solo lectura; cuando vuelvan a ser amigos, continuará donde lo dejaron.",
     "deletedPeer": "Esta cuenta fue eliminada. El chat es de solo lectura y se guarda hasta el límite de 90 días.",
-    "readOnly": "No puede enviar mensajes a este chat."
+    "readOnly": "No puede enviar mensajes a este chat.",
+    "refusedTitle_one": "{{count}} archivo no se adjuntó",
+    "refusedTitle_many": "{{count}} de archivos no se adjuntaron",
+    "refusedTitle_other": "{{count}} archivos no se adjuntaron"
   },
   "attach": {
     "open": "Adjuntar",
@@ -876,5 +876,13 @@
     "tooltipUnread_one": "JKNet: {{count}} mensaje sin leer",
     "tooltipUnread_many": "JKNet: {{count}} mensajes sin leer",
     "tooltipUnread_other": "JKNet: {{count}} mensajes sin leer"
+  },
+  "serverConfig": {
+    "subtitle": "Server config · {{game}} · {{mod}}",
+    "open": "Open server editor",
+    "receiveTitle": "Save a server config",
+    "receiveHint": "Review the game, mod and rules. Saving adds a copy to your server configs. Choose it in Play with friends when you want to host.",
+    "save": "Save to server configs",
+    "sensitive": "Remove passwords or administration secrets before sharing."
   }
 }

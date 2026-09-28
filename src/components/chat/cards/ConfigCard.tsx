@@ -6,12 +6,15 @@ import { useErrorText } from "../../../i18n/errors";
 import { useFormat } from "../../../i18n/useFormat";
 import { usePlatform } from "../../../lib/backend";
 import { lineCount, previewLines } from "../../../lib/chat/cardDrafts";
-import type { ChatCardConfig } from "../../../lib/ipc";
+import type { ChatCardConfig, ServerConfigDocument } from "../../../lib/ipc";
+import { hasServerConfigHeader, parseServerConfigEnvelope } from "../../../lib/serverConfig";
+import { MOD_CATALOG } from "../../../lib/serverConfigCatalog";
 import { useChatCardToConfig, useChatCommandScan } from "../../../lib/queries";
 import { Button } from "../../ui";
 import { DangerList } from "../DangerList";
 import { CardShell, CardStatus } from "./CardShell";
 import { ConfigApplyDialog } from "./ConfigApplyDialog";
+import { ServerConfigApplyDialog } from "./ServerConfigApplyDialog";
 import { copyText, useFlash } from "./useCardActions";
 import type { CardViewProps } from "./withFields";
 
@@ -32,15 +35,20 @@ const PREVIEW_LINES = 4;
  */
 export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
   const { t } = useTranslation("chat");
+  const { t: tServer } = useTranslation("serverConfigs");
   const errorText = useErrorText();
   const format = useFormat();
   const scan = useChatCommandScan(fields.text);
   const toConfig = useChatCardToConfig();
   const caps = usePlatform();
   const [config, setConfig] = useState<ChatCardConfig | null>(null);
+  const [serverConfig, setServerConfig] = useState<ServerConfigDocument | null>(null);
+  const envelope = parseServerConfigEnvelope(fields.text);
+  const [rejectedHeader, setRejectedHeader] = useState(false);
+  const invalidHeader = rejectedHeader || (hasServerConfigHeader(fields.text) && !envelope);
   const [saved, setSaved] = useState<string | null>(null);
   const [copied, flashCopied] = useFlash();
-  const preview = previewLines(fields.text, PREVIEW_LINES);
+  const preview = previewLines(envelope?.text ?? fields.text, PREVIEW_LINES);
   const size = new TextEncoder().encode(fields.text).length;
 
   return (
@@ -50,7 +58,10 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
         icon={<FileCode size={16} />}
         title={fields.name}
         titleText={fields.name}
-        subtitle={t("cards.config.lines", { count: lineCount(fields.text), size: format.bytes(size) })}
+        subtitle={envelope ? t("serverConfig.subtitle", {
+          game: envelope.game === "ja" ? "Jedi Academy" : "Jedi Outcast",
+          mod: MOD_CATALOG.find((mod) => mod.id === envelope.modId)?.name ?? envelope.modId,
+        }) : t("cards.config.lines", { count: lineCount(fields.text), size: format.bytes(size) })}
         actions={
           <>
             {caps.localFiles ? (
@@ -58,13 +69,18 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
                 size="sm"
                 variant="primary"
                 icon={<FilePen size={14} />}
-                disabled={toConfig.isPending}
+                disabled={toConfig.isPending || invalidHeader}
                 onClick={() => {
                   setSaved(null);
-                  toConfig.mutate({ card }, { onSuccess: setConfig });
+                  toConfig.mutate({ card }, { onSuccess: (checked) => {
+                    const server = parseServerConfigEnvelope(checked.document.text);
+                    if (server) setServerConfig({ ...server, id: "" });
+                    else if (hasServerConfigHeader(checked.document.text)) setRejectedHeader(true);
+                    else setConfig(checked);
+                  } });
                 }}
               >
-                {t("cards.config.open")}
+                {t(envelope || invalidHeader ? "serverConfig.open" : "cards.config.open")}
               </Button>
             ) : null}
             <Button
@@ -78,7 +94,9 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
           </>
         }
         status={
-          toConfig.error ? (
+          invalidHeader ? (
+            <CardStatus tone="danger">{tServer("invalidHeader")}</CardStatus>
+          ) : toConfig.error ? (
             <CardStatus tone="danger">{errorText(toConfig.error)}</CardStatus>
           ) : saved !== null ? (
             <CardStatus tone="success">{t("apply.config.saved", { name: saved })}</CardStatus>
@@ -92,7 +110,7 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
             {preview.join("\n")}
           </pre>
         ) : null}
-        <DangerList dangers={scan.data ?? []} compact />
+        {envelope ? null : <DangerList dangers={scan.data ?? []} compact />}
       </CardShell>
       {config !== null ? (
         <ConfigApplyDialog
@@ -104,6 +122,8 @@ export function ConfigCardView({ card, fields }: CardViewProps<"config">) {
           }}
         />
       ) : null}
+      {serverConfig !== null ? <ServerConfigApplyDialog document={serverConfig} onClose={() => setServerConfig(null)}
+        onSaved={(document) => { setServerConfig(null); setSaved(document.name); }} /> : null}
     </>
   );
 }

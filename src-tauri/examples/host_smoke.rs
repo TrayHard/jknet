@@ -28,7 +28,9 @@ use jknet_lib::smoke::{self, SmokeConfig, SmokeOnline};
 
 fn arg(name: &str) -> Option<String> {
     let args: Vec<String> = std::env::args().collect();
-    args.iter().position(|a| a == name).and_then(|at| args.get(at + 1).cloned())
+    args.iter()
+        .position(|a| a == name)
+        .and_then(|at| args.get(at + 1).cloned())
 }
 
 fn data_root() -> Option<PathBuf> {
@@ -38,7 +40,11 @@ fn data_root() -> Option<PathBuf> {
 /// The first client whose engine has the dedicated server of OpenJK x86.
 fn find_engine() -> Option<(PathBuf, &'static str)> {
     let clients = data_root()?.join("clients");
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(clients).ok()?.flatten().map(|e| e.path()).collect();
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(clients)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
     entries.sort();
     for client in entries {
         let engine = client.join("engine");
@@ -101,10 +107,12 @@ async fn dev_sign_in(url: &str, name: &str) -> Result<String, String> {
         .ok_or("the dev form carries no state")?
         .to_string();
     // The state is URL-safe as the service makes it; the names have no space.
-    http.get(format!("{url}/v1/auth/dev/callback?state={state}&name={name}"))
-        .send()
-        .await
-        .map_err(|e| format!("dev callback: {e}"))?;
+    http.get(format!(
+        "{url}/v1/auth/dev/callback?state={state}&name={name}"
+    ))
+    .send()
+    .await
+    .map_err(|e| format!("dev callback: {e}"))?;
     for _ in 0..20 {
         let poll: serde_json::Value = http
             .get(format!("{url}/v1/auth/login-sessions/{id}"))
@@ -141,7 +149,11 @@ fn main() {
     let (engine, exe) = match arg("--engine") {
         Some(dir) => {
             let dir = PathBuf::from(dir);
-            let exe = if dir.join("openjkded.x86.exe").is_file() { "openjkded.x86.exe" } else { "openjkded.x86_64.exe" };
+            let exe = if dir.join("openjkded.x86.exe").is_file() {
+                "openjkded.x86.exe"
+            } else {
+                "openjkded.x86_64.exe"
+            };
             (dir, exe)
         }
         None => find_engine().expect("no client with an OpenJK dedicated server; pass --engine"),
@@ -153,19 +165,38 @@ fn main() {
     let port: u16 = arg("--port").and_then(|p| p.parse().ok()).unwrap_or(29170);
     let map = arg("--map").unwrap_or_else(|| "mp/ffa3".into());
 
-    let temp = tempfile::Builder::new().prefix("jknet-host-smoke-").tempdir().expect("a temp folder");
+    let temp = tempfile::Builder::new()
+        .prefix("jknet-host-smoke-")
+        .tempdir()
+        .expect("a temp folder");
     let engine_copy = temp.path().join("engine");
     let copied = copy_dir(&engine, &engine_copy).expect("the engine copies");
-    println!("engine: {} ({} MB copied into {})", engine.display(), copied / 1_048_576, engine_copy.display());
+    println!(
+        "engine: {} ({} MB copied into {})",
+        engine.display(),
+        copied / 1_048_576,
+        engine_copy.display()
+    );
     println!("game data: {}", game_data.display());
 
     let online = arg("--online").map(|url| {
         let url = url.trim_end_matches('/').to_string();
-        let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
-        let host_token = runtime.block_on(dev_sign_in(&url, "SmokeHost")).expect("the dev sign-in works");
-        let guest_token = runtime.block_on(dev_sign_in(&url, "SmokeGuest")).expect("the dev sign-in works");
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let host_token = runtime
+            .block_on(dev_sign_in(&url, "SmokeHost"))
+            .expect("the dev sign-in works");
+        let guest_token = runtime
+            .block_on(dev_sign_in(&url, "SmokeGuest"))
+            .expect("the dev sign-in works");
         println!("signed in to {url} as SmokeHost and SmokeGuest");
-        SmokeOnline { url, host_token, guest_token }
+        SmokeOnline {
+            url,
+            host_token,
+            guest_token,
+        }
     });
 
     let config = SmokeConfig {

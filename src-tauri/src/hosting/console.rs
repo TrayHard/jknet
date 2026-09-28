@@ -106,6 +106,7 @@ pub struct ConsoleOutput {
     written: AtomicU64,
     /// One flag per entry of [`Marker::ALL`], in its order.
     markers: [AtomicBool; Marker::ALL.len()],
+    game_initializations: AtomicU64,
 }
 
 impl ConsoleOutput {
@@ -141,7 +142,15 @@ impl ConsoleOutput {
         self.markers[index].load(Ordering::Relaxed)
     }
 
+    /// Counts starts and map restarts even after their log lines leave the tail.
+    pub fn game_initializations(&self) -> u64 {
+        self.game_initializations.load(Ordering::Relaxed)
+    }
+
     fn push_line(&self, line: &str) {
+        if line.contains(Marker::GameInitialization.needle()) {
+            self.game_initializations.fetch_add(1, Ordering::Relaxed);
+        }
         for (index, marker) in Marker::ALL.iter().enumerate() {
             if line.contains(marker.needle()) {
                 self.markers[index].store(true, Ordering::Relaxed);
@@ -161,7 +170,10 @@ impl ConsoleOutput {
             if before + bytes <= MAX_LOG_BYTES {
                 let _ = writeln!(handle, "{line}");
             } else if before <= MAX_LOG_BYTES {
-                let _ = writeln!(handle, "[JKNet] the log stops here: it passed {MAX_LOG_BYTES} bytes");
+                let _ = writeln!(
+                    handle,
+                    "[JKNet] the log stops here: it passed {MAX_LOG_BYTES} bytes"
+                );
             }
         }
     }
@@ -480,8 +492,14 @@ mod windows {
             let create = GetProcAddress(module, c"CreatePseudoConsole".as_ptr().cast())?;
             let close = GetProcAddress(module, c"ClosePseudoConsole".as_ptr().cast())?;
             Some(PseudoConsoleApi {
-                create: std::mem::transmute::<unsafe extern "system" fn() -> isize, CreatePseudoConsoleFn>(create),
-                close: std::mem::transmute::<unsafe extern "system" fn() -> isize, ClosePseudoConsoleFn>(close),
+                create: std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    CreatePseudoConsoleFn,
+                >(create),
+                close: std::mem::transmute::<
+                    unsafe extern "system" fn() -> isize,
+                    ClosePseudoConsoleFn,
+                >(close),
             })
         }
     }
@@ -513,7 +531,10 @@ mod windows {
     unsafe impl Sync for Inner {}
 
     fn wide(text: &str) -> Vec<u16> {
-        std::ffi::OsStr::new(text).encode_wide().chain(std::iter::once(0)).collect()
+        std::ffi::OsStr::new(text)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
 
     fn last_error() -> u32 {
@@ -521,7 +542,10 @@ mod windows {
     }
 
     fn failed(reason: String) -> AppError {
-        AppError::HostStartFailed { reason, exit_code: None }
+        AppError::HostStartFailed {
+            reason,
+            exit_code: None,
+        }
     }
 
     /// The job every server lives in: killed with the last handle, no error
@@ -588,9 +612,17 @@ mod windows {
                 output.note("this server was started without a captured console; its output is not in this log");
                 let (process, thread, pid) = create_process(executable, working_dir, &line, None)
                     .inspect_err(|_| unsafe {
-                        CloseHandle(job.0);
-                    })?;
-                (process, thread, pid, ConsoleMethod::NoWindow, None, None, None)
+                    CloseHandle(job.0);
+                })?;
+                (
+                    process,
+                    thread,
+                    pid,
+                    ConsoleMethod::NoWindow,
+                    None,
+                    None,
+                    None,
+                )
             }
         };
 
@@ -643,8 +675,12 @@ mod windows {
         output: &Arc<ConsoleOutput>,
     ) -> Result<Started> {
         unsafe {
-            let (mut in_read, mut in_write, mut out_read, mut out_write): (HANDLE, HANDLE, HANDLE, HANDLE) =
-                (null_mut(), null_mut(), null_mut(), null_mut());
+            let (mut in_read, mut in_write, mut out_read, mut out_write): (
+                HANDLE,
+                HANDLE,
+                HANDLE,
+                HANDLE,
+            ) = (null_mut(), null_mut(), null_mut(), null_mut());
             if CreatePipe(&mut in_read, &mut in_write, null(), 0) == 0 {
                 return Err(failed(format!("CreatePipe failed: {}", last_error())));
             }
@@ -655,7 +691,16 @@ mod windows {
                 return Err(failed(format!("CreatePipe failed: {error}")));
             }
             let mut hpc: HPCON = 0;
-            let hr = (api.create)(COORD { X: COLUMNS, Y: ROWS }, in_read, out_write, 0, &mut hpc);
+            let hr = (api.create)(
+                COORD {
+                    X: COLUMNS,
+                    Y: ROWS,
+                },
+                in_read,
+                out_write,
+                0,
+                &mut hpc,
+            );
             // The pseudo console holds its own duplicates of these two ends.
             CloseHandle(in_read);
             CloseHandle(out_write);
@@ -664,7 +709,10 @@ mod windows {
                 CloseHandle(out_read);
                 return Err(failed(format!("CreatePseudoConsole failed: {hr:#x}")));
             }
-            let pty = Pty { hpc, close: api.close };
+            let pty = Pty {
+                hpc,
+                close: api.close,
+            };
             // Read from the very start: an unread pipe stalls the server.
             let reader = start_reader(File::from_raw_handle(out_read as RawHandle), output.clone());
             let input = File::from_raw_handle(in_write as RawHandle);
@@ -753,7 +801,11 @@ mod windows {
                     );
                     let error = last_error();
                     DeleteProcThreadAttributeList(list);
-                    if ok == 0 { Err(error) } else { Ok(()) }
+                    if ok == 0 {
+                        Err(error)
+                    } else {
+                        Ok(())
+                    }
                 }
                 None => {
                     let mut startup: STARTUPINFOW = zeroed();
@@ -770,7 +822,11 @@ mod windows {
                         &startup,
                         &mut info,
                     );
-                    if ok == 0 { Err(last_error()) } else { Ok(()) }
+                    if ok == 0 {
+                        Err(last_error())
+                    } else {
+                        Ok(())
+                    }
                 }
             };
             if let Err(error) = created {
@@ -781,7 +837,11 @@ mod windows {
             }
             // The main thread stays suspended: the caller resumes it once the
             // process is in the job.
-            Ok((Handle(info.hProcess), Handle(info.hThread), info.dwProcessId))
+            Ok((
+                Handle(info.hProcess),
+                Handle(info.hThread),
+                info.dwProcessId,
+            ))
         }
     }
 
@@ -916,10 +976,26 @@ Opening IP socket: 127.0.0.1:29070\x1b[K\r\n\
 
         let tail = output.tail(30);
         assert_eq!(tail.len(), 30);
-        assert_eq!(tail.last().map(String::as_str), Some("Can't find map maps/mp/nowhere.bsp"));
+        assert_eq!(
+            tail.last().map(String::as_str),
+            Some("Can't find map maps/mp/nowhere.bsp")
+        );
         assert_eq!(output.tail(1000).len(), TAIL_LINES);
         let written = std::fs::read_to_string(&log).expect("the log");
         assert!(written.starts_with("line 0\n"), "the whole run is on disk");
+    }
+
+    #[test]
+    fn game_initialization_count_survives_tail_eviction_and_counts_round_restarts() {
+        let output = ConsoleOutput::default();
+        assert_eq!(output.game_initializations(), 0);
+        output.push_line("------- Game Initialization -------");
+        for _ in 0..TAIL_LINES {
+            output.push_line("other output");
+        }
+        assert_eq!(output.game_initializations(), 1);
+        output.push_line("------- Game Initialization -------");
+        assert_eq!(output.game_initializations(), 2);
     }
 
     #[test]
@@ -934,7 +1010,10 @@ Opening IP socket: 127.0.0.1:29070\x1b[K\r\n\
         assert_eq!(quote_argument(r"C:\with space\"), r#""C:\with space\\""#);
         assert_eq!(quote_argument(r#"say "hi""#), r#""say \"hi\"""#);
         assert_eq!(
-            command_line(Path::new(r"C:\a b\openjkded.x86.exe"), &["+set".into(), "net_port".into(), "29070".into()]),
+            command_line(
+                Path::new(r"C:\a b\openjkded.x86.exe"),
+                &["+set".into(), "net_port".into(), "29070".into()]
+            ),
             r#""C:\a b\openjkded.x86.exe" +set net_port 29070"#
         );
     }

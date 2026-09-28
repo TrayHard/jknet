@@ -226,7 +226,9 @@ impl Engine {
 
     pub fn require_host(&self, host: HostSystem) -> Result<()> {
         if !host.supports_engines() {
-            return Err(AppError::UnsupportedEngineSystem { system: host.label() });
+            return Err(AppError::UnsupportedEngineSystem {
+                system: host.label(),
+            });
         }
         Ok(())
     }
@@ -246,9 +248,15 @@ impl Engine {
     /// Existing x86 clients keep working after x64 becomes the default.
     pub fn installed_executable(&self, dir: &std::path::Path) -> std::path::PathBuf {
         let original = dir.join(self.executable);
-        if original.is_file() { return original; }
+        if original.is_file() {
+            return original;
+        }
         let x64 = dir.join(self.executable_for_asset("x86_64"));
-        if x64.is_file() { x64 } else { original }
+        if x64.is_file() {
+            x64
+        } else {
+            original
+        }
     }
 
     // --- slice: bundles ---
@@ -305,6 +313,26 @@ impl Engine {
             .into_iter()
             .map(|name| dir.join(name))
             .find(|path| path.is_file())
+    }
+
+    /// The dedicated server of one required module architecture.
+    ///
+    /// Unlike [`Engine::dedicated_executable`], this never falls back to the
+    /// other width. Falling back starts Base when an x86-only mod is selected,
+    /// which looks like a successful launch but runs the wrong server.
+    pub fn dedicated_executable_for_arch(
+        &self,
+        dir: &std::path::Path,
+        arch: &str,
+    ) -> Option<std::path::PathBuf> {
+        let server = self.dedicated?;
+        let name = match arch {
+            "x86" => server.executable,
+            "x86_64" => server.executable_x64,
+            _ => return None,
+        };
+        let path = dir.join(name);
+        path.is_file().then_some(path)
     }
 }
 
@@ -374,8 +402,14 @@ const ENGINES: &[Engine] = &[
             },
         ],
         asset_rules_x64: Some(&[
-            AssetRule { require: &["openjk-windows-x86_64", ".zip"], forbid: &["sanitizer", "arm"] },
-            AssetRule { require: &["openjk-windows-x86", ".zip"], forbid: &["x86_64", "sanitizer", "arm"] },
+            AssetRule {
+                require: &["openjk-windows-x86_64", ".zip"],
+                forbid: &["sanitizer", "arm"],
+            },
+            AssetRule {
+                require: &["openjk-windows-x86", ".zip"],
+                forbid: &["x86_64", "sanitizer", "arm"],
+            },
         ]),
     },
     Engine {
@@ -456,8 +490,14 @@ const ENGINES: &[Engine] = &[
             },
         ],
         asset_rules_x64: Some(&[
-            AssetRule { require: &["taystjk-windows-x86_64", ".zip"], forbid: &["sanitizer", "windowsxp", "arm"] },
-            AssetRule { require: &["taystjk-windows-x86", ".zip"], forbid: &["x86_64", "sanitizer", "windowsxp", "arm"] },
+            AssetRule {
+                require: &["taystjk-windows-x86_64", ".zip"],
+                forbid: &["sanitizer", "windowsxp", "arm"],
+            },
+            AssetRule {
+                require: &["taystjk-windows-x86", ".zip"],
+                forbid: &["x86_64", "sanitizer", "windowsxp", "arm"],
+            },
         ]),
     },
     Engine {
@@ -547,6 +587,14 @@ const ENGINES: &[Engine] = &[
     },
 ];
 
+/// Registry entries in their display order.
+///
+/// Persistent dedicated servers use the same registry as clients but keep
+/// their installations in a separate shared library.
+pub(crate) fn all() -> &'static [Engine] {
+    ENGINES
+}
+
 /// Returns the engine with this id.
 pub fn find(id: &str) -> Option<&'static Engine> {
     ENGINES.iter().find(|engine| engine.id == id)
@@ -583,7 +631,8 @@ pub fn require_for_game(id: &str, game: Game) -> Result<&'static Engine> {
 #[tauri::command]
 pub fn list_engines(game: Option<Game>) -> Result<Vec<EngineAvailability>> {
     let host = HostSystem::current();
-    Ok(ENGINES.iter()
+    Ok(ENGINES
+        .iter()
         .filter(|engine| game.is_none_or(|game| engine.game == game))
         .map(|engine| availability(engine, host))
         .collect())
@@ -618,7 +667,13 @@ fn availability(engine: &Engine, host: HostSystem) -> EngineAvailability {
         engine.installable = false;
         Some("unsupportedEngineSystem")
     };
-    EngineAvailability { engine, system: host.label(), compatibility_error, modes, can_host }
+    EngineAvailability {
+        engine,
+        system: host.label(),
+        compatibility_error,
+        modes,
+        can_host,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -638,10 +693,25 @@ where
     for rule in rules {
         let found = assets.clone().into_iter().position(|name| {
             let name = name.to_ascii_lowercase();
-            let is_x64 = |text: &str| ["x86_64", "x64", "amd64"].iter().any(|arch| text.contains(arch));
+            let is_x64 = |text: &str| {
+                ["x86_64", "x64", "amd64"]
+                    .iter()
+                    .any(|arch| text.contains(arch))
+            };
             name.ends_with(".zip")
                 && (!is_x64(&name) || rule.require.iter().any(|part| is_x64(part)))
-                && !["sanitizer", "debug", "symbols", "arm", "aarch", "linux", "macos", "windowsxp"].iter().any(|needle| name.contains(needle))
+                && ![
+                    "sanitizer",
+                    "debug",
+                    "symbols",
+                    "arm",
+                    "aarch",
+                    "linux",
+                    "macos",
+                    "windowsxp",
+                ]
+                .iter()
+                .any(|needle| name.contains(needle))
                 && rule.require.iter().all(|needle| name.contains(needle))
                 && !rule.forbid.iter().any(|needle| name.contains(needle))
         });
@@ -762,6 +832,14 @@ fn admit_engine_install<'a>(
 /// stopped before the engine arrived has nothing to lose yet, and the retry
 /// of that install goes through the same unpacking.
 fn refuse_overlay_update(client: &Client) -> Result<()> {
+    if client.engine_origin == crate::clients::EngineOrigin::Imported
+        && client.engine_version.is_some()
+    {
+        return Err(AppError::InvalidInput(format!(
+            "{} uses an imported engine snapshot. Create another client to install a managed release without overwriting it.",
+            client.name
+        )));
+    }
     let overlaid = client
         .bundle
         .as_ref()
@@ -793,6 +871,14 @@ pub async fn check_engine_update(
     let paths = state.paths()?;
     let client = crate::clients::read_record(&paths, &client_id)?;
     let engine = require(&client.engine_id)?;
+    if client.engine_origin == crate::clients::EngineOrigin::Imported {
+        return Ok(EngineUpdate {
+            installed: client.engine_version.clone(),
+            latest: None,
+            latest_published_at: None,
+            update_available: false,
+        });
+    }
     let releases = engine_install::releases(engine, &paths.cache).await?;
 
     let latest = releases.first();
@@ -809,6 +895,9 @@ pub async fn check_engine_update(
 /// RFC 3339 in UTC with a fixed width sorts the same as time does, so the
 /// publication times compare as plain strings.
 fn is_update_available(client: &Client, latest: Option<&EngineRelease>) -> bool {
+    if client.engine_origin == crate::clients::EngineOrigin::Imported {
+        return false;
+    }
     let Some(latest) = latest else {
         return false;
     };
@@ -892,8 +981,14 @@ mod tests {
 
     fn pick(engine_id: &str, assets: &[&str]) -> Option<String> {
         let engine = find(engine_id).expect("engine is in the registry");
-        match_asset(engine.rules_for_system(HostSystem { os: "windows", arch: "x86" }), assets.iter().copied())
-            .map(|index| assets[index].to_string())
+        match_asset(
+            engine.rules_for_system(HostSystem {
+                os: "windows",
+                arch: "x86",
+            }),
+            assets.iter().copied(),
+        )
+        .map(|index| assets[index].to_string())
     }
 
     /// Picks with one explicit rule list, so a test can name the architecture
@@ -1028,7 +1123,9 @@ mod tests {
 
         let ja = list_engines(Some(Game::JediAcademy)).expect("the registry answers");
         assert_eq!(ja.len(), 4);
-        assert!(ja.iter().all(|entry| entry.engine.game == Game::JediAcademy));
+        assert!(ja
+            .iter()
+            .all(|entry| entry.engine.game == Game::JediAcademy));
 
         let jo = list_engines(Some(Game::JediOutcast)).expect("the registry answers");
         assert_eq!(
@@ -1118,9 +1215,13 @@ mod tests {
         // `http` link in a build that ships to players is a downgrade nobody
         // asked for, and both sites in the registry answer on TLS.
         for engine in ENGINES {
-            for url in [Some(engine.repo_url), Some(engine.releases_url), engine.homepage]
-                .into_iter()
-                .flatten()
+            for url in [
+                Some(engine.repo_url),
+                Some(engine.releases_url),
+                engine.homepage,
+            ]
+            .into_iter()
+            .flatten()
             {
                 assert!(url.starts_with("https://"), "{}: {url}", engine.id);
             }
@@ -1174,28 +1275,58 @@ mod tests {
 
     #[test]
     fn selects_native_x64_or_compatible_x86_from_mixed_releases() {
-        let host = HostSystem { os: "windows", arch: "x86_64" };
+        let host = HostSystem {
+            os: "windows",
+            arch: "x86_64",
+        };
         for (id, assets, expected) in [
             ("openjk", OPENJK_ASSETS, "OpenJK-windows-x86_64.zip"),
             ("taystjk", TAYSTJK_ASSETS, "TaystJK-windows-x86_64.zip"),
             ("jk2mv", JK2MV_ASSETS, "jk2mv-v1.4.1-win32-x64-portable.zip"),
-            ("eternaljk", ETERNALJK_ASSETS, "eternaljk-win32-portable.zip"),
+            (
+                "eternaljk",
+                ETERNALJK_ASSETS,
+                "eternaljk-win32-portable.zip",
+            ),
             ("jamme", JAMME_ASSETS, "jamme-windows-x86.zip"),
         ] {
             let engine = require(id).unwrap();
-            assert_eq!(pick_with(engine.rules_for_system(host), assets).as_deref(), Some(expected), "{id}");
-            let only_x86: Vec<&str> = assets.iter().copied().filter(|name| !name.contains("x86_64") && !name.contains("x64")).collect();
-            assert!(pick_with(engine.rules_for_system(host), &only_x86).is_some(), "{id}");
+            assert_eq!(
+                pick_with(engine.rules_for_system(host), assets).as_deref(),
+                Some(expected),
+                "{id}"
+            );
+            let only_x86: Vec<&str> = assets
+                .iter()
+                .copied()
+                .filter(|name| !name.contains("x86_64") && !name.contains("x64"))
+                .collect();
+            assert!(
+                pick_with(engine.rules_for_system(host), &only_x86).is_some(),
+                "{id}"
+            );
         }
     }
 
     #[test]
     fn unsupported_hosts_disable_catalog_and_refuse_installation() {
         for host in [
-            HostSystem { os: "linux", arch: "x86_64" },
-            HostSystem { os: "macos", arch: "aarch64" },
-            HostSystem { os: "windows", arch: "aarch64" },
-            HostSystem { os: "windows", arch: "unknown" },
+            HostSystem {
+                os: "linux",
+                arch: "x86_64",
+            },
+            HostSystem {
+                os: "macos",
+                arch: "aarch64",
+            },
+            HostSystem {
+                os: "windows",
+                arch: "aarch64",
+            },
+            HostSystem {
+                os: "windows",
+                arch: "unknown",
+            },
         ] {
             for engine in ENGINES {
                 assert!(engine.rules_for_system(host).is_empty());
@@ -1212,7 +1343,10 @@ mod tests {
 
     #[test]
     fn x86_rules_never_accept_x64_arm_debug_or_non_archives() {
-        let host = HostSystem { os: "windows", arch: "x86" };
+        let host = HostSystem {
+            os: "windows",
+            arch: "x86",
+        };
         for engine in ENGINES {
             let assets = [
                 format!("{}-windows-x86_64.zip", engine.id),
@@ -1223,7 +1357,15 @@ mod tests {
                 format!("{}-windows-x86-debug.zip", engine.id),
                 format!("{}-win32-x64-portable.zip", engine.id),
             ];
-            assert!(match_asset(engine.rules_for_system(host), assets.iter().map(String::as_str)).is_none(), "{}", engine.id);
+            assert!(
+                match_asset(
+                    engine.rules_for_system(host),
+                    assets.iter().map(String::as_str)
+                )
+                .is_none(),
+                "{}",
+                engine.id
+            );
         }
     }
 
@@ -1257,13 +1399,19 @@ mod tests {
                 "{}: {modes:?}",
                 engine.id
             );
-            assert_eq!(engine.supports(LaunchMode::Single), engine.single_player.is_some());
+            assert_eq!(
+                engine.supports(LaunchMode::Single),
+                engine.single_player.is_some()
+            );
         }
         let openjk = find("openjk").expect("openjk");
         let single = openjk.single_player.expect("the single-player executable");
         assert_eq!(single.executable, "openjk_sp.x86.exe");
         assert_eq!(single.executable_x64, "openjk_sp.x86_64.exe");
-        assert_eq!(openjk.modes(), [LaunchMode::Multiplayer, LaunchMode::Single]);
+        assert_eq!(
+            openjk.modes(),
+            [LaunchMode::Multiplayer, LaunchMode::Single]
+        );
 
         // On the wire: lowercase, the way `client.json` and a manifest spell it.
         assert_eq!(serde_json::to_value(LaunchMode::Single).unwrap(), "single");
@@ -1280,9 +1428,13 @@ mod tests {
         let entry = serde_json::to_value(listed.iter().find(|e| e.engine.id == "openjk").unwrap())
             .expect("serializes");
         assert_eq!(entry["modes"], serde_json::json!(["multiplayer", "single"]));
-        assert!(entry.get("singlePlayer").is_none(), "the executable names stay in the core");
-        let eternal = serde_json::to_value(listed.iter().find(|e| e.engine.id == "eternaljk").unwrap())
-            .expect("serializes");
+        assert!(
+            entry.get("singlePlayer").is_none(),
+            "the executable names stay in the core"
+        );
+        let eternal =
+            serde_json::to_value(listed.iter().find(|e| e.engine.id == "eternaljk").unwrap())
+                .expect("serializes");
         assert_eq!(eternal["modes"], serde_json::json!(["multiplayer"]));
     }
 
@@ -1293,17 +1445,28 @@ mod tests {
         let dir = temp.path().join("openjk");
         std::fs::create_dir(&dir).unwrap();
         // Nothing installed: the x86 name, so a refusal can name the file.
-        let missing = openjk.single_player_executable(&dir).expect("openjk has one");
+        let missing = openjk
+            .single_player_executable(&dir)
+            .expect("openjk has one");
         assert_eq!(missing, dir.join("openjk_sp.x86.exe"));
         assert!(!missing.is_file());
         // The x64 archive unpacked.
         std::fs::write(dir.join("openjk_sp.x86_64.exe"), b"MZ").unwrap();
-        assert_eq!(openjk.single_player_executable(&dir).unwrap(), dir.join("openjk_sp.x86_64.exe"));
+        assert_eq!(
+            openjk.single_player_executable(&dir).unwrap(),
+            dir.join("openjk_sp.x86_64.exe")
+        );
         // The x86 one, which keeps winning the way `installed_executable` does.
         std::fs::write(dir.join("openjk_sp.x86.exe"), b"MZ").unwrap();
-        assert_eq!(openjk.single_player_executable(&dir).unwrap(), dir.join("openjk_sp.x86.exe"));
+        assert_eq!(
+            openjk.single_player_executable(&dir).unwrap(),
+            dir.join("openjk_sp.x86.exe")
+        );
         // A build without a single-player game has no file to name.
-        assert!(require("eternaljk").unwrap().single_player_executable(&dir).is_none());
+        assert!(require("eternaljk")
+            .unwrap()
+            .single_player_executable(&dir)
+            .is_none());
     }
 
     // --- slice: play with friends ---
@@ -1311,12 +1474,20 @@ mod tests {
     #[test]
     fn every_engine_but_jamme_ships_a_dedicated_server() {
         for engine in ENGINES {
-            assert_eq!(engine.dedicated.is_some(), engine.id != "jamme", "{}", engine.id);
+            assert_eq!(
+                engine.dedicated.is_some(),
+                engine.id != "jamme",
+                "{}",
+                engine.id
+            );
             let listed = availability(engine, HostSystem::current());
             assert_eq!(listed.can_host, engine.id != "jamme", "{}", engine.id);
         }
-        let json = serde_json::to_value(availability(require("jamme").unwrap(), HostSystem::current()))
-            .expect("serializes");
+        let json = serde_json::to_value(availability(
+            require("jamme").unwrap(),
+            HostSystem::current(),
+        ))
+        .expect("serializes");
         assert_eq!(json["canHost"], false);
         // The file names stay in the core, like the single-player ones.
         assert!(json.get("dedicated").is_none(), "{json}");
@@ -1335,18 +1506,42 @@ mod tests {
         std::fs::write(dir.join("openjk.x86_64.exe"), b"MZ").unwrap();
         std::fs::write(dir.join("openjkded.x86_64.exe"), b"MZ").unwrap();
         std::fs::write(dir.join("openjkded.x86.exe"), b"MZ").unwrap();
-        assert_eq!(openjk.dedicated_executable(&dir), Some(dir.join("openjkded.x86_64.exe")));
+        assert_eq!(
+            openjk.dedicated_executable(&dir),
+            Some(dir.join("openjkded.x86_64.exe"))
+        );
 
         // An x86 install starts the x86 one.
         std::fs::write(dir.join("openjk.x86.exe"), b"MZ").unwrap();
-        assert_eq!(openjk.dedicated_executable(&dir), Some(dir.join("openjkded.x86.exe")));
+        assert_eq!(
+            openjk.dedicated_executable(&dir),
+            Some(dir.join("openjkded.x86.exe"))
+        );
 
         // The other width stands in when the first one is gone.
         std::fs::remove_file(dir.join("openjkded.x86.exe")).unwrap();
-        assert_eq!(openjk.dedicated_executable(&dir), Some(dir.join("openjkded.x86_64.exe")));
+        assert_eq!(
+            openjk.dedicated_executable(&dir),
+            Some(dir.join("openjkded.x86_64.exe"))
+        );
 
         // jaMME has nothing to find.
         assert_eq!(require("jamme").unwrap().dedicated_executable(&dir), None);
+    }
+
+    #[test]
+    fn a_required_dedicated_width_never_falls_back_to_the_other_one() {
+        let temp = tempfile::tempdir().unwrap();
+        let openjk = require("openjk").unwrap();
+        let dir = temp.path().join("openjk");
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(dir.join("openjkded.x86_64.exe"), b"MZ").unwrap();
+
+        assert_eq!(openjk.dedicated_executable_for_arch(&dir, "x86"), None);
+        assert_eq!(
+            openjk.dedicated_executable_for_arch(&dir, "x86_64"),
+            Some(dir.join("openjkded.x86_64.exe"))
+        );
     }
 
     #[test]
@@ -1359,7 +1554,10 @@ mod tests {
 
     #[test]
     fn a_release_without_a_windows_build_matches_nothing() {
-        let assets = ["eternaljk-linux-i686.tar.gz", "eternaljk-macos-x86_64.tar.gz"];
+        let assets = [
+            "eternaljk-linux-i686.tar.gz",
+            "eternaljk-macos-x86_64.tar.gz",
+        ];
         assert!(pick("eternaljk", &assets).is_none());
         assert!(pick("openjk", &[]).is_none());
     }
@@ -1395,6 +1593,17 @@ mod tests {
         assert!(!is_update_available(&client, Some(&release)));
     }
 
+    #[test]
+    fn an_imported_snapshot_is_neither_updated_nor_reinstalled() {
+        let mut client = client_with(Some("imported"), None);
+        client.engine_origin = crate::clients::EngineOrigin::Imported;
+        let release = release_at("latest", "2026-09-01T00:00:00Z");
+
+        assert!(!is_update_available(&client, Some(&release)));
+        let error = refuse_overlay_update(&client).expect_err("the snapshot is protected");
+        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+    }
+
     fn client_with(version: Option<&str>, published: Option<&str>) -> Client {
         Client {
             id: "everyday".into(),
@@ -1402,6 +1611,7 @@ mod tests {
             engine_id: "openjk".into(),
             game: Game::JediAcademy,
             engine_version: version.map(str::to_string),
+            engine_origin: crate::clients::EngineOrigin::Managed,
             engine_published_at: published.map(str::to_string),
             engine_installed_at: None,
             fs_game: None,
@@ -1496,7 +1706,10 @@ mod tests {
         let error = bundles
             .claim(&client.id, BundlesState::PUBLISH)
             .expect_err("the publish is refused while the engine installs");
-        assert!(error.to_string().contains("an engine installation"), "{error}");
+        assert!(
+            error.to_string().contains("an engine installation"),
+            "{error}"
+        );
         drop(claim);
         bundles
             .claim(&client.id, BundlesState::PUBLISH)

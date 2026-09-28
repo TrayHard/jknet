@@ -25,6 +25,8 @@ export interface ComboboxOption {
    * «Duel FFA» are told apart by the nickname they carry, not by their names.
    */
   hint?: string;
+  /** Adjacent options with the same label form an accessible, non-collapsible group. */
+  group?: string;
   /** Listed and read out, but not choosable. */
   disabled?: boolean;
 }
@@ -46,6 +48,8 @@ interface ComboboxProps {
   size?: SelectSize;
   disabled?: boolean;
   className?: string;
+  /** Extra room for rich options when the field itself is narrow. */
+  listMinWidth?: number;
   // --- slice: play with friends ---
   /**
    * Draws an option instead of its label and hint, in the list and in the
@@ -112,6 +116,7 @@ export function Combobox({
   size = "md",
   disabled = false,
   className,
+  listMinWidth = 280,
   renderOption,
 }: ComboboxProps) {
   const id = useId();
@@ -133,6 +138,15 @@ export function Combobox({
   const text = selected?.label ?? placeholder ?? value;
 
   const found = useMemo(() => matches(options, query), [options, query]);
+  const groups = useMemo(() => {
+    const result: { label?: string; start: number; options: ComboboxOption[] }[] = [];
+    found.forEach((option, index) => {
+      const previous = result[result.length - 1];
+      if (previous && previous.label === option.group) previous.options.push(option);
+      else result.push({ label: option.group, start: index, options: [option] });
+    });
+    return result;
+  }, [found]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -337,7 +351,7 @@ export function Combobox({
           open ? "border-line-focus" : "border-line hover:border-line-strong",
           // --- slice: play with friends --- a drawn option sets the height.
           renderOption
-            ? "min-h-36 gap-8 py-8 pl-8 pr-32 text-left"
+            ? "h-52 gap-8 pl-8 pr-32 text-left"
             : size === "sm"
               ? "h-28 gap-6 pl-10 pr-28"
               : "h-36 gap-8 pl-12 pr-32",
@@ -382,7 +396,7 @@ export function Combobox({
                 left: anchor.left,
                 width: Math.max(
                   anchor.width,
-                  Math.min(280, window.innerWidth - anchor.left - EDGE),
+                  Math.min(listMinWidth, window.innerWidth - anchor.left - EDGE),
                 ),
                 top: anchor.top,
                 bottom: anchor.bottom,
@@ -433,61 +447,79 @@ export function Combobox({
                 // The focus belongs to the search field for the whole exchange,
                 // and a press on an option must not steal it.
                 onMouseDown={(event) => event.preventDefault()}
-                className="flex-1 min-h-0 overflow-y-auto py-4"
+                className="flex-1 min-h-0 overflow-y-auto pb-4 scroll-pt-36"
               >
                 {found.length === 0 ? (
                   <li className="px-12 py-8 text-body-sm text-fg-muted">
                     {emptyText}
                   </li>
                 ) : (
-                  found.map((option, index) => {
-                    const isSelected = option.value === value;
-                    const isActive = index === activeIndex;
-                    return (
-                      <li
-                        key={option.value}
-                        id={optionId(index)}
-                        data-index={index}
-                        role="option"
-                        aria-selected={isSelected}
-                        aria-disabled={option.disabled || undefined}
-                        onMouseEnter={() => {
-                          if (!option.disabled) setActiveIndex(index);
-                        }}
-                        onClick={() => commit(index)}
-                        className={cn(
-                          "flex items-center gap-8 px-12 py-6 text-body-sm",
-                          option.disabled
-                            ? "text-fg-disabled cursor-not-allowed"
-                            : "cursor-pointer",
-                          !option.disabled && isActive ? "bg-hover-overlay" : "",
-                          isSelected && !option.disabled
-                            ? "bg-selected-overlay text-fg-accent"
-                            : option.disabled
-                              ? ""
-                              : "text-fg",
-                        )}
+                  groups.map((group) => (
+                    <li key={group.start} role="presentation">
+                      {group.label ? (
+                        <div
+                          id={`${id}-group-${group.start}`}
+                          className="sticky top-0 z-10 bg-elevated px-12 pt-12 pb-6 text-label-xs text-fg-secondary border-b border-line"
+                        >
+                          {group.label}
+                        </div>
+                      ) : null}
+                      <ul
+                        role={group.label ? "group" : "presentation"}
+                        aria-labelledby={group.label ? `${id}-group-${group.start}` : undefined}
                       >
-                        {renderOption ? (
-                          <span className="flex-1 min-w-0">
-                            {renderOption(option, "list")}
-                          </span>
-                        ) : (
-                          <span className="flex-1 min-w-0 flex flex-col">
-                            <span className="truncate">{option.label}</span>
-                            {option.hint ? (
-                              <span className="truncate text-label-xs text-fg-muted">
-                                {option.hint}
-                              </span>
-                            ) : null}
-                          </span>
-                        )}
-                        {isSelected ? (
-                          <Check size={14} aria-hidden className="shrink-0" />
-                        ) : null}
-                      </li>
-                    );
-                  })
+                          {group.options.map((option, offset) => {
+                            const index = group.start + offset;
+                            const isSelected = option.value === value;
+                            const isActive = index === activeIndex;
+                            return (
+                              <li
+                                key={option.value}
+                                id={optionId(index)}
+                                data-index={index}
+                                role="option"
+                                aria-selected={isSelected}
+                                aria-disabled={option.disabled || undefined}
+                                onMouseEnter={() => {
+                                  if (!option.disabled) setActiveIndex(index);
+                                }}
+                                onClick={() => commit(index)}
+                                className={cn(
+                                  "flex items-center gap-8 px-12 py-6 text-body-sm",
+                                  option.disabled
+                                    ? "text-fg-disabled cursor-not-allowed"
+                                    : "cursor-pointer",
+                                  !option.disabled && isActive ? "bg-hover-overlay" : "",
+                                  isSelected && !option.disabled
+                                    ? "bg-selected-overlay text-fg-accent"
+                                    : option.disabled
+                                      ? ""
+                                      : "text-fg",
+                                )}
+                              >
+                                {renderOption ? (
+                                  <span className="flex-1 min-w-0">
+                                    {renderOption(option, "list")}
+                                  </span>
+                                ) : (
+                                  <span className="flex-1 min-w-0 flex flex-col">
+                                    <span className="truncate">{option.label}</span>
+                                    {option.hint ? (
+                                      <span className="truncate text-label-xs text-fg-muted">
+                                        {option.hint}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                )}
+                                {isSelected ? (
+                                  <Check size={14} aria-hidden className="shrink-0" />
+                                ) : null}
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    </li>
+                  ))
                 )}
               </ul>
             </div>,
@@ -515,7 +547,8 @@ function matches(
   return options.filter(
     (option) =>
       option.label.toLowerCase().includes(needle) ||
-      (option.hint ?? "").toLowerCase().includes(needle),
+      (option.hint ?? "").toLowerCase().includes(needle) ||
+      (option.group ?? "").toLowerCase().includes(needle),
   );
 }
 

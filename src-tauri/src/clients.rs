@@ -68,6 +68,13 @@ pub struct Client {
     pub game: Game,
     /// Installed engine version, `None` until the engine is downloaded.
     pub engine_version: Option<String>,
+    /// Where the files in `engine\` came from.
+    ///
+    /// `Managed` is a release JKNet may replace with another release from the
+    /// engine registry. `Imported` is a snapshot of a folder the player chose;
+    /// replacing it would discard files JKNet cannot recreate.
+    #[serde(default)]
+    pub engine_origin: EngineOrigin,
     /// UTC creation time, RFC 3339.
     pub created_at: String,
 
@@ -112,6 +119,15 @@ pub struct Client {
     /// before bundles existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bundle: Option<ClientBundleLink>,
+}
+
+/// Whether JKNet installed the engine or copied an existing client.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EngineOrigin {
+    #[default]
+    Managed,
+    Imported,
 }
 
 impl Client {
@@ -286,6 +302,7 @@ pub(crate) fn create_record(
         engine_id: engine_id.to_string(),
         game,
         engine_version: None,
+        engine_origin: EngineOrigin::Managed,
         created_at: timestamp::now_rfc3339(),
         engine_installed_at: None,
         engine_published_at: None,
@@ -468,7 +485,13 @@ pub fn delete_client(
 ) -> Result<()> {
     // The dedicated server of a private server runs out of this folder.
     host.refuse_if_hosting(&id)?;
-    remove_client(state.client_records(), &installs, &bundles, &state.paths()?, &id)?;
+    remove_client(
+        state.client_records(),
+        &installs,
+        &bundles,
+        &state.paths()?,
+        &id,
+    )?;
     // --- slice: client window ---
     // A window editing a client that no longer exists has nothing to show and
     // every field in it would fail on save.
@@ -627,8 +650,7 @@ pub(crate) fn read_record(paths: &DataPaths, id: &str) -> Result<Client> {
 }
 
 fn read_file(file: &Path) -> Result<Client> {
-    let text =
-        fs::read_to_string(file).map_err(|e| AppError::io_path("cannot read", file, e))?;
+    let text = fs::read_to_string(file).map_err(|e| AppError::io_path("cannot read", file, e))?;
     serde_json::from_str(&text)
         .map_err(|e| AppError::json(format!("cannot parse {}", file.display()), e))
 }
@@ -647,7 +669,7 @@ pub(crate) fn write_record(paths: &DataPaths, client: &Client) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Trims a name and rejects the empty and the overlong one.
-fn validate_name(name: &str) -> Result<String> {
+pub(crate) fn validate_name(name: &str) -> Result<String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err(AppError::InvalidInput("client name is empty".into()));
@@ -711,7 +733,7 @@ fn slugify(name: &str) -> String {
 }
 
 /// Appends `-2`, `-3` and so on until the slug is free.
-fn unique_slug(name: &str, taken: &[String]) -> String {
+pub(crate) fn unique_slug(name: &str, taken: &[String]) -> String {
     let base = slugify(name);
     if !taken.iter().any(|id| id == &base) {
         return base;
@@ -751,10 +773,16 @@ mod tests {
 
     #[test]
     fn a_mod_folder_is_one_plain_name() {
-        assert_eq!(validate_fs_game("japlus").unwrap().as_deref(), Some("japlus"));
+        assert_eq!(
+            validate_fs_game("japlus").unwrap().as_deref(),
+            Some("japlus")
+        );
         assert_eq!(validate_fs_game("  mme  ").unwrap().as_deref(), Some("mme"));
         assert_eq!(validate_fs_game("ja+").unwrap().as_deref(), Some("ja+"));
-        assert_eq!(validate_fs_game("MB_II-2").unwrap().as_deref(), Some("MB_II-2"));
+        assert_eq!(
+            validate_fs_game("MB_II-2").unwrap().as_deref(),
+            Some("MB_II-2")
+        );
     }
 
     #[test]
@@ -776,6 +804,7 @@ mod tests {
         .expect("an older record parses");
         assert_eq!(older.game, Game::JediAcademy);
         assert_eq!(older.engine_id, "openjk");
+        assert_eq!(older.engine_origin, EngineOrigin::Managed);
     }
 
     // --- slice: client launch args ---
@@ -878,7 +907,10 @@ mod tests {
         )
         .expect("an older record parses");
         assert!(older.modes.is_empty());
-        assert_eq!(older.launch_modes(openjk), [LaunchMode::Multiplayer, LaunchMode::Single]);
+        assert_eq!(
+            older.launch_modes(openjk),
+            [LaunchMode::Multiplayer, LaunchMode::Single]
+        );
         assert_eq!(older.launch_modes(eternaljk), [LaunchMode::Multiplayer]);
 
         // A component of a bundle that plays the single-player game alone.
@@ -892,21 +924,42 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let paths = DataPaths::new(temp.path().to_path_buf());
         paths.ensure().expect("the data layout");
-        let made = create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None).expect("a client");
+        let made =
+            create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None).expect("a client");
         assert_eq!(made.modes, [LaunchMode::Multiplayer, LaunchMode::Single]);
         let text = fs::read_to_string(paths.client_dir(&made.id).join("client.json")).unwrap();
-        assert!(text.contains("\"modes\": [
+        assert!(
+            text.contains(
+                "\"modes\": [
     \"multiplayer\",
     \"single\"
-  ]"), "{text}");
+  ]"
+            ),
+            "{text}"
+        );
         // A component hands its own list, cut down to what the engine has.
-        let sp = create_record(&paths, "SP", "openjk", Game::JediAcademy, Some(&[LaunchMode::Single]))
-            .expect("a single-player client");
+        let sp = create_record(
+            &paths,
+            "SP",
+            "openjk",
+            Game::JediAcademy,
+            Some(&[LaunchMode::Single]),
+        )
+        .expect("a single-player client");
         assert_eq!(sp.modes, [LaunchMode::Single]);
-        let error = create_record(&paths, "Odd", "eternaljk", Game::JediAcademy, Some(&[LaunchMode::Single]))
-            .expect_err("EternalJK has no single-player game");
+        let error = create_record(
+            &paths,
+            "Odd",
+            "eternaljk",
+            Game::JediAcademy,
+            Some(&[LaunchMode::Single]),
+        )
+        .expect_err("EternalJK has no single-player game");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        assert!(!paths.client_dir("odd").exists(), "nothing was made for a refused client");
+        assert!(
+            !paths.client_dir("odd").exists(),
+            "nothing was made for a refused client"
+        );
     }
 
     #[test]
@@ -914,7 +967,8 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let paths = DataPaths::new(temp.path().to_path_buf());
         paths.ensure().expect("the data layout");
-        let client = create_record(&paths, "Voip", "openjk", Game::JediAcademy, None).expect("a client");
+        let client =
+            create_record(&paths, "Voip", "openjk", Game::JediAcademy, None).expect("a client");
         let dir = paths.client_dir(&client.id);
         let lock = StepLock::default();
         let installs = InstallState::default();
@@ -942,7 +996,9 @@ mod tests {
         // Nobody holds it: the folder goes, and both sets are free again.
         remove_client(&lock, &installs, &bundles, &paths, &client.id).expect("deleted");
         assert!(!dir.exists());
-        installs.claim(&client.id).expect("the deletion released its claim");
+        installs
+            .claim(&client.id)
+            .expect("the deletion released its claim");
         bundles
             .claim(&client.id, BundlesState::INSTALL)
             .expect("the deletion released its claim");
@@ -987,7 +1043,9 @@ mod tests {
 
         let clients = tempfile::tempdir().expect("a clients root");
         let dir = client_layout(clients.path());
-        let link = dir.join(paths::CLIENT_BASEPATH_DIR).join(paths::BASE_FOLDER);
+        let link = dir
+            .join(paths::CLIENT_BASEPATH_DIR)
+            .join(paths::BASE_FOLDER);
         junction::create(&game_base, &link).expect("the junction");
         assert!(link.join("assets0.pk3").is_file(), "the link works");
 
@@ -1017,7 +1075,8 @@ mod tests {
         fs::create_dir_all(dir.join(paths::CLIENT_BASEPATH_DIR)).expect("the base root");
         junction::create(
             &game_base,
-            dir.join(paths::CLIENT_BASEPATH_DIR).join(paths::BASE_FOLDER),
+            dir.join(paths::CLIENT_BASEPATH_DIR)
+                .join(paths::BASE_FOLDER),
         )
         .expect("the junction");
 
@@ -1033,7 +1092,9 @@ mod tests {
         // fallback copy of `launch::prepare_basepath`, among other things.
         let clients = tempfile::tempdir().expect("a clients root");
         let dir = client_layout(clients.path());
-        let copies = dir.join(paths::CLIENT_BASEPATH_DIR).join(paths::BASE_FOLDER);
+        let copies = dir
+            .join(paths::CLIENT_BASEPATH_DIR)
+            .join(paths::BASE_FOLDER);
         fs::create_dir_all(&copies).expect("the copied base folder");
         fs::write(copies.join("assets0.pk3"), b"a copy JKNet made").expect("a copy");
 
@@ -1065,6 +1126,7 @@ mod tests {
             engine_id: "openjk".to_string(),
             game: Game::JediAcademy,
             engine_version: None,
+            engine_origin: EngineOrigin::Managed,
             created_at: timestamp::now_rfc3339(),
             engine_installed_at: None,
             engine_published_at: None,
@@ -1157,6 +1219,7 @@ mod tests {
             engine_id: "openjk".to_string(),
             game: Game::JediAcademy,
             engine_version: None,
+            engine_origin: EngineOrigin::Managed,
             created_at: timestamp::now_rfc3339(),
             engine_installed_at: None,
             engine_published_at: None,

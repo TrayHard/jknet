@@ -1,0 +1,152 @@
+{
+  "title": "Dedicated servers",
+  "subtitle": "Install engines and mods separately, then combine them in persistent server instances.",
+  "tabs": {
+    "instances": "Instances",
+    "engines": "Engines",
+    "mods": "Mods"
+  },
+  "actions": {
+    "connect": "Connect",
+    "create": "Create server",
+    "addMod": "Add mod",
+    "start": "Start",
+    "stop": "Stop",
+    "openFolder": "Open folder",
+    "clone": "Clone",
+    "manage": "Manage",
+    "delete": "Delete",
+    "save": "Save",
+    "saveConfig": "Save config",
+    "edit": "Edit",
+    "editConfig": "Edit config",
+    "cancel": "Cancel",
+    "install": "Install",
+    "reinstall": "Reinstall",
+    "browse": "Browse"
+  },
+  "instances": {
+    "emptyTitle": "No server instances",
+    "emptyBody": "Create an instance, choose its engine and mod, and keep all server data in its own folder.",
+    "running": "Running",
+    "stopped": "Stopped",
+    "noMod": "No mod",
+    "port": "Port {{port}}",
+    "engineRequired": "Install this engine before starting the server."
+  },
+  "details": {
+    "subtitle": "This instance owns its configs, files, logs, databases, and other runtime data.",
+    "tabs": {
+      "settings": "Settings",
+      "config": "Config",
+      "files": "Files",
+      "console": "Console"
+    }
+  },
+  "fields": {
+    "name": "Name",
+    "engine": "Engine",
+    "mod": "Mod",
+    "modFolder": "Game folder",
+    "port": "Port",
+    "public": "Public internet server",
+    "startupConfig": "Startup config",
+    "engineArgs": "Engine arguments",
+    "modArgs": "Mod arguments",
+    "engineArgsPlaceholder": "+set com_hunkMegs 256",
+    "modArgsPlaceholder": "+set fs_game japlus",
+    "modFolderPlaceholder": "japlus"
+  },
+  "files": {
+    "importFiles": "Add files",
+    "importFolder": "Add folder",
+    "newConfig": "New config",
+    "pickFiles": "Choose server files",
+    "pickFolder": "Choose a server folder",
+    "cloneHint": "Only marked files are copied to a cloned instance.",
+    "emptyTitle": "No server files",
+    "emptyBody": "Add configs, PK3 archives, a mod folder, or any other files this server needs.",
+    "path": "Path",
+    "size": "Size",
+    "copyOnClone": "Copy when cloned",
+    "copyFile": "Copy {{file}} when cloned"
+  },
+  "config": {
+    "title": "Startup config",
+    "description": "The server executes this file when it starts. Add or change any cvar and exec command here.",
+    "loading": "Loading config…",
+    "runningHint": "Stop the server before saving config changes.",
+    "editorLabel": "Startup server config",
+    "otherFilesHint": "Edit other CFG, INI, JSON, Lua, and text files from the Files tab."
+  },
+  "console": {
+    "empty": "The server has not written any console output yet."
+  },
+  "engines": {
+    "emptyTitle": "No dedicated engines",
+    "emptyBody": "No engine for the selected game provides a dedicated server.",
+    "notInstalled": "Not installed",
+    "version": "Installed: {{version}}",
+    "fromGameFiles": "Uses the dedicated server from the configured game files."
+  },
+  "mods": {
+    "emptyTitle": "No server mods",
+    "emptyBody": "Add a mod from JKHub or from disk. One installation can be used by several server instances.",
+    "sources": {
+      "disk": "Disk",
+      "jkhub": "JKHub"
+    },
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files"
+  },
+  "create": {
+    "title": "Create server instance",
+    "body": "The instance receives its own writable folder. The engine stays shared, and the selected mod is copied into the instance.",
+    "namePlaceholder": "Friends server",
+    "publicHint": "List this server on the public master server."
+  },
+  "clone": {
+    "title": "Clone server instance",
+    "body": "The clone keeps the launch settings and marked files. Runtime databases, logs, and unmarked files stay with the source instance.",
+    "copySuffix": "copy"
+  },
+  "addMod": {
+    "title": "Add server mod",
+    "body": "A mod is a reusable component. Choose it independently from the server engine.",
+    "disk": "From disk",
+    "jkhub": "From JKHub",
+    "pickSource": "Choose a mod folder",
+    "noSource": "No folder selected",
+    "chooseFolder": "Choose folder",
+    "chooseArchive": "Choose file or ZIP",
+    "searchJkhub": "Search JKHub",
+    "noResults": "No matching JKHub files",
+    "searchingCategory": "Searching every page in this category…",
+    "serverSideCategory": "Server-Side category #{{category}}",
+    "previousPage": "Previous",
+    "nextPage": "Next",
+    "page": "Page {{page}} of {{pages}}"
+  },
+  "editor": {
+    "title": "Edit server file",
+    "copyHint": "Include this file when cloning the instance.",
+    "text": "Server file text"
+  },
+  "deleteInstance": {
+    "title": "Delete server instance?",
+    "body": "{{name}} and all of its configs, databases, logs, and other files will be deleted."
+  },
+  "deleteFile": {
+    "title": "Delete server file?",
+    "body": "{{path}} will be deleted from this instance."
+  },
+  "deleteMod": {
+    "title": "Delete server mod?",
+    "body": "{{name}} will be removed from the reusable mod library. Instances that use it must be changed or deleted first."
+  },
+  "feedback": {
+    "saved": "Server settings saved",
+    "configSaved": "Server config saved",
+    "actionFailed": "The action could not be completed"
+  }
+}

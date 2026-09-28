@@ -93,7 +93,13 @@ fn emit(app: &AppHandle, progress: PublishProgress) {
     }
 }
 
-fn step(app: &AppHandle, draft_id: &str, bundle_id: Option<&str>, phase: &'static str, message: String) {
+fn step(
+    app: &AppHandle,
+    draft_id: &str,
+    bundle_id: Option<&str>,
+    phase: &'static str,
+    message: String,
+) {
     emit(
         app,
         PublishProgress {
@@ -125,7 +131,13 @@ pub(crate) async fn publish(
         Ok(result) => Ok(result),
         Err(e) => {
             log::error!("publishing draft {draft_id} failed: {e}");
-            step(app, draft_id, known_bundle.as_deref(), "error", e.to_string());
+            step(
+                app,
+                draft_id,
+                known_bundle.as_deref(),
+                "error",
+                e.to_string(),
+            );
             Err(e)
         }
     }
@@ -156,7 +168,11 @@ async fn publish_inner(
     let draft = listing::ensure_listings(&paths, draft::read_draft(&paths, draft_id)?).await?;
     let issues = draft::validate(&draft);
     if !issues.errors.is_empty() {
-        let codes: Vec<&str> = issues.errors.iter().map(|issue| issue.code.as_str()).collect();
+        let codes: Vec<&str> = issues
+            .errors
+            .iter()
+            .map(|issue| issue.code.as_str())
+            .collect();
         return Err(AppError::InvalidInput(format!(
             "the draft is not ready to publish: {}",
             codes.join(", ")
@@ -168,16 +184,36 @@ async fn publish_inner(
 
     // 2. The pictures of the description, before the bundle: the service
     //    looks every `blob:` reference up when it takes the fields.
-    upload_images(app, online, &ctx, &paths, &draft, draft.bundle_id.as_deref()).await?;
+    upload_images(
+        app,
+        online,
+        &ctx,
+        &paths,
+        &draft,
+        draft.bundle_id.as_deref(),
+    )
+    .await?;
 
     // 3. The bundle: created, or the linked one read for its revision and
     //    written with the fields of the draft.
-    step(app, draft_id, draft.bundle_id.as_deref(), "creating", "Creating the bundle".into());
+    step(
+        app,
+        draft_id,
+        draft.bundle_id.as_deref(),
+        "creating",
+        "Creating the bundle".into(),
+    );
     let fields = bundle_fields(&draft, &manifest.game);
     let bundle = match &draft.bundle_id {
         None => {
             online
-                .request::<BundleDetails>(&ctx, Method::POST, "/v1/bundles", Some(fields), Auth::Required)
+                .request::<BundleDetails>(
+                    &ctx,
+                    Method::POST,
+                    "/v1/bundles",
+                    Some(fields),
+                    Auth::Required,
+                )
                 .await?
         }
         Some(bundle_id) => {
@@ -189,13 +225,16 @@ async fn publish_inner(
             if owner != Some(account_id.as_str()) {
                 return Err(AppError::Online {
                     code: "forbidden".into(),
-                    message: format!(
-                        "the bundle {} belongs to another account",
-                        bundle.card.name
-                    ),
+                    message: format!("the bundle {} belongs to another account", bundle.card.name),
                 });
             }
-            step(app, draft_id, Some(bundle_id), "creating", "Updating the bundle".into());
+            step(
+                app,
+                draft_id,
+                Some(bundle_id),
+                "creating",
+                "Updating the bundle".into(),
+            );
             let mut body = fields;
             body["revision"] = serde_json::json!(bundle.revision);
             online
@@ -208,7 +247,13 @@ async fn publish_inner(
     let bundle_path = format!("/v1/bundles/{}", path_segment(&bundle_id)?);
 
     // 4. The version, and what the service still needs for it.
-    step(app, draft_id, Some(&bundle_id), "creating", "Creating the version".into());
+    step(
+        app,
+        draft_id,
+        Some(&bundle_id),
+        "creating",
+        "Creating the version".into(),
+    );
     let manifest_document = serde_json::to_value(&manifest)
         .map_err(|e| AppError::json("the manifest of the draft", e))?;
     let body = serde_json::json!({
@@ -217,7 +262,13 @@ async fn publish_inner(
         "manifest": manifest_document,
     });
     let created: CreatedVersion = online
-        .request(&ctx, Method::POST, &format!("{bundle_path}/versions"), Some(body), Auth::Required)
+        .request(
+            &ctx,
+            Method::POST,
+            &format!("{bundle_path}/versions"),
+            Some(body),
+            Auth::Required,
+        )
         .await?;
     let version_id = created.version.summary.id.clone();
 
@@ -234,13 +285,19 @@ async fn publish_inner(
         let Some(listing) = &file.listing else {
             continue;
         };
-        if created.missing_blobs.iter().any(|missing| missing.sha256 == listing.sha256)
+        if created
+            .missing_blobs
+            .iter()
+            .any(|missing| missing.sha256 == listing.sha256)
             || wanted.iter().any(|upload| upload.sha256 == listing.sha256)
         {
             continue;
         }
         if !online.head_blob(&ctx, &listing.sha256).await? {
-            log::info!("the listing of {scope}/{} is not in the store yet", file.path);
+            log::info!(
+                "the listing of {scope}/{} is not in the store yet",
+                file.path
+            );
             wanted.push(upload_of(&draft, &files, &listings, &listing.sha256)?);
         }
     }
@@ -278,7 +335,10 @@ async fn publish_inner(
         .request(
             &ctx,
             Method::POST,
-            &format!("{bundle_path}/versions/{}/publish", path_segment(&version_id)?),
+            &format!(
+                "{bundle_path}/versions/{}/publish",
+                path_segment(&version_id)?
+            ),
             None,
             Auth::Required,
         )
@@ -366,7 +426,11 @@ fn upload_of(
         .all_files()
         .filter_map(|(_, file)| file.listing.as_ref().map(|listing| (file, listing)))
         .find(|(_, listing)| listing.sha256 == sha256)
-        .and_then(|(file, listing)| listings.get(&listing.sha256).map(|path| (path.clone(), file, listing)))
+        .and_then(|(file, listing)| {
+            listings
+                .get(&listing.sha256)
+                .map(|path| (path.clone(), file, listing))
+        })
     {
         return Ok(Upload {
             label: format!("{} (listing)", file.path),
@@ -510,7 +574,11 @@ async fn upload(
         .await?;
         match online.put_blob(ctx, sha256, size, body).await {
             Ok(receipt) => {
-                log::info!("uploaded {manifest_path} ({} bytes, {})", receipt.size, receipt.sha256);
+                log::info!(
+                    "uploaded {manifest_path} ({} bytes, {})",
+                    receipt.size,
+                    receipt.sha256
+                );
                 return Ok(());
             }
             Err(AppError::Network(reason)) if attempt == 0 => {
@@ -614,12 +682,24 @@ mod tests {
         let state = AppState::bootstrap(temp.path().to_path_buf());
         let paths = state.paths().unwrap();
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "openjk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "openjk",
+            &[LaunchMode::Multiplayer],
+        ));
         draft::write_draft(&paths, &draft).unwrap();
 
         // Two clients of the draft, one of another draft, one by hand.
         let lock = state.client_records();
-        let mine = clients::create_record(&paths, "RUJKA · Multiplayer", "openjk", Game::JediAcademy, None).unwrap();
+        let mine = clients::create_record(
+            &paths,
+            "RUJKA · Multiplayer",
+            "openjk",
+            Game::JediAcademy,
+            None,
+        )
+        .unwrap();
         clients::edit_record(lock, &paths, &mine.id, |record| {
             record.bundle = Some(ClientBundleLink {
                 draft_id: Some(draft.id.clone()),
@@ -630,7 +710,8 @@ mod tests {
             });
         })
         .unwrap();
-        let other = clients::create_record(&paths, "Other", "openjk", Game::JediAcademy, None).unwrap();
+        let other =
+            clients::create_record(&paths, "Other", "openjk", Game::JediAcademy, None).unwrap();
         clients::edit_record(lock, &paths, &other.id, |record| {
             record.bundle = Some(ClientBundleLink {
                 draft_id: Some("another-draft".into()),
@@ -639,7 +720,8 @@ mod tests {
             });
         })
         .unwrap();
-        let plain = clients::create_record(&paths, "Plain", "openjk", Game::JediAcademy, None).unwrap();
+        let plain =
+            clients::create_record(&paths, "Plain", "openjk", Game::JediAcademy, None).unwrap();
 
         let bundle = BundleDetails {
             card: BundleCard {
@@ -666,17 +748,30 @@ mod tests {
         assert_eq!(draft.bundle_slug.as_deref(), Some("rujka"));
         assert_eq!(draft.last_version_id.as_deref(), Some("01V"));
 
-        let link = clients::read_record(&paths, &mine.id).unwrap().bundle.unwrap();
+        let link = clients::read_record(&paths, &mine.id)
+            .unwrap()
+            .bundle
+            .unwrap();
         assert_eq!(link.bundle_id.as_deref(), Some("01J"));
         assert_eq!(link.bundle_slug, "rujka");
         assert_eq!(link.bundle_name, "JKA RUJKA Edition");
         assert_eq!(link.version_id.as_deref(), Some("01V"));
         assert_eq!(link.version_label, "3");
-        assert_eq!(link.draft_id.as_deref(), Some(draft.id.as_str()), "the draft stays named");
+        assert_eq!(
+            link.draft_id.as_deref(),
+            Some(draft.id.as_str()),
+            "the draft stays named"
+        );
         assert_eq!(link.component_id, "mp");
-        let untouched = clients::read_record(&paths, &other.id).unwrap().bundle.unwrap();
+        let untouched = clients::read_record(&paths, &other.id)
+            .unwrap()
+            .bundle
+            .unwrap();
         assert_eq!(untouched.bundle_id, None);
-        assert!(clients::read_record(&paths, &plain.id).unwrap().bundle.is_none());
+        assert!(clients::read_record(&paths, &plain.id)
+            .unwrap()
+            .bundle
+            .is_none());
     }
 
     #[test]
@@ -688,7 +783,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let paths = crate::paths::DataPaths::new(temp.path().to_path_buf());
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "openjk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "openjk",
+            &[LaunchMode::Multiplayer],
+        ));
         let mut pk3 = put_draft_file(
             &paths,
             &draft.id,
@@ -733,7 +833,8 @@ mod tests {
         assert_eq!(listing.label, "base/x.pk3 (listing)");
         assert_eq!(listing.size, listing_bytes.len() as u64);
         assert_eq!(listing.path, document);
-        let unknown = upload_of(&draft, &files, &listings, &"0".repeat(64)).expect_err("not in the draft");
+        let unknown =
+            upload_of(&draft, &files, &listings, &"0".repeat(64)).expect_err("not in the draft");
         assert!(matches!(unknown, AppError::BundleFile { .. }), "{unknown}");
 
         // The fields of the bundle as the service takes them.
@@ -745,8 +846,15 @@ mod tests {
         assert_eq!(fields["website"], "https://example.com");
         assert_eq!(fields["discord"], serde_json::Value::Null);
         assert_eq!(fields["language"], "en");
-        assert_eq!(fields["translations"], serde_json::json!({}), "no translation is an empty object");
-        assert!(fields.get("revision").is_none(), "the revision goes only with a PUT");
+        assert_eq!(
+            fields["translations"],
+            serde_json::json!({}),
+            "no translation is an empty object"
+        );
+        assert!(
+            fields.get("revision").is_none(),
+            "the revision goes only with a PUT"
+        );
     }
 
     #[test]
@@ -769,7 +877,9 @@ mod tests {
         );
         // A language added and left empty travels as empty fields: that is
         // how the service learns the fields are not translated.
-        draft.translations.insert("uk".into(), DraftTranslation::default());
+        draft
+            .translations
+            .insert("uk".into(), DraftTranslation::default());
 
         let fields = bundle_fields(&draft, "ja");
         assert_eq!(fields["name"], "Русская сборка");

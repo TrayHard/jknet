@@ -66,8 +66,8 @@ pub const MAX_TEXT_BYTES: u64 = 64 * 1024;
 /// next to its configs that is bytes rather than words. The check is by
 /// name, like the kind of a file; it stops a wrong click, not a wrong file.
 const BINARY_EXTENSIONS: [&str; 24] = [
-    "zip", "7z", "rar", "qvm", "so", "dylib", "pdb", "lib", "bin", "dat", "bsp", "glm", "gla", "md3", "roq",
-    "wav", "mp3", "ogg", "jpg", "jpeg", "png", "tga", "gif", "ico",
+    "zip", "7z", "rar", "qvm", "so", "dylib", "pdb", "lib", "bin", "dat", "bsp", "glm", "gla",
+    "md3", "roq", "wav", "mp3", "ogg", "jpg", "jpeg", "png", "tga", "gif", "ico",
 ];
 
 // ---------------------------------------------------------------------------
@@ -149,7 +149,12 @@ pub(crate) fn draft_listing_path(paths: &DataPaths, draft_id: &str, pk3_sha256: 
 /// Builds the listing of a pk3 of a draft, writes it and answers with what
 /// the record of the file carries. Blocking: the callers run it on a
 /// blocking thread next to the hashing of the file.
-pub(crate) fn write_draft_listing(paths: &DataPaths, draft_id: &str, pk3_sha256: &str, archive: &Path) -> Result<ListingRef> {
+pub(crate) fn write_draft_listing(
+    paths: &DataPaths,
+    draft_id: &str,
+    pk3_sha256: &str,
+    archive: &Path,
+) -> Result<ListingRef> {
     let listing = read_listing(archive)?;
     let bytes = encode(&listing)?;
     let target = draft_listing_path(paths, draft_id, pk3_sha256);
@@ -166,7 +171,12 @@ pub(crate) fn write_draft_listing(paths: &DataPaths, draft_id: &str, pk3_sha256:
 /// The listing of a pk3 of a draft, when adding the file: an archive that
 /// will not open leaves the record without one, with a line in the log,
 /// the way `pk3_info` leaves it without a category.
-pub(crate) fn listing_of_new_file(paths: &DataPaths, draft_id: &str, pk3_sha256: &str, archive: &Path) -> Option<ListingRef> {
+pub(crate) fn listing_of_new_file(
+    paths: &DataPaths,
+    draft_id: &str,
+    pk3_sha256: &str,
+    archive: &Path,
+) -> Option<ListingRef> {
     match write_draft_listing(paths, draft_id, pk3_sha256, archive) {
         Ok(listing) => Some(listing),
         Err(e) => {
@@ -229,7 +239,12 @@ pub(crate) async fn ensure_listings(paths: &DataPaths, draft: Draft) -> Result<D
         if file.listing.is_some() && draft_listing_path(paths, &draft.id, &file.sha256).is_file() {
             continue;
         }
-        wanted.push((scope.to_string(), file.root, file.path.clone(), file.sha256.clone()));
+        wanted.push((
+            scope.to_string(),
+            file.root,
+            file.path.clone(),
+            file.sha256.clone(),
+        ));
     }
     if wanted.is_empty() {
         return Ok(draft);
@@ -237,7 +252,8 @@ pub(crate) async fn ensure_listings(paths: &DataPaths, draft: Draft) -> Result<D
     let mut built: Vec<(String, FileRoot, String, ListingRef)> = Vec::with_capacity(wanted.len());
     for (scope, root, path, sha256) in wanted {
         let archive = draft::file_path(paths, &draft.id, &scope, root, &path)?;
-        let (paths_for_build, draft_for_build, hash) = (paths.clone(), draft.id.clone(), sha256.clone());
+        let (paths_for_build, draft_for_build, hash) =
+            (paths.clone(), draft.id.clone(), sha256.clone());
         let listing = tauri::async_runtime::spawn_blocking(move || {
             write_draft_listing(&paths_for_build, &draft_for_build, &hash, &archive)
         })
@@ -251,9 +267,14 @@ pub(crate) async fn ensure_listings(paths: &DataPaths, draft: Draft) -> Result<D
             let list = match (scope == manifest::SHARED_SCOPE, root) {
                 (true, _) => &mut record.shared.files,
                 (false, FileRoot::Home) => &mut draft::component_mut(record, &scope)?.files,
-                (false, FileRoot::Engine) => &mut draft::component_mut(record, &scope)?.overlay.files,
+                (false, FileRoot::Engine) => {
+                    &mut draft::component_mut(record, &scope)?.overlay.files
+                }
             };
-            if let Some(entry) = list.iter_mut().find(|file| file.path.eq_ignore_ascii_case(&path)) {
+            if let Some(entry) = list
+                .iter_mut()
+                .find(|file| file.path.eq_ignore_ascii_case(&path))
+            {
                 entry.listing = Some(listing);
             }
         }
@@ -267,10 +288,18 @@ pub(crate) async fn ensure_listings(paths: &DataPaths, draft: Draft) -> Result<D
 
 /// The file of a draft at `path` of `scope` and `root`, with the scope
 /// checked first.
-pub(crate) fn find_draft_file<'a>(draft: &'a Draft, scope: &str, root: FileRoot, path: &str) -> Result<&'a DraftFile> {
+pub(crate) fn find_draft_file<'a>(
+    draft: &'a Draft,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<&'a DraftFile> {
     let list: &[DraftFile] = if scope == manifest::SHARED_SCOPE {
         if root != FileRoot::Home {
-            return Err(AppError::NotFound(format!("{}/{path} in {scope}", root.as_str())));
+            return Err(AppError::NotFound(format!(
+                "{}/{path} in {scope}",
+                root.as_str()
+            )));
         }
         &draft.shared.files
     } else {
@@ -290,7 +319,12 @@ pub(crate) fn find_draft_file<'a>(draft: &'a Draft, scope: &str, root: FileRoot,
 // --- slice: pk3 editor ---
 /// The same file, to change: what the pk3 editor writes its new size, hash
 /// and listing into after a save.
-pub(crate) fn find_draft_file_mut<'a>(draft: &'a mut Draft, scope: &str, root: FileRoot, path: &str) -> Result<&'a mut DraftFile> {
+pub(crate) fn find_draft_file_mut<'a>(
+    draft: &'a mut Draft,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<&'a mut DraftFile> {
     let missing = || AppError::NotFound(format!("{}/{path} in {scope}", root.as_str()));
     let list: &mut Vec<DraftFile> = if scope == manifest::SHARED_SCOPE {
         if root != FileRoot::Home {
@@ -322,7 +356,13 @@ fn require_pk3(file: &DraftFile) -> Result<()> {
 
 /// The listing of a pk3 of a draft, built and written first when the draft
 /// predates listings or the document went missing.
-pub(crate) async fn draft_listing(paths: &DataPaths, draft_id: &str, scope: &str, root: FileRoot, path: &str) -> Result<Listing> {
+pub(crate) async fn draft_listing(
+    paths: &DataPaths,
+    draft_id: &str,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<Listing> {
     let draft = draft::read_draft(paths, draft_id)?;
     let file = find_draft_file(&draft, scope, root, path)?;
     require_pk3(file)?;
@@ -332,13 +372,17 @@ pub(crate) async fn draft_listing(paths: &DataPaths, draft_id: &str, scope: &str
             if let Ok(listing) = decode(&bytes) {
                 return Ok(Listing::of(listing));
             }
-            log::warn!("bundles: {} is not a listing, building it again", document.display());
+            log::warn!(
+                "bundles: {} is not a listing, building it again",
+                document.display()
+            );
         }
     }
 
     // Build it, on a blocking thread: an archive runs to 512 MiB.
     let archive = draft::file_path(paths, draft_id, scope, root, &file.path)?;
-    let (paths_for_build, draft_for_build, sha256) = (paths.clone(), draft_id.to_string(), file.sha256.clone());
+    let (paths_for_build, draft_for_build, sha256) =
+        (paths.clone(), draft_id.to_string(), file.sha256.clone());
     let listing = tauri::async_runtime::spawn_blocking(move || {
         write_draft_listing(&paths_for_build, &draft_for_build, &sha256, &archive)
     })
@@ -351,7 +395,10 @@ pub(crate) async fn draft_listing(paths: &DataPaths, draft_id: &str, scope: &str
             (false, FileRoot::Home) => &mut draft::component_mut(draft, scope)?.files,
             (false, FileRoot::Engine) => &mut draft::component_mut(draft, scope)?.overlay.files,
         };
-        if let Some(entry) = list.iter_mut().find(|file| file.path.eq_ignore_ascii_case(&spelled)) {
+        if let Some(entry) = list
+            .iter_mut()
+            .find(|file| file.path.eq_ignore_ascii_case(&spelled))
+        {
             entry.listing = Some(listing);
         }
         Ok(())
@@ -362,9 +409,16 @@ pub(crate) async fn draft_listing(paths: &DataPaths, draft_id: &str, scope: &str
 
 /// The listing of a file of the catalogue, from `cache\bundles\listings\`
 /// or from the store.
-pub(crate) async fn bundle_listing(paths: &DataPaths, online: &OnlineClient, ctx: &OnlineContext, sha256: &str) -> Result<Listing> {
+pub(crate) async fn bundle_listing(
+    paths: &DataPaths,
+    online: &OnlineClient,
+    ctx: &OnlineContext,
+    sha256: &str,
+) -> Result<Listing> {
     manifest::check_sha256(sha256)?;
-    let target = paths.bundle_listings_cache_dir().join(format!("{sha256}.json"));
+    let target = paths
+        .bundle_listings_cache_dir()
+        .join(format!("{sha256}.json"));
     let bytes = preview::cached_blob_bytes(online, ctx, sha256, &target, MAX_LISTING_BYTES).await?;
     Ok(Listing::of(decode(&bytes)?))
 }
@@ -376,15 +430,26 @@ pub(crate) async fn bundle_listing(paths: &DataPaths, online: &OnlineClient, ctx
 pub(crate) fn require_text(path: &str) -> Result<()> {
     let kind = FileKind::of_path(path);
     let name = path.rsplit('/').next().unwrap_or(path).to_ascii_lowercase();
-    let extension = name.rsplit_once('.').map(|(_, extension)| extension).unwrap_or("");
-    if matches!(kind, FileKind::Pk3 | FileKind::Dll | FileKind::Exe) || BINARY_EXTENSIONS.contains(&extension) {
+    let extension = name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension)
+        .unwrap_or("");
+    if matches!(kind, FileKind::Pk3 | FileKind::Dll | FileKind::Exe)
+        || BINARY_EXTENSIONS.contains(&extension)
+    {
         return Err(AppError::InvalidInput(format!("{path} is not a text file")));
     }
     Ok(())
 }
 
 /// The text of a small file of a draft: a cfg or a readme.
-pub(crate) fn draft_text(paths: &DataPaths, draft_id: &str, scope: &str, root: FileRoot, path: &str) -> Result<String> {
+pub(crate) fn draft_text(
+    paths: &DataPaths,
+    draft_id: &str,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<String> {
     let draft = draft::read_draft(paths, draft_id)?;
     let file = find_draft_file(&draft, scope, root, path)?;
     require_text(&file.path)?;
@@ -408,10 +473,14 @@ pub(crate) async fn bundle_text(
 ) -> Result<String> {
     manifest::check_sha256(sha256)?;
     if path.is_empty() {
-        return Err(AppError::InvalidInput("the text of a file is asked for without its path".into()));
+        return Err(AppError::InvalidInput(
+            "the text of a file is asked for without its path".into(),
+        ));
     }
     require_text(path)?;
-    let target = paths.bundle_preview_cache_dir().join(format!("{sha256}.txt"));
+    let target = paths
+        .bundle_preview_cache_dir()
+        .join(format!("{sha256}.txt"));
     let bytes = preview::cached_blob_bytes(online, ctx, sha256, &target, MAX_TEXT_BYTES).await?;
     Ok(text_of(&bytes))
 }
@@ -507,7 +576,9 @@ mod tests {
         let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
         for (name, body) in entries {
             if name.ends_with('/') {
-                writer.add_directory(name.trim_end_matches('/'), options).expect("a folder");
+                writer
+                    .add_directory(name.trim_end_matches('/'), options)
+                    .expect("a folder");
                 continue;
             }
             writer.start_file(*name, options).expect("an entry starts");
@@ -558,11 +629,21 @@ mod tests {
         // The document is compact, in field order, and reads back the same.
         let bytes = encode(&listing).unwrap();
         let text = String::from_utf8(bytes.clone()).unwrap();
-        assert!(text.starts_with(r#"{"schema":1,"entries":[{"path":"README.txt","size":7}"#), "{text}");
+        assert!(
+            text.starts_with(r#"{"schema":1,"entries":[{"path":"README.txt","size":7}"#),
+            "{text}"
+        );
         assert_eq!(decode(&bytes).unwrap(), listing);
-        assert_eq!(encode(&read_listing(&archive).unwrap()).unwrap(), bytes, "the same archive, the same bytes");
+        assert_eq!(
+            encode(&read_listing(&archive).unwrap()).unwrap(),
+            bytes,
+            "the same archive, the same bytes"
+        );
         let other_schema = br#"{"schema":2,"entries":[]}"#;
-        assert!(matches!(decode(other_schema).unwrap_err(), AppError::BundleUnavailable(_)));
+        assert!(matches!(
+            decode(other_schema).unwrap_err(),
+            AppError::BundleUnavailable(_)
+        ));
 
         let sums = Listing::of(listing);
         assert_eq!(sums.total, 4);
@@ -584,13 +665,19 @@ mod tests {
         let paths = DataPaths::new(temp.path().to_path_buf());
         paths.ensure().unwrap();
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         // A pk3 written the way the second edition wrote one: copied into
         // `files\`, described, and without a listing.
         let mut pk3 = Vec::new();
         {
             let mut writer = ZipWriter::new(std::io::Cursor::new(&mut pk3));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
             writer.start_file("maps/mp/duel_x.bsp", options).unwrap();
             writer.write_all(b"map bytes").unwrap();
             writer.start_file("levelshots/duel_x.jpg", options).unwrap();
@@ -625,25 +712,51 @@ mod tests {
         draft::write_draft(&paths, &draft).unwrap();
         assert!(!paths.bundle_draft_listings_dir(&draft.id).exists());
 
-        let listing = run(draft_listing(&paths, &draft.id, "mp", FileRoot::Home, "BASE/duel_x.pk3")).expect("built on demand");
+        let listing = run(draft_listing(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Home,
+            "BASE/duel_x.pk3",
+        ))
+        .expect("built on demand");
         assert_eq!(listing.total, 2);
         assert_eq!(listing.entries[0].path, "levelshots/duel_x.jpg");
         assert_eq!(listing.entries[1].path, "maps/mp/duel_x.bsp");
         assert_eq!(listing.bytes, 3 + 9);
         let document = draft_listing_path(&paths, &draft.id, &file.sha256);
-        assert!(document.is_file(), "the document is written under the hash of the pk3");
+        assert!(
+            document.is_file(),
+            "the document is written under the hash of the pk3"
+        );
         let bytes = fs::read(&document).unwrap();
         let record = draft::read_draft(&paths, &draft.id).unwrap();
-        let remembered = record.components[0].files[0].listing.clone().expect("the record remembers");
+        let remembered = record.components[0].files[0]
+            .listing
+            .clone()
+            .expect("the record remembers");
         assert_eq!(remembered.sha256, sha256_hex(&bytes));
         assert_eq!(remembered.size, bytes.len() as u64);
         let json = serde_json::to_value(&record).unwrap();
-        assert_eq!(json["components"][0]["files"][0]["listing"]["size"], bytes.len());
-        assert!(json["components"][0]["files"][1].get("listing").is_none(), "a cfg has none");
+        assert_eq!(
+            json["components"][0]["files"][0]["listing"]["size"],
+            bytes.len()
+        );
+        assert!(
+            json["components"][0]["files"][1].get("listing").is_none(),
+            "a cfg has none"
+        );
 
         // The second read comes from the document, and the map of hashes
         // finds it for the upload.
-        let again = run(draft_listing(&paths, &draft.id, "mp", FileRoot::Home, "base/duel_x.pk3")).unwrap();
+        let again = run(draft_listing(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Home,
+            "base/duel_x.pk3",
+        ))
+        .unwrap();
         assert_eq!(again, listing);
         let map = listings_by_hash(&paths, &record);
         assert_eq!(map.get(&remembered.sha256), Some(&document));
@@ -651,13 +764,26 @@ mod tests {
         // The manifest carries it on the pk3 and on nothing else.
         let manifest = draft::manifest_of(&record);
         manifest::validate(&manifest).expect("valid");
-        assert_eq!(manifest.components[0].files[0].listing, Some(remembered.clone()));
+        assert_eq!(
+            manifest.components[0].files[0].listing,
+            Some(remembered.clone())
+        );
         assert_eq!(manifest.components[0].files[1].listing, None);
         let json = serde_json::to_value(&manifest).unwrap();
-        assert_eq!(json["components"][0]["files"][0]["listing"]["sha256"], remembered.sha256);
+        assert_eq!(
+            json["components"][0]["files"][0]["listing"]["sha256"],
+            remembered.sha256
+        );
 
         // A cfg has no listing but has a text; a pk3 the other way round.
-        let error = run(draft_listing(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg")).unwrap_err();
+        let error = run(draft_listing(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Home,
+            "base/autoexec.cfg",
+        ))
+        .unwrap_err();
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         assert_eq!(
             draft_text(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg").unwrap(),
@@ -668,11 +794,25 @@ mod tests {
             AppError::InvalidInput(_)
         ));
         assert!(matches!(
-            draft_text(&paths, &draft.id, "shared", FileRoot::Home, "base/autoexec.cfg").unwrap_err(),
+            draft_text(
+                &paths,
+                &draft.id,
+                "shared",
+                FileRoot::Home,
+                "base/autoexec.cfg"
+            )
+            .unwrap_err(),
             AppError::NotFound(_)
         ));
         assert!(matches!(
-            run(draft_listing(&paths, &draft.id, "sp", FileRoot::Home, "base/duel_x.pk3")).unwrap_err(),
+            run(draft_listing(
+                &paths,
+                &draft.id,
+                "sp",
+                FileRoot::Home,
+                "base/duel_x.pk3"
+            ))
+            .unwrap_err(),
             AppError::NotFound(_)
         ));
 
@@ -686,13 +826,19 @@ mod tests {
         // a record of the second edition (no `listing` at all) gets one too.
         let ensured = run(ensure_listings(&paths, record.clone())).expect("ensured");
         assert!(document.is_file());
-        assert_eq!(ensured.components[0].files[0].listing, Some(remembered.clone()));
+        assert_eq!(
+            ensured.components[0].files[0].listing,
+            Some(remembered.clone())
+        );
         let mut second_edition = record.clone();
         second_edition.components[0].files[0].listing = None;
         draft::write_draft(&paths, &second_edition).unwrap();
         fs::remove_file(&document).unwrap();
         let ensured = run(ensure_listings(&paths, second_edition)).expect("ensured");
-        assert_eq!(ensured.components[0].files[0].listing, Some(remembered.clone()));
+        assert_eq!(
+            ensured.components[0].files[0].listing,
+            Some(remembered.clone())
+        );
         assert_eq!(draft::read_draft(&paths, &draft.id).unwrap(), ensured);
         assert!(document.is_file());
         // Nothing to do leaves the record alone.
@@ -703,7 +849,10 @@ mod tests {
 
     #[test]
     fn a_config_with_bytes_outside_utf8_is_shown_rather_than_refused() {
-        assert_eq!(text_of(b"seta name \"\xCA\xE0\xE9\xEB\"\n"), "seta name \"\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\"\n");
+        assert_eq!(
+            text_of(b"seta name \"\xCA\xE0\xE9\xEB\"\n"),
+            "seta name \"\u{FFFD}\u{FFFD}\u{FFFD}\u{FFFD}\"\n"
+        );
         assert!(check_text_size("x.cfg", MAX_TEXT_BYTES).is_ok());
         assert!(check_text_size("x.cfg", MAX_TEXT_BYTES + 1).is_err());
     }
@@ -717,21 +866,41 @@ mod tests {
         {
             let file = fs::File::create(&archive).unwrap();
             let mut writer = ZipWriter::new(std::io::BufWriter::new(file));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
             writer.add_directory("textures", options).unwrap();
             for index in 0..=MAX_ENTRIES {
-                writer.start_file(format!("textures/{index:06}.jpg"), options).unwrap();
+                writer
+                    .start_file(format!("textures/{index:06}.jpg"), options)
+                    .unwrap();
                 writer.write_all(b"j").unwrap();
             }
             writer.finish().unwrap();
         }
         let listing = read_listing(&archive).expect("the archive lists");
-        assert_eq!(listing.entries.len(), MAX_ENTRIES, "the walk stops at the limit");
+        assert_eq!(
+            listing.entries.len(),
+            MAX_ENTRIES,
+            "the walk stops at the limit"
+        );
         assert_eq!(listing.entries[0].path, "textures/000000.jpg");
-        assert_eq!(listing.entries[MAX_ENTRIES - 1].path, format!("textures/{:06}.jpg", MAX_ENTRIES - 1));
-        assert!(listing.entries.windows(2).all(|pair| pair[0].path < pair[1].path), "sorted");
+        assert_eq!(
+            listing.entries[MAX_ENTRIES - 1].path,
+            format!("textures/{:06}.jpg", MAX_ENTRIES - 1)
+        );
+        assert!(
+            listing
+                .entries
+                .windows(2)
+                .all(|pair| pair[0].path < pair[1].path),
+            "sorted"
+        );
         let bytes = encode(&listing).unwrap();
-        assert_eq!(decode(&bytes).unwrap(), listing, "what was written reads back");
+        assert_eq!(
+            decode(&bytes).unwrap(),
+            listing,
+            "what was written reads back"
+        );
 
         // A document that did not come out of `read_listing`: one entry too
         // many is refused, whatever its size.
@@ -776,7 +945,13 @@ mod tests {
 
     #[test]
     fn only_a_text_file_is_read_as_text() {
-        for path in ["base/autoexec.cfg", "base/README.txt", "README", "base/notes.md", "docs/changes.json"] {
+        for path in [
+            "base/autoexec.cfg",
+            "base/README.txt",
+            "README",
+            "base/notes.md",
+            "docs/changes.json",
+        ] {
             require_text(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         }
         for path in [
@@ -793,7 +968,10 @@ mod tests {
             "jknet.pdb",
         ] {
             let error = require_text(path).expect_err(path);
-            assert!(matches!(error, AppError::InvalidInput(_)), "{path}: {error}");
+            assert!(
+                matches!(error, AppError::InvalidInput(_)),
+                "{path}: {error}"
+            );
         }
 
         // The command of the catalogue refuses by the path before it looks
@@ -806,12 +984,24 @@ mod tests {
             token: None,
         };
         let hash = "a".repeat(64);
-        let error = run(bundle_text(&paths, &client, &ctx, &hash, "base/rus.pk3")).expect_err("a pk3 is not text");
+        let error = run(bundle_text(&paths, &client, &ctx, &hash, "base/rus.pk3"))
+            .expect_err("a pk3 is not text");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        let error = run(bundle_text(&paths, &client, &ctx, &hash, "")).expect_err("a path is required");
+        let error =
+            run(bundle_text(&paths, &client, &ctx, &hash, "")).expect_err("a path is required");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        let error = run(bundle_text(&paths, &client, &ctx, "../x", "base/autoexec.cfg")).expect_err("a hash is required");
+        let error = run(bundle_text(
+            &paths,
+            &client,
+            &ctx,
+            "../x",
+            "base/autoexec.cfg",
+        ))
+        .expect_err("a hash is required");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        assert!(!paths.bundle_preview_cache_dir().exists(), "nothing was written");
+        assert!(
+            !paths.bundle_preview_cache_dir().exists(),
+            "nothing was written"
+        );
     }
 }

@@ -250,7 +250,9 @@ impl ChatState {
     /// Whether a window shows this conversation, is focused and is scrolled
     /// to the bottom: then a new message is read the moment it arrives.
     pub(crate) fn is_viewed(&self, conversation_id: &str) -> bool {
-        lock(&self.viewing).values().any(|viewing| viewing.sees(conversation_id))
+        lock(&self.viewing)
+            .values()
+            .any(|viewing| viewing.sees(conversation_id))
     }
 
     /// Forgets everything of the account: summaries, drafts, the queue and
@@ -411,7 +413,8 @@ impl Book {
 
     /// Takes a conversation the service answered or pushed.
     pub fn upsert(&mut self, conversation: Conversation) {
-        self.invites.retain(|invite| invite.conversation_id != conversation.id);
+        self.invites
+            .retain(|invite| invite.conversation_id != conversation.id);
         self.summaries.insert(conversation.id.clone(), conversation);
     }
 
@@ -515,7 +518,12 @@ impl Book {
         else {
             return false;
         };
-        toggle_reaction(&mut message.reactions, &change.user_id, &change.emoji, change.on)
+        toggle_reaction(
+            &mut message.reactions,
+            &change.user_id,
+            &change.emoji,
+            change.on,
+        )
     }
 
     /// Puts the reactions a command answered on the last message, when that
@@ -587,7 +595,9 @@ impl Book {
     /// Whether typing hints may go out. Unknown settings read as the
     /// defaults, which share.
     pub fn shares_typing(&self) -> bool {
-        self.privacy.as_ref().is_none_or(|privacy| privacy.share_typing)
+        self.privacy
+            .as_ref()
+            .is_none_or(|privacy| privacy.share_typing)
     }
 
     /// Whether a typing hint for this conversation may go out: the player
@@ -604,24 +614,22 @@ impl Book {
     /// The summaries, newest activity first.
     pub fn conversations(&self) -> Vec<Conversation> {
         let mut list: Vec<Conversation> = self.summaries.values().cloned().collect();
-        list.sort_by(|a, b| {
-            activity(b)
-                .cmp(activity(a))
-                .then_with(|| b.id.cmp(&a.id))
-        });
+        list.sort_by(|a, b| activity(b).cmp(activity(a)).then_with(|| b.id.cmp(&a.id)));
         list
     }
 
     /// `(unread, mentions)`: unread without the muted conversations, and
     /// mentions of every conversation, muted ones included.
     pub fn totals(&self) -> (u32, u32) {
-        self.summaries.values().fold((0, 0), |(unread, mentions), summary| {
-            let muted = summary.notify == "mute";
-            (
-                unread + if muted { 0 } else { summary.unread },
-                mentions + summary.unread_mentions,
-            )
-        })
+        self.summaries
+            .values()
+            .fold((0, 0), |(unread, mentions), summary| {
+                let muted = summary.notify == "mute";
+                (
+                    unread + if muted { 0 } else { summary.unread },
+                    mentions + summary.unread_mentions,
+                )
+            })
     }
 }
 
@@ -789,7 +797,10 @@ fn publish_state(app: &AppHandle, view: ChatStateView) {
 
 /// Emits the queue of one conversation.
 pub(crate) fn emit_outbox(app: &AppHandle, conversation_id: &str) {
-    let entries = app.state::<ChatState>().outbox().entries_of(conversation_id);
+    let entries = app
+        .state::<ChatState>()
+        .outbox()
+        .entries_of(conversation_id);
     emit(
         app,
         EVENT_OUTBOX,
@@ -1127,7 +1138,9 @@ pub async fn chat_create_group(
     member_ids: Vec<String>,
 ) -> Result<GroupResult> {
     let ctx = account(&app)?;
-    let title = title.map(|title| title.trim().to_string()).filter(|t| !t.is_empty());
+    let title = title
+        .map(|title| title.trim().to_string())
+        .filter(|t| !t.is_empty());
     let client_id = new_client_id();
     let result = noted(
         &app,
@@ -1405,11 +1418,21 @@ pub async fn chat_set_draft(app: AppHandle, conversation_id: String, text: Strin
         if text.is_empty() {
             drafts.remove(&conversation_id).is_some()
         } else {
-            drafts.insert(conversation_id.clone(), text.clone()).as_deref() != Some(text.as_str())
+            drafts
+                .insert(conversation_id.clone(), text.clone())
+                .as_deref()
+                != Some(text.as_str())
         }
     };
     if changed {
-        emit(&app, EVENT_DRAFT, DraftChange { conversation_id, text });
+        emit(
+            &app,
+            EVENT_DRAFT,
+            DraftChange {
+                conversation_id,
+                text,
+            },
+        );
     }
     Ok(())
 }
@@ -1523,10 +1546,17 @@ mod tests {
         let applied = book.apply_message(Some(ME), &message("a", 3, Some(KYLE)), false);
         assert_eq!(
             applied,
-            MessageApplied { known: true, fresh: true, typing_stopped: false }
+            MessageApplied {
+                known: true,
+                fresh: true,
+                typing_stopped: false
+            }
         );
         let summary = book.get("a").expect("known");
-        assert_eq!((summary.last_seq, summary.unread, summary.unread_mentions), (3, 1, 0));
+        assert_eq!(
+            (summary.last_seq, summary.unread, summary.unread_mentions),
+            (3, 1, 0)
+        );
         assert_eq!(summary.last_message.as_ref().map(|m| m.seq), Some(3));
 
         let mut mention = message("a", 4, Some(KYLE));
@@ -1602,15 +1632,26 @@ mod tests {
         let mut book = book_with(vec![conversation("a", 10, 4)]);
         book.summaries.get_mut("a").expect("known").unread = 6;
         // Kyle read up to 8: his marker, not the unread count.
-        let kyle = ReadMark { conversation_id: "a".into(), user_id: KYLE.into(), seq: 8 };
+        let kyle = ReadMark {
+            conversation_id: "a".into(),
+            user_id: KYLE.into(),
+            seq: 8,
+        };
         assert_eq!(book.apply_read(Some(ME), &kyle), (true, false));
         assert_eq!(book.get("a").map(|c| c.members[1].read_seq), Some(Some(8)));
-        let older = ReadMark { seq: 5, ..kyle.clone() };
+        let older = ReadMark {
+            seq: 5,
+            ..kyle.clone()
+        };
         book.apply_read(Some(ME), &older);
         assert_eq!(book.get("a").map(|c| c.members[1].read_seq), Some(Some(8)));
 
         // Another device of mine read part of it: the count is unknown now.
-        let mine = ReadMark { conversation_id: "a".into(), user_id: ME.into(), seq: 7 };
+        let mine = ReadMark {
+            conversation_id: "a".into(),
+            user_id: ME.into(),
+            seq: 7,
+        };
         assert_eq!(book.apply_read(Some(ME), &mine), (true, true));
         // And then all of it.
         let all = ReadMark { seq: 10, ..mine };
@@ -1665,7 +1706,10 @@ mod tests {
                 .unwrap_or_default()
         };
         assert_eq!(reactions(&book)[0].user_ids, [ME]);
-        assert!(book.apply_reaction(&ReactionChange { on: false, ..on.clone() }));
+        assert!(book.apply_reaction(&ReactionChange {
+            on: false,
+            ..on.clone()
+        }));
         assert!(reactions(&book).is_empty(), "an empty group goes");
         // A reaction to an older message leaves the summary alone.
         assert!(!book.apply_reaction(&ReactionChange { seq: 0, ..on }));
@@ -1740,8 +1784,14 @@ mod tests {
             ..ChatSyncDoc::default()
         });
         chat.drafts().insert("a".into(), "half a thought".into());
-        chat.outbox()
-            .push(OutboxEntry::new("c1", "a", SendDraft { body: "hi".into(), ..SendDraft::default() }));
+        chat.outbox().push(OutboxEntry::new(
+            "c1",
+            "a",
+            SendDraft {
+                body: "hi".into(),
+                ..SendDraft::default()
+            },
+        ));
         chat.set_available(false);
 
         assert_eq!(chat.forget(), ["a", "b"]);
@@ -1785,7 +1835,10 @@ mod tests {
 
     #[test]
     fn a_draft_is_checked_before_it_is_queued() {
-        let draft = |body: &str| SendDraft { body: body.into(), ..SendDraft::default() };
+        let draft = |body: &str| SendDraft {
+            body: body.into(),
+            ..SendDraft::default()
+        };
         assert!(check_draft(draft("gg")).is_ok());
         assert!(check_draft(draft("   \n")).is_err());
         assert!(check_draft(draft(&"a".repeat(MAX_BODY_CHARS))).is_ok());
@@ -1798,8 +1851,10 @@ mod tests {
         let checked = check_draft(card).expect("a card alone is a message");
         assert_eq!(
             checked.cards,
-            [serde_json::json!({ "type": "map", "v": 1, "fallbackText": "Map: mp/ffa3",
-                                 "game": "ja", "name": "mp/ffa3" })]
+            [
+                serde_json::json!({ "type": "map", "v": 1, "fallbackText": "Map: mp/ffa3",
+                                 "game": "ja", "name": "mp/ffa3" })
+            ]
         );
         // A card the service would refuse never reaches the queue.
         let broken = SendDraft {

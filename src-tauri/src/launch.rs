@@ -709,12 +709,25 @@ JKNet build it again.
 /// policy — the function copies the game's own archives into `basepath\base\`
 /// and logs why. Hundreds of megabytes, which is why it is the fallback and
 /// not the plan.
-pub(crate) fn prepare_basepath(
+pub(crate) fn prepare_basepath(game: Game, client_dir: &Path, game_data: &Path) -> Result<PathBuf> {
+    prepare_basepath_with(
+        game,
+        client_dir,
+        &client_dir.join(crate::paths::CLIENT_ENGINE_DIR),
+        game_data,
+        make_junction,
+    )
+}
+
+/// Builds the launcher-owned base root for an instance whose engine lives in
+/// the shared dedicated-server library instead of under the instance folder.
+pub(crate) fn prepare_external_basepath(
     game: Game,
-    client_dir: &Path,
+    owner_dir: &Path,
+    engine_dir: &Path,
     game_data: &Path,
 ) -> Result<PathBuf> {
-    prepare_basepath_with(game, client_dir, game_data, make_junction)
+    prepare_basepath_with(game, owner_dir, engine_dir, game_data, make_junction)
 }
 
 /// The body of [`prepare_basepath`] with the junction call injected, so a test
@@ -722,12 +735,13 @@ pub(crate) fn prepare_basepath(
 fn prepare_basepath_with(
     game: Game,
     client_dir: &Path,
+    engine_dir: &Path,
     game_data: &Path,
     junction: fn(&Path, &Path) -> std::io::Result<()>,
 ) -> Result<PathBuf> {
     let base_dir = client_dir.join(crate::paths::CLIENT_BASEPATH_DIR);
     crate::paths::create_dir(&base_dir)?;
-    copy_basepath_modules(game, &client_dir.join(crate::paths::CLIENT_ENGINE_DIR), &base_dir)?;
+    copy_basepath_modules(game, engine_dir, &base_dir)?;
     link_game_base(game, &base_dir, game_data, junction)?;
     Ok(base_dir)
 }
@@ -797,7 +811,10 @@ fn link_game_base(
                 log::info!(
                     "{} links to {}, relinking it to {}",
                     link.display(),
-                    current.as_deref().unwrap_or(Path::new("something else")).display(),
+                    current
+                        .as_deref()
+                        .unwrap_or(Path::new("something else"))
+                        .display(),
                     target.display()
                 );
                 std::fs::remove_dir(&link)
@@ -843,7 +860,9 @@ fn copy_game_archives(
     let mut bytes = 0u64;
     for asset in game.spec().assets {
         let source = source_dir.join(asset.name);
-        let size = std::fs::metadata(&source).map(|meta| meta.len()).unwrap_or(0);
+        let size = std::fs::metadata(&source)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
         if engine_install::copy_if_changed(&source, &target_dir.join(asset.name))? {
             names.push(asset.name);
             bytes += size;
@@ -1108,7 +1127,11 @@ fn executable_for(
 /// multiplayer, and a launcher that dropped the address quietly would start
 /// the wrong game on a click that named a server.
 fn check_connect(mode: LaunchMode, connect: Option<&str>) -> Result<()> {
-    if mode == LaunchMode::Single && connect.map(str::trim).is_some_and(|address| !address.is_empty()) {
+    if mode == LaunchMode::Single
+        && connect
+            .map(str::trim)
+            .is_some_and(|address| !address.is_empty())
+    {
         return Err(AppError::InvalidInput(
             "the single-player game cannot join a server: start it without an address".into(),
         ));
@@ -1151,11 +1174,12 @@ pub(crate) fn prepare_server(state: &AppState, client_id: &str) -> Result<Server
         });
     }
     let engine_dir = paths.client_engine_dir(&client.id);
-    let executable = engine
-        .dedicated_executable(&engine_dir)
-        .ok_or_else(|| AppError::HostEngineMissing {
-            engine: engine.name.to_string(),
-        })?;
+    let executable =
+        engine
+            .dedicated_executable(&engine_dir)
+            .ok_or_else(|| AppError::HostEngineMissing {
+                engine: engine.name.to_string(),
+            })?;
     let game_data = PathBuf::from(settings.require_game_data_path(client.game)?);
     game_files::validate(client.game, &game_data)?;
 
@@ -1470,7 +1494,11 @@ pub fn stop_game(launch: tauri::State<'_, LaunchState>) -> Result<()> {
     let Some(running) = guard.as_mut() else {
         return Ok(());
     };
-    log::info!("stopping {} (pid {})", running.view.client_id, running.view.pid);
+    log::info!(
+        "stopping {} (pid {})",
+        running.view.client_id,
+        running.view.pid
+    );
     running
         .child
         .kill()
@@ -1510,9 +1538,9 @@ fn spawn(executable: &Path, working_dir: &Path, args: &[String]) -> Result<Child
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    command.spawn().map_err(|e| {
-        AppError::Launch(format!("cannot start {}: {e}", executable.display()))
-    })
+    command
+        .spawn()
+        .map_err(|e| AppError::Launch(format!("cannot start {}: {e}", executable.display())))
 }
 
 /// Watches the child in a plain thread and reports the exit once.
@@ -1652,7 +1680,9 @@ mod tests {
             // The server gets the head of the client's line and nothing of
             // the player: no settings tokens, no profile, no `+connect`.
             assert_eq!(client[..roots.len()], roots[..], "{client:?}");
-            assert!(!roots.iter().any(|token| token == "r_mode" || token == "+connect"));
+            assert!(!roots
+                .iter()
+                .any(|token| token == "r_mode" || token == "+connect"));
         }
         // `fs_game` is part of the roots: the server runs the client's mod.
         let roots = root_args(&LaunchPlan {
@@ -1693,9 +1723,7 @@ mod tests {
         // A blank value is the same as no value.
         let mut blank = plan(game, engine, base, home);
         blank.fs_game = Some("   ");
-        assert!(!build_launch_args(&blank)
-            .iter()
-            .any(|arg| arg == "fs_game"));
+        assert!(!build_launch_args(&blank).iter().any(|arg| arg == "fs_game"));
     }
 
     // --- slice: client launch args ---
@@ -1812,15 +1840,31 @@ mod tests {
         assert_eq!(
             &args[9..],
             [
-                "+set", "r_mode", "-1",
-                "+set", "name", "Padawan",
-                "+exec", "duel.cfg",
-                "+set", "name", "Kyle Katarn",
-                "+set", "model", "kyle/red",
-                "+set", "saber1", "single_1",
-                "+set", "color1", "3",
-                "+set", "name", "Guest",
-                "+connect", "jkhub.org:29070",
+                "+set",
+                "r_mode",
+                "-1",
+                "+set",
+                "name",
+                "Padawan",
+                "+exec",
+                "duel.cfg",
+                "+set",
+                "name",
+                "Kyle Katarn",
+                "+set",
+                "model",
+                "kyle/red",
+                "+set",
+                "saber1",
+                "single_1",
+                "+set",
+                "color1",
+                "3",
+                "+set",
+                "name",
+                "Guest",
+                "+connect",
+                "jkhub.org:29070",
             ]
         );
 
@@ -1863,13 +1907,15 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let state = AppState::bootstrap(temp.path().to_path_buf());
         let mut settings = state.settings().unwrap();
-        settings
-            .game_data_paths
-            .insert(Game::JediAcademy, temp.path().join("GameData").display().to_string());
+        settings.game_data_paths.insert(
+            Game::JediAcademy,
+            temp.path().join("GameData").display().to_string(),
+        );
         settings.extra_launch_args = "+set r_mode -1".into();
         state.set_settings(settings).unwrap();
         let paths = state.paths().unwrap();
-        let both = clients::create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None).unwrap();
+        let both =
+            clients::create_record(&paths, "Everyday", "openjk", Game::JediAcademy, None).unwrap();
         clients::edit_record(state.client_records(), &paths, &both.id, |record| {
             record.launch_args = "+exec duel.cfg".into();
         })
@@ -1897,7 +1943,10 @@ mod tests {
     fn the_single_player_line_carries_the_roots_and_no_profile_or_address() {
         let (_temp, state) = modes_fixture();
         let single = resolve_launch(&state, "everyday", inline_kyle(), LaunchMode::Single).unwrap();
-        assert!(single.profile_args.is_empty(), "no nickname for the single-player game");
+        assert!(
+            single.profile_args.is_empty(),
+            "no nickname for the single-player game"
+        );
         let layered = split_args("+exec jknet-active.cfg");
         let args = build_launch_args(&single.plan(&layered, None));
         assert_eq!(args[1], "fs_cdpath");
@@ -1905,14 +1954,25 @@ mod tests {
         assert_eq!(args[7], "fs_homepath");
         assert_eq!(
             &args[9..],
-            ["+set", "r_mode", "-1", "+exec", "duel.cfg", "+exec", "jknet-active.cfg"]
+            [
+                "+set",
+                "r_mode",
+                "-1",
+                "+exec",
+                "duel.cfg",
+                "+exec",
+                "jknet-active.cfg"
+            ]
         );
         assert!(!args.iter().any(|arg| arg == "+connect" || arg == "name"));
 
         // The same client in multiplayer carries the profile the way it always did.
-        let multi = resolve_launch(&state, "everyday", inline_kyle(), LaunchMode::Multiplayer).unwrap();
+        let multi =
+            resolve_launch(&state, "everyday", inline_kyle(), LaunchMode::Multiplayer).unwrap();
         let args = build_launch_args(&multi.plan(&[], Some("203.0.113.7:29070")));
-        assert!(args.windows(3).any(|w| w == ["+set", "name", "Kyle Katarn"]));
+        assert!(args
+            .windows(3)
+            .any(|w| w == ["+set", "name", "Kyle Katarn"]));
         assert_eq!(&args[args.len() - 2..], ["+connect", "203.0.113.7:29070"]);
     }
 
@@ -1921,8 +1981,13 @@ mod tests {
         let (temp, state) = modes_fixture();
         let paths = state.paths().unwrap();
         // EternalJK ships no single-player game.
-        let error = resolve_launch(&state, "eternal", profiles::ProfileChoice::default(), LaunchMode::Single)
-            .expect_err("no single-player game");
+        let error = resolve_launch(
+            &state,
+            "eternal",
+            profiles::ProfileChoice::default(),
+            LaunchMode::Single,
+        )
+        .expect_err("no single-player game");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         assert!(error.to_string().contains("EternalJK"), "{error}");
         // An OpenJK client made for multiplayer alone, out of a component.
@@ -1930,8 +1995,13 @@ mod tests {
             record.modes = vec![LaunchMode::Multiplayer];
         })
         .unwrap();
-        let error = resolve_launch(&state, "everyday", profiles::ProfileChoice::default(), LaunchMode::Single)
-            .expect_err("made without the mode");
+        let error = resolve_launch(
+            &state,
+            "everyday",
+            profiles::ProfileChoice::default(),
+            LaunchMode::Single,
+        )
+        .expect_err("made without the mode");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         assert!(error.to_string().contains("Everyday"), "{error}");
         // And one made for the single-player game alone refuses multiplayer.
@@ -1939,26 +2009,40 @@ mod tests {
             record.modes = vec![LaunchMode::Single];
         })
         .unwrap();
-        let error = resolve_launch(&state, "everyday", profiles::ProfileChoice::default(), LaunchMode::Multiplayer)
-            .expect_err("made without the mode");
+        let error = resolve_launch(
+            &state,
+            "everyday",
+            profiles::ProfileChoice::default(),
+            LaunchMode::Multiplayer,
+        )
+        .expect_err("made without the mode");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
-        resolve_launch(&state, "everyday", profiles::ProfileChoice::default(), LaunchMode::Single)
-            .expect("the mode it was made for");
+        resolve_launch(
+            &state,
+            "everyday",
+            profiles::ProfileChoice::default(),
+            LaunchMode::Single,
+        )
+        .expect("the mode it was made for");
 
         // A server address makes no sense for the single-player game.
-        let error = check_connect(LaunchMode::Single, Some("203.0.113.7:29070")).expect_err("refused");
+        let error =
+            check_connect(LaunchMode::Single, Some("203.0.113.7:29070")).expect_err("refused");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         check_connect(LaunchMode::Single, Some("  ")).expect("a blank address is no address");
         check_connect(LaunchMode::Single, None).expect("no address");
-        check_connect(LaunchMode::Multiplayer, Some("203.0.113.7:29070")).expect("multiplayer joins");
+        check_connect(LaunchMode::Multiplayer, Some("203.0.113.7:29070"))
+            .expect("multiplayer joins");
 
         // The executable of each mode, and what its absence means.
         let openjk = engines::require("openjk").unwrap();
         let engine_dir = temp.path().join("engine");
         std::fs::create_dir_all(&engine_dir).unwrap();
-        let error = executable_for(openjk, &engine_dir, LaunchMode::Multiplayer, "Everyday").expect_err("not installed");
+        let error = executable_for(openjk, &engine_dir, LaunchMode::Multiplayer, "Everyday")
+            .expect_err("not installed");
         assert!(matches!(error, AppError::Launch(_)), "{error}");
-        let error = executable_for(openjk, &engine_dir, LaunchMode::Single, "Everyday").expect_err("not installed");
+        let error = executable_for(openjk, &engine_dir, LaunchMode::Single, "Everyday")
+            .expect_err("not installed");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         assert!(error.to_string().contains("openjk_sp.x86.exe"), "{error}");
         std::fs::write(engine_dir.join("openjk.x86_64.exe"), b"MZ").unwrap();
@@ -1972,7 +2056,8 @@ mod tests {
             engine_dir.join("openjk_sp.x86_64.exe")
         );
         let eternaljk = engines::require("eternaljk").unwrap();
-        let error = executable_for(eternaljk, &engine_dir, LaunchMode::Single, "Eternal").expect_err("no such game");
+        let error = executable_for(eternaljk, &engine_dir, LaunchMode::Single, "Eternal")
+            .expect_err("no such game");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
 
         // The mode rides on the events, `multiplayer` when a record lacks it.
@@ -2159,7 +2244,9 @@ mod tests {
         assert_eq!(ja[2], game.display().to_string());
         // Jedi Academy builds no base root of its own, so the folder is never
         // named on its command line.
-        assert!(!ja.iter().any(|arg| arg == base.display().to_string().as_str()));
+        assert!(!ja
+            .iter()
+            .any(|arg| arg == base.display().to_string().as_str()));
     }
 
     #[test]
@@ -2227,10 +2314,7 @@ mod tests {
     fn extra_arguments_split_like_a_shell() {
         assert_eq!(split_args(""), Vec::<String>::new());
         assert_eq!(split_args("   "), Vec::<String>::new());
-        assert_eq!(
-            split_args("+set r_mode -1"),
-            vec!["+set", "r_mode", "-1"]
-        );
+        assert_eq!(split_args("+set r_mode -1"), vec!["+set", "r_mode", "-1"]);
         assert_eq!(
             split_args("  +set   com_hunkMegs   512  "),
             vec!["+set", "com_hunkMegs", "512"]
@@ -2248,7 +2332,10 @@ mod tests {
             vec!["+set", "name", "Ben Kenobi", "+set", "cg_fov", "97"]
         );
         // An empty quoted value is a value, not a missing token.
-        assert_eq!(split_args("+set rconpassword \"\""), vec!["+set", "rconpassword", ""]);
+        assert_eq!(
+            split_args("+set rconpassword \"\""),
+            vec!["+set", "rconpassword", ""]
+        );
     }
 
     #[test]
@@ -2262,7 +2349,10 @@ mod tests {
     #[test]
     fn an_address_with_a_space_is_refused() {
         assert!(validate_address("127.0.0.1:29070").is_ok());
-        assert_eq!(validate_address("  jkhub.org:29070 ").unwrap(), "jkhub.org:29070");
+        assert_eq!(
+            validate_address("  jkhub.org:29070 ").unwrap(),
+            "jkhub.org:29070"
+        );
         assert!(validate_address("").is_err());
         assert!(validate_address("   ").is_err());
         assert!(validate_address("127.0.0.1:29070 +quit").is_err());
@@ -2343,13 +2433,19 @@ mod tests {
         let silent = split_args("+set s_volume 0");
         let mut quiet = plan(game, engine, base, home);
         quiet.client_args = &silent;
-        assert_eq!(launch_warning("eternaljk", &build_launch_args(&quiet)), None);
+        assert_eq!(
+            launch_warning("eternaljk", &build_launch_args(&quiet)),
+            None
+        );
     }
 
     #[test]
     fn a_line_that_leaves_the_sound_system_alone_is_not_warned_about() {
         assert_eq!(launch_warning("eternaljk", &line("")), None);
-        assert_eq!(launch_warning("eternaljk", &line("+set s_initsound 1")), None);
+        assert_eq!(
+            launch_warning("eternaljk", &line("+set s_initsound 1")),
+            None
+        );
         // The right way to launch silently: the sound system starts and the
         // volume is zero.
         assert_eq!(launch_warning("eternaljk", &line("+set s_volume 0")), None);
@@ -2477,10 +2573,8 @@ mod tests {
 
         let link = fixture.link();
         assert!(
-            junction_target(&link).is_some_and(|target| same_folder(
-                &target,
-                &fixture.game_data().join("base")
-            )),
+            junction_target(&link)
+                .is_some_and(|target| same_folder(&target, &fixture.game_data().join("base"))),
             "{} must be a junction to the game's base",
             link.display()
         );
@@ -2496,22 +2590,33 @@ mod tests {
         let fixture = Fixture::new();
         fixture.prepare().expect("the first launch");
 
-        let stamp = std::fs::metadata(fixture.client_dir().join("basepath").join("jk2mvmenu_x64.dll"))
-            .and_then(|meta| meta.modified())
-            .expect("the copied module");
+        let stamp = std::fs::metadata(
+            fixture
+                .client_dir()
+                .join("basepath")
+                .join("jk2mvmenu_x64.dll"),
+        )
+        .and_then(|meta| meta.modified())
+        .expect("the copied module");
         // `never_junction` panics if the link is remade, so reaching the
         // assertions below is itself the result.
         prepare_basepath_with(
             Game::JediOutcast,
             &fixture.client_dir(),
+            &fixture.client_dir().join("engine"),
             &fixture.game_data(),
             never_junction,
         )
         .expect("the second launch");
 
-        let again = std::fs::metadata(fixture.client_dir().join("basepath").join("jk2mvmenu_x64.dll"))
-            .and_then(|meta| meta.modified())
-            .expect("the copied module");
+        let again = std::fs::metadata(
+            fixture
+                .client_dir()
+                .join("basepath")
+                .join("jk2mvmenu_x64.dll"),
+        )
+        .and_then(|meta| meta.modified())
+        .expect("the copied module");
         assert_eq!(stamp, again, "an unchanged module is not copied again");
         assert!(fixture.game_is_intact());
     }
@@ -2529,8 +2634,9 @@ mod tests {
             .expect("the launch after the move");
 
         let link = fixture.link();
-        assert!(junction_target(&link)
-            .is_some_and(|target| same_folder(&target, &moved.join("base"))));
+        assert!(
+            junction_target(&link).is_some_and(|target| same_folder(&target, &moved.join("base")))
+        );
         assert!(link.join(GAME_MARKER).is_file());
         // Unlinking is not deleting: the folder the link used to name is whole.
         assert!(fixture.game_is_intact());
@@ -2542,11 +2648,17 @@ mod tests {
         let fixture = Fixture::new();
         fixture.prepare().expect("the first launch");
 
-        let source = fixture.client_dir().join("engine").join("jk2mvmenu_x64.dll");
+        let source = fixture
+            .client_dir()
+            .join("engine")
+            .join("jk2mvmenu_x64.dll");
         std::fs::write(&source, b"menu of 1.4.2").expect("the updated module");
         fixture.prepare().expect("the launch after the update");
 
-        let copy = fixture.client_dir().join("basepath").join("jk2mvmenu_x64.dll");
+        let copy = fixture
+            .client_dir()
+            .join("basepath")
+            .join("jk2mvmenu_x64.dll");
         assert_eq!(
             std::fs::read(&copy).expect("the copy"),
             b"menu of 1.4.2".to_vec()
@@ -2585,6 +2697,7 @@ mod tests {
         prepare_basepath_with(
             Game::JediOutcast,
             &fixture.client_dir(),
+            &fixture.client_dir().join("engine"),
             &fixture.game_data(),
             refuse_junction,
         )
@@ -2612,14 +2725,29 @@ mod tests {
         // make. The marker is how the two rules stay apart.
         let fixture = Fixture::new();
         let roots = (fixture.client_dir(), fixture.game_data());
-        prepare_basepath_with(Game::JediOutcast, &roots.0, &roots.1, refuse_junction)
-            .expect("the first fallback");
+        prepare_basepath_with(
+            Game::JediOutcast,
+            &roots.0,
+            &roots.0.join("engine"),
+            &roots.1,
+            refuse_junction,
+        )
+        .expect("the first fallback");
 
         // A patch the player installed between the two launches.
-        std::fs::write(roots.1.join("base").join("assets5.pk3"), b"the 1.04 patch, rebuilt")
-            .expect("the patched archive");
-        prepare_basepath_with(Game::JediOutcast, &roots.0, &roots.1, refuse_junction)
-            .expect("the second fallback");
+        std::fs::write(
+            roots.1.join("base").join("assets5.pk3"),
+            b"the 1.04 patch, rebuilt",
+        )
+        .expect("the patched archive");
+        prepare_basepath_with(
+            Game::JediOutcast,
+            &roots.0,
+            &roots.0.join("engine"),
+            &roots.1,
+            refuse_junction,
+        )
+        .expect("the second fallback");
 
         assert_eq!(
             std::fs::read(fixture.link().join("assets5.pk3")).expect("the copy"),
@@ -2639,6 +2767,7 @@ mod tests {
         prepare_basepath_with(
             Game::JediOutcast,
             &fixture.client_dir(),
+            &fixture.client_dir().join("engine"),
             &fixture.game_data(),
             refuse_junction,
         )

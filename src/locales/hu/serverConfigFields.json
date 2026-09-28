@@ -1,0 +1,714 @@
+{
+  "ja": {
+    "base": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Frag limit",
+        "duel_fraglimit": "Duel win limit",
+        "capturelimit": "Capture limit",
+        "bot_minplayers": "Minimum players with bots",
+        "g_friendlyFire": "Friendly fire",
+        "g_saberLocking": "Saber locks",
+        "g_maxForceRank": "Maximum Force rank",
+        "g_forcePowerDisable": "Disabled Force powers"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "timelimit": "Minutes. Zero disables the limit.",
+        "bot_minplayers": "Bots use normal client slots. Zero disables automatic bots."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Bots": "Bots",
+        "Combat": "Combat",
+        "Force": "Force"
+      },
+      "options": {
+        "g_gametype": {
+          "0": "Free for all",
+          "1": "Holocron",
+          "2": "Jedi Master",
+          "3": "Duel",
+          "4": "Power Duel",
+          "6": "Team free for all",
+          "7": "Siege",
+          "8": "Capture the Flag",
+          "9": "Capture the Ysalamiri"
+        },
+        "g_maxForceRank": {
+          "0": "Uninitiated",
+          "1": "Initiate",
+          "2": "Padawan",
+          "3": "Jedi",
+          "4": "Jedi Guardian",
+          "5": "Jedi Adept",
+          "6": "Jedi Knight",
+          "7": "Jedi Master"
+        }
+      },
+      "flags": {
+        "g_forcePowerDisable": {
+          "1": "Heal",
+          "2": "Jump",
+          "4": "Speed",
+          "8": "Push",
+          "16": "Pull",
+          "32": "Mind Trick",
+          "64": "Grip",
+          "128": "Lightning",
+          "256": "Rage",
+          "512": "Protect",
+          "1024": "Absorb",
+          "2048": "Team Heal",
+          "4096": "Team Energize",
+          "8192": "Drain",
+          "16384": "See",
+          "32768": "Saber offense",
+          "65536": "Saber defense",
+          "131072": "Saber throw"
+        }
+      }
+    },
+    "japlus": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Frag limit",
+        "duel_fraglimit": "Duel win limit",
+        "capturelimit": "Capture limit",
+        "bot_minplayers": "Minimum players with bots",
+        "g_friendlyFire": "Friendly fire",
+        "g_saberLocking": "Saber locks",
+        "g_maxForceRank": "Maximum Force rank",
+        "g_forcePowerDisable": "Disabled Force powers",
+        "jp_allowHook": "Grappling hook",
+        "jp_hookFloodProtect": "Hook cooldown",
+        "jp_hookSpeed": "Hook speed",
+        "jp_newGLAAnims": "JA+ animations",
+        "jp_allowSPForces": "Single-player Force moves",
+        "jp_allowTeamDuel": "Private duels in team modes",
+        "jp_duelStartArmor": "Duel starting armor",
+        "jp_DuelAlpha": "Duel isolation visibility",
+        "jp_votesDisable": "Disabled vote types",
+        "jp_onlyVotingClients": "Count only voting clients",
+        "jp_voteTimer": "Vote cooldown",
+        "jp_startMapVoteTimer": "Initial map-vote delay",
+        "jp_teamLock": "Locked teams",
+        "jp_allowTeamKill": "Allow /kill in team modes",
+        "jp_siegeItemTime": "Siege objective time"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "timelimit": "Minutes. Zero disables the limit.",
+        "bot_minplayers": "Bots use normal client slots. Zero disables automatic bots.",
+        "jp_hookFloodProtect": "Milliseconds between hook shots.",
+        "jp_DuelAlpha": "-1 disables isolation; 0–255 sets dueller visibility.",
+        "jp_votesDisable": "Takes effect only while g_allowVote permits voting.",
+        "jp_voteTimer": "Minutes. Zero disables the cooldown.",
+        "jp_startMapVoteTimer": "Seconds. Zero disables the delay.",
+        "jp_siegeItemTime": "Minutes before a carried objective returns. Zero disables it."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Bots": "Bots",
+        "Combat": "Combat",
+        "Force": "Force",
+        "Items": "Items",
+        "Movement": "Movement",
+        "Duels": "Duels",
+        "Voting": "Voting",
+        "Teams": "Teams"
+      },
+      "options": {
+        "g_gametype": {
+          "0": "Free for all",
+          "1": "Holocron",
+          "2": "Jedi Master",
+          "3": "Duel",
+          "4": "Power Duel",
+          "6": "Team free for all",
+          "7": "Siege",
+          "8": "Capture the Flag",
+          "9": "Capture the Ysalamiri"
+        },
+        "g_maxForceRank": {
+          "0": "Uninitiated",
+          "1": "Initiate",
+          "2": "Padawan",
+          "3": "Jedi",
+          "4": "Jedi Guardian",
+          "5": "Jedi Adept",
+          "6": "Jedi Knight",
+          "7": "Jedi Master"
+        },
+        "jp_allowHook": {
+          "0": "Disabled",
+          "1": "All players",
+          "2": "Mercenaries only in Jedi vs Merc"
+        },
+        "jp_newGLAAnims": {
+          "0": "Disabled",
+          "1": "Enabled",
+          "2": "Require all players to have the plugin"
+        },
+        "jp_allowSPForces": {
+          "0": "Disabled",
+          "1": "Except Sith kiss",
+          "2": "All moves"
+        }
+      },
+      "flags": {
+        "g_forcePowerDisable": {
+          "1": "Heal",
+          "2": "Jump",
+          "4": "Speed",
+          "8": "Push",
+          "16": "Pull",
+          "32": "Mind Trick",
+          "64": "Grip",
+          "128": "Lightning",
+          "256": "Rage",
+          "512": "Protect",
+          "1024": "Absorb",
+          "2048": "Team Heal",
+          "4096": "Team Energize",
+          "8192": "Drain",
+          "16384": "See",
+          "32768": "Saber offense",
+          "65536": "Saber defense",
+          "131072": "Saber throw"
+        },
+        "jp_votesDisable": {
+          "2": "Map restart",
+          "4": "Next map",
+          "8": "Map",
+          "16": "Game type",
+          "32": "Kick",
+          "64": "Warmup",
+          "128": "Time limit",
+          "256": "Frag limit",
+          "512": "Sleep",
+          "1024": "Admin poll",
+          "2048": "Silence"
+        },
+        "jp_teamLock": {
+          "2": "Spectator",
+          "4": "Free for all",
+          "8": "Blue",
+          "16": "Red"
+        }
+      }
+    },
+    "japro": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Frag limit",
+        "duel_fraglimit": "Duel win limit",
+        "capturelimit": "Capture limit",
+        "bot_minplayers": "Minimum players with bots",
+        "g_friendlyFire": "Friendly fire",
+        "g_saberLocking": "Saber locks",
+        "g_maxForceRank": "Maximum Force rank",
+        "g_forcePowerDisable": "Disabled Force powers",
+        "g_raceMode": "Race mode",
+        "g_allowRaceTele": "Race teleport permissions",
+        "g_movementStyle": "Movement style",
+        "g_unlagged": "Unlagged calculations",
+        "g_fixGroundStab": "Ground-stab behaviour",
+        "g_allowGrapple": "Grappling hook",
+        "g_hookSpeed": "Hook speed",
+        "g_hookStrength": "Hook pull speed",
+        "g_hookFloodProtect": "Hook cooldown",
+        "g_showHealth": "Show health bars",
+        "g_eloRanking": "Duel Elo ranking",
+        "bot_maxbots": "Maximum bots"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "timelimit": "Minutes. Zero disables the limit.",
+        "bot_minplayers": "Bots use normal client slots. Zero disables automatic bots.",
+        "g_hookFloodProtect": "Milliseconds between hook shots.",
+        "g_showHealth": "Requires a map restart.",
+        "bot_maxbots": "Bots occupy regular client slots."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Bots": "Bots",
+        "Combat": "Combat",
+        "Force": "Force",
+        "Race": "Race",
+        "Movement": "Movement",
+        "Network": "Network",
+        "Display": "Display",
+        "Duels": "Duels"
+      },
+      "options": {
+        "g_gametype": {
+          "0": "Free for all",
+          "1": "Holocron",
+          "2": "Jedi Master",
+          "3": "Duel",
+          "4": "Power Duel",
+          "6": "Team free for all",
+          "7": "Siege",
+          "8": "Capture the Flag",
+          "9": "Capture the Ysalamiri"
+        },
+        "g_maxForceRank": {
+          "0": "Uninitiated",
+          "1": "Initiate",
+          "2": "Padawan",
+          "3": "Jedi",
+          "4": "Jedi Guardian",
+          "5": "Jedi Adept",
+          "6": "Jedi Knight",
+          "7": "Jedi Master"
+        },
+        "g_raceMode": {
+          "0": "Disabled",
+          "1": "Forced",
+          "2": "Players can toggle it"
+        },
+        "g_allowRaceTele": {
+          "0": "Disabled",
+          "1": "Allow amtele",
+          "2": "Allow amtele and noclip"
+        },
+        "g_movementStyle": {
+          "0": "Siege",
+          "1": "Jedi Academy",
+          "2": "QuakeWorld",
+          "3": "CPM",
+          "4": "Quake III",
+          "5": "PJK",
+          "6": "Warsow"
+        },
+        "g_fixGroundStab": {
+          "0": "Base game",
+          "1": "Damage grounded players",
+          "2": "Damage grounded players less"
+        },
+        "g_allowGrapple": {
+          "0": "Disabled",
+          "1": "Tarzan style",
+          "2": "JA+ style"
+        }
+      },
+      "flags": {
+        "g_forcePowerDisable": {
+          "1": "Heal",
+          "2": "Jump",
+          "4": "Speed",
+          "8": "Push",
+          "16": "Pull",
+          "32": "Mind Trick",
+          "64": "Grip",
+          "128": "Lightning",
+          "256": "Rage",
+          "512": "Protect",
+          "1024": "Absorb",
+          "2048": "Team Heal",
+          "4096": "Team Energize",
+          "8192": "Drain",
+          "16384": "See",
+          "32768": "Saber offense",
+          "65536": "Saber defense",
+          "131072": "Saber throw"
+        },
+        "g_unlagged": {
+          "1": "Projectiles",
+          "2": "Hitscan weapons",
+          "4": "Push and pull"
+        }
+      }
+    },
+    "mbii": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Match win limit",
+        "g_friendlyFire": "Friendly fire",
+        "g_saberLocking": "Saber locks",
+        "g_maxForceRank": "Maximum Force rank",
+        "g_forcePowerDisable": "Disabled Force powers",
+        "g_authenticity": "Movie Battles mode",
+        "g_competitive": "Competitive settings",
+        "g_anticheat": "Anti-cheat",
+        "g_duelfriendlyteam": "Friendly duel team",
+        "g_dueltimelimit": "Duel time limit",
+        "g_hidehudfromspecs": "Hide HUD from spectators",
+        "g_shuffletimer": "Team shuffle timer",
+        "g_spin": "Spin event",
+        "g_teamswap": "Team swap",
+        "tk_spec": "Team-kill points to spectator",
+        "tk_kick": "Team-kill points to kick",
+        "rtvrtm": "Rock the Vote / Rock the Mode"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "g_gametype": "Movie Battles uses 7. Duel and Power Duel use the base game values.",
+        "timelimit": "Minutes. Zero disables the limit."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Combat": "Combat",
+        "Force": "Force",
+        "Security": "Security",
+        "Duels": "Duels",
+        "Spectators": "Spectators",
+        "Teams": "Teams",
+        "Events": "Events",
+        "Moderation": "Moderation",
+        "Voting": "Voting"
+      },
+      "options": {
+        "g_gametype": {
+          "3": "Duel",
+          "4": "Power Duel",
+          "7": "Movie Battles"
+        },
+        "g_maxForceRank": {
+          "0": "Uninitiated",
+          "1": "Initiate",
+          "2": "Padawan",
+          "3": "Jedi",
+          "4": "Jedi Guardian",
+          "5": "Jedi Adept",
+          "6": "Jedi Knight",
+          "7": "Jedi Master"
+        },
+        "g_authenticity": {
+          "0": "Open",
+          "1": "Semi-authentic",
+          "2": "Full-authentic",
+          "3": "Duel",
+          "4": "Legends"
+        }
+      },
+      "flags": {
+        "g_forcePowerDisable": {
+          "1": "Heal",
+          "2": "Jump",
+          "4": "Speed",
+          "8": "Push",
+          "16": "Pull",
+          "32": "Mind Trick",
+          "64": "Grip",
+          "128": "Lightning",
+          "256": "Rage",
+          "512": "Protect",
+          "1024": "Absorb",
+          "2048": "Team Heal",
+          "4096": "Team Energize",
+          "8192": "Drain",
+          "16384": "See",
+          "32768": "Saber offense",
+          "65536": "Saber defense",
+          "131072": "Saber throw"
+        }
+      }
+    },
+    "lugormod": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Frag limit",
+        "duel_fraglimit": "Duel win limit",
+        "capturelimit": "Capture limit",
+        "bot_minplayers": "Minimum players with bots",
+        "g_friendlyFire": "Friendly fire",
+        "g_saberLocking": "Saber locks",
+        "g_maxForceRank": "Maximum Force rank",
+        "g_forcePowerDisable": "Disabled Force powers",
+        "g_gameMode": "Lugormod game mode",
+        "g_privateDuel": "Private duel rules",
+        "g_grapplingHook": "Grappling hook",
+        "g_disableSpec": "Spectator restrictions",
+        "lmd_startingCr": "Starting credits",
+        "lmd_stashRate": "Stash spawn check interval",
+        "lmd_stashCr": "Default stash credits",
+        "lmd_chatDisable": "Disabled chat modes",
+        "lmd_vehcloaking": "Cloak in vehicles",
+        "lmd_loginSecurity": "Account login security",
+        "lmd_enableCorpseDrag": "Drag corpses",
+        "lmd_rewardcr_kill": "Credits for player kills"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "timelimit": "Minutes. Zero disables the limit.",
+        "bot_minplayers": "Bots use normal client slots. Zero disables automatic bots.",
+        "g_gameMode": "0 normal; 1–6 choose a mode. Add 8, 16, 32, 64, or 128 for documented modifiers.",
+        "lmd_stashRate": "Milliseconds. A check does not guarantee a stash spawn.",
+        "lmd_enableCorpseDrag": "Experimental."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Bots": "Bots",
+        "Combat": "Combat",
+        "Force": "Force",
+        "Duels": "Duels",
+        "Items": "Items",
+        "Spectators": "Spectators",
+        "Economy": "Economy",
+        "Chat": "Chat",
+        "Accounts": "Accounts"
+      },
+      "options": {
+        "g_gametype": {
+          "0": "Free for all",
+          "1": "Holocron",
+          "2": "Jedi Master",
+          "3": "Duel",
+          "4": "Power Duel",
+          "6": "Team free for all",
+          "7": "Siege",
+          "8": "Capture the Flag",
+          "9": "Capture the Ysalamiri"
+        },
+        "g_maxForceRank": {
+          "0": "Uninitiated",
+          "1": "Initiate",
+          "2": "Padawan",
+          "3": "Jedi",
+          "4": "Jedi Guardian",
+          "5": "Jedi Adept",
+          "6": "Jedi Knight",
+          "7": "Jedi Master"
+        },
+        "g_grapplingHook": {
+          "0": "Disabled",
+          "1": "Stun baton alternate fire",
+          "2": "Always fire the hook"
+        },
+        "lmd_loginSecurity": {
+          "0": "Optional security code",
+          "1": "Require code from a new IP",
+          "2": "Require code for administrators only"
+        }
+      },
+      "flags": {
+        "g_forcePowerDisable": {
+          "1": "Heal",
+          "2": "Jump",
+          "4": "Speed",
+          "8": "Push",
+          "16": "Pull",
+          "32": "Mind Trick",
+          "64": "Grip",
+          "128": "Lightning",
+          "256": "Rage",
+          "512": "Protect",
+          "1024": "Absorb",
+          "2048": "Team Heal",
+          "4096": "Team Energize",
+          "8192": "Drain",
+          "16384": "See",
+          "32768": "Saber offense",
+          "65536": "Saber defense",
+          "131072": "Saber throw"
+        },
+        "g_privateDuel": {
+          "1": "Enable private duels",
+          "2": "Allow multiple duels",
+          "4": "Full health at start",
+          "8": "Full armor at start",
+          "16": "Full Force at start",
+          "32": "Restore health after duel",
+          "64": "Restore armor after duel",
+          "128": "Restore Force after duel",
+          "256": "Force saber on at start",
+          "512": "Force bow at start",
+          "2048": "Score frags only in duels in FFA",
+          "4096": "Disable severing in duels"
+        },
+        "g_disableSpec": {
+          "1": "Prevent movement",
+          "4": "Prevent following players"
+        },
+        "lmd_chatDisable": {
+          "1": "Normal",
+          "2": "Team",
+          "4": "Tell",
+          "8": "Admin",
+          "16": "Close",
+          "32": "Buddies",
+          "64": "Friends"
+        }
+      }
+    },
+    "makermod": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Frag limit",
+        "duel_fraglimit": "Duel win limit",
+        "capturelimit": "Capture limit",
+        "bot_minplayers": "Minimum players with bots",
+        "g_friendlyFire": "Friendly fire",
+        "g_saberLocking": "Saber locks",
+        "g_maxForceRank": "Maximum Force rank",
+        "g_forcePowerDisable": "Disabled Force powers",
+        "g_allowMapVote": "Map voting",
+        "g_forbiddenNPCs": "Forbidden NPC types",
+        "g_forbiddenVehicles": "Forbidden vehicle types",
+        "g_objectMargin": "Object margin",
+        "g_npcLimit": "NPC limit",
+        "g_antiNPCCrash": "NPC crash protection",
+        "g_teleDelay": "Teleport delay",
+        "g_serverMessages": "Server messages",
+        "g_ServerName": "Server chat name",
+        "g_antiChatFlood": "Chat flood protection",
+        "g_antiUserinfoFlood": "Userinfo flood protection",
+        "g_maxClientsfromIP": "Maximum clients per IP",
+        "g_JoinMOTD": "Join message"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "timelimit": "Minutes. Zero disables the limit.",
+        "bot_minplayers": "Bots use normal client slots. Zero disables automatic bots.",
+        "g_forbiddenNPCs": "Space-separated NPC type names.",
+        "g_forbiddenVehicles": "Space-separated vehicle type names.",
+        "g_teleDelay": "Milliseconds."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Bots": "Bots",
+        "Combat": "Combat",
+        "Force": "Force",
+        "Voting": "Voting",
+        "Building": "Building",
+        "Chat": "Chat",
+        "Security": "Security"
+      },
+      "options": {
+        "g_gametype": {
+          "0": "Free for all",
+          "1": "Holocron",
+          "2": "Jedi Master",
+          "3": "Duel",
+          "4": "Power Duel",
+          "6": "Team free for all",
+          "7": "Siege",
+          "8": "Capture the Flag",
+          "9": "Capture the Ysalamiri"
+        },
+        "g_maxForceRank": {
+          "0": "Uninitiated",
+          "1": "Initiate",
+          "2": "Padawan",
+          "3": "Jedi",
+          "4": "Jedi Guardian",
+          "5": "Jedi Adept",
+          "6": "Jedi Knight",
+          "7": "Jedi Master"
+        }
+      },
+      "flags": {
+        "g_forcePowerDisable": {
+          "1": "Heal",
+          "2": "Jump",
+          "4": "Speed",
+          "8": "Push",
+          "16": "Pull",
+          "32": "Mind Trick",
+          "64": "Grip",
+          "128": "Lightning",
+          "256": "Rage",
+          "512": "Protect",
+          "1024": "Absorb",
+          "2048": "Team Heal",
+          "4096": "Team Energize",
+          "8192": "Drain",
+          "16384": "See",
+          "32768": "Saber offense",
+          "65536": "Saber defense",
+          "131072": "Saber throw"
+        }
+      }
+    }
+  },
+  "jo": {
+    "base": {
+      "labels": {
+        "map": "Starting map",
+        "sv_hostname": "Server name",
+        "sv_maxclients": "Maximum clients",
+        "g_gametype": "Game type",
+        "timelimit": "Time limit",
+        "fraglimit": "Frag limit",
+        "duel_fraglimit": "Duel win limit",
+        "capturelimit": "Capture limit",
+        "bot_minplayers": "Minimum players with bots"
+      },
+      "descriptions": {
+        "map": "Map command run when the server starts.",
+        "sv_hostname": "Name shown in the server browser.",
+        "sv_maxclients": "Players and spectators share these client slots. JKNet private hosting accepts 2–16.",
+        "timelimit": "Minutes. Zero disables the limit.",
+        "bot_minplayers": "Bots use normal client slots. Zero disables automatic bots."
+      },
+      "groups": {
+        "Server": "Server",
+        "Game rules": "Game rules",
+        "Limits": "Limits",
+        "Bots": "Bots"
+      },
+      "options": {
+        "g_gametype": {
+          "0": "Free for all",
+          "1": "Holocron",
+          "2": "Jedi Master",
+          "3": "Duel",
+          "5": "Team free for all",
+          "7": "Capture the Flag",
+          "8": "Capture the Ysalamiri"
+        }
+      },
+      "flags": {}
+    }
+  }
+}

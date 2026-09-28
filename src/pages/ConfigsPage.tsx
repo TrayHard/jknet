@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
   useClients,
@@ -21,8 +22,29 @@ import { configCommands, type BindSource } from "../lib/quakeConfig";
 // --- slice: chat cards ---
 import { configCard, fitsConfigCard } from "../lib/chat/cardDrafts";
 import { useShareDialog } from "../components/chat/ShareToChatDialog";
+import { Tabs } from "../components/servers/Tabs";
+import { ServerConfigsPanel } from "../components/server-configs/ServerConfigsPanel";
 
 export function ConfigsPage() {
+  const { t } = useTranslation("common");
+  const { t: tServer } = useTranslation("serverConfigs");
+  const [params, setParams] = useSearchParams();
+  const guard = useUnsavedGuard();
+  const scope = params.get("scope") === "server" ? "server" : "client";
+  return (
+    <Page>
+      <PageHeader title={t("configs.title")} subtitle={scope === "server" ? tServer("subtitle") : t("configs.subtitle")} />
+      <Tabs className="mb-20" value={scope} tabs={[{ id: "client", label: tServer("clientTab") }, { id: "server", label: tServer("serverTab") }]}
+        onChange={next => guard.ask(() => {
+          guard.setDirty(false);
+          setParams(previous => { const search = new URLSearchParams(previous); search.set("scope", next); return search; });
+        })} />
+      {scope === "server" ? <ServerConfigsPanel selectedId={params.get("id")} /> : <ClientConfigs />}
+    </Page>
+  );
+}
+
+function ClientConfigs() {
   const { t } = useTranslation("common"),
     errorText = useErrorText(),
     guard = useUnsavedGuard();
@@ -94,8 +116,7 @@ export function ConfigsPage() {
     files.error ??
     conflicts.error;
   return (
-    <Page>
-      <PageHeader title={t("configs.title")} subtitle={t("configs.subtitle")} />
+    <>
       <div className="flex flex-wrap gap-8 mb-20">
         <Button
           onClick={() =>
@@ -516,6 +537,6 @@ export function ConfigsPage() {
         />
       ) : null}
       {share.dialog}
-    </Page>
+    </>
   );
 }

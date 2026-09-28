@@ -161,7 +161,11 @@ impl ServerChats {
     /// The open of `session_id` failed; the next heartbeat asks again.
     pub fn open_failed(&mut self, session_id: &str) {
         let session_id = session_key(session_id);
-        if let Some(host) = self.host.as_mut().filter(|host| host.session_id == session_id) {
+        if let Some(host) = self
+            .host
+            .as_mut()
+            .filter(|host| host.session_id == session_id)
+        {
             host.opening = false;
         }
     }
@@ -242,7 +246,10 @@ pub(crate) fn is_session_id(session_id: &str) -> bool {
 fn is_chat_of(conversation: &Conversation, session_id: &str, host: Option<&str>) -> bool {
     conversation.kind == "server"
         && conversation.server.as_ref().is_some_and(|server| {
-            server.session_id.trim().eq_ignore_ascii_case(session_id.trim())
+            server
+                .session_id
+                .trim()
+                .eq_ignore_ascii_case(session_id.trim())
                 && host.is_none_or(|host| server.host_id == host)
         })
 }
@@ -381,7 +388,10 @@ pub(super) async fn set_history(
     on: bool,
 ) -> Result<Conversation> {
     check_host(my_id(app).as_deref(), server)?;
-    let conversation = noted(app, online.chat_patch_server(ctx, &server.session_id, on).await)?;
+    let conversation = noted(
+        app,
+        online.chat_patch_server(ctx, &server.session_id, on).await,
+    )?;
     keep(app, &conversation);
     Ok(conversation)
 }
@@ -503,15 +513,24 @@ pub async fn chat_join_host_card(
 ) -> Result<JoinResult> {
     let host_id = host_id.trim();
     if host_id.is_empty() {
-        return Err(AppError::InvalidInput("a host invite names its host".into()));
+        return Err(AppError::InvalidInput(
+            "a host invite names its host".into(),
+        ));
     }
     if !is_session_id(&session_id) {
         return Err(AppError::InvalidInput(format!(
             "{session_id:?} is not the session of a private server"
         )));
     }
-    crate::friends::join_host_card(&app, &state, &online, &launch, host_id, &session_key(&session_id))
-        .await
+    crate::friends::join_host_card(
+        &app,
+        &state,
+        &online,
+        &launch,
+        host_id,
+        &session_key(&session_id),
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -524,14 +543,20 @@ mod tests {
     const NEXT: &str = "0123456789abcdef";
 
     fn refusal(code: &str) -> AppError {
-        AppError::Online { code: code.into(), message: "x".into() }
+        AppError::Online {
+            code: code.into(),
+            message: "x".into(),
+        }
     }
 
     fn server_chat(id: &str, host: &str, session: &str) -> Conversation {
         Conversation {
             kind: "server".into(),
             owner_id: Some(host.into()),
-            server: Some(ServerChatRef { host_id: host.into(), session_id: session.into() }),
+            server: Some(ServerChatRef {
+                host_id: host.into(),
+                session_id: session.into(),
+            }),
             ..conversation(id, 1, 1)
         }
     }
@@ -540,7 +565,10 @@ mod tests {
     fn the_first_stored_heartbeat_opens_the_chat_and_later_ones_leave_it() {
         let mut chats = ServerChats::default();
         let nothing_known = |_: &str| false;
-        assert_eq!(chats.plan_open(SESSION, nothing_known), OpenPlan::Open { superseded: None });
+        assert_eq!(
+            chats.plan_open(SESSION, nothing_known),
+            OpenPlan::Open { superseded: None }
+        );
         // The next heartbeat comes while the request is out.
         assert_eq!(chats.plan_open(SESSION, nothing_known), OpenPlan::Nothing);
         assert_eq!(chats.opened(SESSION, "c1"), Opened::Keep);
@@ -548,16 +576,25 @@ mod tests {
         let in_book = |id: &str| id == "c1";
         assert_eq!(chats.plan_open(SESSION, in_book), OpenPlan::Nothing);
         // The session reads the same in upper case, as the service stores it.
-        assert_eq!(chats.plan_open(&SESSION.to_uppercase(), in_book), OpenPlan::Nothing);
+        assert_eq!(
+            chats.plan_open(&SESSION.to_uppercase(), in_book),
+            OpenPlan::Nothing
+        );
     }
 
     #[test]
     fn a_refused_open_is_asked_again_at_the_next_heartbeat() {
         let mut chats = ServerChats::default();
-        assert!(matches!(chats.plan_open(SESSION, |_| false), OpenPlan::Open { .. }));
+        assert!(matches!(
+            chats.plan_open(SESSION, |_| false),
+            OpenPlan::Open { .. }
+        ));
         // `409 not_hosting`: the service had not stored the heartbeat yet.
         chats.open_failed(SESSION);
-        assert_eq!(chats.plan_open(SESSION, |_| false), OpenPlan::Open { superseded: None });
+        assert_eq!(
+            chats.plan_open(SESSION, |_| false),
+            OpenPlan::Open { superseded: None }
+        );
     }
 
     #[test]
@@ -567,10 +604,16 @@ mod tests {
         chats.opened(SESSION, "c1");
         // The host's presence expired during a network cut: `ended`.
         chats.removed("c1", "ended");
-        assert_eq!(chats.plan_open(SESSION, |_| false), OpenPlan::Open { superseded: None });
+        assert_eq!(
+            chats.plan_open(SESSION, |_| false),
+            OpenPlan::Open { superseded: None }
+        );
         // A resync that no longer carries it does the same.
         chats.opened(SESSION, "c2");
-        assert_eq!(chats.plan_open(SESSION, |_| false), OpenPlan::Open { superseded: None });
+        assert_eq!(
+            chats.plan_open(SESSION, |_| false),
+            OpenPlan::Open { superseded: None }
+        );
     }
 
     #[test]
@@ -614,14 +657,19 @@ mod tests {
         chats.opened(SESSION, "c1");
         assert_eq!(
             chats.plan_open(NEXT, |id| id == "c1"),
-            OpenPlan::Open { superseded: Some("c1".into()) }
+            OpenPlan::Open {
+                superseded: Some("c1".into())
+            }
         );
         // The answer of the old session's open, late: not kept.
         assert_eq!(chats.opened(SESSION, "c1"), Opened::Close);
         assert_eq!(chats.opened(NEXT, "c2"), Opened::Keep);
         assert_eq!(chats.hosted_session(), Some(NEXT));
         // An old chat the book no longer holds is not dropped twice.
-        assert_eq!(chats.plan_open(SESSION, |_| false), OpenPlan::Open { superseded: None });
+        assert_eq!(
+            chats.plan_open(SESSION, |_| false),
+            OpenPlan::Open { superseded: None }
+        );
     }
 
     #[test]
@@ -657,11 +705,17 @@ mod tests {
 
     #[test]
     fn only_the_host_changes_the_history_of_a_server_chat() {
-        let server = ServerChatRef { host_id: ME.into(), session_id: SESSION.into() };
+        let server = ServerChatRef {
+            host_id: ME.into(),
+            session_id: SESSION.into(),
+        };
         assert!(check_host(Some(ME), &server).is_ok());
         // An unknown player is left to the service.
         assert!(check_host(None, &server).is_ok());
-        let guest = ServerChatRef { host_id: KYLE.into(), ..server };
+        let guest = ServerChatRef {
+            host_id: KYLE.into(),
+            ..server
+        };
         let refused = check_host(Some(ME), &guest).expect_err("a guest");
         assert_eq!(refused.details()["code"], OWNER_ONLY);
     }
@@ -698,7 +752,10 @@ mod tests {
 
     #[tokio::test]
     async fn a_join_is_asked_again_after_each_wait_and_then_given_up() {
-        let chat = Conversation { id: "c".into(), ..Conversation::default() };
+        let chat = Conversation {
+            id: "c".into(),
+            ..Conversation::default()
+        };
         let (result, asked) = scripted(vec![
             Err(refusal("not_found")),
             Err(AppError::Network("reset".into())),

@@ -534,12 +534,8 @@ export async function devHost<T>(command: string, args: Record<string, unknown> 
   switch (command) {
     case "host_get_options":
       return copy(world.options) as T;
-    case "host_list_maps": {
-      const index = typeof args.gametype === "number" ? args.gametype : null;
-      const token = world.options.gametypes.find((entry) => entry.index === index)?.id ?? null;
-      const maps = token === null ? world.maps : world.maps.filter((entry) => entry.gametypes.includes(token));
-      return copy(maps) as T;
-    }
+    case "host_list_maps":
+      return copy(world.maps) as T;
     case "host_get_session":
       return copy(world.session) as T;
     case "host_start": {

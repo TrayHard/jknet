@@ -976,7 +976,10 @@ mod tests {
             .all(|p| p.kind == "map" && p.model.is_none()));
         // The picture and the texture are listed as files, the `.arena` as data.
         let kinds: Vec<_> = all.iter().map(|p| p.kind.as_str()).collect();
-        assert!(kinds.contains(&"levelshot") && kinds.contains(&"texture") && kinds.contains(&"data"), "{kinds:?}");
+        assert!(
+            kinds.contains(&"levelshot") && kinds.contains(&"texture") && kinds.contains(&"data"),
+            "{kinds:?}"
+        );
         let assets = model_preview::read_assets(
             None,
             &temp.0.join("cache"),
@@ -1189,9 +1192,15 @@ mod tests {
             eprintln!("  {kind}: {count}");
         }
         let report = library::inspect(&sample).unwrap();
-        eprintln!("  category {:?}, features {:?}", report.category, report.features);
+        eprintln!(
+            "  category {:?}, features {:?}",
+            report.category, report.features
+        );
         assert!(
-            report.features.iter().all(|code| crate::bundles::manifest::is_library_feature(code)),
+            report
+                .features
+                .iter()
+                .all(|code| crate::bundles::manifest::is_library_feature(code)),
             "every badge is a code a bundle manifest accepts: {:?}",
             report.features
         );
@@ -1231,17 +1240,23 @@ mod tests {
         }
         let strings = preview.entries.iter().find(|entry| entry.kind == "strings");
         if let Some(strings) = strings {
-            let text =
-                crate::file_preview_contents::text(&sample, &strings.name).unwrap();
+            let text = crate::file_preview_contents::text(&sample, &strings.name).unwrap();
             let sample_lines: Vec<_> = text
                 .text
                 .lines()
                 .filter(|line| line.contains("LANG_") && !line.contains("LANG_ENGLISH"))
                 .take(3)
                 .collect();
-            eprintln!("  {} decoded as {}: {sample_lines:?}", strings.name, text.encoding);
+            eprintln!(
+                "  {} decoded as {}: {sample_lines:?}",
+                strings.name, text.encoding
+            );
         }
-        if let Some(picture) = preview.entries.iter().find(|entry| entry.kind == "levelshot") {
+        if let Some(picture) = preview
+            .entries
+            .iter()
+            .find(|entry| entry.kind == "levelshot")
+        {
             let thumbnail =
                 crate::file_preview_contents::picture(&sample, &picture.name, Some(192)).unwrap();
             eprintln!(

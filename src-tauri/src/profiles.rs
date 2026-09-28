@@ -406,10 +406,7 @@ pub fn launch_tokens(profile: &PlayerProfile, game: Game) -> Vec<String> {
 
 /// The profiles of one client and which of them is the default.
 #[tauri::command]
-pub fn list_profiles(
-    state: tauri::State<'_, AppState>,
-    client_id: String,
-) -> Result<ProfileBook> {
+pub fn list_profiles(state: tauri::State<'_, AppState>, client_id: String) -> Result<ProfileBook> {
     let paths = state.paths()?;
     // The record is read first, so an id that names nothing is a refusal
     // instead of an empty list the window would draw as «no profiles yet».
@@ -584,7 +581,10 @@ pub(crate) fn read_book(paths: &DataPaths, client_id: &str) -> ProfileBook {
     match serde_json::from_str(&text) {
         Ok(book) => book,
         Err(e) => {
-            log::warn!("cannot parse {}: {e}, starting an empty one", file.display());
+            log::warn!(
+                "cannot parse {}: {e}, starting an empty one",
+                file.display()
+            );
             ProfileBook::default()
         }
     }
@@ -638,7 +638,12 @@ fn validate(profile: PlayerProfile) -> Result<PlayerProfile> {
             "nickname",
             Shape::Free,
         )?,
-        model: clean(profile.model.as_deref(), MAX_VALUE_LEN, "model", Shape::Model)?,
+        model: clean(
+            profile.model.as_deref(),
+            MAX_VALUE_LEN,
+            "model",
+            Shape::Model,
+        )?,
         saber1: clean(
             profile.saber1.as_deref(),
             MAX_VALUE_LEN,
@@ -972,7 +977,10 @@ mod tests {
             launch_tokens(&only_a_name, Game::JediAcademy),
             ["+set", "name", "Kyle"]
         );
-        assert_eq!(launch_tokens(&profile("Empty"), Game::JediAcademy), Vec::<String>::new());
+        assert_eq!(
+            launch_tokens(&profile("Empty"), Game::JediAcademy),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -986,22 +994,44 @@ mod tests {
             saber2: Some("none".to_string()),
             color1: Some(0),
             color2: Some(5),
-            char_color: Some(CharColor { red: 255, green: 128, blue: 0 }),
+            char_color: Some(CharColor {
+                red: 255,
+                green: 128,
+                blue: 0,
+            }),
             tokens_override: None,
         };
 
         assert_eq!(
             launch_tokens(&full, Game::JediAcademy),
             [
-                "+set", "name", "^1Kyle",
-                "+set", "model", "kyle/red",
-                "+set", "saber1", "single_1",
-                "+set", "saber2", "none",
-                "+set", "color1", "0",
-                "+set", "color2", "5",
-                "+set", "char_color_red", "255",
-                "+set", "char_color_green", "128",
-                "+set", "char_color_blue", "0",
+                "+set",
+                "name",
+                "^1Kyle",
+                "+set",
+                "model",
+                "kyle/red",
+                "+set",
+                "saber1",
+                "single_1",
+                "+set",
+                "saber2",
+                "none",
+                "+set",
+                "color1",
+                "0",
+                "+set",
+                "color2",
+                "5",
+                "+set",
+                "char_color_red",
+                "255",
+                "+set",
+                "char_color_green",
+                "128",
+                "+set",
+                "char_color_blue",
+                "0",
             ]
         );
     }
@@ -1099,6 +1129,7 @@ mod tests {
             engine_id: "openjk".to_string(),
             game: Game::JediAcademy,
             engine_version: None,
+            engine_origin: clients::EngineOrigin::Managed,
             engine_installed_at: None,
             engine_published_at: None,
             fs_game: None,
@@ -1188,11 +1219,7 @@ mod tests {
         // `G_SetSaber(ent, 1, …, "none")` at `codemp/game/g_client.c:2240`.
         assert_eq!(
             launch_tokens(&saber("single_1", Some("none"), 4, None), Game::JediAcademy),
-            [
-                "+set", "saber1", "single_1",
-                "+set", "saber2", "none",
-                "+set", "color1", "4",
-            ]
+            ["+set", "saber1", "single_1", "+set", "saber2", "none", "+set", "color1", "4",]
         );
 
         // A staff is one hilt with two blades, and the engine picks the colour
@@ -1203,11 +1230,7 @@ mod tests {
         assert!(!tokens.iter().any(|token| token == "color2"), "{tokens:?}");
         assert_eq!(
             tokens,
-            [
-                "+set", "saber1", "dual_1",
-                "+set", "saber2", "none",
-                "+set", "color1", "5",
-            ]
+            ["+set", "saber1", "dual_1", "+set", "saber2", "none", "+set", "color1", "5",]
         );
     }
 
@@ -1221,9 +1244,7 @@ mod tests {
                 Game::JediAcademy
             ),
             [
-                "+set", "saber1", "single_1",
-                "+set", "saber2", "single_5",
-                "+set", "color1", "0",
+                "+set", "saber1", "single_1", "+set", "saber2", "single_5", "+set", "color1", "0",
                 "+set", "color2", "3",
             ]
         );
@@ -1276,7 +1297,10 @@ mod tests {
         assert_eq!(clean.name, "Duel");
         assert_eq!(clean.nickname, None);
         assert_eq!(clean.model, None);
-        assert_eq!(launch_tokens(&clean, Game::JediAcademy), Vec::<String>::new());
+        assert_eq!(
+            launch_tokens(&clean, Game::JediAcademy),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -1311,10 +1335,7 @@ mod tests {
         // Nineteen letters are thirty-eight bytes: the server would cut the
         // name, possibly through the middle of a letter, so the launcher says
         // so instead of promising a name nobody will read.
-        assert!(matches!(
-            validate(over),
-            Err(AppError::InvalidInput(_)),
-        ));
+        assert!(matches!(validate(over), Err(AppError::InvalidInput(_)),));
 
         // A colour code is two bytes of the limit like any other pair of Latin
         // characters, because the engine counts it in and the launcher has to
@@ -1413,7 +1434,10 @@ mod tests {
 
         let mut edge = profile("Duel");
         edge.model = Some(format!("jedi_hm/{fits}|torso_a1|lower_a1"));
-        assert!(validate(edge).is_ok(), "a part of the buffer size is a model");
+        assert!(
+            validate(edge).is_ok(),
+            "a part of the buffer size is a model"
+        );
 
         // Each of the three rows is measured on its own.
         for value in [
@@ -1519,10 +1543,9 @@ mod tests {
     fn a_document_of_an_older_shape_reads_field_by_field() {
         // The nine launch fields arrived together, but a hand-written document
         // may carry any subset of them, and every one is `serde(default)`.
-        let book: ProfileBook = serde_json::from_str(
-            r#"{"profiles":[{"id":"duel","name":"Duel","nickname":"Kyle"}]}"#,
-        )
-        .expect("a partial document parses");
+        let book: ProfileBook =
+            serde_json::from_str(r#"{"profiles":[{"id":"duel","name":"Duel","nickname":"Kyle"}]}"#)
+                .expect("a partial document parses");
         let profile = book.find("duel").expect("the profile");
         assert_eq!(profile.nickname.as_deref(), Some("Kyle"));
         assert_eq!(profile.model, None);
@@ -1533,17 +1556,28 @@ mod tests {
     #[test]
     fn the_default_is_resolved_by_id_and_never_guessed() {
         let mut book = ProfileBook::default();
-        book.profiles.push(PlayerProfile { id: "duel".into(), ..profile("Duel") });
-        book.profiles.push(PlayerProfile { id: "ffa".into(), ..profile("FFA") });
+        book.profiles.push(PlayerProfile {
+            id: "duel".into(),
+            ..profile("Duel")
+        });
+        book.profiles.push(PlayerProfile {
+            id: "ffa".into(),
+            ..profile("FFA")
+        });
 
         // No default named: no tokens, rather than the first profile.
         assert!(book.default_profile().is_none());
-        assert!(book.resolve(None).expect("no default is not a refusal").is_none());
+        assert!(book
+            .resolve(None)
+            .expect("no default is not a refusal")
+            .is_none());
 
         book.default_profile_id = Some("ffa".to_string());
         assert_eq!(book.default_profile().map(|p| p.id.as_str()), Some("ffa"));
         assert_eq!(
-            book.resolve(Some("duel")).expect("a named profile").map(|p| p.id.as_str()),
+            book.resolve(Some("duel"))
+                .expect("a named profile")
+                .map(|p| p.id.as_str()),
             Some("duel")
         );
 
@@ -1573,7 +1607,11 @@ mod tests {
                 saber2: Some("none".to_string()),
                 color1: Some(2),
                 color2: Some(4),
-                char_color: Some(CharColor { red: 1, green: 2, blue: 3 }),
+                char_color: Some(CharColor {
+                    red: 1,
+                    green: 2,
+                    blue: 3,
+                }),
                 tokens_override: Some("+set name Ben".to_string()),
             }],
             default_profile_id: Some("duel".to_string()),
@@ -1684,7 +1722,9 @@ mod tests {
             color2: None,
             char_color: None,
         };
-        let blank = empty.into_profile().expect("a profile that manages nothing");
+        let blank = empty
+            .into_profile()
+            .expect("a profile that manages nothing");
         assert!(launch_tokens(&blank, Game::JediAcademy).is_empty());
     }
 

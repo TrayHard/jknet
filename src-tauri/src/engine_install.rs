@@ -48,7 +48,10 @@ const PROGRESS_INTERVAL_MS: u128 = 150;
 
 /// GitHub rejects a request without a User-Agent, so this is not optional.
 fn user_agent() -> String {
-    format!("JKNet/{} (+https://github.com/JACoders/OpenJK)", env!("CARGO_PKG_VERSION"))
+    format!(
+        "JKNet/{} (+https://github.com/JACoders/OpenJK)",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +118,11 @@ pub async fn releases(engine: &'static Engine, cache_dir: &Path) -> Result<Vec<E
     releases_for_system(engine, cache_dir, HostSystem::current()).await
 }
 
-async fn releases_for_system(engine: &'static Engine, cache_dir: &Path, host: HostSystem) -> Result<Vec<EngineRelease>> {
+async fn releases_for_system(
+    engine: &'static Engine,
+    cache_dir: &Path,
+    host: HostSystem,
+) -> Result<Vec<EngineRelease>> {
     engine.require_host(host)?;
     if !engine.installable {
         return Ok(Vec::new());
@@ -164,9 +171,11 @@ async fn releases_for_system(engine: &'static Engine, cache_dir: &Path, host: Ho
 }
 
 fn cache_is_compatible(engine: &Engine, host: HostSystem, cached: &CachedReleases) -> bool {
-    host.supports_engines() && cached.releases.iter().all(|release| {
-        engines::match_asset(engine.rules_for_system(host), [release.asset_name.as_str()]).is_some()
-    })
+    host.supports_engines()
+        && cached.releases.iter().all(|release| {
+            engines::match_asset(engine.rules_for_system(host), [release.asset_name.as_str()])
+                .is_some()
+        })
 }
 
 fn release_cache_file(cache_dir: &Path, engine_id: &str) -> PathBuf {
@@ -294,7 +303,11 @@ async fn fetch_releases(engine: &'static Engine, host: HostSystem) -> Result<Vec
 }
 
 /// Turns a GitHub release into ours, or drops it when no asset matches.
-fn to_engine_release(engine: &Engine, release: GithubRelease, host: HostSystem) -> Option<EngineRelease> {
+fn to_engine_release(
+    engine: &Engine,
+    release: GithubRelease,
+    host: HostSystem,
+) -> Option<EngineRelease> {
     let names: Vec<&str> = release
         .assets
         .iter()
@@ -399,7 +412,10 @@ impl Drop for InstallGuard<'_> {
             }
             // A poisoned lock would keep the client busy until the launcher
             // restarts, which is worse than the panic that poisoned it.
-            Err(e) => log::error!("cannot release the install claim of {}: {e}", self.client_id),
+            Err(e) => log::error!(
+                "cannot release the install claim of {}: {e}",
+                self.client_id
+            ),
         }
     }
 }
@@ -456,7 +472,9 @@ async fn install_inner(
         return Err(AppError::InvalidInput(format!(
             "{} cannot be installed automatically: {}",
             engine.name,
-            engine.not_installable_reason.unwrap_or("no reason recorded")
+            engine
+                .not_installable_reason
+                .unwrap_or("no reason recorded")
         )));
     }
 
@@ -466,10 +484,18 @@ async fn install_inner(
             .into_iter()
             .find(|release| release.tag == tag)
             .ok_or_else(|| {
-                AppError::NotFound(format!("release {tag} of {} compatible with {}", engine.name, HostSystem::current().label()))
+                AppError::NotFound(format!(
+                    "release {tag} of {} compatible with {}",
+                    engine.name,
+                    HostSystem::current().label()
+                ))
             })?,
         None => available.into_iter().next().ok_or_else(|| {
-            AppError::NotFound(format!("a release of {} compatible with {}", engine.name, HostSystem::current().label()))
+            AppError::NotFound(format!(
+                "a release of {} compatible with {}",
+                engine.name,
+                HostSystem::current().label()
+            ))
         })?,
     };
 
@@ -548,7 +574,7 @@ async fn download(
     app: &AppHandle,
     paths: &DataPaths,
     client_id: &str,
-    engine: &Engine,
+    engine: &'static Engine,
     release: &EngineRelease,
 ) -> Result<PathBuf> {
     fetch_archive(paths, engine, release, |progress| {
@@ -599,7 +625,9 @@ pub(crate) async fn fetch_archive(
 ) -> Result<PathBuf> {
     engine.require_host(HostSystem::current())?;
     if engines::match_asset(engine.rules_for_host(), [release.asset_name.as_str()]).is_none() {
-        return Err(AppError::UnsupportedEngineSystem { system: HostSystem::current().label() });
+        return Err(AppError::UnsupportedEngineSystem {
+            system: HostSystem::current().label(),
+        });
     }
     let dir = paths.cache.join("downloads");
     paths::create_dir(&dir)?;
@@ -679,12 +707,97 @@ pub(crate) async fn fetch_archive(
     Ok(file)
 }
 
+/// Installs one registry release into an arbitrary launcher-owned folder.
+///
+/// Clients wrap this operation with their record update. Persistent dedicated
+/// servers use it for the shared engine library, where there is no client
+/// record and every instance points at the same immutable build.
+pub(crate) async fn install_release_into(
+    paths: &DataPaths,
+    engine: &'static Engine,
+    tag: Option<&str>,
+    target: &Path,
+    report: impl FnMut(ArchiveProgress),
+) -> Result<EngineRelease> {
+    let current = HostSystem::current();
+    engine.require_host(current)?;
+    if !engine.installable {
+        return Err(AppError::InvalidInput(format!(
+            "{} cannot be installed automatically: {}",
+            engine.name,
+            engine
+                .not_installable_reason
+                .unwrap_or("no reason recorded")
+        )));
+    }
+
+    // Dedicated Jedi servers still live in a 32-bit mod ecosystem. Old and
+    // actively used mods ship `jampgamex86.dll`, often inside a pk3, and a
+    // 64-bit process cannot load it. Server engines therefore use the x86
+    // release on 64-bit Windows too. Client installs keep following the host
+    // architecture through `releases` above.
+    let server_system = dedicated_server_system(current);
+    let available = releases_for_system(engine, &paths.cache, server_system).await?;
+    let release = match tag {
+        Some(tag) => available
+            .into_iter()
+            .find(|release| release.tag == tag)
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "release {tag} of {} compatible with {}",
+                    engine.name,
+                    server_system.label()
+                ))
+            })?,
+        None => available.into_iter().next().ok_or_else(|| {
+            AppError::NotFound(format!(
+                "a release of {} compatible with {}",
+                engine.name,
+                server_system.label()
+            ))
+        })?,
+    };
+
+    let archive = fetch_archive(paths, engine, &release, report).await?;
+    let destination = target.to_path_buf();
+    let archive_for_task = archive.clone();
+    tauri::async_runtime::spawn_blocking(move || extract_archive(&archive_for_task, &destination))
+        .await
+        .map_err(|e| AppError::Archive(format!("the unpacking task did not finish: {e}")))??;
+
+    let dedicated = engine.dedicated_executable(target).ok_or_else(|| {
+        AppError::Archive(format!(
+            "the dedicated server of {} is missing from {} after unpacking {}",
+            engine.name,
+            target.display(),
+            release.asset_name
+        ))
+    })?;
+    if !dedicated.is_file() {
+        return Err(AppError::Archive(format!(
+            "{} is missing after unpacking {}",
+            dedicated.display(),
+            release.asset_name
+        )));
+    }
+    Ok(release)
+}
+
+fn dedicated_server_system(current: HostSystem) -> HostSystem {
+    HostSystem {
+        os: current.os,
+        arch: "x86",
+    }
+}
+
 fn download_cache_file(dir: &Path, engine: &Engine, release: &EngineRelease) -> PathBuf {
-    dir.join(format!("{}-{}-{}-{}.zip",
+    dir.join(format!(
+        "{}-{}-{}-{}.zip",
         HostSystem::current().cache_key(engine.id),
         sanitize_file_stem(&release.tag),
         sanitize_file_stem(&release.published_at),
-        sanitize_file_stem(&release.asset_name)))
+        sanitize_file_stem(&release.asset_name)
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -820,8 +933,7 @@ pub(crate) fn copy_if_changed(source: &Path, target: &Path) -> Result<bool> {
     if let Some(parent) = target.parent() {
         paths::create_dir(parent)?;
     }
-    fs::copy(source, target)
-        .map_err(|e| AppError::io_path("cannot copy into", target, e))?;
+    fs::copy(source, target).map_err(|e| AppError::io_path("cannot copy into", target, e))?;
     stamp_modified(target, &meta);
     Ok(true)
 }
@@ -858,7 +970,10 @@ fn stamp_modified(target: &Path, source: &fs::Metadata) {
         .open(target)
         .and_then(|file| file.set_modified(modified));
     if let Err(e) = stamped {
-        log::warn!("cannot stamp the modification time of {}: {e}", target.display());
+        log::warn!(
+            "cannot stamp the modification time of {}: {e}",
+            target.display()
+        );
     }
 }
 
@@ -873,14 +988,16 @@ fn stamp_modified(target: &Path, source: &fs::Metadata) {
 /// data from the internet, and a `..` in an entry name is how a zip escapes
 /// the folder it is supposed to fill.
 pub fn extract_archive(archive: &Path, target: &Path) -> Result<()> {
-    let reader =
-        File::open(archive).map_err(|e| AppError::io_path("cannot open", archive, e))?;
+    let reader = File::open(archive).map_err(|e| AppError::io_path("cannot open", archive, e))?;
     let mut zip = zip::ZipArchive::new(reader)?;
 
     let names: Vec<String> = zip.file_names().map(str::to_string).collect();
     let root = single_root(&names);
     if let Some(root) = &root {
-        log::info!("flattening the single top folder {root}/ of {}", archive.display());
+        log::info!(
+            "flattening the single top folder {root}/ of {}",
+            archive.display()
+        );
     }
 
     if target.exists() {
@@ -936,8 +1053,7 @@ pub(crate) struct ArchiveEntry {
 pub(crate) fn archive_entries(archive: &Path) -> Result<HashMap<String, ArchiveEntry>> {
     use sha2::{Digest, Sha256};
 
-    let reader =
-        File::open(archive).map_err(|e| AppError::io_path("cannot open", archive, e))?;
+    let reader = File::open(archive).map_err(|e| AppError::io_path("cannot open", archive, e))?;
     let mut zip = zip::ZipArchive::new(reader)?;
     let names: Vec<String> = zip.file_names().map(str::to_string).collect();
     let root = single_root(&names);
@@ -1087,7 +1203,12 @@ pub(crate) mod test_support {
     /// that prime the same engine and tag must prime it with the same
     /// archive: the second one would otherwise look for a file of the size
     /// the first one announced.
-    pub(crate) fn prime_release_cache(paths: &DataPaths, engine_id: &str, tag: &str, archive: &Path) -> PathBuf {
+    pub(crate) fn prime_release_cache(
+        paths: &DataPaths,
+        engine_id: &str,
+        tag: &str,
+        archive: &Path,
+    ) -> PathBuf {
         let engine = engines::require(engine_id).expect("an engine of the registry");
         let host = HostSystem::current();
         let asset_name = match engine_id {
@@ -1134,8 +1255,8 @@ mod tests {
         let mut buffer = Cursor::new(Vec::new());
         {
             let mut writer = zip::ZipWriter::new(&mut buffer);
-            let options = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
             for (name, body) in entries {
                 writer.start_file(*name, options).expect("start entry");
                 writer.write_all(body).expect("write entry");
@@ -1152,6 +1273,21 @@ mod tests {
         assert_eq!(sanitize_file_stem("release/2026-09"), "release-2026-09");
         assert_eq!(sanitize_file_stem("../../etc"), "..-..-etc");
         assert_eq!(sanitize_file_stem("///"), "release");
+    }
+
+    #[test]
+    fn dedicated_server_installs_use_the_legacy_mod_architecture() {
+        let x64 = HostSystem {
+            os: "windows",
+            arch: "x86_64",
+        };
+        assert_eq!(
+            dedicated_server_system(x64),
+            HostSystem {
+                os: "windows",
+                arch: "x86"
+            }
+        );
     }
 
     #[test]
@@ -1262,7 +1398,10 @@ mod tests {
         assert!(target.join("openjk.x86.exe").is_file());
         assert!(target.join("base").join("cgamex86.dll").is_file());
         assert!(target.join("OpenJK").join("jampgamex86.dll").is_file());
-        assert!(!target.join("stale.dll").exists(), "the folder is wiped first");
+        assert!(
+            !target.join("stale.dll").exists(),
+            "the folder is wiped first"
+        );
     }
 
     // --- slice: game core ---
@@ -1277,7 +1416,10 @@ mod tests {
         write_zip(
             &archive,
             &[
-                ("jk2mv-v1.4.1-win32-x64-portable/base/assetsmv.pk3", b"mv" as &[u8]),
+                (
+                    "jk2mv-v1.4.1-win32-x64-portable/base/assetsmv.pk3",
+                    b"mv" as &[u8],
+                ),
                 ("jk2mv-v1.4.1-win32-x64-portable/base/assetsmv2.pk3", b"mv2"),
                 ("jk2mv-v1.4.1-win32-x64-portable/jk2mvmp.exe", b"MZ"),
                 ("jk2mv-v1.4.1-win32-x64-portable/jk2mvded.exe", b"MZ"),
@@ -1361,7 +1503,8 @@ mod tests {
         // An engine update writes a different archive under the same name.
         fs::write(engine_dir.join("base").join("assetsmv.pk3"), b"mv 1.4.2")
             .expect("a newer archive");
-        let copied = sync_engine_archives(&engine_dir, &home_dir).expect("the sync after an update");
+        let copied =
+            sync_engine_archives(&engine_dir, &home_dir).expect("the sync after an update");
         assert_eq!(copied, vec!["assetsmv.pk3".to_string()]);
         assert_eq!(
             fs::read(home_dir.join("base").join("assetsmv.pk3")).expect("the copy"),
@@ -1444,7 +1587,10 @@ mod tests {
         fs::write(link_stand_in.join("assets0.pk3"), b"the player's game").expect("an archive");
 
         let archive = temp.path().join("jk2mv.zip");
-        write_zip(&archive, &[("jk2mvmp.exe", b"MZ"), ("base/assetsmv.pk3", b"mv")]);
+        write_zip(
+            &archive,
+            &[("jk2mvmp.exe", b"MZ"), ("base/assetsmv.pk3", b"mv")],
+        );
         extract_archive(&archive, &extract_target(&paths, "jk2")).expect("extraction succeeds");
 
         assert!(paths.client_engine_dir("jk2").join("jk2mvmp.exe").is_file());
@@ -1466,12 +1612,16 @@ mod tests {
 
         fs::write(&source, b"menu of 1.4.2").expect("a newer build");
         assert!(copy_if_changed(&source, &target).expect("the copy after an update"));
-        assert_eq!(fs::read(&target).expect("the copy"), b"menu of 1.4.2".to_vec());
+        assert_eq!(
+            fs::read(&target).expect("the copy"),
+            b"menu of 1.4.2".to_vec()
+        );
 
         // A source that is not there is not a failure: a patch archive the
         // player has not got looks exactly like this.
-        assert!(!copy_if_changed(&temp.path().join("missing.pk3"), &target)
-            .expect("a missing source"));
+        assert!(
+            !copy_if_changed(&temp.path().join("missing.pk3"), &target).expect("a missing source")
+        );
     }
 
     #[test]
@@ -1537,7 +1687,9 @@ mod tests {
         // The top folder is gone and the key is lowercase, which is how the
         // walk of `engine\` spells the same file.
         assert_eq!(
-            entries.get("taystjk.x86.exe").map(|entry| entry.sha256.as_str()),
+            entries
+                .get("taystjk.x86.exe")
+                .map(|entry| entry.sha256.as_str()),
             Some(format!("{:x}", Sha256::digest(b"MZ")).as_str())
         );
         assert!(entries.contains_key("base/cgamex86.dll"));
@@ -1570,9 +1722,12 @@ mod tests {
             fetched_at: "2026-09-13T00:00:00Z".into(),
             fetched_at_unix: timestamp::now_unix(),
             releases: vec![EngineRelease {
-                tag: "latest".into(), name: "latest".into(),
-                published_at: "2026-09-13T00:00:00Z".into(), prerelease: true,
-                asset_name: asset_name.into(), asset_size: 123,
+                tag: "latest".into(),
+                name: "latest".into(),
+                published_at: "2026-09-13T00:00:00Z".into(),
+                prerelease: true,
+                asset_name: asset_name.into(),
+                asset_size: 123,
                 asset_url: "https://example.invalid/build.zip".into(),
             }],
         }
@@ -1581,13 +1736,23 @@ mod tests {
     #[test]
     fn incompatible_cached_archives_are_rejected_even_when_fresh() {
         let engine = engines::require("openjk").unwrap();
-        let x86 = HostSystem { os: "windows", arch: "x86" };
-        let x64 = HostSystem { os: "windows", arch: "x86_64" };
+        let x86 = HostSystem {
+            os: "windows",
+            arch: "x86",
+        };
+        let x64 = HostSystem {
+            os: "windows",
+            arch: "x86_64",
+        };
         let cached = cached_asset("OpenJK-windows-x86_64.zip");
         assert!(cached.is_fresh(timestamp::now_unix()));
         assert!(!cache_is_compatible(engine, x86, &cached));
         assert!(cache_is_compatible(engine, x64, &cached));
-        for asset in ["OpenJK-macos-arm64.zip", "OpenJO-windows-x86.zip", "OpenJK-windows-x86.zip.sha256"] {
+        for asset in [
+            "OpenJK-macos-arm64.zip",
+            "OpenJO-windows-x86.zip",
+            "OpenJK-windows-x86.zip.sha256",
+        ] {
             assert!(!cache_is_compatible(engine, x86, &cached_asset(asset)));
         }
     }
@@ -1598,21 +1763,31 @@ mod tests {
         let x86 = cached_asset("OpenJK-windows-x86.zip").releases.remove(0);
         let x64 = cached_asset("OpenJK-windows-x86_64.zip").releases.remove(0);
         let dir = Path::new("cache");
-        assert_ne!(download_cache_file(dir, engine, &x86), download_cache_file(dir, engine, &x64));
+        assert_ne!(
+            download_cache_file(dir, engine, &x86),
+            download_cache_file(dir, engine, &x64)
+        );
         let mut next = x86.clone();
         next.published_at = "2026-09-14T00:00:00Z".into();
-        assert_ne!(download_cache_file(dir, engine, &x86), download_cache_file(dir, engine, &next));
+        assert_ne!(
+            download_cache_file(dir, engine, &x86),
+            download_cache_file(dir, engine, &next)
+        );
     }
 
     #[test]
     fn unsupported_system_cannot_use_a_cache_or_start_a_request() {
         let temp = tempfile::tempdir().unwrap();
         let engine = engines::require("openjk").unwrap();
-        let host = HostSystem { os: "windows", arch: "aarch64" };
+        let host = HostSystem {
+            os: "windows",
+            arch: "aarch64",
+        };
         let key = host.cache_key(engine.id);
         let file = release_cache_file(temp.path(), &key);
         write_disk(&file, &cached_asset("OpenJK-windows-x86_64.zip"));
-        let error = tauri::async_runtime::block_on(releases_for_system(engine, temp.path(), host)).unwrap_err();
+        let error = tauri::async_runtime::block_on(releases_for_system(engine, temp.path(), host))
+            .unwrap_err();
         assert_eq!(error.code(), "unsupportedEngineSystem");
         assert!(read_memory(&key).is_none());
         assert!(!temp.path().join("downloads").exists());
@@ -1622,11 +1797,19 @@ mod tests {
     fn cache_round_trip_preserves_the_selected_architecture() {
         let temp = tempfile::tempdir().unwrap();
         let engine = engines::require("openjk").unwrap();
-        for (arch, asset) in [("x86", "OpenJK-windows-x86.zip"), ("x86_64", "OpenJK-windows-x86_64.zip")] {
-            let host = HostSystem { os: "windows", arch };
+        for (arch, asset) in [
+            ("x86", "OpenJK-windows-x86.zip"),
+            ("x86_64", "OpenJK-windows-x86_64.zip"),
+        ] {
+            let host = HostSystem {
+                os: "windows",
+                arch,
+            };
             let key = host.cache_key(engine.id);
             write_disk(&release_cache_file(temp.path(), &key), &cached_asset(asset));
-            let releases = tauri::async_runtime::block_on(releases_for_system(engine, temp.path(), host)).unwrap();
+            let releases =
+                tauri::async_runtime::block_on(releases_for_system(engine, temp.path(), host))
+                    .unwrap();
             assert_eq!(releases[0].asset_name, asset);
         }
     }
@@ -1676,45 +1859,57 @@ mod tests {
     #[test]
     #[ignore = "downloads OpenJK and TaystJK archives from github.com"]
     fn downloads_and_unpacks_native_engine_builds() {
-      for id in ["openjk", "taystjk"] {
-        let engine = engines::require(id).unwrap();
-        let temp = tempfile::tempdir().expect("temp dir");
+        for id in ["openjk", "taystjk"] {
+            let engine = engines::require(id).unwrap();
+            let temp = tempfile::tempdir().expect("temp dir");
 
-        let found = tauri::async_runtime::block_on(releases(engine, temp.path()))
-            .expect("the release list");
-        let newest = found.first().expect("at least one release");
-        assert!(newest.asset_name.to_lowercase().ends_with(".zip"));
-        println!("newest {} release: {} / {}", engine.id, newest.tag, newest.asset_name);
+            let found = tauri::async_runtime::block_on(releases(engine, temp.path()))
+                .expect("the release list");
+            let newest = found.first().expect("at least one release");
+            assert!(newest.asset_name.to_lowercase().ends_with(".zip"));
+            println!(
+                "newest {} release: {} / {}",
+                engine.id, newest.tag, newest.asset_name
+            );
 
-        let archive = temp.path().join("openjk.zip");
-        let bytes = tauri::async_runtime::block_on(async {
-            http_client()?
-                .get(&newest.asset_url)
-                .send()
-                .await?
-                .bytes()
-                .await
-                .map_err(AppError::from)
-        })
-        .expect("the archive downloads");
-        fs::write(&archive, &bytes).expect("write the archive");
-        assert_eq!(bytes.len() as u64, newest.asset_size);
+            let archive = temp.path().join("openjk.zip");
+            let bytes = tauri::async_runtime::block_on(async {
+                http_client()?
+                    .get(&newest.asset_url)
+                    .send()
+                    .await?
+                    .bytes()
+                    .await
+                    .map_err(AppError::from)
+            })
+            .expect("the archive downloads");
+            fs::write(&archive, &bytes).expect("write the archive");
+            assert_eq!(bytes.len() as u64, newest.asset_size);
 
-        let target = temp.path().join("engine");
-        extract_archive(&archive, &target).expect("the archive unpacks");
-        assert!(
-            target.join(engine.executable_for_asset(&newest.asset_name)).is_file(),
-            "{} is missing from the unpacked build",
-            engine.executable
-        );
-        // Read the PE machine field without executing either game.
-        let binary = fs::read(engine.installed_executable(&target)).unwrap();
-        assert_eq!(&binary[..2], b"MZ");
-        let offset = u32::from_le_bytes(binary[0x3c..0x40].try_into().unwrap()) as usize;
-        assert_eq!(&binary[offset..offset + 4], b"PE\0\0");
-        let machine = u16::from_le_bytes(binary[offset + 4..offset + 6].try_into().unwrap());
-        assert_eq!(machine, if HostSystem::current().arch == "x86_64" { 0x8664 } else { 0x014c });
-        println!("{id}: executable and native PE architecture verified");
-      }
+            let target = temp.path().join("engine");
+            extract_archive(&archive, &target).expect("the archive unpacks");
+            assert!(
+                target
+                    .join(engine.executable_for_asset(&newest.asset_name))
+                    .is_file(),
+                "{} is missing from the unpacked build",
+                engine.executable
+            );
+            // Read the PE machine field without executing either game.
+            let binary = fs::read(engine.installed_executable(&target)).unwrap();
+            assert_eq!(&binary[..2], b"MZ");
+            let offset = u32::from_le_bytes(binary[0x3c..0x40].try_into().unwrap()) as usize;
+            assert_eq!(&binary[offset..offset + 4], b"PE\0\0");
+            let machine = u16::from_le_bytes(binary[offset + 4..offset + 6].try_into().unwrap());
+            assert_eq!(
+                machine,
+                if HostSystem::current().arch == "x86_64" {
+                    0x8664
+                } else {
+                    0x014c
+                }
+            );
+            println!("{id}: executable and native PE architecture verified");
+        }
     }
 }
