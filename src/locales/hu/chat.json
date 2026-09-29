@@ -382,11 +382,20 @@
   "attach": {
     "open": "Csatolás",
     "limits": "Fájlonként legfeljebb 25 MiB. A fájlokat 90 napig őrizzük.",
+    "groups": {
+      "files": "Files",
+      "media": "Media",
+      "game": "Game",
+      "settings": "Settings",
+      "catalogs": "Catalogs"
+    },
     "kinds": {
       "file": "Bármilyen fájl",
       "clipboard": "Kép a vágólapról",
       "photo": "Fénykép",
-      "media": "Videó vagy képernyőkép a „Media” képernyőről",
+      "screenshot": "Screenshot",
+      "demo": "Demo",
+      "video": "Video",
       "server": "Szerver",
       "map": "Pálya",
       "profile": "Játékosprofil",
@@ -603,13 +612,17 @@
     "loading": "Betöltés…",
     "noMatch": "Semmi sem felel meg ennek: „{{query}}”",
     "noClient": "Előbb adjon hozzá egy klienst ehhez a játékhoz a „Kliensek” képernyőn.",
+    "localBank": "One local bank collected from all clients of the selected game.",
     "media": {
-      "title": "Csatolás a „Media” képernyőről",
-      "empty": "A „Media” képernyőn még nincs demó, képernyőkép vagy videó ehhez a játékhoz.",
-      "kinds": {
-        "demos": "Demó",
-        "screenshots": "Képernyőkép",
-        "videos": "Videó"
+      "titles": {
+        "demos": "Share a demo",
+        "screenshots": "Share a screenshot",
+        "videos": "Share a video"
+      },
+      "empty": {
+        "demos": "No demos of this game are in Media yet.",
+        "screenshots": "No screenshots of this game are in Media yet.",
+        "videos": "No videos of this game are in Media yet."
       }
     },
     "server": {
@@ -618,8 +631,11 @@
     },
     "map": {
       "title": "Pálya megosztása",
-      "body": "{{client}} pályái.",
-      "empty": "Ennek a kliensnek nincsenek pályái."
+      "empty": "Ennek a kliensnek nincsenek pályái.",
+      "groups": {
+        "game": "Game maps",
+        "client": "Client and mod maps"
+      }
     },
     "profile": {
       "title": "Játékosprofil megosztása",
@@ -635,8 +651,20 @@
     },
     "config": {
       "title": "Config megosztása",
+      "body": "Client and server configs are listed separately.",
       "empty": "Ehhez a játékhoz még nincs mentett config. Hozzon létre egyet a „Configs” képernyőn.",
-      "tooLarge": "Nagyobb 32 KiB-nál: küldje el inkább fájlként a .cfg-t."
+      "tooLarge": "Nagyobb 32 KiB-nál: küldje el inkább fájlként a .cfg-t.",
+      "local": "Local config",
+      "groups": {
+        "client": "Client configs",
+        "server": "Server configs"
+      },
+      "sensitive": {
+        "title": "Remove secrets before sharing?",
+        "body": "JKNet found possible secrets: {{keys}}. Remove the commands that contain them, or share the config unchanged.",
+        "shareUnchanged": "Share unchanged",
+        "removeAndShare": "Remove and share"
+      }
     },
     "bundle": {
       "title": "Bundle megosztása",

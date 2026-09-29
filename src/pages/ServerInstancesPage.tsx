@@ -1,9 +1,11 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ChevronLeft,
   ChevronRight,
   Copy,
   Download,
+  ExternalLink,
   FileCode2,
   FilePlus2,
   FolderInput,
@@ -16,6 +18,7 @@ import {
   ServerCog,
   Settings2,
   Square,
+  Star,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -33,6 +36,7 @@ import { useFormat } from "../i18n/useFormat";
 import { useActiveGame, useGameNames } from "../lib/game";
 import {
   type Game,
+  type FeaturedServerMod,
   type ServerEngineView,
   type ServerFile,
   type ServerInstanceView,
@@ -42,6 +46,8 @@ import {
 } from "../lib/ipc";
 import {
   useCompleteJkhubListing,
+  useAccountState,
+  useFeaturedServerMods,
   useJkhubListing,
   useServerEngines,
   useServerInstanceActions,
@@ -623,13 +629,21 @@ function AddModDialog({ game, onClose }: { game: Game; onClose: () => void }) {
   const errorText = useErrorText();
   const { show } = useToasts();
   const actions = useServerInstanceActions();
-  const [source, setSource] = useState<"disk" | "jkhub">("disk");
+  const account = useAccountState();
+  const featured = useFeaturedServerMods(game);
+  const canManageFeatured = account.data?.isServerModAdmin === true;
+  const [source, setSource] = useState<"featured" | "disk" | "jkhub">("featured");
   const [sourcePath, setSourcePath] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [fileId, setFileId] = useState<number | null>(null);
+  const [featuredId, setFeaturedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [folder, setFolder] = useState("");
+  const [websiteOpen, setWebsiteOpen] = useState(false);
+  const [websiteName, setWebsiteName] = useState("");
+  const [websiteFolder, setWebsiteFolder] = useState("");
+  const [websiteUrl, setWebsiteUrl] = useState("");
   const categoryId = game === "ja" ? 25 : 43;
   const listing = useJkhubListing(game, categoryId, "recentlyUpdated", page);
   const normalizedQuery = query.trim().toLocaleLowerCase();
@@ -638,7 +652,9 @@ function AddModDialog({ game, onClose }: { game: Game; onClose: () => void }) {
     normalizedQuery ? (completeListing.data?.cards ?? []) : (listing.data?.cards ?? []),
     normalizedQuery,
   );
-  const busy = actions.addModFromDisk.isPending || actions.addModFromJkhub.isPending;
+  const selectedFeatured = featured.data?.find((mod) => mod.id === featuredId) ?? null;
+  const busy = actions.addModFromDisk.isPending || actions.addModFromJkhub.isPending ||
+    actions.saveFeaturedMod.isPending || actions.deleteFeaturedMod.isPending;
   const pickDisk = async (directory: boolean) => {
     const picked = await open({ directory, multiple: false, title: t("addMod.pickSource") });
     if (typeof picked === "string") {
@@ -657,14 +673,91 @@ function AddModDialog({ game, onClose }: { game: Game; onClose: () => void }) {
       show("server-mod:add:error", { variant: "error", title: t("feedback.actionFailed"), text: errorText(error) });
     }
   };
+  const pickFeatured = (mod: FeaturedServerMod) => {
+    setFeaturedId(mod.id);
+    setName(mod.name);
+    setFolder(mod.folder);
+    setFileId(mod.sourceKind === "jkhub" ? Number(mod.sourceRef) : null);
+  };
+  const saveFeatured = async (mod: Omit<FeaturedServerMod, "id">) => {
+    try {
+      await actions.saveFeaturedMod.mutateAsync(mod);
+      show("server-mod:featured:saved", { variant: "success", title: t("addMod.featuredSaved") });
+      return true;
+    } catch (error) {
+      show("server-mod:featured:error", { variant: "error", title: t("feedback.actionFailed"), text: errorText(error) });
+      return false;
+    }
+  };
+  const removeFeatured = async (mod: FeaturedServerMod) => {
+    try {
+      await actions.deleteFeaturedMod.mutateAsync(mod);
+      if (featuredId === mod.id) setFeaturedId(null);
+    } catch (error) {
+      show("server-mod:featured:delete:error", { variant: "error", title: t("feedback.actionFailed"), text: errorText(error) });
+    }
+  };
+  const saveWebsite = async () => {
+    if (!await saveFeatured({ game, name: websiteName, folder: websiteFolder, sourceKind: "website", sourceRef: websiteUrl })) return;
+    setWebsiteName("");
+    setWebsiteFolder("");
+    setWebsiteUrl("");
+    setWebsiteOpen(false);
+  };
+  const canInstall = source === "disk" ? Boolean(sourcePath) : fileId !== null;
+  const websiteSelected = source === "featured" && selectedFeatured?.sourceKind === "website";
   return (
     <Dialog wide title={t("addMod.title")} body={t("addMod.body")} onClose={onClose} actions={<>
       <Button onClick={onClose}>{t("actions.cancel")}</Button>
-      <Button variant="primary" disabled={busy || !name.trim() || !folder.trim() || (source === "disk" ? !sourcePath : fileId === null)} onClick={() => void install()}>{t("actions.addMod")}</Button>
+      {websiteSelected ? (
+        <Button variant="primary" icon={<ExternalLink size={16} />} onClick={() => void openUrl(selectedFeatured.sourceRef)}>{t("addMod.openWebsite")}</Button>
+      ) : (
+        <Button variant="primary" disabled={busy || !name.trim() || !folder.trim() || !canInstall} onClick={() => void install()}>{t("actions.addMod")}</Button>
+      )}
     </>}>
       <div className="flex flex-col gap-12">
-        <Tabs value={source} onChange={setSource} tabs={[{ id: "disk", label: t("addMod.disk") }, { id: "jkhub", label: t("addMod.jkhub") }]} />
-        {source === "disk" ? (
+        <Tabs value={source} onChange={(value) => { setSource(value); setFeaturedId(null); setFileId(null); }} tabs={[{ id: "featured", label: t("addMod.featured") }, { id: "disk", label: t("addMod.disk") }, { id: "jkhub", label: t("addMod.jkhub") }]} />
+        {source === "featured" ? (
+          <div className="flex flex-col gap-8">
+            <p className="text-body-sm text-fg-secondary">{t("addMod.featuredBody")}</p>
+            {featured.error ? <p className="text-body-sm text-status-error">{errorText(featured.error)}</p> : null}
+            <div className="max-h-220 overflow-auto rounded-md border border-line">
+              {featured.isPending ? <p className="p-12 text-body-sm text-fg-muted">{t("addMod.loadingFeatured")}</p> : null}
+              {(featured.data ?? []).map((mod) => (
+                <div key={mod.id} className={`flex items-center border-b border-line-subtle ${featuredId === mod.id ? "bg-accent-subtle" : "hover:bg-hover-overlay"}`}>
+                  <button type="button" onClick={() => pickFeatured(mod)} className="flex min-w-0 flex-1 cursor-pointer items-center gap-8 px-12 py-9 text-left">
+                    <Star size={14} className="shrink-0 text-fg-accent" />
+                    <span className="flex-1 truncate text-body-sm text-fg">{mod.name}</span>
+                    <span className="text-mono-xs text-fg-muted">{mod.sourceKind === "jkhub" ? `JKHub #${mod.sourceRef}` : t("addMod.website")}</span>
+                  </button>
+                  {canManageFeatured ? (
+                    <button type="button" aria-label={t("addMod.removeFeatured", { name: mod.name })} title={t("addMod.removeFeatured", { name: mod.name })} disabled={busy} onClick={() => void removeFeatured(mod)} className="m-4 flex size-28 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-danger-subtle hover:text-fg-danger disabled:cursor-not-allowed disabled:opacity-50">
+                      <Trash2 size={14} />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+              {!featured.isPending && (featured.data?.length ?? 0) === 0 ? <p className="p-12 text-body-sm text-fg-muted">{t("addMod.noFeatured")}</p> : null}
+            </div>
+            {canManageFeatured ? (
+              <div className="flex flex-col gap-8 rounded-md border border-line p-10">
+                <div className="flex items-center justify-between gap-8">
+                  <p className="text-body-sm-medium text-fg">{t("addMod.manageFeatured")}</p>
+                  <Button size="sm" icon={<ExternalLink size={14} />} onClick={() => setWebsiteOpen((value) => !value)}>{t("addMod.addWebsite")}</Button>
+                </div>
+                <p className="text-body-xs text-fg-muted">{t("addMod.manageFeaturedBody")}</p>
+                {websiteOpen ? (
+                  <div className="grid grid-cols-2 gap-8 @max-[760px]/page:grid-cols-1">
+                    <Input value={websiteName} onChange={(event) => { setWebsiteName(event.target.value); if (!websiteFolder) setWebsiteFolder(slugFolder(event.target.value)); }} placeholder={t("fields.name")} />
+                    <Input value={websiteFolder} onChange={(event) => setWebsiteFolder(event.target.value)} placeholder={t("fields.modFolderPlaceholder")} />
+                    <Input value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder={t("addMod.websitePlaceholder")} className="col-span-2 @max-[760px]/page:col-span-1" />
+                    <Button variant="primary" disabled={busy || !websiteName.trim() || !websiteFolder.trim() || !websiteUrl.trim()} onClick={() => void saveWebsite()}>{t("addMod.saveFeatured")}</Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : source === "disk" ? (
           <div className="flex flex-wrap gap-8">
             <Input readOnly value={sourcePath} placeholder={t("addMod.noSource")} className="flex-1 min-w-240" />
             <Button icon={<FolderOpen size={16} />} onClick={() => void pickDisk(true)}>{t("addMod.chooseFolder")}</Button>
@@ -678,9 +771,16 @@ function AddModDialog({ game, onClose }: { game: Game; onClose: () => void }) {
               {normalizedQuery && completeListing.isPending ? <p className="p-12 text-body-sm text-fg-muted">{t("addMod.searchingCategory")}</p> : null}
               {normalizedQuery && completeListing.isError ? <p className="p-12 text-body-sm text-status-error">{errorText(completeListing.error)}</p> : null}
               {cards.map((card) => (
-                <button key={card.id} type="button" onClick={() => { setFileId(card.id); setName(card.title); setFolder(slugFolder(card.slug || card.title)); }} className={`w-full flex items-center gap-8 px-12 py-9 border-b border-line-subtle text-left cursor-pointer ${fileId === card.id ? "bg-accent-subtle" : "hover:bg-hover-overlay"}`}>
-                  <span className="flex-1 text-body-sm text-fg truncate">{card.title}</span><span className="text-mono-xs text-fg-muted">#{card.id}</span>
-                </button>
+                <div key={card.id} className={`flex items-center border-b border-line-subtle ${fileId === card.id ? "bg-accent-subtle" : "hover:bg-hover-overlay"}`}>
+                  <button type="button" onClick={() => { setFileId(card.id); setName(card.title); setFolder(slugFolder(card.slug || card.title)); }} className="flex min-w-0 flex-1 cursor-pointer items-center gap-8 px-12 py-9 text-left">
+                    <span className="flex-1 truncate text-body-sm text-fg">{card.title}</span><span className="text-mono-xs text-fg-muted">#{card.id}</span>
+                  </button>
+                  {canManageFeatured ? (
+                    <button type="button" aria-label={t("addMod.addFeatured", { name: card.title })} title={t("addMod.addFeatured", { name: card.title })} disabled={busy} onClick={() => void saveFeatured({ game, name: card.title, folder: slugFolder(card.slug || card.title), sourceKind: "jkhub", sourceRef: String(card.id) })} className="m-4 flex size-28 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-muted hover:bg-accent-subtle hover:text-fg-accent disabled:cursor-not-allowed disabled:opacity-50">
+                      <Star size={14} />
+                    </button>
+                  ) : null}
+                </div>
               ))}
               {(normalizedQuery ? completeListing.data : listing.data) && cards.length === 0 ? <p className="p-12 text-body-sm text-fg-muted">{t("addMod.noResults")}</p> : null}
             </div>
@@ -693,10 +793,12 @@ function AddModDialog({ game, onClose }: { game: Game; onClose: () => void }) {
             ) : null}
           </div>
         )}
-        <div className="grid grid-cols-2 gap-12 @max-[760px]/page:grid-cols-1">
-          <Field label={t("fields.name")}><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
-          <Field label={t("fields.modFolder")}><Input value={folder} onChange={(event) => setFolder(event.target.value)} placeholder={t("fields.modFolderPlaceholder")} /></Field>
-        </div>
+        {!websiteSelected ? (
+          <div className="grid grid-cols-2 gap-12 @max-[760px]/page:grid-cols-1">
+            <Field label={t("fields.name")}><Input value={name} onChange={(event) => setName(event.target.value)} /></Field>
+            <Field label={t("fields.modFolder")}><Input value={folder} onChange={(event) => setFolder(event.target.value)} placeholder={t("fields.modFolderPlaceholder")} /></Field>
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );

@@ -12,6 +12,8 @@ export interface PickerItem {
   title: string;
   /** A second line: an address, a map name, a nickname. */
   detail?: string | null;
+  /** A visible section that explains where or what kind the row is. */
+  group?: string;
   /** A picture or a mark, left of the text. */
   lead?: ReactNode;
   /** Why the row cannot be picked; the row stays listed, switched off. */
@@ -52,7 +54,7 @@ const ROWS_MAX = 150;
  * a picture or a mark, a title and a second line, and a press that picks.
  *
  * The search folds case and accents, like the conversation list does, and
- * matches the title, the detail and the keywords of a row. A picker whose
+ * matches the title, the detail, the group and the keywords of a row. A picker whose
  * search runs elsewhere hands the query out instead and lists what comes
  * back.
  */
@@ -77,8 +79,9 @@ export function PickerDialog({
   const shown =
     onQuery !== undefined || needle === ""
       ? items
-      : items.filter((item) => fold(`${item.title} ${item.detail ?? ""} ${item.keywords ?? ""}`).includes(needle));
+      : items.filter((item) => fold(`${item.title} ${item.detail ?? ""} ${item.group ?? ""} ${item.keywords ?? ""}`).includes(needle));
   const rows = shown.slice(0, ROWS_MAX);
+  let previousGroup: string | null = null;
 
   return (
     <Dialog
@@ -120,8 +123,11 @@ export function PickerDialog({
           ) : (
             rows.map((item) => {
               const off = busy || (item.disabledReason ?? null) !== null;
+              const heading = item.group && item.group !== previousGroup ? item.group : null;
+              previousGroup = item.group ?? null;
               return (
-                <li key={item.id}>
+                <li key={item.id} className="contents">
+                  {heading ? <p className="sticky top-0 z-10 bg-elevated px-8 pt-8 pb-2 text-caption uppercase tracking-wide text-fg-muted">{heading}</p> : null}
                   <button
                     type="button"
                     disabled={off}

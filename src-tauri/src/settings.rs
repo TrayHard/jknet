@@ -1392,6 +1392,7 @@ mod tests {
                 provider_name: "kyle_k".into(),
                 created_at: "2026-09-10T10:00:00Z".into(),
                 admin: false,
+                server_mod_admin: false,
             }),
             // --- slice: play with friends ---
             host_defaults: BTreeMap::from([(

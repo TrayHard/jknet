@@ -15,10 +15,10 @@ import {
   serverCard,
   type BindEntry,
 } from "../../../lib/chat/cardDrafts";
-import { clientsOfGame, useActiveGame, useDefaultClient } from "../../../lib/game";
-import type { ChatCard, ChatStagedFile, MediaItem } from "../../../lib/ipc";
+import { clientsOfGame, useActiveGame } from "../../../lib/game";
+import type { ChatCard, ChatStagedFile, MediaItem, ServerConfigDocument } from "../../../lib/ipc";
 import { configBinds } from "../../../lib/quakeConfig";
-import { serverConfigEnvelope, serverConfigSensitiveKeys } from "../../../lib/serverConfig";
+import { removeServerConfigSensitive, serverConfigEnvelope, serverConfigSensitiveKeys } from "../../../lib/serverConfig";
 import { MOD_CATALOG } from "../../../lib/serverConfigCatalog";
 import {
   useBundles,
@@ -26,16 +26,16 @@ import {
   useChatCardFromProfile,
   useClients,
   useConfigs,
+  useLocalMapBank,
+  useLocalProfileBank,
   useServerConfigs,
-  useHostMaps,
   useJkhubSearch,
   useMedia,
-  useProfiles,
   useStageChatFiles,
 } from "../../../lib/queries";
 import { ColoredNickname } from "../../client/ColoredNickname";
 import { MapThumb } from "../../host/MapOption";
-import { Button, Dialog, Select } from "../../ui";
+import { Button, Dialog } from "../../ui";
 import { WEB_ATTACH_KINDS, type AttachKind } from "../AttachMenu";
 import { PickerDialog, type PickerItem } from "./PickerDialog";
 
@@ -63,8 +63,12 @@ export function AttachPicker({ kind, onPick, onClose }: PickerProps & { kind: At
   const caps = usePlatform();
   if (!caps.localFiles && !WEB_ATTACH_KINDS.includes(kind)) return null;
   switch (kind) {
-    case "media":
-      return <MediaPicker onPick={onPick} onClose={onClose} />;
+    case "screenshot":
+      return <MediaPicker kind="screenshots" onPick={onPick} onClose={onClose} />;
+    case "demo":
+      return <MediaPicker kind="demos" onPick={onPick} onClose={onClose} />;
+    case "video":
+      return <MediaPicker kind="videos" onPick={onPick} onClose={onClose} />;
     case "server":
       return <ServerPicker onPick={onPick} onClose={onClose} />;
     case "map":
@@ -93,7 +97,7 @@ function Mark({ children }: { children: ReactNode }) {
 }
 
 /** A Media item: the core stages the file with its metadata stripped. */
-function MediaPicker({ onPick, onClose }: PickerProps) {
+function MediaPicker({ kind, onPick, onClose }: PickerProps & { kind: MediaItem["kind"] }) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const format = useFormat();
@@ -103,12 +107,12 @@ function MediaPicker({ onPick, onClose }: PickerProps) {
   const items = useMemo<PickerItem[]>(
     () =>
       (media.data ?? [])
-        .filter((item: MediaItem) => item.game === game)
+        .filter((item: MediaItem) => item.game === game && item.kind === kind)
         .map((item: MediaItem) => ({
           id: item.id,
           title: item.name,
-          detail: `${t(`pickers.media.kinds.${item.kind}`)} · ${format.bytes(item.size)}`,
-          keywords: item.tags.join(" "),
+          detail: `${item.origins.map((origin) => origin.clientName).join(", ")} · ${format.bytes(item.size)}`,
+          keywords: `${item.tags.join(" ")} ${item.origins.map((origin) => origin.clientName).join(" ")}`,
           lead:
             item.preview !== null ? (
               <img src={item.preview} alt="" className="h-36 w-64 shrink-0 rounded-xs object-cover" />
@@ -116,17 +120,17 @@ function MediaPicker({ onPick, onClose }: PickerProps) {
               <Mark>{item.kind === "demos" ? <Film size={16} /> : item.kind === "videos" ? <Clapperboard size={16} /> : <ImageIcon size={16} />}</Mark>
             ),
         })),
-    [media.data, game, t, format],
+    [media.data, game, kind, format],
   );
   return (
     <PickerDialog
-      title={t("pickers.media.title")}
-      body={t("attach.limits")}
+      title={t(`pickers.media.titles.${kind}`)}
+      body={t("pickers.localBank")}
       items={items}
       loading={media.isPending}
       busy={stage.isPending}
       error={media.error ? errorText(media.error) : stage.error ? errorText(stage.error) : null}
-      emptyText={t("pickers.media.empty")}
+      emptyText={t(`pickers.media.empty.${kind}`)}
       onClose={onClose}
       onPick={(id) => stage.mutate(id, { onSuccess: (file) => onPick({ file }) })}
     />
@@ -168,58 +172,59 @@ function ServerPicker({ onPick, onClose }: PickerProps) {
   );
 }
 
-/** A map of the default client of the active game. */
+/** One local map bank, merged across every client of the active game. */
 function MapPicker({ onPick, onClose }: PickerProps) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const game = useActiveGame();
-  const client = useDefaultClient();
-  const maps = useHostMaps(client?.id ?? null);
+  const clients = useClients();
+  const own = clientsOfGame(clients.data, game);
+  const bank = useLocalMapBank(own);
   const items = useMemo<PickerItem[]>(
     () =>
-      (maps.data ?? []).map((map) => ({
+      bank.data.map(({ map, clients: origins }) => ({
         id: map.name,
         title: map.title ?? map.name,
-        detail: map.title ? map.name : null,
+        detail: `${map.name} · ${origins.map((client) => client.name).join(", ")}`,
+        group: t(`pickers.map.groups.${map.source}`),
+        keywords: origins.map((client) => client.name).join(" "),
         lead: <MapThumb map={map} />,
       })),
-    [maps.data],
+    [bank.data, t],
   );
   return (
     <PickerDialog
       title={t("pickers.map.title")}
-      body={client ? t("pickers.map.body", { client: client.name }) : undefined}
+      body={own.length ? t("pickers.localBank") : undefined}
       items={items}
-      loading={client !== undefined && maps.isPending}
-      error={maps.error ? errorText(maps.error) : null}
-      emptyText={client ? t("pickers.map.empty") : t("pickers.noClient")}
+      loading={clients.isPending || bank.isPending}
+      error={clients.error || bank.error ? errorText(clients.error ?? bank.error) : null}
+      emptyText={own.length ? t("pickers.map.empty") : t("pickers.noClient")}
       onClose={onClose}
       onPick={(name) => {
-        const map = maps.data?.find((entry) => entry.name === name);
+        const map = bank.data.find((entry) => entry.map.name === name)?.map;
         if (map) onPick({ card: mapCard(map, game) });
       }}
     />
   );
 }
 
-/** A player profile of a client of the active game. */
+/** One local profile bank, grouped by every client of the active game. */
 function ProfilePicker({ onPick, onClose }: PickerProps) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
   const game = useActiveGame();
   const clients = useClients();
-  const fallback = useDefaultClient();
   const own = clientsOfGame(clients.data, game);
-  const [clientId, setClientId] = useState<string | null>(null);
-  const client = own.find((entry) => entry.id === (clientId ?? fallback?.id)) ?? own[0];
-  const book = useProfiles(client?.id ?? "", client !== undefined);
+  const bank = useLocalProfileBank(own);
   const fromProfile = useChatCardFromProfile();
   const items = useMemo<PickerItem[]>(
     () =>
-      (book.data?.profiles ?? []).map((profile) => ({
-        id: profile.id,
+      bank.data.map(({ client, profile }) => ({
+        id: `${client.id}:${profile.id}`,
         title: profile.name,
         detail: profile.model,
+        group: client.name,
         titleNode: (
           <span className="flex min-w-0 items-baseline gap-8">
             <span className="truncate">{profile.name}</span>
@@ -233,31 +238,21 @@ function ProfilePicker({ onPick, onClose }: PickerProps) {
           </Mark>
         ),
       })),
-    [book.data],
+    [bank.data],
   );
   return (
     <PickerDialog
       title={t("pickers.profile.title")}
-      header={
-        own.length > 1 && client !== undefined ? (
-          <Select
-            label={t("pickers.profile.client")}
-            ariaLabel={t("pickers.profile.client")}
-            value={client.id}
-            options={own.map((entry) => ({ value: entry.id, label: entry.name }))}
-            onChange={setClientId}
-          />
-        ) : null
-      }
+      body={own.length ? t("pickers.localBank") : undefined}
       items={items}
-      loading={client !== undefined && book.isPending}
+      loading={clients.isPending || bank.isPending}
       busy={fromProfile.isPending}
-      error={book.error ? errorText(book.error) : fromProfile.error ? errorText(fromProfile.error) : null}
-      emptyText={client ? t("pickers.profile.empty") : t("pickers.noClient")}
+      error={clients.error || bank.error ? errorText(clients.error ?? bank.error) : fromProfile.error ? errorText(fromProfile.error) : null}
+      emptyText={own.length ? t("pickers.profile.empty") : t("pickers.noClient")}
       onClose={onClose}
       onPick={(id) => {
-        const profile = book.data?.profiles.find((entry) => entry.id === id);
-        if (profile) fromProfile.mutate(profile, { onSuccess: (card) => onPick({ card }) });
+        const entry = bank.data.find((row) => `${row.client.id}:${row.profile.id}` === id);
+        if (entry) fromProfile.mutate(entry.profile, { onSuccess: (card) => onPick({ card }) });
       }}
     />
   );
@@ -266,17 +261,21 @@ function ProfilePicker({ onPick, onClose }: PickerProps) {
 /** A config document of the active game, 32 KiB at most. */
 function ConfigPicker({ onPick, onClose }: PickerProps) {
   const { t } = useTranslation("chat");
+  const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
   const format = useFormat();
   const game = useActiveGame();
+  const clients = useClients();
   const book = useConfigs();
   const servers = useServerConfigs();
+  const [sensitive, setSensitive] = useState<ServerConfigDocument | null>(null);
   const serverDocuments = (servers.data ?? []).filter((document) => document.game === game);
   const documents = (book.data?.documents ?? []).filter((document) => document.game === game);
   const items: PickerItem[] = documents.map((document) => ({
     id: document.id,
     title: document.name,
-    detail: format.bytes(new TextEncoder().encode(document.text).length),
+    detail: `${clients.data?.find((client) => client.id === document.sourceClient)?.name ?? document.sourceFile ?? t("pickers.config.local")} · ${format.bytes(new TextEncoder().encode(document.text).length)}`,
+    group: t("pickers.config.groups.client"),
     lead: (
       <Mark>
         <FileCode size={16} />
@@ -287,35 +286,57 @@ function ConfigPicker({ onPick, onClose }: PickerProps) {
   items.push(...serverDocuments.map((document) => ({
     id: `server:${document.id}`,
     title: document.name,
+    group: t("pickers.config.groups.server"),
     detail: t("serverConfig.subtitle", {
       game: document.game === "ja" ? "Jedi Academy" : "Jedi Outcast",
       mod: MOD_CATALOG.find((mod) => mod.id === document.modId)?.name ?? document.modId,
     }),
     lead: <Mark><Server size={16} /></Mark>,
-    disabledReason: serverConfigSensitiveKeys(document.text).length ? t("serverConfig.sensitive")
-      : fitsConfigCard(serverConfigEnvelope(document)) ? null : t("pickers.config.tooLarge"),
+    disabledReason: fitsConfigCard(serverConfigEnvelope(document)) ? null : t("pickers.config.tooLarge"),
   })));
+  const shareServer = (document: ServerConfigDocument, removeSensitive: boolean) => {
+    const prepared = removeSensitive ? { ...document, text: removeServerConfigSensitive(document.text) } : document;
+    const text = serverConfigEnvelope(prepared);
+    if (fitsConfigCard(text)) onPick({ card: configCard({ name: document.name, text }) });
+  };
   return (
-    <PickerDialog
-      title={t("pickers.config.title")}
-      items={items}
-      loading={book.isPending || servers.isPending}
-      error={book.error || servers.error ? errorText(book.error ?? servers.error) : null}
-      emptyText={t("pickers.config.empty")}
-      onClose={onClose}
-      onPick={(id) => {
-        if (id.startsWith("server:")) {
-          const document = serverDocuments.find((entry) => entry.id === id.slice(7));
-          if (document && !serverConfigSensitiveKeys(document.text).length) {
-            const text = serverConfigEnvelope(document);
-            if (fitsConfigCard(text)) onPick({ card: configCard({ name: document.name, text }) });
+    <>
+      <PickerDialog
+        title={t("pickers.config.title")}
+        body={t("pickers.config.body")}
+        items={items}
+        loading={clients.isPending || book.isPending || servers.isPending}
+        error={clients.error || book.error || servers.error ? errorText(clients.error ?? book.error ?? servers.error) : null}
+        emptyText={t("pickers.config.empty")}
+        onClose={onClose}
+        onPick={(id) => {
+          if (id.startsWith("server:")) {
+            const document = serverDocuments.find((entry) => entry.id === id.slice(7));
+            if (document) {
+              if (serverConfigSensitiveKeys(document.text).length) setSensitive(document);
+              else shareServer(document, false);
+            }
+            return;
           }
-          return;
-        }
-        const document = documents.find((entry) => entry.id === id);
-        if (document) onPick({ card: configCard(document) });
-      }}
-    />
+          const document = documents.find((entry) => entry.id === id);
+          if (document) onPick({ card: configCard(document) });
+        }}
+      />
+      {sensitive ? (
+        <Dialog
+          title={t("pickers.config.sensitive.title")}
+          body={t("pickers.config.sensitive.body", { keys: serverConfigSensitiveKeys(sensitive.text).join(", ") })}
+          onClose={() => setSensitive(null)}
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => setSensitive(null)}>{tCommon("actions.cancel")}</Button>
+              <Button variant="secondary" onClick={() => shareServer(sensitive, false)}>{t("pickers.config.sensitive.shareUnchanged")}</Button>
+              <Button variant="primary" onClick={() => shareServer(sensitive, true)}>{t("pickers.config.sensitive.removeAndShare")}</Button>
+            </>
+          }
+        />
+      ) : null}
+    </>
   );
 }
 

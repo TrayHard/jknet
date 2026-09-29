@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodeServerConfigBytes, detectServerConfigMod, hasServerConfigHeader, parseServerConfigEnvelope, serverConfigEnvelope, serverConfigValues, setServerConfigValue, removeServerConfigValue, serverConfigSensitiveKeys, serverConfigFilename, serverConfigDropProblem, serverConfigImportName } from "./serverConfig.ts";
+import { decodeServerConfigBytes, detectServerConfigMod, hasServerConfigHeader, parseServerConfigEnvelope, removeServerConfigSensitive, serverConfigEnvelope, serverConfigValues, setServerConfigValue, removeServerConfigValue, serverConfigSensitiveKeys, serverConfigFilename, serverConfigDropProblem, serverConfigImportName } from "./serverConfig.ts";
 
 test("cfg bytes recognize Unicode and legacy Windows encodings", () => {
   const bytes = values => new Uint8Array(values);
@@ -73,6 +73,15 @@ test("secrets cannot be shared through case, quoted keys, compound or malformed 
   }
   assert.deepEqual(serverConfigSensitiveKeys('// rconPassword "example"\nset g_password ""\nset g_speed 250'), []);
   assert.equal(serverConfigFilename('../duel:best.cfg'), '.._duel_best.cfg');
+});
+
+test("detected secrets can be removed before sharing without touching other rules", () => {
+  const text = '// access\nset rconPassword "hidden"; set g_speed 250\nset x "set admin_token hunter"\n/* keep */ set sv_hostname "Friends"\n';
+  const cleaned = removeServerConfigSensitive(text);
+  assert.deepEqual(serverConfigSensitiveKeys(cleaned), []);
+  assert.match(cleaned, /\/\/ access/);
+  assert.match(cleaned, /set g_speed 250/);
+  assert.match(cleaned, /\/\* keep \*\/ set sv_hostname/);
 });
 
 test("block comments never contribute assignments or secrets", () => {
