@@ -86,6 +86,52 @@ test("messages written offline survive a reload and arrive once, in order", asyn
   for (const text of written) await expect(messageRow(page, text)).toHaveCount(1);
 });
 
+test("a message that arrives while its thread's first page is on its way still shows", async ({ page, players }) => {
+  const kyle = uniqueName("Kyle");
+  const jan = uniqueName("Jan");
+  await signIn(page, jan);
+  const other = await players.open();
+  await signIn(other, kyle);
+  await makeFriends(other, kyle, page, jan);
+  const id = await openDirect(other, jan);
+  await send(other, "before the load");
+
+  // Jan's first read of the thread is taken from the service at once and
+  // handed to the page only after the next message came by the socket:
+  // the page then holds a first page older than that message. (Jan is the
+  // test's own page: WebKit shows `route` no call of a page a worker
+  // controls, and this file keeps the worker off there.)
+  let taken = false;
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`${SERVICE}/v1/chat/conversations/*/messages*`, async (route) => {
+    if (route.request().method() !== "GET" || taken) return route.fallback();
+    taken = true;
+    const response = await route.fetch();
+    await held;
+    await route.fulfill({ response });
+  });
+  await visit(page, `/c/${encodeURIComponent(id)}`);
+  await expect.poll(() => taken, { message: "the thread asks for its first page" }).toBe(true);
+
+  await send(other, "during the load");
+  await page.waitForFunction(
+    (conversationId) =>
+      (
+        window as unknown as { __jknetChat?: { view(): { conversations: Array<{ id: string; lastMessage: { body: string } | null }> } } }
+      ).__jknetChat
+        ?.view()
+        .conversations.find((conversation) => conversation.id === conversationId)?.lastMessage?.body === "during the load",
+    id,
+  );
+  release();
+
+  await expect(messageRow(page, "during the load")).toHaveCount(1);
+  await expect(messageRow(page, "before the load")).toHaveCount(1);
+});
+
 test("a message whose answer was lost when the service went away is stored once", async ({ page, players, guard }) => {
   guard.allowed.push(...OFFLINE_NOISE);
   const mara = uniqueName("Mara");

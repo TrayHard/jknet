@@ -5238,6 +5238,18 @@ export function useChatEvents(handlers: ChatEventHandlers = {}): void {
           } else if (placed.outcome === "gap") {
             void catchUp(queryClient, message.conversationId);
           }
+        } else {
+          // --- slice: web app --- the thread's first page is on its way and
+          // may have been read before this message was stored: once it is
+          // in, catch up past it, or the message would not show until the
+          // next resync.
+          const loading = queryClient.getQueryCache().find({ queryKey: key, exact: true });
+          if (loading?.state.fetchStatus === "fetching") {
+            void loading.promise?.then(
+              () => catchUp(queryClient, message.conversationId),
+              () => undefined,
+            );
+          }
         }
         chatLive.stopTyping(message.conversationId, message.senderId);
         let known = true;

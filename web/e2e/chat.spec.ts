@@ -83,6 +83,10 @@ test("two friends write, reply, react and see each other type and read", async (
 });
 
 test("a group is made, renamed, joined by invitation, loses a member and a leaver", async ({ page, players }) => {
+  // Three players and some fifty steps. WebKit takes most of a second to
+  // report each click done, so alone the test runs about 40 s there, and a
+  // full run of all five browsers slows it past the default minute.
+  test.setTimeout(120_000);
   const mara = uniqueName("Mara");
   const bast = uniqueName("Bast");
   const cade = uniqueName("Cade");
