@@ -68,7 +68,7 @@ export function App({ core }: { core: WebCore }) {
       <OneTabGate core={core}>
         <QueryClientProvider client={queryClient}>
           <ToastsProvider>
-            <AccountProvider>
+            <AccountProvider expiredToast={false}>
               <AccountSwitch />
               <FriendsEvents />
               <ChatProvider role="main">

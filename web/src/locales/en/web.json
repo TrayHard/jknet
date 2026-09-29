@@ -182,8 +182,10 @@
     "signedOut": "This device was signed out from another device."
   },
   "serverChats": {
+    "title": "Friends’ servers",
     "hosts": "{{name}} hosts a server",
     "invited": "Invited",
+    "joining": "Joining…",
     "guestNote": "You're a guest on this server. Chat from here, join the game from JKNet on your PC.",
     "gone": "This chat is no longer available"
   },

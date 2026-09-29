@@ -194,7 +194,8 @@ function SessionRow({
 }) {
   const { t } = useTranslation("account");
   const format = useFormat();
-  const Icon = ICONS[sessionIcon(session)];
+  const icon = sessionIcon(session);
+  const Icon = ICONS[icon];
   const name = sessionName(session) ?? t("devices.unnamed");
   const age = relativeAge(session.lastUsedAt, Date.now());
   const time =
@@ -206,6 +207,7 @@ function SessionRow({
     <li className="flex flex-wrap items-center gap-12 py-12 border-t border-line-subtle first:border-t-0 first:pt-0">
       <span
         aria-hidden="true"
+        data-icon={icon}
         className="flex items-center justify-center size-36 rounded-md bg-elevated text-fg-secondary shrink-0"
       >
         <Icon size={18} />

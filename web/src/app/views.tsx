@@ -26,6 +26,7 @@ import { NotificationsScreen } from "./screens/NotificationsScreen.tsx";
 import { PendingScreen } from "./screens/PendingScreen.tsx";
 import { PrivacyScreen } from "./screens/PrivacyScreen.tsx";
 import { RequestsScreen } from "./screens/RequestsScreen.tsx";
+import { SessionsScreen } from "./screens/SessionsScreen.tsx";
 import { SettingsScreen } from "./screens/SettingsScreen.tsx";
 import { ThreadScreen } from "./screens/ThreadScreen.tsx";
 
@@ -43,6 +44,8 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
       return <NotificationsScreen />;
     case "privacy":
       return <PrivacyScreen />;
+    case "sessions":
+      return <SessionsScreen />;
     case "friends":
       return (
         <FriendsScreen selectedId={params.userId} requestsOpen={spec.detail === "requests"} />

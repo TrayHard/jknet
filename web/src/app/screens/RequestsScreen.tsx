@@ -4,20 +4,23 @@ import { useTranslation } from "react-i18next";
 import { RequestList } from "../../../../src/components/friends/RequestList.tsx";
 import { Avatar, Button } from "../../../../src/components/ui/index.ts";
 import { useErrorText } from "../../../../src/i18n/errors.ts";
+import type { Invite, JoinableServer } from "../../../../src/lib/ipc.ts";
 import {
   useAcceptFriendRequest,
   useDeclineFriendRequest,
   useDismissInvite,
   useFriendsState,
+  useJoinableServers,
 } from "../../../../src/lib/queries.ts";
 import { openInvites } from "../../core/friends.ts";
+import { JoinChatButton, JoinRefusal, useJoinChat } from "../JoinableServers.tsx";
 
 /**
  * Friend requests both ways and the server invites addressed to me.
  *
- * An invite can be dismissed here; joining the game stays in the launcher,
- * and joining a host's server chat arrives with the server chats of the web
- * app.
+ * An invite can be dismissed here, and an invite to a private server whose
+ * chat is open to me has **Join chat**; joining the game stays in the
+ * launcher.
  */
 export function RequestsScreen() {
   const { t } = useTranslation("friends");
@@ -28,6 +31,8 @@ export function RequestsScreen() {
   const accept = useAcceptFriendRequest();
   const decline = useDeclineFriendRequest();
   const dismiss = useDismissInvite();
+  const joinable = useJoinableServers().data ?? [];
+  const chat = useJoinChat();
 
   const view = friends.data;
   if (view === undefined) {
@@ -46,6 +51,8 @@ export function RequestsScreen() {
           <span>{errorText(error)}</span>
         </p>
       ) : null}
+
+      <JoinRefusal error={chat.error} className="mx-8 mt-12" />
 
       {empty ? <p className="px-12 py-24 text-body-md text-fg-secondary">{tWeb("friendsScreen.none")}</p> : null}
 
@@ -72,34 +79,51 @@ export function RequestsScreen() {
           <span className="px-12 pb-4 text-label-xs text-fg-muted">
             {t("requests.heading", { title: tWeb("friendsScreen.invites"), count: invites.length })}
           </span>
-          {invites.map((invite) => (
-            <div key={invite.id} className="flex items-center gap-12 rounded-md px-12 py-8 hover:bg-hover-overlay">
-              <Avatar name={invite.from.displayName} src={invite.from.avatarUrl} />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-body-md-medium text-fg break-words">
-                  {tWeb("friendsScreen.inviteFrom", {
-                    name: invite.from.displayName,
-                    server: invite.serverName ?? invite.serverAddress,
-                  })}
-                </span>
-                <span className="flex items-center gap-4 text-body-sm text-fg-muted">
-                  <Server size={12} />
-                  {tWeb("friendsScreen.inviteNote")}
-                </span>
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<X size={14} />}
-                disabled={dismiss.isPending && dismiss.variables === invite.id}
-                onClick={() => dismiss.mutate(invite.id)}
+          {invites.map((invite) => {
+            const server = joinableOf(invite, joinable);
+            return (
+              <div
+                key={invite.id}
+                data-testid="server-invite"
+                className="flex flex-wrap items-center gap-12 rounded-md px-12 py-8 hover:bg-hover-overlay"
               >
-                {tCommon("actions.dismiss")}
-              </Button>
-            </div>
-          ))}
+                <Avatar name={invite.from.displayName} src={invite.from.avatarUrl} />
+                <span className="flex min-w-0 flex-1 basis-[160px] flex-col">
+                  <span className="text-body-md-medium text-fg break-words">
+                    {tWeb("friendsScreen.inviteFrom", {
+                      name: invite.from.displayName,
+                      server: invite.serverName ?? invite.serverAddress,
+                    })}
+                  </span>
+                  <span className="flex items-center gap-4 text-body-sm text-fg-muted">
+                    <Server size={12} />
+                    {tWeb("friendsScreen.inviteNote")}
+                  </span>
+                </span>
+                <span className="ml-auto flex items-center gap-8">
+                  {server !== null ? <JoinChatButton server={server} chat={chat} /> : null}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<X size={14} />}
+                    disabled={dismiss.isPending && dismiss.variables === invite.id}
+                    onClick={() => dismiss.mutate(invite.id)}
+                  >
+                    {tCommon("actions.dismiss")}
+                  </Button>
+                </span>
+              </div>
+            );
+          })}
         </section>
       ) : null}
     </div>
   );
+}
+
+/** The joinable chat an invite to a private server leads to, if its chat is open to me. */
+function joinableOf(invite: Invite, joinable: JoinableServer[]): JoinableServer | null {
+  const sessionId = invite.hosting?.sessionId;
+  if (!sessionId) return null;
+  return joinable.find((server) => server.hostUserId === invite.from.id && server.sessionId === sessionId) ?? null;
 }

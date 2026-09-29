@@ -182,8 +182,10 @@
     "signedOut": "Ezt az eszközt egy másik eszközről jelentették ki."
   },
   "serverChats": {
+    "title": "Barátok szerverei",
     "hosts": "{{name}} szervert futtat",
     "invited": "Meghívták",
+    "joining": "Csatlakozás…",
     "guestNote": "Vendég ezen a szerveren. Innen csevegjen, a játékba a számítógépen futó JKNetből lépjen be.",
     "gone": "Ez a csevegés már nem érhető el"
   },

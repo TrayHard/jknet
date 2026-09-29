@@ -13,6 +13,7 @@
  * | events          | `events.ts`    |
  * | requests        | `http.ts`      |
  * | the account     | `session.ts`   |
+ * | devices and sessions | `sessions.ts` |
  * | IndexedDB       | `storage.ts`, `prefs.ts` |
  * | settings        | `settings.ts`  |
  * | live socket     | `socket.ts`, `lifecycle.ts` |
@@ -45,6 +46,7 @@ import type { PrefsStore } from "./prefs.ts";
 import { createPush, webPushTransport, type PushCore, type PushTransport } from "./push.ts";
 import { createRouter, createStats, type CommandRouter, type CoreStats } from "./router.ts";
 import { createSession, type Session } from "./session.ts";
+import { createSessions, type SessionsCore } from "./sessions.ts";
 import { createSettings, DEFAULT_CHAT_NOTIFICATIONS, type SettingsCore } from "./settings.ts";
 import { createSocket, type Frame, type LiveSocket, type SocketStatus } from "./socket.ts";
 import type { Storage } from "./storage.ts";
@@ -89,6 +91,7 @@ export interface WebCore {
   readonly events: EventBus;
   readonly http: Http;
   readonly session: Session;
+  readonly sessions: SessionsCore;
   readonly settings: SettingsCore;
   readonly friends: FriendsCore;
   readonly chat: ChatCore;
@@ -204,6 +207,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     chat.forget();
     files.forget();
     serverChats.stop();
+    sessions.forget();
     await storage.wipe();
     await prefs.restoreDevicePrefs();
     await clearBrowserState();
@@ -225,6 +229,13 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     },
   });
   sessionRef = session;
+
+  const sessions = createSessions({
+    http,
+    signedIn: () => session.signedIn(),
+    signOut: () => session.signOut(),
+    live: () => socket.status() === "open" || socket.status() === "connecting",
+  });
 
   const friends = createFriends({
     http,
@@ -307,6 +318,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
   const invoke = createRouter({
     apiBase: http.apiBase,
     session,
+    sessions,
     settings,
     friends,
     chat,
@@ -360,6 +372,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     events,
     http,
     session,
+    sessions,
     settings,
     friends,
     chat,

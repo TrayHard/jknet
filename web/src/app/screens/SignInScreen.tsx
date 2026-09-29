@@ -1,4 +1,4 @@
-import { AlertTriangle, Share } from "lucide-react";
+import { AlertTriangle, LogOut, Share } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useSearchParams } from "react-router";
@@ -9,7 +9,7 @@ import { Button } from "../../../../src/components/ui/index.ts";
 import { onlineErrorCode, onlineErrorMessage, type OnlineProvider, type SignInStart } from "../../../../src/lib/ipc.ts";
 import { useAccountState } from "../../../../src/lib/queries.ts";
 import { DEFAULT_NEXT, safeNext } from "../../core/session.ts";
-import { useSignInStatus, useWebCore } from "../CoreContext.tsx";
+import { useEndedElsewhere, useSignInStatus, useWebCore } from "../CoreContext.tsx";
 
 /** Safari on an iPhone, outside the installed app: sign-in belongs in the app. */
 function iphoneInBrowser(): boolean {
@@ -39,6 +39,8 @@ export function SignInFrame({ children }: { children: ReactNode }) {
  * `/signin`: Discord, JKHub, and the Developer sign-in against a local
  * service. The tab goes to the provider; `/signin/done` picks the answer up.
  * `?next=` is where the player was going, kept only when it stays in the app.
+ * A browser whose session was signed out from another device (or ran out)
+ * lands here and says so.
  */
 export function SignInScreen() {
   const { t } = useTranslation("web");
@@ -46,6 +48,7 @@ export function SignInScreen() {
   const core = useWebCore();
   const account = useAccountState().data;
   const status = useSignInStatus();
+  const endedElsewhere = useEndedElsewhere();
   const [params] = useSearchParams();
   const next = safeNext(params.get("next"));
   const [busy, setBusy] = useState(false);
@@ -92,6 +95,17 @@ export function SignInScreen() {
         >
           <Share size={16} className="mt-2 shrink-0 text-fg-warm" />
           <span>{t("signin.installFirst")}</span>
+        </p>
+      ) : null}
+
+      {endedElsewhere && !waiting && error === null && !failed ? (
+        <p
+          role="status"
+          data-testid="signed-out-elsewhere"
+          className="flex items-start gap-10 rounded-[10px] border border-line bg-elevated px-12 py-10 text-body-sm text-fg"
+        >
+          <LogOut size={16} className="mt-2 shrink-0 text-fg-secondary" />
+          <span>{t("sessions.signedOut")}</span>
         </p>
       ) : null}
 

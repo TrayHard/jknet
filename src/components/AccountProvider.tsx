@@ -21,8 +21,12 @@ const EXPIRED_TOAST = "account:expired";
  *
  * Mounted once and above the router, because the refusal that starts this can
  * land while any screen is open.
+ *
+ * --- slice: web app --- the web app goes straight to its sign-in screen,
+ * which says the device was signed out, so it turns the toast off
+ * (`expiredToast={false}`); the lists are refreshed either way.
  */
-export function AccountProvider({ children }: { children: ReactNode }) {
+export function AccountProvider({ children, expiredToast = true }: { children: ReactNode; expiredToast?: boolean }) {
   const { t } = useTranslation("account");
   const queryClient = useQueryClient();
   const toasts = useToasts();
@@ -44,6 +48,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
           void queryClient.invalidateQueries({ queryKey: friendsKeys.state });
           void queryClient.invalidateQueries({ queryKey: accountKeys.state });
           void queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+          if (!expiredToast) return;
           show(EXPIRED_TOAST, {
             variant: "error",
             title: t("session.expiredTitle"),
@@ -62,7 +67,7 @@ export function AccountProvider({ children }: { children: ReactNode }) {
       disposed = true;
       stop?.();
     };
-  }, [queryClient, show, t]);
+  }, [queryClient, show, t, expiredToast]);
 
   return <>{children}</>;
 }

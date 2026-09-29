@@ -27,7 +27,7 @@ import {
   MAX_OBJECT_URLS,
   sanitizeName,
 } from "./files.ts";
-import { createServerChats, JOINABLE_EVENT, readJoinable } from "./serverChats.ts";
+import { createServerChats, hostingKey, JOINABLE_EVENT, readJoinable } from "./serverChats.ts";
 
 const API = "https://api.example.com";
 const CONVERSATION = "01HDIRECT00000000000000000";
@@ -696,6 +696,39 @@ describe("the chats of friends' servers", () => {
     assert.equal(kept.length, 1);
     assert.deepEqual(JSON.parse(calls.at(-1).init.body), { hostUserId: "H" });
     assert.ok(calls.at(-1).url.endsWith("/v1/chat/servers/0123456789abcdef/join"));
+  });
+
+  test("the host's switch, its policy and its map count as a change; its player count does not", () => {
+    const events = new EventBus();
+    let heard = 0;
+    events.on(JOINABLE_EVENT, () => (heard += 1));
+    const chats = createServerChats({ http: createHttp({ apiBase: API, token: () => TOKEN, onUnauthorized: () => {} }), events, signedIn: () => true, keep: () => {} });
+    const hosting = { sessionId: "0123456789abcdef", game: "ja", map: "mp/ffa3", mod: null, gametype: 0, players: 1, maxPlayers: 8, joinPolicy: "friends", canJoin: true };
+    const beat = (extra) => events.emit(EVENTS.friendsPresence, { userId: "H", presence: { status: "online", hosting: { ...hosting, ...extra } } });
+    beat({});
+    assert.equal(heard, 1);
+    beat({ players: 5 });
+    assert.equal(heard, 1, "more players change nothing");
+    beat({ chatFromWeb: true });
+    assert.equal(heard, 1, "an explicit yes is the default");
+    beat({ chatFromWeb: false });
+    assert.equal(heard, 2, "the host switched web joins off");
+    beat({ chatFromWeb: false, joinPolicy: "invite", canJoin: false });
+    assert.equal(heard, 3, "the policy closed the server");
+    beat({ chatFromWeb: false, joinPolicy: "invite", canJoin: false, map: "mp/duel1" });
+    assert.equal(heard, 4, "another map");
+    events.emit(EVENTS.friendsPresence, { userId: "H", presence: { status: "offline", hosting: { ...hosting } } });
+    assert.equal(heard, 5, "an offline host hosts nothing");
+    assert.equal(hostingKey({ status: "online" }), null);
+
+    // A reconnect reads the list again, and the next word of a hosting
+    // friend counts as the first: what went unheard meanwhile is unknown.
+    beat({});
+    assert.equal(heard, 6);
+    chats.connected();
+    assert.equal(heard, 7);
+    beat({});
+    assert.equal(heard, 8);
   });
 });
 

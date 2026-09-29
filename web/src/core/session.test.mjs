@@ -211,6 +211,35 @@ test("a 401 on a call with the token wipes the account as expired", async () => 
   assert.equal(session.signedIn(), false);
   assert.deepEqual(wiped, ["expired"]);
   assert.deepEqual(changes.at(-1), { signedIn: false, reason: "expired" });
+  assert.equal(session.endedElsewhere(), true, "the sign-in screen says the device was signed out");
+});
+
+test("only a lost token says the device was signed out elsewhere", async () => {
+  const { session, storage } = setup({
+    "POST /v1/auth/logout": { status: 204 },
+    "GET /v1/auth/login-sessions/S1": { body: { id: "S1", provider: "dev", url: "u", status: "done", token: "NEW", user: USER } },
+    "GET /v1/me": { body: { user: USER } },
+  });
+  let heard = 0;
+  session.subscribe(() => (heard += 1));
+
+  // Nobody was signed in: a refusal says nothing.
+  await session.expire();
+  assert.equal(session.endedElsewhere(), false);
+
+  await storage.put("session", "current", { token: "T", userId: "u", apiBase: "https://api.example.com", createdAt: "x" });
+  await session.load();
+  await session.expire();
+  assert.equal(session.endedElsewhere(), true);
+  assert.equal(heard, 1, "the screen hears it");
+
+  // Signing in again clears it.
+  await session.poll("S1");
+  assert.equal(session.endedElsewhere(), false);
+
+  // Signing out on this device is not "elsewhere".
+  await session.signOut();
+  assert.equal(session.endedElsewhere(), false);
 });
 
 test("sign-out tells the service, then forgets everything", async () => {

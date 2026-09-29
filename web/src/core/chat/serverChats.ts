@@ -12,8 +12,9 @@
  * The list changes without a word to this device in several ways, so the
  * core tells the screens to ask again (`chat:joinable`) whenever one of them
  * may have happened: the socket opened, the service said so
- * (`chat.serverJoinable`), a friend's hosting appeared, vanished or changed,
- * or an invite came or went.
+ * (`chat.serverJoinable`), a friend's hosting appeared, vanished or changed
+ * (another session, its join policy, the host's **Chat from the web app**
+ * switch, its map), or an invite came or went.
  */
 
 import type { Conversation, Game, JoinableServer, Presence } from "../../../../src/lib/ipc.ts";
@@ -76,9 +77,30 @@ function nonEmpty(value: string, what: string): string {
   return trimmed;
 }
 
+/**
+ * What of a friend's hosting decides the list, as one string: the session,
+ * whether the server opens to the player and to the web app, and what a row
+ * shows. `null` while the friend hosts nothing. The number of players is
+ * left out: it changes all the time and no row shows it.
+ */
+export function hostingKey(presence: Presence | null | undefined): string | null {
+  const hosting = presence?.hosting;
+  if (hosting == null || presence?.status === "offline") return null;
+  return JSON.stringify([
+    hosting.sessionId,
+    hosting.canJoin ?? null,
+    hosting.joinPolicy ?? null,
+    hosting.chatFromWeb !== false,
+    hosting.game ?? null,
+    hosting.map ?? null,
+    hosting.mod ?? null,
+    hosting.gametype ?? null,
+  ]);
+}
+
 export function createServerChats(deps: ServerChatsDeps): ServerChats {
   const { http, events } = deps;
-  /** The session each friend hosts, as the presence events said last. */
+  /** What each friend hosts, as the presence events said last (`hostingKey`). */
   const hosting = new Map<string, string | null>();
 
   const changed = () => events.emit(JOINABLE_EVENT, {});
@@ -86,12 +108,12 @@ export function createServerChats(deps: ServerChatsDeps): ServerChats {
   // The bus lives as long as the core: these listeners are never taken off.
   events.on(EVENTS.friendsPresence, (payload) => {
     if (!isObject(payload) || typeof payload.userId !== "string") return;
-    const presence = payload.presence as Presence | null | undefined;
-    const session = presence?.hosting?.sessionId ?? null;
+    const key = hostingKey(payload.presence as Presence | null | undefined);
     const before = hosting.has(payload.userId) ? hosting.get(payload.userId) : undefined;
-    hosting.set(payload.userId, session);
-    // A friend seen for the first time without a server changes nothing.
-    if (before === undefined ? session !== null : before !== session) changed();
+    hosting.set(payload.userId, key);
+    // A friend seen for the first time without a server changes nothing;
+    // a server that appeared, went, or changed its rules or its map does.
+    if (before === undefined ? key !== null : before !== key) changed();
   });
   events.on(EVENTS.friendsInvite, changed);
 
@@ -125,7 +147,13 @@ export function createServerChats(deps: ServerChatsDeps): ServerChats {
       return true;
     },
 
-    connected: changed,
+    connected() {
+      // Whatever the friends' hostings did while the socket was down went
+      // unheard: the list is read again now, and the next word of each
+      // friend counts as the first.
+      hosting.clear();
+      changed();
+    },
 
     stop() {
       hosting.clear();

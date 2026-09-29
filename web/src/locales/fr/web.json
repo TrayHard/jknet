@@ -182,8 +182,10 @@
     "signedOut": "Cet appareil a été déconnecté depuis un autre appareil."
   },
   "serverChats": {
+    "title": "Serveurs d’amis",
     "hosts": "{{name}} héberge un serveur",
     "invited": "Invité",
+    "joining": "Connexion au chat…",
     "guestNote": "Vous êtes invité sur ce serveur. Discutez d’ici, rejoignez la partie depuis JKNet sur votre PC.",
     "gone": "Cette discussion n’est plus disponible"
   },

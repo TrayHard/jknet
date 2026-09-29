@@ -154,6 +154,12 @@ export interface Session {
   signOut(): Promise<void>;
   /** The token was refused: a `401` or the socket's 4401. */
   expire(): Promise<void>;
+  /**
+   * Whether this browser was signed in and lost its token to a refusal: the
+   * session was signed out from another device (or ran out), so the sign-in
+   * screen says why. A new sign-in, or a sign-out of its own, clears it.
+   */
+  endedElsewhere(): boolean;
   refreshMe(): Promise<void>;
   updateDisplayName(displayName: string): Promise<OnlineUser>;
   deleteAccount(): Promise<void>;
@@ -171,10 +177,15 @@ export function createSession(deps: SessionDeps): Session {
   let polling = false;
   let wiping: Promise<void> | null = null;
   let detachWake: (() => void) | null = null;
+  let ended = false;
+
+  const notify = () => {
+    for (const listener of [...listeners]) listener();
+  };
 
   const setStatus = (next: SignInStatus) => {
     status = next;
-    for (const listener of [...listeners]) listener();
+    notify();
   };
 
   const emit = (payload: AccountChanged) => events.emit(EVENTS.accountChanged, payload);
@@ -200,6 +211,7 @@ export function createSession(deps: SessionDeps): Session {
       createdAt: new Date(now()).toISOString(),
       user: user ?? null,
     };
+    ended = false;
     await save();
     await storage.delete("pendingSignIn", "current");
     // Not awaited: Firefox asks the player and leaves the promise pending
@@ -336,6 +348,11 @@ export function createSession(deps: SessionDeps): Session {
       const had = record !== null;
       record = null;
       stopPolling();
+      const endedNow = reason === "expired" ? had || ended : false;
+      if (endedNow !== ended) {
+        ended = endedNow;
+        notify();
+      }
       try {
         await deps.wipe(reason);
       } catch (error) {
@@ -408,6 +425,7 @@ export function createSession(deps: SessionDeps): Session {
       await wipe("signedOut");
     },
     expire: () => wipe("expired"),
+    endedElsewhere: () => ended,
     refreshMe,
     updateDisplayName: async (displayName: string) => {
       if (record === null) throw onlineError("unauthorized", "Sign in to JKNet first", 401);

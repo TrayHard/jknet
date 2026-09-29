@@ -1,4 +1,4 @@
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Monitor } from "lucide-react";
 import { useMemo, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router";
@@ -88,8 +88,12 @@ export function ThreadScreen({ conversationId }: { conversationId: string }) {
       onInfo={(mode) => void navigate(infoPath(conversationId, mode === "view" ? undefined : mode))}
       composerNote={
         guest ? (
-          <p data-testid="guest-note" className="px-16 pb-4 text-body-sm text-fg-muted">
-            {tWeb("serverChats.guestNote")}
+          <p
+            data-testid="guest-note"
+            className="flex items-start gap-10 border-t border-line-subtle bg-accent-subtle px-16 py-10 text-body-sm text-fg"
+          >
+            <Monitor size={16} aria-hidden="true" className="mt-2 shrink-0 text-fg-accent" />
+            <span>{tWeb("serverChats.guestNote")}</span>
           </p>
         ) : null
       }

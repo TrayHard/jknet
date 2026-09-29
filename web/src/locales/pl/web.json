@@ -182,8 +182,10 @@
     "signedOut": "To urządzenie zostało wylogowane z innego urządzenia."
   },
   "serverChats": {
+    "title": "Serwery znajomych",
     "hosts": "{{name}} hostuje serwer",
     "invited": "Zaproszono Cię",
+    "joining": "Dołączanie…",
     "guestNote": "Jesteś gościem na tym serwerze. Pisz na czacie stąd, do gry dołącz z JKNet na komputerze.",
     "gone": "Ten czat nie jest już dostępny"
   },

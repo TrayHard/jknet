@@ -1,5 +1,5 @@
 import { MessageCircle, Search, UserPlus, WifiOff, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -28,6 +28,12 @@ interface ConversationListProps {
   onOpenMessage: (conversationId: string, seq: number) => void;
   dense?: boolean;
   className?: string;
+  /**
+   * --- slice: web app --- rows drawn first in the list, while it shows all
+   * chats or the server chats and nothing is searched: the web app's chats
+   * of friends' servers the player may join. The launcher passes none.
+   */
+  leading?: ReactNode;
 }
 
 const FILTERS: ConversationFilter[] = ["all", "direct", "group", "server"];
@@ -50,6 +56,7 @@ export function ConversationList({
   onOpenMessage,
   dense = false,
   className,
+  leading,
 }: ConversationListProps) {
   const { t } = useTranslation("chat");
   const names = useChatNames();
@@ -143,6 +150,8 @@ export function ConversationList({
       </div>
 
       <div className={cn("flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto", dense ? "px-4 pb-8" : "px-8 pb-12")}>
+        {leading !== undefined && (filter === "all" || filter === "server") && query.trim() === "" ? leading : null}
+
         {state.groupInvites.length > 0 && filter !== "direct" && filter !== "server" ? (
           <section aria-label={t("invites.title")} className="flex flex-col gap-4 pb-8">
             <h3 className="px-8 pt-4 text-label-xs text-fg-muted">{t("invites.title")}</h3>

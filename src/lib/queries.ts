@@ -4701,7 +4701,9 @@ export function useJoinableServers(): UseQueryResult<JoinableServer[]> {
 
 /**
  * **Join chat** of a friend's private server from the web app: the player
- * becomes a member of its chat, and the answer goes into the list.
+ * becomes a member of its chat, and the answer goes into the list. A
+ * refusal — the host switched web joins off, the server stopped, the invite
+ * ran out — means the list was stale: it is read again either way.
  */
 export function useJoinServerChat() {
   const queryClient = useQueryClient();
@@ -4710,6 +4712,8 @@ export function useJoinServerChat() {
       chatIpc.joinServer(hostUserId, sessionId),
     onSuccess: (conversation) => {
       upsertConversation(queryClient, conversation);
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: chatKeys.joinable });
     },
   });

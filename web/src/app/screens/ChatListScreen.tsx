@@ -5,13 +5,15 @@ import { ChatUnavailable } from "../../../../src/components/chat/ChatUnavailable
 import { ConversationList } from "../../../../src/components/chat/ConversationList.tsx";
 import { useErrorText } from "../../../../src/i18n/errors.ts";
 import { useChatState } from "../../../../src/lib/queries.ts";
+import { JoinableServers } from "../JoinableServers.tsx";
 import { threadPath } from "./chatPaths.ts";
 
 /**
  * The chats: the launcher's conversation list — its search over names and
  * messages, the filter, the group invitations and **New group** — as the
  * list of the chats section. Picking a chat, or a message a search found,
- * is a navigation: the thread is a route of its own.
+ * is a navigation: the thread is a route of its own. The chats of friends'
+ * servers the player may join from here come first (`JoinableServers`).
  */
 export function ChatListScreen({ selectedId }: { selectedId: string | null }) {
   const { t } = useTranslation("chat");
@@ -37,6 +39,7 @@ export function ChatListScreen({ selectedId }: { selectedId: string | null }) {
       selectedId={selectedId}
       onSelect={(conversationId) => void navigate(threadPath(conversationId))}
       onOpenMessage={(conversationId, seq) => void navigate(threadPath(conversationId, seq))}
+      leading={<JoinableServers />}
       className="min-h-0 flex-1"
     />
   );

@@ -10,6 +10,7 @@ import { Avatar, Badge, Button, Dialog } from "../../../../src/components/ui/ind
 import { useErrorText } from "../../../../src/i18n/errors.ts";
 import { useFormat } from "../../../../src/i18n/useFormat.ts";
 import { useFriendsState, useRemoveFriend } from "../../../../src/lib/queries.ts";
+import { HostedServer } from "../JoinableServers.tsx";
 
 /** The name of the friend a route shows, for the top bar and the header. */
 export function FriendTitle({ userId }: { userId: string }) {
@@ -24,8 +25,9 @@ export function FriendTitle({ userId }: { userId: string }) {
 
 /**
  * One friend: who they are, where they are, **Message** — the direct chat,
- * made on first use — and **Remove friend** behind a confirmation. Joining
- * their game stays in the launcher.
+ * made on first use — and **Remove friend** behind a confirmation. A friend
+ * who hosts a private server shows it, with **Join chat** while its chat is
+ * open to the player. Joining their game stays in the launcher.
  */
 export function FriendDetailsScreen({ userId }: { userId: string }) {
   const { t } = useTranslation("friends");
@@ -75,6 +77,8 @@ export function FriendDetailsScreen({ userId }: { userId: string }) {
         </p>
         <p className="text-body-sm text-fg-muted">{tWeb("friendsScreen.since", { date: format.date(friend.friendsSince) })}</p>
       </div>
+
+      <HostedServer friend={friend} />
 
       <div>
         <Button

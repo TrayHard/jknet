@@ -182,8 +182,10 @@
     "signedOut": "Se cerró la sesión de este dispositivo desde otro dispositivo."
   },
   "serverChats": {
+    "title": "Servidores de amigos",
     "hosts": "{{name}} aloja un servidor",
     "invited": "Invitado",
+    "joining": "Uniéndose…",
     "guestNote": "Es invitado en este servidor. Chatee desde aquí y entre en la partida con JKNet en su PC.",
     "gone": "Este chat ya no está disponible"
   },

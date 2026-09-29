@@ -30,6 +30,12 @@ export function useSignInStatus(): SignInStatus {
   return useSyncExternalStore(core.session.subscribe, core.session.status, core.session.status);
 }
 
+/** Whether this browser's session was signed out from another device (or ran out). */
+export function useEndedElsewhere(): boolean {
+  const core = useWebCore();
+  return useSyncExternalStore(core.session.subscribe, core.session.endedElsewhere, core.session.endedElsewhere);
+}
+
 /** The live socket's state. */
 export function useSocketStatus(): SocketStatus {
   const core = useWebCore();

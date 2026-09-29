@@ -182,8 +182,10 @@
     "signedOut": "Dieses Gerät wurde von einem anderen Gerät abgemeldet."
   },
   "serverChats": {
+    "title": "Server von Freunden",
     "hosts": "{{name}} hostet einen Server",
     "invited": "Eingeladen",
+    "joining": "Beitritt…",
     "guestNote": "Sie sind Gast auf diesem Server. Chatten Sie von hier, betreten Sie das Spiel mit JKNet auf Ihrem PC.",
     "gone": "Dieser Chat ist nicht mehr verfügbar"
   },

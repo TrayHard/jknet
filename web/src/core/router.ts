@@ -4,10 +4,10 @@
  * One `switch`, one command per case, the arguments under the names the IPC
  * wrappers send. Three kinds of answer:
  *
- * - implemented: the account, the settings, the friends, the chat with its
- *   files and cards, the chats of friends' servers, and the reads of the
- *   community servers and the bundles (plus a bundle's like); the server
- *   list, JKHub, push and the sessions join as their slices land;
+ * - implemented: the account with its devices and sessions, the settings,
+ *   the friends, the chat with its files and cards, the chats of friends'
+ *   servers, and the reads of the community servers and the bundles (plus a
+ *   bundle's like); the server list and JKHub join as their slice lands;
  * - neutral: read-only launcher state whose empty answer is true in a
  *   browser (`neutral.ts`), counted in `stats.neutral`;
  * - refused with `needs_launcher`: anything that needs the game, local files
@@ -24,6 +24,7 @@ import { needsLauncher, signedOut } from "./errors.ts";
 import type { FriendsCore } from "./friends.ts";
 import { neutralAnswer } from "./neutral.ts";
 import type { Session } from "./session.ts";
+import { readTarget, type SessionsCore } from "./sessions.ts";
 import type { SettingsCore } from "./settings.ts";
 import type { ChatMessagePage, ChatSearchPage, OnlineProvider } from "../../../src/lib/ipc.ts";
 
@@ -44,6 +45,7 @@ export function createStats(): CoreStats {
 export interface RouterDeps {
   apiBase: string;
   session: Session;
+  sessions: SessionsCore;
   settings: SettingsCore;
   friends: FriendsCore;
   chat: ChatCore;
@@ -74,7 +76,7 @@ function object(args: Args, name: string): Args {
 }
 
 export function createRouter(deps: RouterDeps): CommandRouter {
-  const { session, settings, friends, chat, files, serverChats, catalogs, stats } = deps;
+  const { session, sessions, settings, friends, chat, files, serverChats, catalogs, stats } = deps;
 
   const requireAccount = () => {
     if (!session.signedIn()) throw signedOut();
@@ -103,6 +105,10 @@ export function createRouter(deps: RouterDeps): CommandRouter {
       case "delete_account":
         requireAccount();
         return session.deleteAccount();
+      case "get_sessions":
+        return sessions.list();
+      case "revoke_session":
+        return sessions.revoke(readTarget(args));
 
       // -- Settings -----------------------------------------------------------
       case "get_settings":
