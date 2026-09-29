@@ -90,8 +90,7 @@ pub async fn resolve(http: &JkhubClient, id: u32, slug: &str) -> Result<JkhubDow
 
     let head = http.head(&target).await?;
     Ok(JkhubDownload::Hosted {
-        file_name: parse::file_name_from_url(&target)
-            .unwrap_or_else(|| format!("jkhub-{id}.zip")),
+        file_name: parse::file_name_from_url(&target).unwrap_or_else(|| format!("jkhub-{id}.zip")),
         size: header_u64(head.headers().get(CONTENT_LENGTH)),
         content_type: head
             .headers()
@@ -198,7 +197,10 @@ pub async fn fetch(
     std::fs::rename(&partial, &target)
         .map_err(|e| AppError::io_path("cannot rename", &partial, e))?;
     emit(app, file_id, received, total.max(received), file_name);
-    log::info!("jkhub: downloaded {received} bytes into {}", target.display());
+    log::info!(
+        "jkhub: downloaded {received} bytes into {}",
+        target.display()
+    );
     Ok(target)
 }
 
@@ -361,7 +363,10 @@ mod tests {
     #[test]
     fn a_hosted_archive_is_recognised_from_its_saved_headers() {
         let location = header(HOSTED, "Location").expect("the 301 carries one");
-        assert_eq!(location, "https://files.jkhub.org/jka/configs/SaberChanger.zip");
+        assert_eq!(
+            location,
+            "https://files.jkhub.org/jka/configs/SaberChanger.zip"
+        );
         assert!(parse::is_hosted_archive(location));
         assert_eq!(
             parse::file_name_from_url(location),
@@ -424,7 +429,9 @@ mod tests {
         let response = runtime
             .block_on(client.get_range(&url, 0))
             .expect("the archive answers");
-        let bytes = runtime.block_on(response.bytes()).expect("the body arrives");
+        let bytes = runtime
+            .block_on(response.bytes())
+            .expect("the body arrives");
         assert_eq!(bytes.len() as u64, size);
         assert_eq!(&bytes[..2], b"PK", "a zip starts with PK");
         std::fs::write(dir.path().join(&file_name), &bytes).expect("it lands on disk");
@@ -500,7 +507,10 @@ mod tests {
         let now = SystemTime::now();
         let day = Duration::from_secs(24 * 60 * 60);
         assert!(is_stale(Some(now - day - Duration::from_secs(1)), now, day));
-        assert!(is_stale(Some(now - day), now, day), "exactly a day is spent");
+        assert!(
+            is_stale(Some(now - day), now, day),
+            "exactly a day is spent"
+        );
         assert!(!is_stale(Some(now - Duration::from_secs(3600)), now, day));
         assert!(!is_stale(Some(now + day), now, day), "a clock moved back");
         assert!(is_stale(None, now, day), "an age nobody can read");

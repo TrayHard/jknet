@@ -290,9 +290,7 @@ fn steam_candidates(spec: &GameSpec) -> Vec<PathBuf> {
 
     libraries
         .iter()
-        .flat_map(|library| {
-            game_dirs_in(spec, &library.join("steamapps").join("common"))
-        })
+        .flat_map(|library| game_dirs_in(spec, &library.join("steamapps").join("common")))
         .collect()
 }
 
@@ -329,7 +327,8 @@ fn parse_library_paths(vdf: &str) -> Vec<String> {
         let (Some(key), Some(value)) = (tokens.next(), tokens.next()) else {
             continue;
         };
-        let is_path_key = key.eq_ignore_ascii_case("path") || key.chars().all(|c| c.is_ascii_digit());
+        let is_path_key =
+            key.eq_ignore_ascii_case("path") || key.chars().all(|c| c.is_ascii_digit());
         if is_path_key && value.contains(['\\', '/']) {
             paths.push(value.replace("\\\\", "\\"));
         }
@@ -368,7 +367,10 @@ fn gog_registry_paths(spec: &GameSpec) -> Vec<PathBuf> {
     use winreg::enums::{HKEY_LOCAL_MACHINE, KEY_READ};
     use winreg::RegKey;
 
-    let roots = [r"SOFTWARE\WOW6432Node\GOG.com\Games", r"SOFTWARE\GOG.com\Games"];
+    let roots = [
+        r"SOFTWARE\WOW6432Node\GOG.com\Games",
+        r"SOFTWARE\GOG.com\Games",
+    ];
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
     let mut found = Vec::new();
 
@@ -398,7 +400,10 @@ fn gog_registry_paths(spec: &GameSpec) -> Vec<PathBuf> {
 
     // The offline installer's own uninstall entry, for a copy Galaxy never saw.
     if let Some(key) = spec.gog_uninstall_key {
-        for root in [key.to_string(), key.replace(r"SOFTWARE\", r"SOFTWARE\WOW6432Node\")] {
+        for root in [
+            key.to_string(),
+            key.replace(r"SOFTWARE\", r"SOFTWARE\WOW6432Node\"),
+        ] {
             let Ok(entry) = hklm.open_subkey_with_flags(&root, KEY_READ) else {
                 continue;
             };
@@ -484,7 +489,10 @@ mod tests {
     #[test]
     fn reads_paths_from_the_old_vdf_layout() {
         let vdf = "\"LibraryFolders\"\n{\n\t\"1\"\t\t\"D:\\\\SteamLibrary\"\n}\n";
-        assert_eq!(parse_library_paths(vdf), vec!["D:\\SteamLibrary".to_string()]);
+        assert_eq!(
+            parse_library_paths(vdf),
+            vec!["D:\\SteamLibrary".to_string()]
+        );
     }
 
     #[test]
@@ -495,7 +503,11 @@ mod tests {
 
     #[test]
     fn a_folder_without_assets_is_not_valid() {
-        let candidate = inspect(Game::JediAcademy, Path::new("Z:\\nowhere"), GameFilesSource::Manual);
+        let candidate = inspect(
+            Game::JediAcademy,
+            Path::new("Z:\\nowhere"),
+            GameFilesSource::Manual,
+        );
         assert!(!candidate.valid);
         assert_eq!(candidate.assets.len(), 4);
         assert!(candidate.assets.iter().all(|a| !a.present));
@@ -632,9 +644,8 @@ mod tests {
         let root = temp.path().join("Jedi Outcast");
         game_data(&root.join("GameData"), &["assets0.pk3", "assets1.pk3"]);
 
-        let candidate =
-            validate_game_data(Game::JediOutcast, root.to_string_lossy().to_string())
-                .expect("the folder is inspected");
+        let candidate = validate_game_data(Game::JediOutcast, root.to_string_lossy().to_string())
+            .expect("the folder is inspected");
         assert!(candidate.valid);
         assert!(candidate.path.ends_with("GameData"), "{}", candidate.path);
         assert_eq!(candidate.game, Game::JediOutcast);

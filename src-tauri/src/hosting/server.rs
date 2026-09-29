@@ -6,12 +6,14 @@
 //!
 //! ```text
 //! <roots of the client>                       fs_cdpath or fs_assetspath, fs_basepath, fs_homepath, fs_game
+//! +safe                                      skip archived server settings (and OpenJK autoexec)
 //! +set dedicated 1                            no heartbeat to the master servers
 //! +set net_ip 127.0.0.1                       only in the `internet` mode: loopback only
 //! +set net_port <PORT_SERVER of the game>     the first of the ten ports the engine tries
 //! +sets jknet_session <16 hex characters>     serverinfo label the launcher waits for
 //! +exec jknet-host.cfg                        everything else
-//! +map <map>                                  last: starts the map after the settings
+//! +map <map>                                  starts the map after the settings
+//! +exec jknet-host-settings.cfg               reapplies authored cvars the map may override
 //! ```
 //!
 //! `dedicated 1` is what keeps the server off the master lists: the engine
@@ -33,6 +35,7 @@
 
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use tokio::net::UdpSocket;
@@ -43,6 +46,65 @@ use crate::servers::protocol::{self, oob_packet, oob_payload, parse_infostring, 
 
 /// The file `+exec` reads, in `home\<fs_game or base>\`.
 pub const CONFIG_FILE: &str = "jknet-host.cfg";
+pub const SETTINGS_FILE: &str = "jknet-host-settings.cfg";
+
+/// Reapply checked settings after game-driven restarts, which need not change
+/// the map name. Only a successful enqueue consumes an initialization marker.
+#[derive(Default)]
+pub struct MapSettingsReplay {
+    last_initialization: u64,
+}
+
+impl MapSettingsReplay {
+    pub fn reapply_after(&mut self, initialization: u64, apply: impl FnOnce() -> bool) -> bool {
+        if initialization <= self.last_initialization || !apply() {
+            return false;
+        }
+        self.last_initialization = initialization;
+        true
+    }
+}
+
+/// Owns the generated cfg files for exactly one running server. Every exit
+/// path, including a failed spawn, removes both files without touching assets.
+pub struct ConfigFiles {
+    paths: Vec<PathBuf>,
+}
+
+impl Drop for ConfigFiles {
+    fn drop(&mut self) {
+        self.cleanup();
+    }
+}
+
+impl ConfigFiles {
+    /// Clean before publishing a stopped session so another start cannot
+    /// race the old session's destructor and lose its generated cfg files.
+    pub fn cleanup(&mut self) {
+        for path in self.paths.drain(..) {
+            if let Err(e) = std::fs::remove_file(&path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    log::warn!("hosting: cannot delete {}: {e}", path.display());
+                }
+            }
+        }
+    }
+}
+
+pub fn write_configs(directory: &Path, config: &ServerConfig) -> Result<ConfigFiles> {
+    let mut files = ConfigFiles { paths: Vec::new() };
+    let mut write = |name: &str, text: String| -> Result<()> {
+        let path = directory.join(name);
+        files.paths.push(path.clone());
+        std::fs::write(&path, text).map_err(|e| AppError::io_path("cannot write", &path, e))
+    };
+    write(CONFIG_FILE, host_config(config))?;
+    let map_settings = config.map_settings().collect::<Vec<_>>();
+    if !map_settings.is_empty() {
+        write(SETTINGS_FILE, format!("{}\n", map_settings.join("\n")))?;
+    }
+    Ok(files)
+}
 
 /// How many ports the engine tries from `net_port` up.
 pub const PORT_SPAN: u16 = 10;
@@ -111,6 +173,7 @@ impl Network {
 #[derive(Clone)]
 pub struct ServerConfig {
     pub game: Game,
+    pub mod_folder: Option<String>,
     /// [`crate::launch::root_args`] of the client.
     pub roots: Vec<String>,
     pub network: Network,
@@ -129,6 +192,26 @@ pub struct ServerConfig {
     /// `None` for a server without a password.
     pub password: Option<String>,
     pub rcon_password: String,
+    /// Checked server-only assignments and map-state commands; never raw
+    /// authored cfg text.
+    pub extra_commands: Vec<String>,
+}
+
+impl ServerConfig {
+    /// Worldspawn explicitly resets g_gravity. MakerMod registers its map
+    /// state commands only after the game module loads. Other cvars may be
+    /// restricted by the mod during map initialization (for example MBII
+    /// g_authenticity), so their pre-map values must not be forced back.
+    pub fn map_settings(&self) -> impl Iterator<Item = &str> {
+        self.extra_commands
+            .iter()
+            .map(String::as_str)
+            .filter(|command| {
+                command.starts_with("set g_gravity ")
+                    || command.starts_with("mremap ")
+                    || command.starts_with("mweather ")
+            })
+    }
 }
 
 impl std::fmt::Debug for ServerConfig {
@@ -136,6 +219,7 @@ impl std::fmt::Debug for ServerConfig {
         // Every field named: a new one fails to build until it is listed here.
         let ServerConfig {
             game,
+            mod_folder,
             roots,
             network,
             port,
@@ -149,9 +233,11 @@ impl std::fmt::Debug for ServerConfig {
             server_name,
             password,
             rcon_password: _,
+            extra_commands: _,
         } = self;
         f.debug_struct("ServerConfig")
             .field("game", game)
+            .field("mod_folder", mod_folder)
             .field("roots", roots)
             .field("network", network)
             .field("port", port)
@@ -172,6 +258,10 @@ impl std::fmt::Debug for ServerConfig {
 /// The arguments of the server process.
 pub fn server_args(config: &ServerConfig) -> Vec<String> {
     let mut args = config.roots.clone();
+    // A previous server's archived cvars must not change this session,
+    // including when no cfg is selected. OpenJK also skips autoexec here;
+    // JK2MV executes autoexec independently of its saved-config switch.
+    args.push("+safe".into());
     let mut set = |name: &str, value: String| {
         args.push("+set".to_string());
         args.push(name.to_string());
@@ -189,6 +279,11 @@ pub fn server_args(config: &ServerConfig) -> Vec<String> {
     args.push(CONFIG_FILE.into());
     args.push("+map".into());
     args.push(config.map.clone());
+    if config.map_settings().next().is_some() {
+        // Reapply only source-proven worldspawn overrides after map load.
+        args.push("+exec".into());
+        args.push(SETTINGS_FILE.into());
+    }
     args
 }
 
@@ -207,16 +302,20 @@ pub fn host_config(config: &ServerConfig) -> String {
     let mut lines = vec![
         "// Written by JKNet for one private server session and deleted when it stops.".to_string(),
         format!("set sv_hostname \"{}\"", config.server_name),
-        format!("set g_password \"{}\"", config.password.as_deref().unwrap_or("")),
+        format!(
+            "set g_password \"{}\"",
+            config.password.as_deref().unwrap_or("")
+        ),
         format!("set rconPassword \"{}\"", config.rcon_password),
         format!("set sv_maxclients {}", config.max_players),
         format!("set g_gametype {}", config.gametype),
         format!("set timelimit {}", config.time_limit),
     ];
-    let score_cvar = spec
-        .hosting
-        .gametype(config.gametype)
-        .and_then(|gametype| gametype.score_cvar);
+    let score_cvar = crate::server_configs::score_cvar(
+        config.game,
+        config.mod_folder.as_deref(),
+        config.gametype,
+    );
     for (cvar, default) in SCORE_CVARS {
         let value = if Some(cvar) == score_cvar {
             config.score_limit
@@ -237,6 +336,17 @@ pub fn host_config(config: &ServerConfig) -> String {
     }
     let mut text = lines.join("\n");
     text.push('\n');
+    let pre_map_commands = config
+        .extra_commands
+        .iter()
+        .filter(|command| command.starts_with("set "))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !pre_map_commands.is_empty() {
+        // Checked assignments cannot change managed settings. Keeping the
+        // managed policy last also makes the effective cfg clear to readers.
+        text = format!("{}\n{text}", pre_map_commands.join("\n"));
+    }
     text
 }
 
@@ -246,10 +356,17 @@ pub fn host_config(config: &ServerConfig) -> String {
 pub fn clean_server_name(name: &str) -> String {
     let kept: String = name
         .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, ' ' | '_' | '.' | '\'' | '!' | '^' | '-'))
+        .filter(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, ' ' | '_' | '.' | '\'' | '!' | '^' | '-')
+        })
         .collect();
     let collapsed = kept.split_whitespace().collect::<Vec<_>>().join(" ");
-    collapsed.chars().take(MAX_SERVER_NAME).collect::<String>().trim().to_string()
+    collapsed
+        .chars()
+        .take(MAX_SERVER_NAME)
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 /// Refuses a password the cfg and the console command could not carry.
@@ -340,7 +457,10 @@ impl Status {
     /// the server browser uses too; a player still connecting shows 999 and
     /// counts as a human.
     pub fn humans(&self) -> usize {
-        self.players.iter().filter(|player| !player.is_bot()).count()
+        self.players
+            .iter()
+            .filter(|player| !player.is_bot())
+            .count()
     }
 }
 
@@ -476,21 +596,30 @@ pub async fn rcon(port: u16, rcon_password: &str, command: &str) -> Result<()> {
 /// the same cvar.
 pub fn change_map_commands(
     game: Game,
+    mod_folder: Option<&str>,
     old_gametype: u8,
     score_limit: u16,
     map: &str,
     gametype: u8,
+    reapply_settings: bool,
 ) -> Vec<String> {
     let hosting = game.spec().hosting;
-    let old_cvar = hosting.gametype(old_gametype).and_then(|g| g.score_cvar);
+    let old_cvar = crate::server_configs::score_cvar(game, mod_folder, old_gametype);
     let mut commands = vec![format!("g_gametype {gametype}")];
     if let Some(new) = hosting.gametype(gametype) {
-        if let Some(cvar) = new.score_cvar {
-            let value = if Some(cvar) == old_cvar { score_limit } else { new.default_score };
+        if let Some(cvar) = crate::server_configs::score_cvar(game, mod_folder, gametype) {
+            let value = if Some(cvar) == old_cvar {
+                score_limit
+            } else {
+                new.default_score
+            };
             commands.push(format!("{cvar} {value}"));
         }
     }
     commands.push(format!("map {map}"));
+    if reapply_settings {
+        commands.push(format!("exec {SETTINGS_FILE}"));
+    }
     commands
 }
 
@@ -513,6 +642,7 @@ mod tests {
     fn config(game: Game, network: Network) -> ServerConfig {
         ServerConfig {
             game,
+            mod_folder: None,
             roots: vec![
                 "+set".into(),
                 "fs_cdpath".into(),
@@ -536,6 +666,7 @@ mod tests {
             server_name: "Tray's game".into(),
             password: Some("k7m2q9xa".into()),
             rcon_password: "r4n9d0mr4n9d0mr4n9d0mr4".into(),
+            extra_commands: Vec::new(),
         }
     }
 
@@ -554,17 +685,31 @@ mod tests {
         assert_eq!(
             tail,
             [
-                "+set", "dedicated", "1",
-                "+set", "net_port", "29070",
-                "+sets", "jknet_session", "5e0b7c1f9a2d4c38",
-                "+exec", "jknet-host.cfg",
-                "+map", "mp/ffa3",
+                "+safe",
+                "+set",
+                "dedicated",
+                "1",
+                "+set",
+                "net_port",
+                "29070",
+                "+sets",
+                "jknet_session",
+                "5e0b7c1f9a2d4c38",
+                "+exec",
+                "jknet-host.cfg",
+                "+map",
+                "mp/ffa3",
             ]
         );
         // The roots come first, exactly as the client gets them.
-        assert_eq!(args[..9], config(Game::JediAcademy, Network::InternetLan).roots[..]);
+        assert_eq!(
+            args[..9],
+            config(Game::JediAcademy, Network::InternetLan).roots[..]
+        );
         // No password on the command line: it lives in the cfg.
-        assert!(!args.iter().any(|arg| arg.contains("k7m2q9xa") || arg.contains("r4n9d0m")));
+        assert!(!args
+            .iter()
+            .any(|arg| arg.contains("k7m2q9xa") || arg.contains("r4n9d0m")));
     }
 
     #[test]
@@ -575,7 +720,9 @@ mod tests {
             (Network::Internet, true),
         ] {
             let args = server_args(&config(Game::JediAcademy, network));
-            let has = args.windows(3).any(|w| w == ["+set", "net_ip", "127.0.0.1"]);
+            let has = args
+                .windows(3)
+                .any(|w| w == ["+set", "net_ip", "127.0.0.1"]);
             assert_eq!(has, loopback, "{network:?}");
         }
         let jo = server_args(&config(Game::JediOutcast, Network::Internet));
@@ -610,7 +757,8 @@ mod tests {
              set sv_master5 \"\"\n"
         );
         // The relay modes lift the LAN rate exemption; the LAN mode keeps it.
-        assert!(host_config(&config(Game::JediAcademy, Network::Internet)).contains("sv_lanForceRate 0"));
+        assert!(host_config(&config(Game::JediAcademy, Network::Internet))
+            .contains("sv_lanForceRate 0"));
         assert!(!host_config(&config(Game::JediAcademy, Network::Lan)).contains("sv_lanForceRate"));
     }
 
@@ -630,9 +778,93 @@ mod tests {
     }
 
     #[test]
+    fn server_document_assignments_run_before_the_private_session_policy() {
+        let mut config = config(Game::JediAcademy, Network::Internet);
+        config.extra_commands = vec!["set g_gravity \"600\"".into()];
+        let text = host_config(&config);
+        assert!(text.starts_with("set g_gravity \"600\"\n"));
+        assert!(text.contains("set g_password \"k7m2q9xa\"\n"));
+        assert!(text.contains("set sv_master1 \"\"\n"));
+        assert!(server_args(&config)
+            .windows(3)
+            .any(|tokens| tokens == ["+set", "dedicated", "1"]));
+        assert!(server_args(&config)
+            .windows(3)
+            .any(|tokens| tokens == ["+set", "net_ip", "127.0.0.1"]));
+        assert!(server_args(&config).ends_with(&[
+            "+map".into(),
+            "mp/ffa3".into(),
+            "+exec".into(),
+            SETTINGS_FILE.into()
+        ]));
+    }
+
+    #[test]
+    fn staged_configs_reapply_only_checked_cvars_and_are_removed_together() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut config = config(Game::JediAcademy, Network::Internet);
+        config.extra_commands = vec![
+            "set g_gravity \"500\"".into(),
+            "set g_authenticity \"3\"".into(),
+            "set g_maxforcerank \"6\"".into(),
+            "set custom_mod_setting \"1\"".into(),
+            "set g_gravity \"650\"".into(),
+        ];
+        let files = write_configs(temp.path(), &config).unwrap();
+        assert!(temp.path().join(CONFIG_FILE).is_file());
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join(SETTINGS_FILE)).unwrap(),
+            "set g_gravity \"500\"\nset g_gravity \"650\"\n"
+        );
+        let initial = std::fs::read_to_string(temp.path().join(CONFIG_FILE)).unwrap();
+        assert!(initial.contains("set g_authenticity \"3\""));
+        assert!(initial.contains("set g_maxforcerank \"6\""));
+        assert!(initial.contains("set custom_mod_setting \"1\""));
+        drop(files);
+        assert!(!temp.path().join(CONFIG_FILE).exists());
+        assert!(!temp.path().join(SETTINGS_FILE).exists());
+        config
+            .extra_commands
+            .retain(|command| !command.starts_with("set g_gravity "));
+        let _files = write_configs(temp.path(), &config).unwrap();
+        assert!(!temp.path().join(SETTINGS_FILE).exists());
+        assert!(!server_args(&config)
+            .iter()
+            .any(|argument| argument == SETTINGS_FILE));
+    }
+
+    #[test]
+    fn each_game_initialization_reapplies_once_and_a_closed_console_is_not_consumed() {
+        let mut replay = MapSettingsReplay::default();
+        assert!(!replay.reapply_after(0, || panic!("no map initialized")));
+        assert!(replay.reapply_after(1, || true));
+        assert!(!replay.reapply_after(1, || panic!("already applied")));
+        assert!(!replay.reapply_after(2, || false));
+        assert!(replay.reapply_after(2, || true));
+        assert!(!replay.reapply_after(2, || panic!("already applied")));
+        assert!(replay.reapply_after(3, || true));
+    }
+
+    #[test]
+    fn mbii_uses_the_round_limit_on_start_and_after_a_map_change() {
+        let mut config = config(Game::JediAcademy, Network::Internet);
+        config.mod_folder = Some("MBII".into());
+        config.gametype = 7;
+        config.score_limit = 12;
+        assert!(host_config(&config).contains("set fraglimit 12\n"));
+        assert_eq!(
+            change_map_commands(config.game, Some("MBII"), 7, 12, "mb2_test", 3, false),
+            ["g_gametype 3", "fraglimit 12", "map mb2_test"]
+        );
+    }
+
+    #[test]
     fn a_server_name_is_cleaned_down_to_what_a_cfg_can_carry() {
         assert_eq!(clean_server_name("Tray's game"), "Tray's game");
-        assert_eq!(clean_server_name("  ^1Red \"quoted\"; rm\\ -rf  "), "^1Red quoted rm -rf");
+        assert_eq!(
+            clean_server_name("  ^1Red \"quoted\"; rm\\ -rf  "),
+            "^1Red quoted rm -rf"
+        );
         assert_eq!(clean_server_name("Кириллица"), "");
         assert_eq!(clean_server_name(&"x".repeat(50)).len(), MAX_SERVER_NAME);
     }
@@ -642,12 +874,21 @@ mod tests {
         for good in ["k7m2q9xa", "A", "under_score-dash", &"a".repeat(24)] {
             assert!(validate_password(good).is_ok(), "{good}");
         }
-        for bad in ["", "with space", "semi;colon", "quote\"", &"a".repeat(25), "пароль"] {
+        for bad in [
+            "",
+            "with space",
+            "semi;colon",
+            "quote\"",
+            &"a".repeat(25),
+            "пароль",
+        ] {
             assert!(validate_password(bad).is_err(), "{bad}");
         }
         let generated = random_password(PASSWORD_LEN);
         assert_eq!(generated.len(), PASSWORD_LEN);
-        assert!(generated.bytes().all(|byte| PASSWORD_ALPHABET.contains(&byte)));
+        assert!(generated
+            .bytes()
+            .all(|byte| PASSWORD_ALPHABET.contains(&byte)));
         assert!(validate_password(&random_password(RCON_PASSWORD_LEN)).is_ok());
         let id = new_session_id();
         assert_eq!(id.len(), 16);
@@ -658,20 +899,29 @@ mod tests {
     #[test]
     fn a_map_change_sends_one_command_per_packet() {
         assert_eq!(
-            change_map_commands(Game::JediAcademy, 0, 30, "mp/duel1", 3),
+            change_map_commands(Game::JediAcademy, None, 0, 30, "mp/duel1", 3, false),
             ["g_gametype 3", "duel_fraglimit 10", "map mp/duel1"]
         );
         // The same cvar keeps the limit the host chose.
         assert_eq!(
-            change_map_commands(Game::JediAcademy, 0, 30, "mp/ffa5", 6),
+            change_map_commands(Game::JediAcademy, None, 0, 30, "mp/ffa5", 6, false),
             ["g_gametype 6", "fraglimit 30", "map mp/ffa5"]
         );
         // Siege has no score limit.
         assert_eq!(
-            change_map_commands(Game::JediAcademy, 0, 30, "mp/siege_hoth", 7),
+            change_map_commands(Game::JediAcademy, None, 0, 30, "mp/siege_hoth", 7, false),
             ["g_gametype 7", "map mp/siege_hoth"]
         );
         assert!(is_safe_map_name("mp/ffa3"));
+        assert_eq!(
+            change_map_commands(Game::JediAcademy, None, 0, 30, "mp/ffa5", 0, true),
+            [
+                "g_gametype 0",
+                "fraglimit 30",
+                "map mp/ffa5",
+                "exec jknet-host-settings.cfg"
+            ]
+        );
         assert!(is_safe_map_name("ffa_bespin"));
         for bad in ["", "../etc", "mp ffa3", "mp;quit", "/abs", "mp/\"x"] {
             assert!(!is_safe_map_name(bad), "{bad}");
@@ -698,7 +948,9 @@ mod tests {
         let task = tokio::spawn(async move {
             let mut buffer = vec![0u8; 2048];
             while let Ok((read, from)) = socket.recv_from(&mut buffer).await {
-                let Some(payload) = oob_payload(&buffer[..read]) else { continue };
+                let Some(payload) = oob_payload(&buffer[..read]) else {
+                    continue;
+                };
                 if split_command(payload).0 == b"getstatus" {
                     let reply = oob_packet(&format!(
                         "statusResponse\n\\sv_hostname\\Test\\mapname\\mp/ffa3\\jknet_session\\{label}\n0 0 \"^1Bot\"\n3 42 \"Kyle\"\n"

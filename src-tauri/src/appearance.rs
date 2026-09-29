@@ -357,7 +357,10 @@ pub(crate) fn preview_models(path: &Path, cache: &Path) -> Result<Vec<PlayerMode
     preview_models_from_sources(&[path.to_path_buf()], cache)
 }
 
-pub(crate) fn preview_models_from_sources(paths: &[PathBuf], cache: &Path) -> Result<Vec<PlayerModel>> {
+pub(crate) fn preview_models_from_sources(
+    paths: &[PathBuf],
+    cache: &Path,
+) -> Result<Vec<PlayerModel>> {
     scan_models(&preview_archive_sources(paths)?, cache)
 }
 
@@ -368,28 +371,52 @@ pub(crate) fn preview_hilts(paths: &[PathBuf]) -> Result<Vec<SaberHilt>> {
 fn preview_archive_sources(paths: &[PathBuf]) -> Result<Vec<Source>> {
     let mut sources = Vec::new();
     for path in paths {
-        let meta = fs::metadata(path).map_err(|error| AppError::io_path("cannot inspect", path, error))?;
+        let meta =
+            fs::metadata(path).map_err(|error| AppError::io_path("cannot inspect", path, error))?;
         sources.push(Source {
             path: path.to_path_buf(),
-            mtime: meta.modified().ok().and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-                .map(|since| since.as_secs()).unwrap_or(0),
+            mtime: meta
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|since| since.as_secs())
+                .unwrap_or(0),
             size: meta.len(),
         });
     }
     Ok(sources)
 }
 
-pub(crate) fn preview_sources(paths: &DataPaths, settings: &Settings, client: &Client) -> Vec<PathBuf> {
+pub(crate) fn preview_sources(
+    paths: &DataPaths,
+    settings: &Settings,
+    client: &Client,
+) -> Vec<PathBuf> {
     let mut sources = Vec::new();
     let engine = crate::engines::require(&client.engine_id).ok();
-    let active = client.fs_game.as_deref().or(engine.and_then(|e| e.default_fs_game));
+    let active = client
+        .fs_game
+        .as_deref()
+        .or(engine.and_then(|e| e.default_fs_game));
     let mut folders = vec!["base"];
-    if let Some(active) = active.filter(|f| *f != "base") { folders.push(active); }
+    if let Some(active) = active.filter(|f| *f != "base") {
+        folders.push(active);
+    }
     for folder in folders {
-        if crate::user_files::valid_folder(folder).is_err() { continue; }
-        if let Some(game_data) = settings.game_data_path(client.game) { collect_from_folder(&Path::new(game_data).join(folder), &mut sources); }
-        collect_from_folder(&paths.client_engine_dir(&client.id).join(folder), &mut sources);
-        collect_from_folder(&paths.client_home_dir(&client.id).join(folder), &mut sources);
+        if crate::user_files::valid_folder(folder).is_err() {
+            continue;
+        }
+        if let Some(game_data) = settings.game_data_path(client.game) {
+            collect_from_folder(&Path::new(game_data).join(folder), &mut sources);
+        }
+        collect_from_folder(
+            &paths.client_engine_dir(&client.id).join(folder),
+            &mut sources,
+        );
+        collect_from_folder(
+            &paths.client_home_dir(&client.id).join(folder),
+            &mut sources,
+        );
     }
     sources.into_iter().map(|source| source.path).collect()
 }
@@ -409,10 +436,7 @@ fn collect_sources(paths: &DataPaths, settings: &Settings, client: &Client) -> V
     let mut sources = Vec::new();
 
     if let Some(game_data) = settings.game_data_path(client.game) {
-        collect_from_folder(
-            &Path::new(game_data).join(paths::BASE_FOLDER),
-            &mut sources,
-        );
+        collect_from_folder(&Path::new(game_data).join(paths::BASE_FOLDER), &mut sources);
     }
 
     // Every folder under `home\`, not only `base` and the client's own
@@ -477,14 +501,7 @@ fn collect_from_folder(folder: &Path, out: &mut Vec<Source>) {
 fn signature(sources: &[Source]) -> String {
     sources
         .iter()
-        .map(|source| {
-            format!(
-                "{}|{}|{}",
-                source.path.display(),
-                source.size,
-                source.mtime
-            )
-        })
+        .map(|source| format!("{}|{}|{}", source.path.display(), source.size, source.mtime))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -545,7 +562,11 @@ fn icon_entry(entry: &str) -> Option<(String, String, String)> {
     if variant.is_empty() || !ICON_EXTENSIONS.contains(&extension) {
         return None;
     }
-    Some((model.to_string(), variant.to_string(), extension.to_string()))
+    Some((
+        model.to_string(),
+        variant.to_string(),
+        extension.to_string(),
+    ))
 }
 
 /// Reads `models/players/<model>/<row>_<variant>.skin` out of an entry path.
@@ -703,7 +724,9 @@ fn store_icon(
         return Ok(None);
     };
 
-    let tint_mask = PART_PREFIXES.iter().any(|prefix| variant.starts_with(prefix));
+    let tint_mask = PART_PREFIXES
+        .iter()
+        .any(|prefix| variant.starts_with(prefix));
     let encoded = if fits && format != ImageFormat::Tga && !tint_mask {
         bytes.to_vec()
     } else {
@@ -731,8 +754,13 @@ fn store_icon(
                 .write_with_encoder(JpegEncoder::new_with_quality(&mut out, JPEG_QUALITY))?;
         } else {
             // Part icon alpha is a dye mask; the game draws the full RGB base.
-            if tint_mask { decoded.to_rgb8().write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?; }
-            else { decoded.write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?; }
+            if tint_mask {
+                decoded
+                    .to_rgb8()
+                    .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?;
+            } else {
+                decoded.write_to(&mut Cursor::new(&mut out), ImageFormat::Png)?;
+            }
         }
         out
     };
@@ -879,8 +907,8 @@ fn compose_preview(rows: [Option<Vec<u8>>; 3]) -> Result<Option<Vec<u8>>> {
             .resize(PREVIEW_SIDE, PREVIEW_SIDE, FilterType::Triangle)
             .to_rgba8();
         let x = (PREVIEW_SIDE.saturating_sub(scaled.width()) / 2) as i64;
-        let y = (row as u32 * PREVIEW_SIDE + PREVIEW_SIDE.saturating_sub(scaled.height()) / 2)
-            as i64;
+        let y =
+            (row as u32 * PREVIEW_SIDE + PREVIEW_SIDE.saturating_sub(scaled.height()) / 2) as i64;
         // `overlay` blends by alpha, so a cut-away pixel keeps the ground.
         imageops::overlay(&mut sheet, &scaled, x, y);
         drawn += 1;
@@ -1263,8 +1291,8 @@ fn scan_hilts_of(
     hilts: &mut BTreeMap<String, SaberHilt>,
     strings: &mut BTreeMap<String, String>,
 ) -> Result<()> {
-    let file = File::open(&source.path)
-        .map_err(|e| AppError::io_path("cannot open", &source.path, e))?;
+    let file =
+        File::open(&source.path).map_err(|e| AppError::io_path("cannot open", &source.path, e))?;
     let mut archive = ZipArchive::new(BufReader::new(file))?;
 
     let names: Vec<String> = archive
@@ -1433,7 +1461,10 @@ fn parse_sabers(text: &str, source: &str) -> Vec<SaberHilt> {
             }
         }
 
-        if fields.get("notinmp").is_some_and(|value| value.trim() != "0") {
+        if fields
+            .get("notinmp")
+            .is_some_and(|value| value.trim() != "0")
+        {
             continue;
         }
         let saber_type = fields
@@ -1898,7 +1929,10 @@ mod tests {
             &pk3,
             &[
                 // The whole skin of the same folder stays a tile of its own.
-                ("models/players/jedi_hm/model_siege.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/jedi_hm/model_siege.skin",
+                    b"hips,x".to_vec(),
+                ),
                 (
                     "models/players/jedi_hm/icon_siege.jpg",
                     picture(128, 128, ImageFormat::Jpeg),
@@ -1912,7 +1946,10 @@ mod tests {
         let dir = temp.path().join("cache");
         let models = scan_models(&[source_of(&pk3)], &dir).expect("the scan");
         let values: Vec<&str> = models.iter().map(|model| model.value.as_str()).collect();
-        assert_eq!(values, ["jedi_hm/siege", "jedi_hm/head_a1|torso_a1|lower_a1"]);
+        assert_eq!(
+            values,
+            ["jedi_hm/siege", "jedi_hm/head_a1|torso_a1|lower_a1"]
+        );
 
         let assembled = models.last().expect("the assembled tile");
         assert_eq!(assembled.model, "jedi_hm");
@@ -2051,7 +2088,10 @@ mod tests {
             .join(PREVIEW_DIR)
             .join("jedi_hm__head_a1__torso_a1__lower_a1.png");
         assert!(file.is_file(), "the preview of the default combination");
-        assert_eq!(assembled.preview.as_deref(), Some(file.display().to_string().as_str()));
+        assert_eq!(
+            assembled.preview.as_deref(),
+            Some(file.display().to_string().as_str())
+        );
         // And the window is allowed to read it by the same per-file rule the
         // icons go through.
         assert!(
@@ -2171,7 +2211,11 @@ mod tests {
         let models = scan_models(&[source_of(&stock), source_of(&mine)], &dir).expect("scan");
         assert_eq!(models.len(), 1, "one tile per model, not two");
         assert_eq!(models[0].value, "jedi_hm/head_z9|torso_z9|lower_z9");
-        assert!(models[0].source.ends_with("zzz_jedi.pk3"), "{}", models[0].source);
+        assert!(
+            models[0].source.ends_with("zzz_jedi.pk3"),
+            "{}",
+            models[0].source
+        );
     }
 
     #[test]
@@ -2212,7 +2256,10 @@ mod tests {
         assert_eq!(cache_file_name("kyle", "..", "jpg"), None);
         assert_eq!(cache_file_name("", "red", "jpg"), None);
         assert_eq!(cache_file_name("c:", "red", "jpg"), None);
-        assert_eq!(cache_file_name(&"x".repeat(MAX_SEGMENT_LEN + 1), "red", "jpg"), None);
+        assert_eq!(
+            cache_file_name(&"x".repeat(MAX_SEGMENT_LEN + 1), "red", "jpg"),
+            None
+        );
     }
 
     #[test]
@@ -2226,13 +2273,22 @@ mod tests {
             &pk3,
             &[
                 ("models/players/kyle/model_default.skin", b"hips,x".to_vec()),
-                ("models/players/kyle/icon_default.jpg", picture(128, 128, ImageFormat::Jpeg)),
+                (
+                    "models/players/kyle/icon_default.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
                 ("models/players/kyle/model_red.skin", b"hips,x".to_vec()),
-                ("models/players/kyle/icon_red.jpg", picture(128, 128, ImageFormat::Jpeg)),
+                (
+                    "models/players/kyle/icon_red.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
                 // A variant the game hides: a skin with no icon.
                 ("models/players/kyle/model_menu.skin", b"hips,x".to_vec()),
                 // A vehicle: the same shape, and not a player at all.
-                ("models/players/x-wing/model_default.skin", b"hips,x".to_vec()),
+                (
+                    "models/players/x-wing/model_default.skin",
+                    b"hips,x".to_vec(),
+                ),
             ],
         );
 
@@ -2253,7 +2309,10 @@ mod tests {
             &stock,
             &[
                 ("models/players/kyle/model_default.skin", b"hips,x".to_vec()),
-                ("models/players/kyle/icon_default.jpg", picture(128, 128, ImageFormat::Jpeg)),
+                (
+                    "models/players/kyle/icon_default.jpg",
+                    picture(128, 128, ImageFormat::Jpeg),
+                ),
             ],
         );
         let mine = temp.path().join("home").join("zzz_kyle.pk3");
@@ -2261,7 +2320,10 @@ mod tests {
             &mine,
             &[
                 ("models/players/kyle/model_default.skin", b"hips,x".to_vec()),
-                ("models/players/kyle/icon_default.png", picture(64, 64, ImageFormat::Png)),
+                (
+                    "models/players/kyle/icon_default.png",
+                    picture(64, 64, ImageFormat::Png),
+                ),
             ],
         );
 
@@ -2270,7 +2332,11 @@ mod tests {
         assert_eq!(models.len(), 1);
         let icon = models[0].icon.as_deref().expect("an icon");
         assert!(icon.ends_with("kyle__default.png"), "{icon}");
-        assert!(models[0].source.ends_with("zzz_kyle.pk3"), "{}", models[0].source);
+        assert!(
+            models[0].source.ends_with("zzz_kyle.pk3"),
+            "{}",
+            models[0].source
+        );
     }
 
     #[test]
@@ -2327,11 +2393,16 @@ mod tests {
 
         // 20000 × 20000 × 3 bytes out of eighteen bytes of header. The
         // launcher reads archives a player downloaded from anywhere.
-        assert!(
-            store_icon(&tga_header(20_000, 20_000), "kyle", "bomb", "tga", "crafted.pk3", &dir)
-                .expect("an icon over the limit is not an error")
-                .is_none()
-        );
+        assert!(store_icon(
+            &tga_header(20_000, 20_000),
+            "kyle",
+            "bomb",
+            "tga",
+            "crafted.pk3",
+            &dir
+        )
+        .expect("an icon over the limit is not an error")
+        .is_none());
         assert_eq!(fs::read_dir(&dir).expect("cache folder").count(), 0);
     }
 
@@ -2424,8 +2495,14 @@ dual_1
              LANG_ENGLISH        \"Guardian\"\n",
             "menus",
         );
-        assert_eq!(table.get("menus_single_hilt1").map(String::as_str), Some("Arbiter"));
-        assert_eq!(table.get("menus_staff_hilt1").map(String::as_str), Some("Guardian"));
+        assert_eq!(
+            table.get("menus_single_hilt1").map(String::as_str),
+            Some("Arbiter")
+        );
+        assert_eq!(
+            table.get("menus_staff_hilt1").map(String::as_str),
+            Some("Guardian")
+        );
     }
 
     // --- slice: profiles polish ---
@@ -2543,7 +2620,9 @@ dual_1
         assert!(!sources.is_empty(), "no archive in {}", base.display());
 
         let temp = TempDir::new().expect("temp dir");
-        let dir = std::env::var_os("JKNET_ICON_QA_DIR").map(PathBuf::from).unwrap_or_else(|| temp.path().join("skins"));
+        let dir = std::env::var_os("JKNET_ICON_QA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| temp.path().join("skins"));
 
         let started = Instant::now();
         let models = scan_models(&sources, &dir).expect("the skin list");
@@ -2566,8 +2645,10 @@ dual_1
 
         // --- slice: assembled skins ---
         // The six folders of `assets1.pk3` that carry a `playerchoice.txt`.
-        let assembled: Vec<&PlayerModel> =
-            models.iter().filter(|model| model.parts.is_some()).collect();
+        let assembled: Vec<&PlayerModel> = models
+            .iter()
+            .filter(|model| model.parts.is_some())
+            .collect();
         let mut total = 0;
         for model in &assembled {
             let parts = model.parts.as_ref().expect("the three rows");
@@ -2593,7 +2674,11 @@ dual_1
         let started = Instant::now();
         let hilts = scan_hilts(&sources);
         if std::env::var_os("JKNET_ICON_QA_DIR").is_some() {
-            fs::write(dir.join("models.json"), serde_json::to_vec(&models).unwrap()).unwrap();
+            fs::write(
+                dir.join("models.json"),
+                serde_json::to_vec(&models).unwrap(),
+            )
+            .unwrap();
             fs::write(dir.join("hilts.json"), serde_json::to_vec(&hilts).unwrap()).unwrap();
         }
         println!(
@@ -2609,7 +2694,10 @@ dual_1
         // Fifteen hilts are valid for multiplayer in the retail game: `Kyle`,
         // `single_1`..`single_9` and `dual_1`..`dual_5`.
         assert_eq!(hilts.len(), 15, "{hilts:?}");
-        let arbiter = hilts.iter().find(|hilt| hilt.id == "single_1").expect("single_1");
+        let arbiter = hilts
+            .iter()
+            .find(|hilt| hilt.id == "single_1")
+            .expect("single_1");
         assert_eq!(arbiter.name, "Arbiter");
         assert!(!hilts.iter().any(|hilt| hilt.id == "Luke"), "notInMP");
     }
@@ -2622,7 +2710,10 @@ dual_1
         let first = signature(&[source_of(&pk3)]);
         assert_eq!(first, signature(&[source_of(&pk3)]));
 
-        write_pk3(&pk3, &[("models/players/kyle/model_red.skin", b"x".to_vec())]);
+        write_pk3(
+            &pk3,
+            &[("models/players/kyle/model_red.skin", b"x".to_vec())],
+        );
         assert_ne!(first, signature(&[source_of(&pk3)]));
         assert_eq!(signature(&[]), "");
     }

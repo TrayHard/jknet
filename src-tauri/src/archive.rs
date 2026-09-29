@@ -98,10 +98,13 @@ mod tests {
         let mut bytes = Vec::new();
         {
             let mut writer = ZipWriter::new(Cursor::new(&mut bytes));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
             for (name, body) in entries {
                 if name.ends_with('/') {
-                    writer.add_directory(name.trim_end_matches('/'), options).expect("a folder");
+                    writer
+                        .add_directory(name.trim_end_matches('/'), options)
+                        .expect("a folder");
                     continue;
                 }
                 writer.start_file(*name, options).expect("an entry starts");
@@ -125,21 +128,48 @@ mod tests {
         assert_eq!(zip.len(), 6, "folders count in the archive");
         assert_eq!(
             names(&zip, MAX_ENTRIES),
-            ["models/players/reborn/model.glm", "sound/taunt.mp3", "README.txt", "maps/duel.bsp"]
+            [
+                "models/players/reborn/model.glm",
+                "sound/taunt.mp3",
+                "README.txt",
+                "maps/duel.bsp"
+            ]
         );
         // The walk keeps the index of the central directory next to the path.
-        assert_eq!(walk(&zip, MAX_ENTRIES).map(|(index, _)| index).collect::<Vec<_>>(), [1, 2, 3, 5]);
-        assert_eq!(walk(&zip, MAX_ENTRIES).find(|(_, path)| path == "README.txt"), Some((3, "README.txt".to_string())));
+        assert_eq!(
+            walk(&zip, MAX_ENTRIES)
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>(),
+            [1, 2, 3, 5]
+        );
+        assert_eq!(
+            walk(&zip, MAX_ENTRIES).find(|(_, path)| path == "README.txt"),
+            Some((3, "README.txt".to_string()))
+        );
         let all = entries(&mut zip, MAX_ENTRIES).expect("the entries read");
         assert_eq!(all.len(), 4);
         assert_eq!(all[0].path, "models/players/reborn/model.glm");
         assert_eq!(all[0].size, 8);
-        assert_eq!(all[3], Entry { path: "maps/duel.bsp".into(), size: 3 });
+        assert_eq!(
+            all[3],
+            Entry {
+                path: "maps/duel.bsp".into(),
+                size: 3
+            }
+        );
 
         // The limit counts files, not folders, and the walk stops there.
-        assert_eq!(names(&zip, 2), ["models/players/reborn/model.glm", "sound/taunt.mp3"]);
+        assert_eq!(
+            names(&zip, 2),
+            ["models/players/reborn/model.glm", "sound/taunt.mp3"]
+        );
         let two = entries(&mut zip, 2).expect("two entries");
-        assert_eq!(two.iter().map(|entry| entry.path.as_str()).collect::<Vec<_>>(), ["models/players/reborn/model.glm", "sound/taunt.mp3"]);
+        assert_eq!(
+            two.iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            ["models/players/reborn/model.glm", "sound/taunt.mp3"]
+        );
         assert!(names(&zip, 0).is_empty());
         assert!(entries(&mut zip, 0).unwrap().is_empty());
     }

@@ -41,9 +41,8 @@ const PORT_SERVER: u16 = 8806;
 /// How long a frame the test waits for may take.
 const FRAME_TIMEOUT: Duration = Duration::from_secs(10);
 
-type Socket = tokio_tungstenite::WebSocketStream<
-    tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
->;
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// A token and the account it belongs to, without the browser round trip.
 async fn sign_in(mock: &MockOnline) -> (OnlineContext, OnlineUser) {
@@ -148,13 +147,20 @@ async fn a_sent_message_comes_back_on_the_socket_and_settles_the_outbox() {
     chat.outbox().push(OutboxEntry::new(
         &client_id,
         &dm.id,
-        SendDraft { body: "gg".into(), ..SendDraft::default() },
+        SendDraft {
+            body: "gg".into(),
+            ..SendDraft::default()
+        },
     ));
     let sent = client
         .chat_send(
             &ctx,
             &dm.id,
-            &NewMessage { client_id: client_id.clone(), body: "gg".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: client_id.clone(),
+                body: "gg".into(),
+                ..NewMessage::default()
+            },
         )
         .await
         .expect("the message is stored");
@@ -165,7 +171,11 @@ async fn a_sent_message_comes_back_on_the_socket_and_settles_the_outbox() {
         frame.kind == "chat.message" && frame.payload["message"]["clientId"] == client_id.as_str()
     })
     .await;
-    assert!(found, "no chat.message for the send: {:?}", frames_seen.iter().map(|f| &f.kind).collect::<Vec<_>>());
+    assert!(
+        found,
+        "no chat.message for the send: {:?}",
+        frames_seen.iter().map(|f| &f.kind).collect::<Vec<_>>()
+    );
     let frame = frames_seen.last().expect("the frame").clone();
     let parsed = frames::parse(&frame.kind, frame.payload).expect("the frame parses");
     let Frame::Message(message) = parsed.clone() else {
@@ -173,8 +183,14 @@ async fn a_sent_message_comes_back_on_the_socket_and_settles_the_outbox() {
     };
     assert_eq!(message.seq, sent.seq);
     frames::apply(&chat, Some(&me.id), parsed, Instant::now());
-    assert!(chat.outbox().all().is_empty(), "the frame settled the entry");
-    assert_eq!(chat.book().get(&dm.id).map(|c| (c.last_seq, c.unread)), Some((sent.seq, 0)));
+    assert!(
+        chat.outbox().all().is_empty(),
+        "the frame settled the entry"
+    );
+    assert_eq!(
+        chat.book().get(&dm.id).map(|c| (c.last_seq, c.unread)),
+        Some((sent.seq, 0))
+    );
 
     // Kyle reads it, types and answers: three frames of the contract from a
     // real socket, and the answer counts as unread.
@@ -184,15 +200,25 @@ async fn a_sent_message_comes_back_on_the_socket_and_settles_the_outbox() {
     .await;
     assert!(answered, "Kyle never answered");
     let kinds: Vec<&str> = seen.iter().map(|frame| frame.kind.as_str()).collect();
-    assert!(kinds.contains(&"chat.read") && kinds.contains(&"chat.typing"), "{kinds:?}");
+    assert!(
+        kinds.contains(&"chat.read") && kinds.contains(&"chat.typing"),
+        "{kinds:?}"
+    );
     for frame in seen {
         let parsed = frames::parse(&frame.kind, frame.payload).expect("every frame parses");
         frames::apply(&chat, Some(&me.id), parsed, Instant::now());
     }
     let summary = chat.book().get(&dm.id).cloned().expect("known");
     assert_eq!(summary.unread, 1);
-    let kyle_marker = summary.members.iter().find(|m| m.user.id == kyle.id).and_then(|m| m.read_seq);
-    assert!(kyle_marker >= Some(sent.seq), "Kyle's read marker {kyle_marker:?}");
+    let kyle_marker = summary
+        .members
+        .iter()
+        .find(|m| m.user.id == kyle.id)
+        .and_then(|m| m.read_seq);
+    assert!(
+        kyle_marker >= Some(sent.seq),
+        "Kyle's read marker {kyle_marker:?}"
+    );
 
     // The typing hint of the core reaches the service over the same socket.
     socket
@@ -231,7 +257,11 @@ async fn only_a_socket_that_asks_for_chat_hears_chat() {
         .chat_send(
             &ctx,
             &dm.id,
-            &NewMessage { client_id: new_client_id(), body: "hi".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                body: "hi".into(),
+                ..NewMessage::default()
+            },
         )
         .await
         .expect("sent");
@@ -286,46 +316,86 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         .chat_send(
             &ctx,
             &gone.id,
-            &NewMessage { client_id: new_client_id(), body: "hello?".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                body: "hello?".into(),
+                ..NewMessage::default()
+            },
         )
         .await;
     assert_eq!(code_of(refused), "not_friends");
 
     // -- Direct ---------------------------------------------------------------
-    let dm = client.chat_open_direct(&ctx, &kyle).await.expect("the direct conversation");
-    assert_eq!(dm.id, direct_with(&doc.conversations, &kyle).id, "the same one again");
-    assert_eq!(code_of(client.chat_open_direct(&ctx, "01HNOBODY0000000000000000").await), "not_found");
+    let dm = client
+        .chat_open_direct(&ctx, &kyle)
+        .await
+        .expect("the direct conversation");
+    assert_eq!(
+        dm.id,
+        direct_with(&doc.conversations, &kyle).id,
+        "the same one again"
+    );
+    assert_eq!(
+        code_of(
+            client
+                .chat_open_direct(&ctx, "01HNOBODY0000000000000000")
+                .await
+        ),
+        "not_found"
+    );
 
     // -- History --------------------------------------------------------------
     let latest = client
         .chat_messages(&ctx, &school.id, PageAnchor::Latest, Some(3))
         .await
         .expect("a page");
-    assert_eq!(latest.messages.iter().map(|m| m.seq).collect::<Vec<_>>(), [5, 6, 7]);
+    assert_eq!(
+        latest.messages.iter().map(|m| m.seq).collect::<Vec<_>>(),
+        [5, 6, 7]
+    );
     assert!(latest.has_before && !latest.has_after);
     let older = client
         .chat_messages(&ctx, &school.id, PageAnchor::Before(5), Some(2))
         .await
         .expect("a page");
-    assert_eq!(older.messages.iter().map(|m| m.seq).collect::<Vec<_>>(), [3, 4]);
+    assert_eq!(
+        older.messages.iter().map(|m| m.seq).collect::<Vec<_>>(),
+        [3, 4]
+    );
     // The message of the deleted account, the system message of its leaving,
     // the reply to it and the token that named it.
     assert_eq!(older.messages[0].sender_id, None);
     assert!(older.messages[0].is_user());
-    assert_eq!(older.messages[1].system.as_ref().map(|s| s.user_id.clone()), Some(None));
+    assert_eq!(
+        older.messages[1].system.as_ref().map(|s| s.user_id.clone()),
+        Some(None)
+    );
     let around = client
         .chat_messages(&ctx, &school.id, PageAnchor::Around(5), Some(3))
         .await
         .expect("a page");
-    assert_eq!(around.messages.iter().map(|m| m.seq).collect::<Vec<_>>(), [4, 5, 6]);
+    assert_eq!(
+        around.messages.iter().map(|m| m.seq).collect::<Vec<_>>(),
+        [4, 5, 6]
+    );
     let reply = around.messages[1].reply_to.as_ref().expect("a reply");
-    assert_eq!((reply.seq, reply.sender_id.clone(), reply.missing), (3, None, false));
-    assert!(around.messages[2].body.contains("<@deleted>"), "{}", around.messages[2].body);
+    assert_eq!(
+        (reply.seq, reply.sender_id.clone(), reply.missing),
+        (3, None, false)
+    );
+    assert!(
+        around.messages[2].body.contains("<@deleted>"),
+        "{}",
+        around.messages[2].body
+    );
     let newer = client
         .chat_messages(&ctx, &school.id, PageAnchor::After(6), None)
         .await
         .expect("a page");
-    assert_eq!(newer.messages.iter().map(|m| m.seq).collect::<Vec<_>>(), [7]);
+    assert_eq!(
+        newer.messages.iter().map(|m| m.seq).collect::<Vec<_>>(),
+        [7]
+    );
     assert!(newer.messages[0].mentions.contains(&me.id));
 
     // -- Send, replay, read, react, notify -------------------------------------
@@ -336,27 +406,52 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         reply_seq: Some(7),
         ..NewMessage::default()
     };
-    let sent = client.chat_send(&ctx, &school.id, &message).await.expect("stored");
+    let sent = client
+        .chat_send(&ctx, &school.id, &message)
+        .await
+        .expect("stored");
     assert_eq!(sent.seq, 8);
     assert!(sent.mentions.contains(&kyle), "a reply mentions its author");
-    assert!(!sent.body.contains("<@"), "a token of a stranger is rewritten: {}", sent.body);
-    let replayed = client.chat_send(&ctx, &school.id, &message).await.expect("replayed");
+    assert!(
+        !sent.body.contains("<@"),
+        "a token of a stranger is rewritten: {}",
+        sent.body
+    );
+    let replayed = client
+        .chat_send(&ctx, &school.id, &message)
+        .await
+        .expect("replayed");
     assert_eq!(replayed.seq, sent.seq, "a replay is the stored message");
-    assert_eq!(client.chat_read(&ctx, &school.id, 999).await.expect("read"), 8);
+    assert_eq!(
+        client.chat_read(&ctx, &school.id, 999).await.expect("read"),
+        8
+    );
 
     let reactions = client
         .chat_react(&ctx, &school.id, 6, "🔥", true)
         .await
         .expect("reacted");
-    assert!(reactions.iter().any(|r| r.emoji == "🔥" && r.user_ids.contains(&me.id)));
+    assert!(reactions
+        .iter()
+        .any(|r| r.emoji == "🔥" && r.user_ids.contains(&me.id)));
     // The service names the cause: not one emoji.
-    assert_eq!(code_of(client.chat_react(&ctx, &school.id, 6, "no", true).await), "emoji");
-    let muted = client.chat_set_notify(&ctx, &school.id, "mute").await.expect("muted");
+    assert_eq!(
+        code_of(client.chat_react(&ctx, &school.id, 6, "no", true).await),
+        "emoji"
+    );
+    let muted = client
+        .chat_set_notify(&ctx, &school.id, "mute")
+        .await
+        .expect("muted");
     assert_eq!(muted.notify, "mute");
 
     // -- Groups: owner-only rename and history setting (D1, D5) ----------------
     assert_eq!(
-        code_of(client.chat_patch_group(&ctx, &school.id, Some("Mine now"), None).await),
+        code_of(
+            client
+                .chat_patch_group(&ctx, &school.id, Some("Mine now"), None)
+                .await
+        ),
         "owner_only"
     );
     let group_client_id = new_client_id();
@@ -365,12 +460,20 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
             &ctx,
             &group_client_id,
             Some("Duel night"),
-            &[kyle.clone(), mara.clone(), "01HSTRANGER000000000000000".into()],
+            &[
+                kyle.clone(),
+                mara.clone(),
+                "01HSTRANGER000000000000000".into(),
+            ],
         )
         .await
         .expect("a group");
     assert_eq!(created.added, std::slice::from_ref(&kyle));
-    assert_eq!(created.invited, std::slice::from_ref(&mara), "Mara asks before she is added");
+    assert_eq!(
+        created.invited,
+        std::slice::from_ref(&mara),
+        "Mara asks before she is added"
+    );
     assert_eq!(created.refused[0].reason, "not_friend");
     let again = client
         .chat_create_group(&ctx, &group_client_id, Some("Duel night"), &[])
@@ -378,7 +481,12 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         .expect("a replay");
     assert_eq!(again.conversation.id, created.conversation.id);
     let renamed = client
-        .chat_patch_group(&ctx, &created.conversation.id, Some("Duel night 2"), Some(true))
+        .chat_patch_group(
+            &ctx,
+            &created.conversation.id,
+            Some("Duel night 2"),
+            Some(true),
+        )
         .await
         .expect("the owner renames");
     assert_eq!(renamed.title.as_deref(), Some("Duel night 2"));
@@ -399,12 +507,28 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
 
     // -- Server chats ------------------------------------------------------------
     let session = "5e0b7c1f9a2d4c38";
-    let guest = client.chat_join_server(&ctx, session, &jan).await.expect("joined Jan's server chat");
+    let guest = client
+        .chat_join_server(&ctx, session, &jan)
+        .await
+        .expect("joined Jan's server chat");
     assert_eq!(guest.kind, "server");
-    assert_eq!(guest.server.as_ref().map(|s| s.host_id.clone()), Some(jan.clone()));
-    assert_eq!(guest.visible_from_seq, guest.last_seq - 1, "a guest sees from the join");
-    assert_eq!(code_of(client.chat_patch_server(&ctx, session, true).await), "owner_only");
-    assert_eq!(code_of(client.chat_open_server(&ctx, "0000000000000000").await), "not_hosting");
+    assert_eq!(
+        guest.server.as_ref().map(|s| s.host_id.clone()),
+        Some(jan.clone())
+    );
+    assert_eq!(
+        guest.visible_from_seq,
+        guest.last_seq - 1,
+        "a guest sees from the join"
+    );
+    assert_eq!(
+        code_of(client.chat_patch_server(&ctx, session, true).await),
+        "owner_only"
+    );
+    assert_eq!(
+        code_of(client.chat_open_server(&ctx, "0000000000000000").await),
+        "not_hosting"
+    );
 
     // -- Search ------------------------------------------------------------------
     let search = |q: &str, conversation_id: Option<&str>| SearchQuery {
@@ -412,10 +536,16 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         conversation_id: conversation_id.map(str::to_string),
         ..SearchQuery::default()
     };
-    let found = client.chat_search(&ctx, &search("KATA", None)).await.expect("results");
+    let found = client
+        .chat_search(&ctx, &search("KATA", None))
+        .await
+        .expect("results");
     assert_eq!(found.results.len(), 1);
     assert!(found.results[0].message.body.contains("<@deleted>"));
-    assert_eq!(code_of(client.chat_search(&ctx, &search("gg", None)).await), "invalid");
+    assert_eq!(
+        code_of(client.chat_search(&ctx, &search("gg", None)).await),
+        "invalid"
+    );
     client
         .chat_search(&ctx, &search("gg", Some(&school.id)))
         .await
@@ -436,15 +566,29 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         .expect("registered");
     assert!(registered.needs_upload);
     let uploaded = client
-        .chat_upload_file(&ctx, &registered.file.id, png.len() as u64, png.clone().into())
+        .chat_upload_file(
+            &ctx,
+            &registered.file.id,
+            png.len() as u64,
+            png.clone().into(),
+        )
         .await
         .expect("uploaded");
-    assert_eq!((uploaded.file.class.as_str(), uploaded.file.media_type.as_str()), ("image", "image/png"));
+    assert_eq!(
+        (
+            uploaded.file.class.as_str(),
+            uploaded.file.media_type.as_str()
+        ),
+        ("image", "image/png")
+    );
     let again = client
         .chat_register_file(&ctx, &dm.id, "copy.png", png.len() as u64, &sha256, None)
         .await
         .expect("registered again");
-    assert!(!again.needs_upload, "the account already stored these bytes");
+    assert!(
+        !again.needs_upload,
+        "the account already stored these bytes"
+    );
     let with_file = client
         .chat_send(
             &ctx,
@@ -500,12 +644,20 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         .expect("saved");
     assert!(!hidden.share_read_receipts && hidden.share_typing);
     let doc = client.chat_sync(&ctx).await.expect("the sync document");
-    let school = doc.conversations.iter().find(|c| c.id == school.id).expect("Saber school");
+    let school = doc
+        .conversations
+        .iter()
+        .find(|c| c.id == school.id)
+        .expect("Saber school");
     for member in &school.members {
         if member.user.id == me.id {
             assert!(member.read_seq.is_some(), "the player's own marker stays");
         } else {
-            assert_eq!(member.read_seq, None, "{} is hidden both ways", member.user.display_name);
+            assert_eq!(
+                member.read_seq, None,
+                "{} is hidden both ways",
+                member.user.display_name
+            );
         }
     }
     assert_eq!(client.chat_settings(&ctx).await.expect("read back"), hidden);
@@ -516,7 +668,11 @@ async fn the_chat_routes_answer_in_the_shapes_of_the_contract() {
         .await
         .expect("left");
     assert_eq!(
-        code_of(client.chat_conversation(&ctx, &created.conversation.id).await),
+        code_of(
+            client
+                .chat_conversation(&ctx, &created.conversation.id)
+                .await
+        ),
         "not_found"
     );
 }
@@ -562,25 +718,41 @@ async fn a_file_goes_up_stripped_and_comes_back_resumed_and_checked() {
         .await
         .expect("a message with the file");
     let sent = &message.files[0];
-    assert_eq!((sent.name.as_str(), sent.size, sent.class.as_str()), (file.name.as_str(), staged.size, "image"));
+    assert_eq!(
+        (sent.name.as_str(), sent.size, sent.class.as_str()),
+        (file.name.as_str(), staged.size, "image")
+    );
 
     // Down, whole, checked against the ETag.
     let mut quiet = |_: u64, _: u64| {};
-    let whole = files::fetch(&client, &ctx, &temp.path().join("whole"), &file_id, &mut quiet)
-        .await
-        .expect("downloaded");
+    let whole = files::fetch(
+        &client,
+        &ctx,
+        &temp.path().join("whole"),
+        &file_id,
+        &mut quiet,
+    )
+    .await
+    .expect("downloaded");
     assert_eq!(std::fs::read(&whole).expect("the cached copy"), sent_bytes);
 
     // Resumed from a partial download.
     let resumed_dir = temp.path().join("resumed");
     std::fs::create_dir_all(&resumed_dir).expect("the folder");
-    std::fs::write(resumed_dir.join(format!("{file_id}.part")), &sent_bytes[..100]).expect("a partial file");
+    std::fs::write(
+        resumed_dir.join(format!("{file_id}.part")),
+        &sent_bytes[..100],
+    )
+    .expect("a partial file");
     let mut seen: Vec<u64> = Vec::new();
     let mut record = |received: u64, _: u64| seen.push(received);
     let resumed = files::fetch(&client, &ctx, &resumed_dir, &file_id, &mut record)
         .await
         .expect("resumed");
-    assert_eq!(std::fs::read(&resumed).expect("the cached copy"), sent_bytes);
+    assert_eq!(
+        std::fs::read(&resumed).expect("the cached copy"),
+        sent_bytes
+    );
     assert_eq!(seen.first(), Some(&100), "it went on from the partial file");
 
     // A partial file that does not belong: the hash catches the splice, the
@@ -590,7 +762,10 @@ async fn a_file_goes_up_stripped_and_comes_back_resumed_and_checked() {
     let spoiled = spoiled_dir.join(format!("{file_id}.part"));
     std::fs::write(&spoiled, vec![b'x'; 100]).expect("a partial file");
     let refused = files::fetch(&client, &ctx, &spoiled_dir, &file_id, &mut quiet).await;
-    assert!(matches!(refused, Err(AppError::Network(ref reason)) if reason.contains("hash")), "{refused:?}");
+    assert!(
+        matches!(refused, Err(AppError::Network(ref reason)) if reason.contains("hash")),
+        "{refused:?}"
+    );
     assert!(!spoiled.exists());
     let again = files::fetch(&client, &ctx, &spoiled_dir, &file_id, &mut quiet)
         .await
@@ -599,21 +774,38 @@ async fn a_file_goes_up_stripped_and_comes_back_resumed_and_checked() {
 
     // The service lost the bytes: the file is gone, not merely remote.
     let status = reqwest::Client::new()
-        .post(format!("{}/v1/dev/chat/files/{file_id}/lose", mock.base_url()))
+        .post(format!(
+            "{}/v1/dev/chat/files/{file_id}/lose",
+            mock.base_url()
+        ))
         .bearer_auth(ctx.token.as_deref().unwrap_or_default())
         .send()
         .await
         .expect("the mock answers")
         .status();
     assert_eq!(status.as_u16(), 200);
-    let lost = files::fetch(&client, &ctx, &temp.path().join("lost"), &file_id, &mut quiet).await;
+    let lost = files::fetch(
+        &client,
+        &ctx,
+        &temp.path().join("lost"),
+        &file_id,
+        &mut quiet,
+    )
+    .await;
     let error = lost.expect_err("the bytes are gone");
     assert_eq!(files::status_after(&error), LocalStatus::Gone);
     assert_eq!(code_of(Err::<(), _>(error)), "file_gone");
     // And registering the same bytes again asks for them, since the lost
     // copy cannot spare the upload.
     let registered = client
-        .chat_register_file(&ctx, &dm.id, &staged.name, staged.size, &staged.sha256, staged.meta.as_ref())
+        .chat_register_file(
+            &ctx,
+            &dm.id,
+            &staged.name,
+            staged.size,
+            &staged.sha256,
+            staged.meta.as_ref(),
+        )
         .await
         .expect("registered again");
     assert!(registered.needs_upload);
@@ -656,7 +848,10 @@ async fn every_card_kind_passes_the_checks_and_opens_in_its_editor() {
                 Card::Bind(_) | Card::Config(_) => {
                     let opened = cards::config_from_card(&card, Game::JediAcademy).expect("opens");
                     assert!(!opened.document.text.is_empty());
-                    assert!(!opened.dangers.is_empty(), "the showcase holds a dangerous line");
+                    assert!(
+                        !opened.dangers.is_empty(),
+                        "the showcase holds a dangerous line"
+                    );
                 }
                 _ => {}
             }
@@ -688,13 +883,18 @@ async fn every_card_kind_passes_the_checks_and_opens_in_its_editor() {
     }
 
     // A card built here goes out and comes back as it was built.
-    let built = cards::prepare(&[serde_json::json!({ "type": "map", "game": "ja", "name": "mp/ffa3" })])
-        .expect("a map card");
+    let built =
+        cards::prepare(&[serde_json::json!({ "type": "map", "game": "ja", "name": "mp/ffa3" })])
+            .expect("a map card");
     let sent = client
         .chat_send(
             &ctx,
             &with_jan.id,
-            &NewMessage { client_id: new_client_id(), cards: built.clone(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                cards: built.clone(),
+                ..NewMessage::default()
+            },
         )
         .await
         .expect("stored");
@@ -710,9 +910,17 @@ struct GuestView {
 }
 
 /// A friend of the cast joins the chat of the server the account hosts.
-async fn guest_joins(mock: &MockOnline, ctx: &OnlineContext, session: &str, user_id: &str) -> GuestView {
+async fn guest_joins(
+    mock: &MockOnline,
+    ctx: &OnlineContext,
+    session: &str,
+    user_id: &str,
+) -> GuestView {
     let text = reqwest::Client::new()
-        .post(format!("{}/v1/dev/chat/servers/{session}/join", mock.base_url()))
+        .post(format!(
+            "{}/v1/dev/chat/servers/{session}/join",
+            mock.base_url()
+        ))
         .bearer_auth(ctx.token.as_deref().unwrap_or_default())
         .header("content-type", "application/json")
         .body(serde_json::json!({ "userId": user_id }).to_string())
@@ -732,7 +940,10 @@ async fn heartbeat(client: &OnlineClient, ctx: &OnlineContext, hosting: Option<H
         hosting,
         ..PresenceUpdate::default()
     };
-    client.put_presence(ctx, &update).await.expect("the heartbeat is stored");
+    client
+        .put_presence(ctx, &update)
+        .await
+        .expect("the heartbeat is stored");
 }
 
 fn hosting_of(session: &str) -> HostingInfo {
@@ -771,40 +982,79 @@ async fn a_server_chat_opens_with_the_server_takes_its_guests_and_ends_with_it()
     let mut chats = ServerChats::default();
 
     // -- The host: the chat opens once a heartbeat carried the server ---------
-    assert_eq!(code_of(client.chat_open_server(&ctx, session).await), "not_hosting");
+    assert_eq!(
+        code_of(client.chat_open_server(&ctx, session).await),
+        "not_hosting"
+    );
     heartbeat(&client, &ctx, Some(hosting_of(session))).await;
-    assert_eq!(chats.plan_open(session, |_| false), OpenPlan::Open { superseded: None });
-    let opened = client.chat_open_server(&ctx, session).await.expect("the chat opens");
+    assert_eq!(
+        chats.plan_open(session, |_| false),
+        OpenPlan::Open { superseded: None }
+    );
+    let opened = client
+        .chat_open_server(&ctx, session)
+        .await
+        .expect("the chat opens");
     assert_eq!(chats.opened(session, &opened.id), Opened::Keep);
     assert_eq!(opened.kind, "server");
     assert_eq!(
         opened.server,
-        Some(ServerChatRef { host_id: me.id.clone(), session_id: session.into() })
+        Some(ServerChatRef {
+            host_id: me.id.clone(),
+            session_id: session.into()
+        })
     );
-    assert!(!opened.history_for_new_members, "a new server chat starts with history off (D1)");
-    let again = client.chat_open_server(&ctx, session).await.expect("opened again");
+    assert!(
+        !opened.history_for_new_members,
+        "a new server chat starts with history off (D1)"
+    );
+    let again = client
+        .chat_open_server(&ctx, session)
+        .await
+        .expect("opened again");
     assert_eq!(again.id, opened.id, "the open of an open chat answers it");
-    assert_eq!(chats.plan_open(session, |id| id == opened.id), OpenPlan::Nothing);
+    assert_eq!(
+        chats.plan_open(session, |id| id == opened.id),
+        OpenPlan::Nothing
+    );
 
     // -- Guests: history only from the join, until the host turns it on (D1) --
     client
         .chat_send(
             &ctx,
             &opened.id,
-            &NewMessage { client_id: new_client_id(), body: "warming up".into(), ..NewMessage::default() },
+            &NewMessage {
+                client_id: new_client_id(),
+                body: "warming up".into(),
+                ..NewMessage::default()
+            },
         )
         .await
         .expect("the host writes");
     let kyle_sees = guest_joins(&mock, &ctx, session, &kyle).await;
-    assert_eq!(kyle_sees.seqs.len(), 1, "Kyle sees his join message only: {kyle_sees:?}");
+    assert_eq!(
+        kyle_sees.seqs.len(),
+        1,
+        "Kyle sees his join message only: {kyle_sees:?}"
+    );
     assert_eq!(kyle_sees.visible_from_seq, kyle_sees.seqs[0] - 1);
-    let on = client.chat_patch_server(&ctx, session, true).await.expect("the host switches");
+    let on = client
+        .chat_patch_server(&ctx, session, true)
+        .await
+        .expect("the host switches");
     assert!(on.history_for_new_members);
     let mara_sees = guest_joins(&mock, &ctx, session, &mara).await;
     assert_eq!(mara_sees.visible_from_seq, 0);
-    assert_eq!(mara_sees.seqs.first(), Some(&1), "Mara sees the chat from its start");
+    assert_eq!(
+        mara_sees.seqs.first(),
+        Some(&1),
+        "Mara sees the chat from its start"
+    );
     let kyle_again = guest_joins(&mock, &ctx, session, &kyle).await;
-    assert_eq!(kyle_again.visible_from_seq, kyle_sees.visible_from_seq, "Kyle keeps what he saw");
+    assert_eq!(
+        kyle_again.visible_from_seq, kyle_sees.visible_from_seq,
+        "Kyle keeps what he saw"
+    );
 
     // -- A guest of a friend's server: joined, and the switch is not theirs ---
     let jan_session = "5e0b7c1f9a2d4c38";
@@ -813,9 +1063,19 @@ async fn a_server_chat_opens_with_the_server_takes_its_guests_and_ends_with_it()
     })
     .await
     .expect("joined Jan's server chat");
-    assert_eq!(guest.server.as_ref().map(|s| s.host_id.as_str()), Some(jan.as_str()));
-    assert_eq!(guest.visible_from_seq, guest.last_seq - 1, "a guest sees from the join");
-    assert_eq!(code_of(client.chat_patch_server(&ctx, jan_session, true).await), "owner_only");
+    assert_eq!(
+        guest.server.as_ref().map(|s| s.host_id.as_str()),
+        Some(jan.as_str())
+    );
+    assert_eq!(
+        guest.visible_from_seq,
+        guest.last_seq - 1,
+        "a guest sees from the join"
+    );
+    assert_eq!(
+        code_of(client.chat_patch_server(&ctx, jan_session, true).await),
+        "owner_only"
+    );
     // A host with no chat for that session: asked four times, then given up.
     let mut asked = 0;
     let missing = server::retry_join(&[Duration::from_millis(10); 3], || {
@@ -830,18 +1090,28 @@ async fn a_server_chat_opens_with_the_server_takes_its_guests_and_ends_with_it()
         .chat_remove_member(&ctx, &guest.id, &me.id)
         .await
         .expect("left Jan's server chat");
-    assert_eq!(code_of(client.chat_conversation(&ctx, &guest.id).await), "not_found");
+    assert_eq!(
+        code_of(client.chat_conversation(&ctx, &guest.id).await),
+        "not_found"
+    );
 
     // -- The server stops: the chat ends for everybody --------------------------
     assert_eq!(chats.closing(session), Some(opened.id.clone()));
     server::close_on_service(&client, &ctx, session).await;
     let (seen, ended) = read_until(&mut socket, FRAME_TIMEOUT, |frame| {
-        frame.kind == "chat.conversation.removed" && frame.payload["conversationId"] == opened.id.as_str()
+        frame.kind == "chat.conversation.removed"
+            && frame.payload["conversationId"] == opened.id.as_str()
     })
     .await;
     assert!(ended, "no chat.conversation.removed for the stopped server");
-    assert_eq!(seen.last().map(|frame| frame.payload["reason"].clone()), Some("ended".into()));
-    assert_eq!(code_of(client.chat_conversation(&ctx, &opened.id).await), "not_found");
+    assert_eq!(
+        seen.last().map(|frame| frame.payload["reason"].clone()),
+        Some("ended".into())
+    );
+    assert_eq!(
+        code_of(client.chat_conversation(&ctx, &opened.id).await),
+        "not_found"
+    );
     client
         .chat_close_server(&ctx, session)
         .await
@@ -852,7 +1122,10 @@ async fn a_server_chat_opens_with_the_server_takes_its_guests_and_ends_with_it()
     // -- A heartbeat without the server ends a chat the stop did not ------------
     let next = "fedcba9876543210";
     heartbeat(&client, &ctx, Some(hosting_of(next))).await;
-    let reopened = client.chat_open_server(&ctx, next).await.expect("the next server's chat");
+    let reopened = client
+        .chat_open_server(&ctx, next)
+        .await
+        .expect("the next server's chat");
     assert_ne!(reopened.id, opened.id);
     heartbeat(&client, &ctx, None).await;
     let (_, ended) = read_until(&mut socket, FRAME_TIMEOUT, |frame| {

@@ -94,7 +94,7 @@ export function InvitePanel({
   const ordered = [...groups.active, ...groups.offline];
 
   const shell = cn(
-    "flex flex-col gap-12 w-320 shrink-0 rounded-lg border border-line bg-surface p-16 overflow-y-auto",
+    "flex flex-col gap-12 w-300 shrink-0 self-start max-h-full rounded-lg border border-line bg-surface p-16 overflow-y-auto",
     className,
   );
 
@@ -169,7 +169,7 @@ export function InvitePanel({
       <ChatFromWebSwitch state={chatFromWeb} onChange={onChatFromWebChange} />
       <div aria-hidden="true" className="h-px shrink-0 bg-line-subtle" />
       {mode === "select" ? (
-        <p className="text-body-sm text-fg-muted">{t("panel.caption")}</p>
+        <p className="text-body-sm text-fg-muted">{t("panel.selected", { count: new Set([...marked, ...lockedMarks]).size })}</p>
       ) : session !== null && relayDown(session) ? (
         <Notice tone="warm">{t("panel.relayNeeded")}</Notice>
       ) : null}
@@ -241,7 +241,6 @@ function ChatFromWebSwitch({
       {/* The switch dims itself when off-limits; the words dim like the policy above. */}
       <span className={cn("flex-1 min-w-0 flex flex-col gap-2", state.disabled && "opacity-60")}>
         <span className="text-body-sm text-fg">{title}</span>
-        <span className="text-body-sm text-fg-muted">{t("policy.chatFromWebHint")}</span>
       </span>
       <Toggle
         checked={state.checked}

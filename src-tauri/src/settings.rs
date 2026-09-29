@@ -436,7 +436,11 @@ pub fn parse_clock(text: &str) -> Option<u16> {
     if hours.is_empty() || hours.len() > 2 || minutes.len() != 2 {
         return None;
     }
-    if !hours.bytes().chain(minutes.bytes()).all(|b| b.is_ascii_digit()) {
+    if !hours
+        .bytes()
+        .chain(minutes.bytes())
+        .all(|b| b.is_ascii_digit())
+    {
         return None;
     }
     let hours: u16 = hours.parse().ok()?;
@@ -523,6 +527,7 @@ pub struct WindowBounds {
 #[serde(default, rename_all = "camelCase")]
 pub struct HostDefaults {
     pub client_id: Option<String>,
+    pub server_config_id: Option<String>,
     pub map: Option<String>,
     pub gametype: u8,
     pub max_players: u8,
@@ -738,10 +743,11 @@ impl Settings {
 
     /// The `GameData` folder of one game, or the error naming what to do.
     pub fn require_game_data_path(&self, game: Game) -> Result<&str> {
-        self.game_data_path(game).ok_or_else(|| AppError::GameDataMissing {
-            game: game.display_name(),
-            reason: "the folder is not set. Pick it on the Settings screen first.".into(),
-        })
+        self.game_data_path(game)
+            .ok_or_else(|| AppError::GameDataMissing {
+                game: game.display_name(),
+                reason: "the folder is not set. Pick it on the Settings screen first.".into(),
+            })
     }
 
     /// The game a command works in when the caller named none.
@@ -1297,7 +1303,10 @@ pub fn update_settings(
     settings.save(&state)?;
     state.set_settings(settings.clone())?;
     state.paths()?.ensure()?;
-    log::info!("settings updated, data root is {}", state.paths()?.root.display());
+    log::info!(
+        "settings updated, data root is {}",
+        state.paths()?.root.display()
+    );
     // --- slice: jkhub index startup ---
     // Only the switch, not every write: the settings document is also where
     // favourites and the server history land, and neither of those is worth
@@ -1311,8 +1320,10 @@ pub fn update_settings(
         }
     }
     // --- slice: clients page ---
-    if (settings.default_client_ids.clone(), settings.default_client_id.clone())
-        != was_defaults
+    if (
+        settings.default_client_ids.clone(),
+        settings.default_client_id.clone(),
+    ) != was_defaults
     {
         emit_default_clients(&app, &settings);
     }
@@ -1333,16 +1344,17 @@ mod tests {
         Settings {
             game_data_paths: BTreeMap::from([
                 (Game::JediAcademy, "D:\\SteamLibrary\\GameData".to_string()),
-                (Game::JediOutcast, "D:\\SteamLibrary\\JK2\\GameData".to_string()),
+                (
+                    Game::JediOutcast,
+                    "D:\\SteamLibrary\\JK2\\GameData".to_string(),
+                ),
             ]),
             active_game: Game::JediAcademy,
             // --- slice: i18n ---
             language: "ru".into(),
             legacy_game_data_path: None,
             default_client_id: Some("everyday".into()),
-            default_client_ids: BTreeMap::from([
-                (Game::JediAcademy, "everyday".to_string()),
-            ]),
+            default_client_ids: BTreeMap::from([(Game::JediAcademy, "everyday".to_string())]),
             close_on_launch: false,
             data_dir_override: Some("D:\\JKNet".into()),
             library_conflict_notice_dismissed: false,
@@ -1454,13 +1466,22 @@ mod tests {
         assert!(notify.in_app && notify.os && notify.sound && notify.show_text);
         assert_eq!(notify.sound_name, DEFAULT_CHAT_SOUND);
         assert!(!notify.dnd, "Do not disturb starts off");
-        assert!(!notify.mentions_break_dnd, "mentions stay silent in DND (D7)");
+        assert!(
+            !notify.mentions_break_dnd,
+            "mentions stay silent in DND (D7)"
+        );
         assert!(notify.dnd_in_game && notify.summary_after_game);
         assert_eq!(notify.quiet_hours, None);
-        assert!(settings.close_to_tray, "the close button hides to the tray (D6)");
+        assert!(
+            settings.close_to_tray,
+            "the close button hides to the tray (D6)"
+        );
         assert!(!settings.close_to_tray_hint_seen);
         assert!(settings.start_minimized);
-        assert_eq!(settings.chat_auto_download_mb, DEFAULT_CHAT_AUTO_DOWNLOAD_MB);
+        assert_eq!(
+            settings.chat_auto_download_mb,
+            DEFAULT_CHAT_AUTO_DOWNLOAD_MB
+        );
 
         // A document written before chat notifications reads as the defaults,
         // and so does a block that lacks a switch added later.
@@ -1546,17 +1567,29 @@ mod tests {
             r#"{"chatAutoDownloadMb":26}"#,
         ] {
             let error = patch(json).validate().expect_err(json);
-            assert!(matches!(error, AppError::InvalidInput(_)), "{json}: {error:?}");
+            assert!(
+                matches!(error, AppError::InvalidInput(_)),
+                "{json}: {error:?}"
+            );
         }
         for name in CHAT_SOUNDS {
-            patch(&format!(r#"{{"chatNotifications":{{"soundName":"{name}"}}}}"#))
-                .validate()
-                .expect("a shipped sound");
+            patch(&format!(
+                r#"{{"chatNotifications":{{"soundName":"{name}"}}}}"#
+            ))
+            .validate()
+            .expect("a shipped sound");
         }
-        patch(r#"{"chatAutoDownloadMb":0}"#).validate().expect("0 turns it off");
-        patch(r#"{"chatAutoDownloadMb":25}"#).validate().expect("the largest file");
+        patch(r#"{"chatAutoDownloadMb":0}"#)
+            .validate()
+            .expect("0 turns it off");
+        patch(r#"{"chatAutoDownloadMb":25}"#)
+            .validate()
+            .expect("the largest file");
         // An unknown switch is refused like an unknown field of the patch.
-        assert!(serde_json::from_str::<SettingsPatch>(r#"{"chatNotifications":{"volume":70}}"#).is_err());
+        assert!(
+            serde_json::from_str::<SettingsPatch>(r#"{"chatNotifications":{"volume":70}}"#)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1564,7 +1597,9 @@ mod tests {
         assert_eq!(parse_clock("00:00"), Some(0));
         assert_eq!(parse_clock("8:30"), Some(8 * 60 + 30));
         assert_eq!(parse_clock(" 23:59 "), Some(23 * 60 + 59));
-        for bad in ["", "24:00", "12:60", "12", "12:5", "123:00", "ab:cd", "+1:00", "12:00:00"] {
+        for bad in [
+            "", "24:00", "12:60", "12", "12:5", "123:00", "ab:cd", "+1:00", "12:00:00",
+        ] {
             assert_eq!(parse_clock(bad), None, "{bad:?}");
         }
         assert_eq!(format_clock(65), "01:05");
@@ -1759,9 +1794,15 @@ mod tests {
         assert!(reloaded.library_conflict_notice_dismissed);
 
         let mut legacy = serde_json::to_value(&settings).unwrap();
-        legacy.as_object_mut().unwrap().remove("libraryConflictNoticeDismissed");
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("libraryConflictNoticeDismissed");
         let migrated: Settings = serde_json::from_value(legacy).unwrap();
-        assert!(!migrated.library_conflict_notice_dismissed, "old settings show the notice once");
+        assert!(
+            !migrated.library_conflict_notice_dismissed,
+            "old settings show the notice once"
+        );
     }
 
     #[test]
@@ -1771,8 +1812,14 @@ mod tests {
         let mut settings = filled();
         patch(r#"{"gameDataPaths":{"ja":"E:\\Games\\GameData"}}"#).apply(&mut settings);
 
-        assert_eq!(settings.game_data_path(Game::JediAcademy), Some("E:\\Games\\GameData"));
-        assert_eq!(settings.extra_launch_args, "+set r_fullscreen 0 +set r_mode 4");
+        assert_eq!(
+            settings.game_data_path(Game::JediAcademy),
+            Some("E:\\Games\\GameData")
+        );
+        assert_eq!(
+            settings.extra_launch_args,
+            "+set r_fullscreen 0 +set r_mode 4"
+        );
         assert_eq!(settings.default_client_id.as_deref(), Some("everyday"));
         assert_eq!(settings.data_dir_override.as_deref(), Some("D:\\JKNet"));
         assert_eq!(settings.favorite_servers.len(), 1);
@@ -1853,8 +1900,8 @@ mod tests {
         // file. The defaults are not the zero values of the fields, so a
         // derived `Default` would open the screen on a row of empty strings
         // that matches nothing.
-        let older: Settings = serde_json::from_str(r#"{"closeOnLaunch":true}"#)
-            .expect("an older document parses");
+        let older: Settings =
+            serde_json::from_str(r#"{"closeOnLaunch":true}"#).expect("an older document parses");
         assert_eq!(older.server_filters.gametype, "any");
         assert_eq!(older.server_filters.mod_name, "any");
         assert_eq!(older.server_filters.players, "any");
@@ -1904,10 +1951,9 @@ mod tests {
         // `settings.json` is a file without it. Reading one as «no server is
         // hidden» is what keeps the browser showing the list it showed before
         // the update; anything else would be a screen that lost rows.
-        let file: Settings = serde_json::from_str(
-            r#"{"activeGame":"ja","favoriteServers":["203.0.113.10:29070"]}"#,
-        )
-        .expect("a document without the field parses");
+        let file: Settings =
+            serde_json::from_str(r#"{"activeGame":"ja","favoriteServers":["203.0.113.10:29070"]}"#)
+                .expect("a document without the field parses");
         assert!(file.hidden_servers.is_empty());
         assert_eq!(file.favorite_servers.len(), 1);
     }
@@ -1934,7 +1980,10 @@ mod tests {
         assert_eq!(settings.hidden_servers.len(), 2);
         // Two lists of addresses in one document: hiding a server is not
         // unstarring it, and the screen shows both marks on the same row.
-        assert_eq!(settings.favorite_servers, vec!["203.0.113.10:29070".to_string()]);
+        assert_eq!(
+            settings.favorite_servers,
+            vec!["203.0.113.10:29070".to_string()]
+        );
 
         patch(r#"{"closeOnLaunch":true}"#).apply(&mut settings);
         assert_eq!(settings.hidden_servers.len(), 2);
@@ -1954,8 +2003,8 @@ mod tests {
         // The container-level `#[serde(default)]` fills a missing field from
         // `Settings::default()`, so this is the test that proves the manual
         // `Default` and not a derived one is in force.
-        let older: Settings = serde_json::from_str(r#"{"closeOnLaunch":true}"#)
-            .expect("an older document parses");
+        let older: Settings =
+            serde_json::from_str(r#"{"closeOnLaunch":true}"#).expect("an older document parses");
         assert_eq!(older.online_url, crate::online::default_online_url());
         assert_eq!(older.online_token, None);
         assert_eq!(older.online_user, None);
@@ -1983,7 +2032,10 @@ mod tests {
         assert_eq!(older.online_url, "https://online.jknet.gg");
         assert_eq!(older.online_token.as_deref(), Some("0123456789abcdef"));
         assert_eq!(
-            older.online_user.as_ref().map(|user| user.display_name.as_str()),
+            older
+                .online_user
+                .as_ref()
+                .map(|user| user.display_name.as_str()),
             Some("Kyle")
         );
 
@@ -1991,10 +2043,16 @@ mod tests {
         // the first write, so the alias never has to be read twice.
         let written = serde_json::to_string(&older).expect("the document serializes");
         for new_key in ["onlineUrl", "onlineToken", "onlineUser"] {
-            assert!(written.contains(new_key), "{new_key} is missing from {written}");
+            assert!(
+                written.contains(new_key),
+                "{new_key} is missing from {written}"
+            );
         }
         for old_key in ["hubUrl", "hubToken", "hubUser"] {
-            assert!(!written.contains(old_key), "{old_key} is still in {written}");
+            assert!(
+                !written.contains(old_key),
+                "{old_key} is still in {written}"
+            );
         }
     }
 
@@ -2040,9 +2098,15 @@ mod tests {
     fn a_service_address_without_an_http_scheme_is_refused() {
         // Storing it would move the complaint from the field the player typed
         // into to every later call to the service.
-        assert!(patch(r#"{"onlineUrl":"127.0.0.1:8787"}"#).validate().is_err());
-        assert!(patch(r#"{"onlineUrl":"file:///C:/online"}"#).validate().is_err());
-        assert!(patch(r#"{"onlineUrl":"https://online.jknet.gg"}"#).validate().is_ok());
+        assert!(patch(r#"{"onlineUrl":"127.0.0.1:8787"}"#)
+            .validate()
+            .is_err());
+        assert!(patch(r#"{"onlineUrl":"file:///C:/online"}"#)
+            .validate()
+            .is_err());
+        assert!(patch(r#"{"onlineUrl":"https://online.jknet.gg"}"#)
+            .validate()
+            .is_ok());
         assert!(patch(r#"{"onlineUrl":"  "}"#).validate().is_ok());
         assert!(patch("{}").validate().is_ok());
     }
@@ -2126,7 +2190,10 @@ mod tests {
         // Nothing is invented for the game the player has not set up.
         assert_eq!(older.game_data_path(Game::JediOutcast), None);
         assert_eq!(
-            older.default_client_ids.get(&Game::JediAcademy).map(String::as_str),
+            older
+                .default_client_ids
+                .get(&Game::JediAcademy)
+                .map(String::as_str),
             Some("everyday")
         );
         // The single field stays: the Play button is not scoped yet.
@@ -2147,7 +2214,10 @@ mod tests {
         assert!(!settings.migrate(), "there is nothing left to move");
         assert_eq!(settings.game_data_path(Game::JediAcademy), Some("E:\\new"));
         assert_eq!(
-            settings.default_client_ids.get(&Game::JediAcademy).map(String::as_str),
+            settings
+                .default_client_ids
+                .get(&Game::JediAcademy)
+                .map(String::as_str),
             Some("ffa")
         );
 
@@ -2171,8 +2241,7 @@ mod tests {
 
     #[test]
     fn a_settings_file_without_the_game_fields_reads_as_jedi_academy() {
-        let older: Settings =
-            serde_json::from_str(r#"{"closeOnLaunch":true}"#).expect("it parses");
+        let older: Settings = serde_json::from_str(r#"{"closeOnLaunch":true}"#).expect("it parses");
         assert_eq!(older.active_game, Game::JediAcademy);
         assert!(older.game_data_paths.is_empty());
         assert!(older.default_client_ids.is_empty());
@@ -2182,8 +2251,7 @@ mod tests {
     fn a_patch_edits_one_game_and_leaves_the_other_alone() {
         // The Settings screen shows two rows and saves the row that changed.
         let mut settings = filled();
-        patch(r#"{"gameDataPaths":{"jo":"E:\\GOG\\Jedi Outcast\\GameData"}}"#)
-            .apply(&mut settings);
+        patch(r#"{"gameDataPaths":{"jo":"E:\\GOG\\Jedi Outcast\\GameData"}}"#).apply(&mut settings);
         assert_eq!(
             settings.game_data_path(Game::JediOutcast),
             Some("E:\\GOG\\Jedi Outcast\\GameData")
@@ -2207,7 +2275,10 @@ mod tests {
     fn the_one_game_field_still_writes_the_jedi_academy_entry() {
         let mut settings = Settings::default();
         patch(r#"{"gameDataPath":"D:\\GameData"}"#).apply(&mut settings);
-        assert_eq!(settings.game_data_path(Game::JediAcademy), Some("D:\\GameData"));
+        assert_eq!(
+            settings.game_data_path(Game::JediAcademy),
+            Some("D:\\GameData")
+        );
         assert_eq!(settings.game_data_path(Game::JediOutcast), None);
     }
 
@@ -2223,8 +2294,7 @@ mod tests {
 
         // And the map clears the entry the old field just wrote, rather than
         // the old field restoring it.
-        patch(r#"{"gameDataPath":"D:\\Old","gameDataPaths":{"ja":null}}"#)
-            .apply(&mut settings);
+        patch(r#"{"gameDataPath":"D:\\Old","gameDataPaths":{"ja":null}}"#).apply(&mut settings);
         assert_eq!(settings.game_data_path(Game::JediAcademy), None);
     }
 
@@ -2244,7 +2314,10 @@ mod tests {
     fn a_command_without_a_game_works_in_the_active_one() {
         let mut settings = Settings::default();
         assert_eq!(settings.game_or_active(None), Game::JediAcademy);
-        assert_eq!(settings.game_or_active(Some(Game::JediOutcast)), Game::JediOutcast);
+        assert_eq!(
+            settings.game_or_active(Some(Game::JediOutcast)),
+            Game::JediOutcast
+        );
         settings.active_game = Game::JediOutcast;
         assert_eq!(settings.game_or_active(None), Game::JediOutcast);
     }
@@ -2275,7 +2348,9 @@ mod tests {
     fn only_a_language_with_a_catalog_may_be_stored() {
         for value in ["system", "en", "ru", "uk", "de", "fr", "es", "pl", "hu"] {
             let patch = patch(&format!(r#"{{"language":{value:?}}}"#));
-            patch.validate().expect("a language with a catalog is accepted");
+            patch
+                .validate()
+                .expect("a language with a catalog is accepted");
         }
 
         // A tag with a region, a language JKNet does not speak and an empty
@@ -2374,7 +2449,10 @@ mod tests {
         );
         // The engine cuts a name to `MAX_NETNAME`, so a longer one is not a
         // name anybody would see.
-        assert_eq!(clean_nicknames(vec!["x".repeat(MAX_NICKNAME_LEN + 1)]), Vec::<String>::new());
+        assert_eq!(
+            clean_nicknames(vec!["x".repeat(MAX_NICKNAME_LEN + 1)]),
+            Vec::<String>::new()
+        );
         // And it counts bytes: eighteen Cyrillic letters fill the buffer,
         // nineteen overflow it.
         assert_eq!(
@@ -2391,7 +2469,9 @@ mod tests {
             Vec::<String>::new()
         );
         // And the list cannot grow without end under a form that prepends.
-        let many: Vec<String> = (0..MAX_NICKNAMES + 10).map(|n| format!("name{n}")).collect();
+        let many: Vec<String> = (0..MAX_NICKNAMES + 10)
+            .map(|n| format!("name{n}"))
+            .collect();
         assert_eq!(clean_nicknames(many).len(), MAX_NICKNAMES);
     }
 }

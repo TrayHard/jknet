@@ -224,7 +224,9 @@ pub fn parse_status_players(body: &str) -> Vec<StatusPlayer> {
     for line in body.lines() {
         let line = line.trim_end_matches('\r');
         let Some(open) = line.find('"') else { continue };
-        let Some(close) = line.rfind('"') else { continue };
+        let Some(close) = line.rfind('"') else {
+            continue;
+        };
         if close <= open {
             continue;
         }
@@ -458,7 +460,10 @@ mod tests {
     fn splits_a_command_from_its_argument() {
         assert_eq!(split_command(b"infoResponse\n\\a\\b").0, b"infoResponse");
         assert_eq!(split_command(b"infoResponse\n\\a\\b").1, b"\\a\\b");
-        assert_eq!(split_command(b"getserversResponse\\x").0, b"getserversResponse");
+        assert_eq!(
+            split_command(b"getserversResponse\\x").0,
+            b"getserversResponse"
+        );
         assert_eq!(split_command(b"getstatus").0, b"getstatus");
         assert_eq!(split_command(b"getstatus").1, b"");
     }

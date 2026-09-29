@@ -129,9 +129,6 @@ export function FriendPanel({
           >
             {t(`groups.${friend.presence.status}`)}
           </Badge>
-          {friend.presence.clientName ? (
-            <Badge>{friend.presence.clientName}</Badge>
-          ) : null}
         </div>
         <p className="text-body-sm text-fg-secondary break-words">
           {statusLine(friend.presence)}

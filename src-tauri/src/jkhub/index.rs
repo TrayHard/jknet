@@ -45,7 +45,9 @@ use super::client::{JkhubClient, Lane};
 use super::parse;
 use super::sections;
 use super::source::{self, HtmlSource};
-use super::types::{JkhubAuthor, JkhubCard, JkhubCategory, JkhubGame, JkhubRating, JkhubSort, SortDirection};
+use super::types::{
+    JkhubAuthor, JkhubCard, JkhubCategory, JkhubGame, JkhubRating, JkhubSort, SortDirection,
+};
 
 /// Shape of the stored document. A file written by an older launcher is a
 /// miss, not a failure: the fields of a card change with the parsers.
@@ -507,9 +509,15 @@ pub fn parse_query(query: &str) -> Query {
                         &mut out.before
                     };
                     let replace = bound.as_deref().is_none_or(|old| {
-                        if operator.eq_ignore_ascii_case("after") { value > old } else { value < old }
+                        if operator.eq_ignore_ascii_case("after") {
+                            value > old
+                        } else {
+                            value < old
+                        }
                     });
-                    if replace { *bound = Some(value.to_string()); }
+                    if replace {
+                        *bound = Some(value.to_string());
+                    }
                 } else if !value.is_empty() {
                     // An invalid date stays a literal term, never silently broadens a query.
                     out.tokens.push(fold(word));
@@ -558,8 +566,14 @@ pub fn parse_query(query: &str) -> Query {
 /// Fixed-width calendar dates compare lexically; reject impossible days first.
 fn valid_date(value: &str) -> bool {
     let bytes = value.as_bytes();
-    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-'
-        || bytes.iter().enumerate().any(|(i, b)| i != 4 && i != 7 && !b.is_ascii_digit()) {
+    if bytes.len() != 10
+        || bytes[4] != b'-'
+        || bytes[7] != b'-'
+        || bytes
+            .iter()
+            .enumerate()
+            .any(|(i, b)| i != 4 && i != 7 && !b.is_ascii_digit())
+    {
         return false;
     }
     let year: u32 = value[..4].parse().unwrap_or(0);
@@ -567,7 +581,9 @@ fn valid_date(value: &str) -> bool {
     let day: u32 = value[8..].parse().unwrap_or(0);
     let days = match month {
         4 | 6 | 9 | 11 => 30,
-        2 if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) => 29,
+        2 if year.is_multiple_of(4) && (!year.is_multiple_of(100) || year.is_multiple_of(400)) => {
+            29
+        }
         2 => 28,
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         _ => 0,
@@ -721,18 +737,28 @@ impl LoadedIndex {
         // The `by:` operators come out of the query first, so what is left is
         // words. An author filter is a condition and not a token: it never
         // ranks a file, it only decides whether the file is answered at all.
-        let Query { tokens, authors, after, before } = parse_query(&request.query);
+        let Query {
+            tokens,
+            authors,
+            after,
+            before,
+        } = parse_query(&request.query);
         let game = self.index.game;
         let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
         let mut hits: Vec<(u8, usize)> = Vec::new();
 
         for (position, file) in self.index.files.iter().enumerate() {
             if after.is_some() || before.is_some() {
-                let date = file.updated_at.as_deref().or(file.submitted_at.as_deref())
-                    .and_then(|date| date.get(..10)).filter(|date| valid_date(date));
+                let date = file
+                    .updated_at
+                    .as_deref()
+                    .or(file.submitted_at.as_deref())
+                    .and_then(|date| date.get(..10))
+                    .filter(|date| valid_date(date));
                 let Some(date) = date else { continue };
                 if after.as_deref().is_some_and(|bound| date <= bound)
-                    || before.as_deref().is_some_and(|bound| date >= bound) {
+                    || before.as_deref().is_some_and(|bound| date >= bound)
+                {
                     continue;
                 }
             }
@@ -757,7 +783,9 @@ impl LoadedIndex {
         }
 
         let files = &self.index.files;
-        let direction = request.direction.unwrap_or_else(|| request.sort.default_direction());
+        let direction = request
+            .direction
+            .unwrap_or_else(|| request.sort.default_direction());
         hits.sort_by(|(left_rank, left), (right_rank, right)| {
             compare(&files[*left], &files[*right], request.sort, direction)
                 .then_with(|| left_rank.cmp(right_rank))
@@ -810,33 +838,59 @@ pub struct SearchAnswer {
 }
 
 /// Sorts the whole filtered catalogue before pagination. Unknown values stay last.
-fn compare(left: &IndexedFile, right: &IndexedFile, sort: JkhubSort, direction: SortDirection) -> std::cmp::Ordering {
+fn compare(
+    left: &IndexedFile,
+    right: &IndexedFile,
+    sort: JkhubSort,
+    direction: SortDirection,
+) -> std::cmp::Ordering {
     match sort {
         JkhubSort::RecentlyUpdated => optional_order(
             left.updated_at.as_deref().or(left.submitted_at.as_deref()),
-            right.updated_at.as_deref().or(right.submitted_at.as_deref()), direction,
+            right
+                .updated_at
+                .as_deref()
+                .or(right.submitted_at.as_deref()),
+            direction,
         ),
         JkhubSort::Newest => optional_order(
             left.submitted_at.as_deref().or(left.updated_at.as_deref()),
-            right.submitted_at.as_deref().or(right.updated_at.as_deref()), direction,
+            right
+                .submitted_at
+                .as_deref()
+                .or(right.updated_at.as_deref()),
+            direction,
         ),
         JkhubSort::MostDownloaded => optional_order(left.downloads, right.downloads, direction),
         JkhubSort::TopRated => {
-            let rating = |file: &IndexedFile| file.rating.as_ref()
-                .filter(|rating| rating.count > 0 && rating.value.is_finite())
-                .map(|rating| (rating.value, rating.count));
+            let rating = |file: &IndexedFile| {
+                file.rating
+                    .as_ref()
+                    .filter(|rating| rating.count > 0 && rating.value.is_finite())
+                    .map(|rating| (rating.value, rating.count))
+            };
             optional_order(rating(left), rating(right), direction)
         }
-        JkhubSort::Name => optional_order(Some(fold(&left.title)), Some(fold(&right.title)), direction),
+        JkhubSort::Name => {
+            optional_order(Some(fold(&left.title)), Some(fold(&right.title)), direction)
+        }
     }
 }
 
-fn optional_order<T: PartialOrd>(left: Option<T>, right: Option<T>, direction: SortDirection) -> std::cmp::Ordering {
+fn optional_order<T: PartialOrd>(
+    left: Option<T>,
+    right: Option<T>,
+    direction: SortDirection,
+) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     match (left, right) {
         (Some(a), Some(b)) => {
             let order = a.partial_cmp(&b).unwrap_or(Ordering::Equal);
-            if direction == SortDirection::Asc { order } else { order.reverse() }
+            if direction == SortDirection::Asc {
+                order
+            } else {
+                order.reverse()
+            }
         }
         (Some(_), None) => Ordering::Less,
         (None, Some(_)) => Ordering::Greater,
@@ -1359,7 +1413,11 @@ fn merge_pages(
 /// Pages a category of this size takes, or one when the size is unknown.
 fn estimated_pages(file_count: Option<u32>) -> u32 {
     file_count
-        .map(|count| count.div_ceil(parse::PER_PAGE).clamp(1, MAX_PAGES_PER_CATEGORY))
+        .map(|count| {
+            count
+                .div_ceil(parse::PER_PAGE)
+                .clamp(1, MAX_PAGES_PER_CATEGORY)
+        })
         .unwrap_or(1)
 }
 
@@ -1458,7 +1516,8 @@ pub async fn run(context: &RefreshContext<'_>, manual: bool, full: bool) -> Resu
     log::info!(
         "jkhub: the {} index is {} and the plan is {plan:?}",
         game.id(),
-        age.map(|age| format!("{age} s old")).unwrap_or("missing".into())
+        age.map(|age| format!("{age} s old"))
+            .unwrap_or("missing".into())
     );
 
     let mut crawled = false;
@@ -1643,8 +1702,8 @@ async fn rebuild(
             ..CrawlStep::default()
         },
     );
-    let source = HtmlSource::new(context.client, context.data)
-        .with_snapshots(context.snapshots.clone());
+    let source =
+        HtmlSource::new(context.client, context.data).with_snapshots(context.snapshots.clone());
     // The tree comes from the disk cache or from the bundle in the common
     // case; only a machine with neither pays for the twenty-request walk here,
     // and it would have paid for it when the tab opened anyway.
@@ -1789,10 +1848,22 @@ mod tests {
     #[test]
     fn the_by_operator_takes_a_substring_and_quotes_take_the_whole_name() {
         let loaded = by_authors();
-        assert_eq!(found(&loaded, "by:circa"), vec![1, 2], "a substring, and case does not count");
+        assert_eq!(
+            found(&loaded, "by:circa"),
+            vec![1, 2],
+            "a substring, and case does not count"
+        );
         assert_eq!(found(&loaded, "by:CIRCA"), vec![1, 2], "typed in capitals");
-        assert_eq!(found(&loaded, "by:\"circa\""), vec![1], "quotes ask for the whole name");
-        assert_eq!(found(&loaded, "by:\"Circa\""), vec![1], "and ignore case too");
+        assert_eq!(
+            found(&loaded, "by:\"circa\""),
+            vec![1],
+            "quotes ask for the whole name"
+        );
+        assert_eq!(
+            found(&loaded, "by:\"Circa\""),
+            vec![1],
+            "and ignore case too"
+        );
     }
 
     #[test]
@@ -1813,7 +1884,11 @@ mod tests {
     #[test]
     fn the_by_operator_narrows_the_words_beside_it() {
         let loaded = by_authors();
-        assert_eq!(found(&loaded, "by:circa duel"), vec![1], "the author and the title");
+        assert_eq!(
+            found(&loaded, "by:circa duel"),
+            vec![1],
+            "the author and the title"
+        );
         assert!(
             found(&loaded, "by:circa terminative").is_empty(),
             "the word is by another author"
@@ -1826,8 +1901,16 @@ mod tests {
     #[test]
     fn a_half_typed_operator_answers_rather_than_breaking() {
         let loaded = by_authors();
-        assert_eq!(found(&loaded, "by:"), vec![1, 2, 3, 4], "nothing was asked yet");
-        assert_eq!(found(&loaded, "by:\"\""), vec![1, 2, 3, 4], "and empty quotes ask nothing");
+        assert_eq!(
+            found(&loaded, "by:"),
+            vec![1, 2, 3, 4],
+            "nothing was asked yet"
+        );
+        assert_eq!(
+            found(&loaded, "by:\"\""),
+            vec![1, 2, 3, 4],
+            "and empty quotes ask nothing"
+        );
         assert_eq!(
             found(&loaded, "by:\"Szico VII"),
             vec![3],
@@ -1895,22 +1978,54 @@ mod tests {
         unknown.updated_at = None;
         unknown.submitted_at = None;
         let loaded = index(vec![first, second, unknown]);
-        assert_eq!(found(&loaded, "AFTER:2024-02-29 before:2024-03-02 by:\"Author\" duel"), vec![2]);
+        assert_eq!(
+            found(
+                &loaded,
+                "AFTER:2024-02-29 before:2024-03-02 by:\"Author\" duel"
+            ),
+            vec![2]
+        );
         assert_eq!(found(&loaded, "before:2024-03-01"), vec![1]);
         assert!(found(&loaded, "after:2024-03-01 before:2024-02-29").is_empty());
-        assert_eq!(found(&loaded, "after:2020-01-01 after:2024-02-29 before:2030-01-01 before:2024-03-02"), vec![2]);
+        assert_eq!(
+            found(
+                &loaded,
+                "after:2020-01-01 after:2024-02-29 before:2030-01-01 before:2024-03-02"
+            ),
+            vec![2]
+        );
         let result = loaded.search(&request("after:2024-02-29"));
         assert_eq!(result.category_counts, BTreeMap::from([(30, 1)]));
         assert!(found(&loaded, "after:2024-02-29 by:someone").is_empty());
         let mut submitted = file(4, "Never updated", 28);
         submitted.updated_at = None;
-        assert_eq!(found(&index(vec![submitted]), "after:2025-12-31 before:2026-01-02"), vec![4]);
+        assert_eq!(
+            found(
+                &index(vec![submitted]),
+                "after:2025-12-31 before:2026-01-02"
+            ),
+            vec![4]
+        );
     }
 
     #[test]
     fn date_filters_validate_leap_days_and_keep_invalid_values_literal() {
-        for valid in ["2024-02-29", "2000-02-29", "2026-12-31"] { assert!(valid_date(valid)); }
-        for invalid in ["2025-02-29", "1900-02-29", "2026-04-31", "2026-00-01", "2026-01-00", "26-01-01", "0000-01-01", "я-2026-01", "2026-01-01junk"] { assert!(!valid_date(invalid)); }
+        for valid in ["2024-02-29", "2000-02-29", "2026-12-31"] {
+            assert!(valid_date(valid));
+        }
+        for invalid in [
+            "2025-02-29",
+            "1900-02-29",
+            "2026-04-31",
+            "2026-00-01",
+            "2026-01-00",
+            "26-01-01",
+            "0000-01-01",
+            "я-2026-01",
+            "2026-01-01junk",
+        ] {
+            assert!(!valid_date(invalid));
+        }
         assert_eq!(parse_query("after: before:"), Query::default());
         let query = parse_query("duel after:2025-02-29 before:2026-01-01");
         assert_eq!(query.tokens, vec!["duel", "after:2025-02-29"]);
@@ -1920,9 +2035,14 @@ mod tests {
 
     #[test]
     fn listing_ratings_survive_index_storage_and_search() {
-        let listing = parse::parse_listing(include_str!("../../tests/fixtures/jkhub/cat-13-ffa.html"));
+        let listing =
+            parse::parse_listing(include_str!("../../tests/fixtures/jkhub/cat-13-ffa.html"));
         let listing = listing.unwrap();
-        let card = listing.cards.into_iter().find(|card| card.rating.is_some()).unwrap();
+        let card = listing
+            .cards
+            .into_iter()
+            .find(|card| card.rating.is_some())
+            .unwrap();
         let expected = card.rating.clone();
         let entry = IndexedFile::from_card(card, 28, JkhubGame::Ja);
         let saved = serde_json::to_string(&entry).unwrap();
@@ -1980,7 +2100,10 @@ mod tests {
             category_id: Some(sections::NODE_ID_BASE + 71),
             ..request("")
         });
-        assert_eq!(maps.total, 2, "the section takes in every gametype under it");
+        assert_eq!(
+            maps.total, 2,
+            "the section takes in every gametype under it"
+        );
 
         let skins = loaded.search(&SearchRequest {
             category_id: Some(sections::NODE_ID_BASE + 4),
@@ -2090,7 +2213,11 @@ mod tests {
             Some(&4),
             "a section of one category answers for it"
         );
-        assert_eq!(rolled.get(&38), None, "and nothing lands on a node nobody draws");
+        assert_eq!(
+            rolled.get(&38),
+            None,
+            "and nothing lands on a node nobody draws"
+        );
     }
 
     /// A node of the site's tree, for a test that builds one.
@@ -2158,7 +2285,11 @@ mod tests {
             ..request("")
         });
         assert_eq!(greedy.per_page, MAX_RESULTS_PER_PAGE);
-        assert_eq!(greedy.cards.len(), 60, "and no more than the catalogue holds");
+        assert_eq!(
+            greedy.cards.len(),
+            60,
+            "and no more than the catalogue holds"
+        );
         assert_eq!(greedy.pages, 1);
     }
 
@@ -2168,16 +2299,33 @@ mod tests {
         low.downloads = Some(5);
         low.submitted_at = Some("2020-01-01T00:00:00Z".into());
         low.updated_at = None; // Falls back to submission for date updated.
-        low.rating = Some(JkhubRating { value: 3.0, count: 10 });
+        low.rating = Some(JkhubRating {
+            value: 3.0,
+            count: 10,
+        });
         let mut high = file(2, "Zulu", 13);
         high.description = "A map".into(); // Lower relevance must not override sorting.
         high.downloads = Some(20);
-        high.rating = Some(JkhubRating { value: 4.5, count: 2 });
+        high.rating = Some(JkhubRating {
+            value: 4.5,
+            count: 2,
+        });
         let loaded = index(vec![high, low]);
-        for sort in [JkhubSort::RecentlyUpdated, JkhubSort::Newest,
-            JkhubSort::MostDownloaded, JkhubSort::TopRated, JkhubSort::Name] {
-            for (direction, expected) in [(SortDirection::Asc, [1, 2]), (SortDirection::Desc, [2, 1])] {
-                let answer = loaded.search(&SearchRequest { sort, direction: Some(direction), ..request("map") });
+        for sort in [
+            JkhubSort::RecentlyUpdated,
+            JkhubSort::Newest,
+            JkhubSort::MostDownloaded,
+            JkhubSort::TopRated,
+            JkhubSort::Name,
+        ] {
+            for (direction, expected) in
+                [(SortDirection::Asc, [1, 2]), (SortDirection::Desc, [2, 1])]
+            {
+                let answer = loaded.search(&SearchRequest {
+                    sort,
+                    direction: Some(direction),
+                    ..request("map")
+                });
                 let ids: Vec<_> = answer.cards.iter().map(|card| card.id).collect();
                 assert_eq!(ids, expected, "{sort:?} {direction:?}");
             }
@@ -2191,12 +2339,21 @@ mod tests {
             entry.rating = Some(JkhubRating { value, count });
             entry
         };
-        let loaded = index(vec![file(1, "Map", 13), rated(2, 5.0, 0),
-            rated(3, 5.0, 4), rated(4, 3.0, 8), rated(5, 5.0, 12)]);
-        for (direction, expected) in [(SortDirection::Asc, [4, 3, 5, 1, 2]),
-            (SortDirection::Desc, [5, 3, 4, 1, 2])] {
+        let loaded = index(vec![
+            file(1, "Map", 13),
+            rated(2, 5.0, 0),
+            rated(3, 5.0, 4),
+            rated(4, 3.0, 8),
+            rated(5, 5.0, 12),
+        ]);
+        for (direction, expected) in [
+            (SortDirection::Asc, [4, 3, 5, 1, 2]),
+            (SortDirection::Desc, [5, 3, 4, 1, 2]),
+        ] {
             let answer = loaded.search(&SearchRequest {
-                sort: JkhubSort::TopRated, direction: Some(direction), ..request("")
+                sort: JkhubSort::TopRated,
+                direction: Some(direction),
+                ..request("")
             });
             let ids: Vec<_> = answer.cards.iter().map(|card| card.id).collect();
             assert_eq!(ids, expected);
@@ -2210,9 +2367,17 @@ mod tests {
         unknown.submitted_at = None;
         unknown.downloads = None;
         let loaded = index(vec![unknown, file(2, "Map", 13)]);
-        for sort in [JkhubSort::RecentlyUpdated, JkhubSort::Newest, JkhubSort::MostDownloaded] {
+        for sort in [
+            JkhubSort::RecentlyUpdated,
+            JkhubSort::Newest,
+            JkhubSort::MostDownloaded,
+        ] {
             for direction in [SortDirection::Asc, SortDirection::Desc] {
-                let answer = loaded.search(&SearchRequest { sort, direction: Some(direction), ..request("") });
+                let answer = loaded.search(&SearchRequest {
+                    sort,
+                    direction: Some(direction),
+                    ..request("")
+                });
                 assert_eq!(answer.cards[0].id, 2);
             }
         }
@@ -2220,30 +2385,54 @@ mod tests {
 
     #[test]
     fn rating_sort_covers_every_filtered_result_before_pagination() {
-        let mut files: Vec<_> = (1..=40).map(|id| {
-            let mut entry = file(id, "Map", 13);
-            entry.rating = Some(JkhubRating { value: id as f32 / 8.0, count: 1 });
-            entry
-        }).collect();
+        let mut files: Vec<_> = (1..=40)
+            .map(|id| {
+                let mut entry = file(id, "Map", 13);
+                entry.rating = Some(JkhubRating {
+                    value: id as f32 / 8.0,
+                    count: 1,
+                });
+                entry
+            })
+            .collect();
         let mut outside = file(41, "Map", 15);
-        outside.rating = Some(JkhubRating { value: 5.0, count: 20 });
+        outside.rating = Some(JkhubRating {
+            value: 5.0,
+            count: 20,
+        });
         files.push(outside);
         let loaded = index(files);
         let mut query = SearchRequest {
-            category_id: Some(13), sort: JkhubSort::TopRated, direction: Some(SortDirection::Desc),
-            per_page: 25, ..request("map by:author after:2025-12-31 before:2026-01-02")
+            category_id: Some(13),
+            sort: JkhubSort::TopRated,
+            direction: Some(SortDirection::Desc),
+            per_page: 25,
+            ..request("map by:author after:2025-12-31 before:2026-01-02")
         };
         let first = loaded.search(&query);
         assert_eq!(first.total, 40);
         assert_eq!(first.category_counts.get(&15), Some(&1));
-        assert_eq!(first.cards.iter().map(|card| card.id).collect::<Vec<_>>(), (16..=40).rev().collect::<Vec<_>>());
+        assert_eq!(
+            first.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
+            (16..=40).rev().collect::<Vec<_>>()
+        );
         query.page = 2;
         let second = loaded.search(&query);
-        assert_eq!(second.cards.iter().map(|card| card.id).collect::<Vec<_>>(), (1..=15).rev().collect::<Vec<_>>());
+        assert_eq!(
+            second.cards.iter().map(|card| card.id).collect::<Vec<_>>(),
+            (1..=15).rev().collect::<Vec<_>>()
+        );
         query.page = 1;
         query.direction = Some(SortDirection::Asc);
         let ascending = loaded.search(&query);
-        assert_eq!(ascending.cards.iter().map(|card| card.id).collect::<Vec<_>>(), (1..=25).collect::<Vec<_>>());
+        assert_eq!(
+            ascending
+                .cards
+                .iter()
+                .map(|card| card.id)
+                .collect::<Vec<_>>(),
+            (1..=25).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2412,10 +2601,10 @@ mod tests {
         );
         assert_eq!(files[2].category_id, 15, "and the other leaf keeps its own");
         assert!(
-            files
-                .iter()
-                .all(|entry| sections::node_id_of(Game::JediAcademy, entry.category_id)
-                    == Some(sections::NODE_ID_BASE + 71)),
+            files.iter().all(
+                |entry| sections::node_id_of(Game::JediAcademy, entry.category_id)
+                    == Some(sections::NODE_ID_BASE + 71)
+            ),
             "every gametype still answers under the Maps section"
         );
     }
@@ -2547,7 +2736,10 @@ mod tests {
         catalogue.replace(vec![file(1, "One", 13)]);
         let text = serde_json::to_string(&catalogue).expect("it serializes");
         let error = parse_index(&text, Game::JediAcademy).expect_err("the games disagree");
-        assert!(error.to_string().contains("holds the catalogue of"), "{error}");
+        assert!(
+            error.to_string().contains("holds the catalogue of"),
+            "{error}"
+        );
 
         catalogue.version = INDEX_VERSION + 1;
         let text = serde_json::to_string(&catalogue).expect("it serializes");
@@ -2557,7 +2749,10 @@ mod tests {
         catalogue.version = INDEX_VERSION;
         catalogue.files.clear();
         let text = serde_json::to_string(&catalogue).expect("it serializes");
-        assert!(parse_index(&text, Game::JediOutcast).is_err(), "an empty index is no index");
+        assert!(
+            parse_index(&text, Game::JediOutcast).is_err(),
+            "an empty index is no index"
+        );
         assert!(parse_index("{", Game::JediOutcast).is_err());
     }
 
@@ -2623,8 +2818,14 @@ mod tests {
 
         let back = entry.to_card();
         assert_eq!(back.id, 4283);
-        assert_eq!(back.url, "https://jkhub.org/files/file/4283-terminative-3-home/");
-        assert_eq!(back.author.as_ref().map(|a| a.name.as_str()), Some("Szico VII"));
+        assert_eq!(
+            back.url,
+            "https://jkhub.org/files/file/4283-terminative-3-home/"
+        );
+        assert_eq!(
+            back.author.as_ref().map(|a| a.name.as_str()),
+            Some("Szico VII")
+        );
         assert_eq!(back.date_label.as_deref(), Some("Updated"));
         assert_eq!(back.rating, None, "this card carries no stars");
     }
@@ -2748,7 +2949,8 @@ mod tests {
             .enable_all()
             .build()
             .expect("a runtime");
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(super::super::snapshot::RESOURCE_DIR);
+        let dir =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(super::super::snapshot::RESOURCE_DIR);
         std::fs::create_dir_all(&dir).expect("the folder exists");
 
         for game in Game::ALL {
@@ -2795,7 +2997,8 @@ mod tests {
     /// goes.
     #[test]
     fn a_file_of_another_category_is_found_while_browsing_this_one() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(super::super::snapshot::RESOURCE_DIR);
+        let dir =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(super::super::snapshot::RESOURCE_DIR);
         let catalogue = read_from(&dir, Game::JediAcademy).expect("the build ships an index");
         let loaded = LoadedIndex::new(catalogue, IndexSource::Snapshot);
 
@@ -2835,7 +3038,8 @@ mod tests {
     /// The documents the build ships, as the installer will carry them.
     #[test]
     fn the_bundled_indexes_parse_and_name_their_own_game() {
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(super::super::snapshot::RESOURCE_DIR);
+        let dir =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(super::super::snapshot::RESOURCE_DIR);
         for game in Game::ALL {
             let index = read_from(&dir, game)
                 .unwrap_or_else(|| panic!("{} ships an index", file_name(game)));

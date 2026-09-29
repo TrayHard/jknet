@@ -192,6 +192,168 @@ fn expose(app: &tauri::AppHandle, state: &AppState, item: &mut MediaItem) -> Res
     Ok(())
 }
 
+/// Imports demos and screenshots from one copied client tree into the shared
+/// content-addressed bank.
+///
+/// An imported portable client keeps its old files inside `engine\`, whereas
+/// the regular client tree is `home\`. The importer calls this after the
+/// snapshot is complete, and a later Media refresh scans imported snapshots
+/// again so a recoverable bank error does not strand their old media. Later
+/// captures land in `home\` and follow the usual refresh path.
+pub(crate) fn import_client_tree(
+    state: &AppState,
+    client: &clients::Client,
+    root: &Path,
+) -> Result<u64> {
+    let _guard = state.client_records().enter();
+    let path = book_path(state)?;
+    let mut book: MediaBook = user_files::read(&path)?;
+    let imported = import_tree_into_book(state, client, root, "engine", false, &mut book)?;
+    user_files::write(&path, &book)?;
+    Ok(imported)
+}
+
+/// Adds every supported media file below `root` to `book` and returns how many
+/// origins were added. A duplicate file still counts when it adds this client
+/// as another origin; it is useful media recovered from the imported folder
+/// even when the bank already held the same bytes.
+fn import_tree_into_book(
+    state: &AppState,
+    client: &clients::Client,
+    root: &Path,
+    source_prefix: &str,
+    require_settled: bool,
+    book: &mut MediaBook,
+) -> Result<u64> {
+    let mut files = Vec::new();
+    files_under(root, 8, &mut files);
+    let mut imported = 0u64;
+    for path in files {
+        let ext = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let relative = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let lower = relative.to_ascii_lowercase();
+        let kind =
+            if client.game.demo_extensions().contains(&ext.as_str()) && lower.contains("/demos/") {
+                "demos"
+            } else if ["png", "jpg", "jpeg", "tga", "bmp"].contains(&ext.as_str())
+                && lower.contains("/screenshots/")
+            {
+                "screenshots"
+            } else {
+                continue;
+            };
+        if path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s.starts_with("jknet-"))
+        {
+            continue;
+        }
+        let Ok(meta) = fs::metadata(&path) else {
+            continue;
+        };
+        let modified = seconds(meta.modified());
+        if meta.len() == 0
+            || require_settled
+                && seconds(Ok(std::time::SystemTime::now())).saturating_sub(modified) < 3
+        {
+            continue;
+        }
+        let source = if source_prefix.is_empty() {
+            relative
+        } else {
+            format!("{source_prefix}/{relative}")
+        };
+        if book.items.iter().any(|item| {
+            item.origins.iter().any(|origin| {
+                origin.client_id == client.id
+                    && origin.source == source
+                    && origin.modified_at == modified
+                    && origin.size == meta.len()
+            })
+        }) {
+            continue;
+        }
+        let import = (|| -> Result<bool> {
+            let Some(id) = import_id(&path, client.game, &book.deleted_ids)? else {
+                return Ok(false);
+            };
+            let mut origin = MediaOrigin {
+                client_id: client.id.clone(),
+                client_name: client.name.clone(),
+                source,
+                created_at: seconds(meta.created()).max(1),
+                modified_at: modified,
+                size: meta.len(),
+                date_is_modified: meta.created().is_err(),
+            };
+            if origin.date_is_modified {
+                origin.created_at = modified;
+            }
+            if let Some(item) = book.items.iter_mut().find(|item| item.id == id) {
+                if !item.origins.iter().any(|known| {
+                    known.client_id == origin.client_id
+                        && known.source == origin.source
+                        && known.modified_at == origin.modified_at
+                }) {
+                    item.origins.push(origin);
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+            let item = MediaItem {
+                id,
+                name: path
+                    .file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+                kind: kind.into(),
+                game: client.game,
+                extension: ext,
+                tags: Vec::new(),
+                origins: vec![origin],
+                size: meta.len(),
+                preview: None,
+                source_demo: None,
+                file_name: None,
+            };
+            let destination = media_file(state, &item)?;
+            fs::create_dir_all(destination.parent().unwrap()).map_err(|error| {
+                AppError::io_path("cannot create media bank", &destination, error)
+            })?;
+            let temporary = destination.with_extension("importing");
+            fs::copy(&path, &temporary)
+                .map_err(|error| AppError::io_path("cannot import media", &path, error))?;
+            let after = fs::metadata(&path)
+                .map_err(|error| AppError::io_path("cannot inspect media", &path, error))?;
+            if after.len() != meta.len() || seconds(after.modified()) != modified {
+                let _ = fs::remove_file(&temporary);
+                return Ok(false);
+            }
+            fs::rename(&temporary, &destination).map_err(|error| {
+                AppError::io_path("cannot finish media import", &destination, error)
+            })?;
+            book.items.push(item);
+            Ok(true)
+        })();
+        match import {
+            Ok(true) => imported += 1,
+            Ok(false) => {}
+            Err(error) => log::warn!("media import skipped {}: {error}", path.display()),
+        }
+    }
+    Ok(imported)
+}
+
 #[tauri::command]
 pub async fn list_media(
     app: tauri::AppHandle,
@@ -207,124 +369,12 @@ pub async fn list_media(
         let mut book: MediaBook = user_files::read(&book_path(&state)?)?;
         if refresh {
             for client in clients::read_all(&paths)? {
-                let home = paths.client_home_dir(&client.id);
-                let mut files = Vec::new();
-                files_under(&home, 8, &mut files);
-                for path in files {
-                    let ext = path
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_ascii_lowercase();
-                    let relative = path
-                        .strip_prefix(&home)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .replace('\\', "/");
-                    let lower = relative.to_ascii_lowercase();
-                    let kind = if client.game.demo_extensions().contains(&ext.as_str())
-                        && lower.contains("/demos/")
-                    {
-                        "demos"
-                    } else if ["png", "jpg", "jpeg", "tga", "bmp"].contains(&ext.as_str())
-                        && lower.contains("/screenshots/")
-                    {
-                        "screenshots"
-                    } else {
-                        continue;
-                    };
-                    if path
-                        .file_stem()
-                        .and_then(|s| s.to_str())
-                        .is_some_and(|s| s.starts_with("jknet-"))
-                    {
-                        continue;
-                    }
-                    let Ok(meta) = fs::metadata(&path) else {
-                        continue;
-                    };
-                    let modified = seconds(meta.modified());
-                    if meta.len() == 0
-                        || seconds(Ok(std::time::SystemTime::now())).saturating_sub(modified) < 3
-                    {
-                        continue;
-                    }
-                    if book.items.iter().any(|i| {
-                        i.origins.iter().any(|o| {
-                            o.client_id == client.id
-                                && o.source == relative
-                                && o.modified_at == modified
-                                && o.size == meta.len()
-                        })
-                    }) {
-                        continue;
-                    }
-                    let import = (|| -> Result<()> {
-                        let Some(id) = import_id(&path, client.game, &book.deleted_ids)? else {
-                            return Ok(());
-                        };
-                        let origin = MediaOrigin {
-                            client_id: client.id.clone(),
-                            client_name: client.name.clone(),
-                            source: relative,
-                            created_at: seconds(meta.created()).max(1),
-                            modified_at: modified,
-                            size: meta.len(),
-                            date_is_modified: meta.created().is_err(),
-                        };
-                        let mut origin = origin;
-                        if origin.date_is_modified {
-                            origin.created_at = modified;
-                        }
-                        if let Some(item) = book.items.iter_mut().find(|i| i.id == id) {
-                            if !item.origins.iter().any(|o| {
-                                o.client_id == origin.client_id
-                                    && o.source == origin.source
-                                    && o.modified_at == origin.modified_at
-                            }) {
-                                item.origins.push(origin);
-                            }
-                            return Ok(());
-                        }
-                        let item = MediaItem {
-                            id,
-                            name: path
-                                .file_stem()
-                                .unwrap_or_default()
-                                .to_string_lossy()
-                                .into_owned(),
-                            kind: kind.into(),
-                            game: client.game,
-                            extension: ext,
-                            tags: Vec::new(),
-                            origins: vec![origin],
-                            size: meta.len(),
-                            preview: None,
-                            source_demo: None,
-                            file_name: None,
-                        };
-                        let dest = media_file(&state, &item)?;
-                        fs::create_dir_all(dest.parent().unwrap())
-                            .map_err(|e| AppError::io_path("cannot create media bank", &dest, e))?;
-                        let temp = dest.with_extension("importing");
-                        fs::copy(&path, &temp)
-                            .map_err(|e| AppError::io_path("cannot import media", &path, e))?;
-                        let after = fs::metadata(&path)
-                            .map_err(|e| AppError::io_path("cannot inspect media", &path, e))?;
-                        if after.len() != meta.len() || seconds(after.modified()) != modified {
-                            let _ = fs::remove_file(&temp);
-                            return Ok(());
-                        }
-                        fs::rename(&temp, &dest).map_err(|e| {
-                            AppError::io_path("cannot finish media import", &dest, e)
-                        })?;
-                        book.items.push(item);
-                        Ok(())
-                    })();
-                    if let Err(error) = import {
-                        log::warn!("media import skipped {}: {error}", path.display());
-                    }
+                if client.engine_origin == clients::EngineOrigin::Imported {
+                    let engine = paths.client_engine_dir(&client.id);
+                    import_tree_into_book(&state, &client, &engine, "engine", true, &mut book)?;
                 }
+                let home = paths.client_home_dir(&client.id);
+                import_tree_into_book(&state, &client, &home, "", true, &mut book)?;
             }
             user_files::write(&book_path(&state)?, &book)?;
         }
@@ -594,6 +644,40 @@ pub fn play_media_demo(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_imported_snapshot_adds_media_once_with_an_engine_origin() {
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::bootstrap(temp.path().into());
+        let paths = state.paths().unwrap();
+        paths.ensure().unwrap();
+        let mut client =
+            clients::create_record(&paths, "Imported", "openjk", Game::JediAcademy, None).unwrap();
+        client.engine_origin = clients::EngineOrigin::Imported;
+        let snapshot = temp.path().join("snapshot");
+        fs::create_dir_all(snapshot.join("base/screenshots")).unwrap();
+        fs::write(snapshot.join("base/screenshots/old.tga"), b"old screenshot").unwrap();
+        let mut book = MediaBook::default();
+
+        assert_eq!(
+            import_tree_into_book(&state, &client, &snapshot, "engine", false, &mut book,).unwrap(),
+            1
+        );
+        assert_eq!(
+            import_tree_into_book(&state, &client, &snapshot, "engine", false, &mut book,).unwrap(),
+            0
+        );
+        assert_eq!(book.items.len(), 1);
+        assert_eq!(
+            book.items[0].origins[0].source,
+            "engine/base/screenshots/old.tga"
+        );
+        assert_eq!(
+            fs::read(media_file(&state, &book.items[0]).unwrap()).unwrap(),
+            b"old screenshot"
+        );
+    }
+
     #[test]
     fn batch_delete_rolls_back_every_staged_item_and_preserves_unselected_files() {
         let temp = tempfile::tempdir().unwrap();

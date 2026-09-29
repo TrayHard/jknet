@@ -9,8 +9,8 @@
   },
   "setup": {
     "client": {
-      "label": "Client",
-      "hint": "The server runs this client's engine, mod and files.",
+      "label": "Cliente con mod y mapas",
+      "hint": "El motor, el mod y los mapas proceden del cliente seleccionado. El servidor dedicado se ejecuta como un proceso independiente.",
       "option": "{{client}} · {{engine}}",
       "noDedicatedServer": "No dedicated server",
       "engineMissing": "Dedicated server missing",
@@ -21,10 +21,11 @@
       "label": "Map",
       "search": "Search maps",
       "noMatch": "No map matches your search.",
-      "none": "This client has no map for this game type.",
+      "none": "No maps were found in this client.",
       "loading": "Reading the maps…",
       "library": "From your library",
-      "libraryHint": "Friends need this map too."
+      "libraryHint": "Friends need this map too.",
+      "unspecifiedMode": "Modo no especificado"
     },
     "gametype": {
       "label": "Game type"
@@ -76,9 +77,39 @@
       "text": "Sign in to JKNet Online to let friends join over the internet. Local network play works without an account.",
       "action": "Sign in"
     },
-    "startAndPlay": "Start and play",
-    "startServer": "Start server",
-    "stopGameFirst": "Stop the running game first."
+    "startAndPlay": "Iniciar servidor y unirse",
+    "startServer": "Iniciar solo el servidor",
+    "stopGameFirst": "Stop the running game first.",
+    "config": {
+      "label": "Server config",
+      "none": "Custom settings",
+      "manage": "Edit configs",
+      "saveAs": "Save as config",
+      "hint": "Choose a config for this client’s mod. Match settings below override its defaults for this session.",
+      "needsMod": "Choose a client with {{mod}}.",
+      "missing": "The saved config is missing. Choose another config or Custom settings.",
+      "incompatible": "This config uses a different mod. Choose a compatible client or another config.",
+      "invalid": "This config has {{count}} issues. Open the editor before starting.",
+      "saveHint": "Save the match rules for future games. Passwords, invited friends and network access stay with this session.",
+      "name": "Config name",
+      "save": "Save config",
+      "cancel": "Cancel",
+      "mbiiMode": "Movie Battles",
+      "roundLimit": "Rounds to win",
+      "mapNotListed": "Map from the config. Check that this client has it."
+    },
+    "sections": {
+      "match": "Partida rápida",
+      "matchHint": "Elige el mapa y el modo. El resto queda como lo dejaste.",
+      "advanced": "Servidor y conexión",
+      "advancedSummary": "{{client}} · {{score}} · {{time}} · {{network}} · {{password}} · {{access}}",
+      "client": "Servidor dedicado",
+      "rules": "Reglas adicionales",
+      "server": "Servidor",
+      "launchSummary": "{{mode}} · hasta {{count}} jugadores · {{client}}",
+      "passwordOn": "Con contraseña",
+      "passwordOff": "Sin contraseña"
+    }
   },
   "starting": {
     "title": "Starting your server",
@@ -197,7 +228,8 @@
     "invitedJustNow": "Just now",
     "inYourGame": "In your game",
     "relayNeeded": "Friends outside your network can't join until the relay connects.",
-    "markFriend": "Invite {{name}} when the server is ready"
+    "markFriend": "Invite {{name}} when the server is ready",
+    "selected": "Invitar al iniciar: {{count}}"
   },
   "policy": {
     "label": "Who can join without an invite",

@@ -1,4 +1,4 @@
-import { ContactRound, Library, Monitor, Server, Settings, Users, Images, FileSliders, Globe, Swords } from "lucide-react";
+import { ContactRound, History, Library, Monitor, Server, ServerCog, Settings, Users, Images, FileSliders, Globe, Swords } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -7,6 +7,7 @@ import { clientsOfGame, useActiveGame, useDefaultClient } from "../lib/game";
 import {
   useAccountState,
   useClients,
+  useServerInstances,
   // --- slice: play with friends ---
   useHostSession,
   useOnlineFriendCount,
@@ -34,6 +35,7 @@ export function Sidebar() {
       : undefined;
   const navigate = useNavigate();
   const clients = useClients();
+  const serverInstances = useServerInstances();
   // --- slice: account ---
   const account = useAccountState();
   // --- slice: friends ---
@@ -46,6 +48,7 @@ export function Sidebar() {
   // at Jedi Outcast can start.
   const activeGame = useActiveGame();
   const gameClients = clientsOfGame(clients.data, activeGame);
+  const gameServerInstances = serverInstances.data?.filter((server) => server.game === activeGame);
   const defaultClient = useDefaultClient();
 
   const user = account.data?.onlineSignedIn ? (account.data.onlineUser ?? null) : null;
@@ -85,6 +88,12 @@ export function Sidebar() {
             label={t("items.clients")}
             count={clients.isSuccess ? gameClients.length : undefined}
           />
+          <NavItem
+            to="/server-instances"
+            icon={<ServerCog size={20} />}
+            label={t("items.serverInstances")}
+            count={serverInstances.isSuccess ? gameServerInstances?.length : undefined}
+          />
           <NavItem to="/player-profiles" icon={<ContactRound size={20} />} label={t("items.playerProfiles")} />
           <NavItem to="/media" icon={<Images size={20} />} label={t("items.media")} />
           <NavItem to="/configs" icon={<FileSliders size={20} />} label={t("items.configs")} />
@@ -97,6 +106,11 @@ export function Sidebar() {
             icon={<Users size={20} />}
             label={t("items.friends")}
             count={friendsOnline}
+          />
+          <NavItem
+            to="/changelog"
+            icon={<History size={20} />}
+            label={t("items.changelog")}
           />
         </Group>
       </div>

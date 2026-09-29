@@ -165,7 +165,9 @@ pub async fn begin_sign_in(
     app.opener()
         .open_url(session.url.clone(), None::<&str>)
         .map_err(|e| {
-            AppError::Launch(format!("the system browser did not open the sign-in page: {e}"))
+            AppError::Launch(format!(
+                "the system browser did not open the sign-in page: {e}"
+            ))
         })?;
 
     log::info!("sign-in session {} opened for {provider}", session.id);
@@ -257,7 +259,11 @@ pub async fn sign_out(
 
 /// The body of [`sign_out`], which signing out this launcher's own session
 /// from the devices card runs too.
-async fn sign_out_here(app: &tauri::AppHandle, state: &AppState, online: &OnlineClient) -> Result<()> {
+async fn sign_out_here(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    online: &OnlineClient,
+) -> Result<()> {
     let settings = state.settings()?;
     let ctx = OnlineContext::from_settings(&settings);
 
@@ -298,7 +304,10 @@ pub async fn update_display_name(
     // --- slice: bundles ---
     // `PATCH /v1/me` answers with the contract's `User`, which has no `admin`
     // flag; the one read at sign-in survives the rename.
-    user.admin = settings.online_user.as_ref().is_some_and(|known| known.admin);
+    user.admin = settings
+        .online_user
+        .as_ref()
+        .is_some_and(|known| known.admin);
     store_account(&state, ctx.token.clone(), Some(user.clone()))?;
     // Signed in either way; the payload exists so a listener knows to reread
     // the account rather than to work out what changed.
@@ -451,10 +460,12 @@ fn revoke_target(id: Option<String>, others: bool, current: Option<&str>) -> Res
 /// listed it.
 fn current_of(list: &[DeviceSession], token: Option<&str>) -> Option<CurrentSession> {
     let token = token.map(str::trim).filter(|token| !token.is_empty())?;
-    list.iter().find(|session| session.current).map(|session| CurrentSession {
-        token: token.to_string(),
-        id: session.id.clone(),
-    })
+    list.iter()
+        .find(|session| session.current)
+        .map(|session| CurrentSession {
+            token: token.to_string(),
+            id: session.id.clone(),
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -529,11 +540,7 @@ fn device_name() -> Option<String> {
 /// The document is read from disk first, like every other write in the
 /// launcher: signing in must not undo a favourite server starred a second
 /// earlier from another screen.
-fn store_account(
-    state: &AppState,
-    token: Option<String>,
-    user: Option<OnlineUser>,
-) -> Result<()> {
+fn store_account(state: &AppState, token: Option<String>, user: Option<OnlineUser>) -> Result<()> {
     let mut settings = Settings::current(state)?;
     settings.online_token = token;
     settings.online_user = user;
@@ -651,7 +658,10 @@ mod tests {
         assert!(state.online_configured);
         assert!(state.online_signed_in);
         assert!(!state.is_admin);
-        assert_eq!(state.online_user.expect("a user").display_name, "Kyle Katarn");
+        assert_eq!(
+            state.online_user.expect("a user").display_name,
+            "Kyle Katarn"
+        );
         // The development service runs here, so the Developer button shows.
         assert!(state.local_online);
         assert_eq!(state.online_url, crate::online::DEV_ONLINE_URL);
@@ -682,7 +692,10 @@ mod tests {
             serde_json::from_str(r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"},"presence":{"status":"online"},"admin":true}"#)
                 .expect("the answer parses");
         assert!(me.admin);
-        assert!(!me.user.admin, "the flag lives on the answer, not on the user");
+        assert!(
+            !me.user.admin,
+            "the flag lives on the answer, not on the user"
+        );
     }
 
     // --- slice: online gate ---
@@ -722,7 +735,9 @@ mod tests {
         assert!(!account_state_of(signed_in_at(""), stored_user()).online_configured);
 
         let state = account_state_of(
-            signed_in_at(&crate::online::normalize_online_url("https://online.jknet.gg/")),
+            signed_in_at(&crate::online::normalize_online_url(
+                "https://online.jknet.gg/",
+            )),
             stored_user(),
         );
         assert!(state.online_configured);
@@ -805,8 +820,7 @@ mod tests {
         .expect("the payload serializes");
         assert_eq!(json, r#"{"signedIn":false,"reason":"expired"}"#);
 
-        let read: AccountChanged =
-            serde_json::from_str(&json).expect("the payload reads back");
+        let read: AccountChanged = serde_json::from_str(&json).expect("the payload reads back");
         assert!(!read.signed_in);
         assert_eq!(read.reason, AccountChangeReason::Expired);
     }
@@ -824,14 +838,20 @@ mod tests {
 
     #[test]
     fn signing_a_device_out_names_one_session_every_other_one_or_this_launcher() {
-        assert_eq!(revoke_target(None, true, None).unwrap(), RevokeTarget::Others);
+        assert_eq!(
+            revoke_target(None, true, None).unwrap(),
+            RevokeTarget::Others
+        );
         assert_eq!(
             revoke_target(Some(" 01JPHONE ".into()), false, Some("01JPC")).unwrap(),
             RevokeTarget::One("01JPHONE".into())
         );
         // No id, or the id of this launcher's own session: the sign-out of
         // this machine, not a token deleted under its feet.
-        assert_eq!(revoke_target(None, false, None).unwrap(), RevokeTarget::ThisLauncher);
+        assert_eq!(
+            revoke_target(None, false, None).unwrap(),
+            RevokeTarget::ThisLauncher
+        );
         assert_eq!(
             revoke_target(Some("01JPC".into()), false, Some("01JPC")).unwrap(),
             RevokeTarget::ThisLauncher
@@ -850,13 +870,19 @@ mod tests {
         let list = [listed("01JPHONE", false), listed("01JPC", true)];
         let sessions = SessionsState::default();
         sessions.remember(current_of(&list, Some("0123456789abcdef")));
-        assert_eq!(sessions.current_id(Some("0123456789abcdef")).as_deref(), Some("01JPC"));
+        assert_eq!(
+            sessions.current_id(Some("0123456789abcdef")).as_deref(),
+            Some("01JPC")
+        );
         // Signed out, or signed in again in between: the id is not ours.
         assert_eq!(sessions.current_id(None), None);
         assert_eq!(sessions.current_id(Some("fedcba9876543210")), None);
 
         // A listing without a current row, or without a token, remembers nothing.
-        assert_eq!(current_of(&[listed("01JPHONE", false)], Some("0123456789abcdef")), None);
+        assert_eq!(
+            current_of(&[listed("01JPHONE", false)], Some("0123456789abcdef")),
+            None
+        );
         assert_eq!(current_of(&list, None), None);
         assert_eq!(current_of(&list, Some(" ")), None);
     }
@@ -872,10 +898,18 @@ mod tests {
               "expiresAt": "2026-12-19T10:00:00Z", "current": true, "online": false, "push": false }
         ]});
         let read: crate::online::DeviceSessions = serde_json::from_value(answer).expect("parses");
-        let [phone, pc] = read.sessions.as_slice() else { panic!("two sessions") };
-        assert_eq!((phone.client.as_str(), phone.device.as_deref()), ("web", Some("phone")));
+        let [phone, pc] = read.sessions.as_slice() else {
+            panic!("two sessions")
+        };
+        assert_eq!(
+            (phone.client.as_str(), phone.device.as_deref()),
+            ("web", Some("phone"))
+        );
         assert!(phone.online && phone.push && !phone.current);
-        assert_eq!((pc.device.as_deref(), pc.device_name.as_deref()), (None, None));
+        assert_eq!(
+            (pc.device.as_deref(), pc.device_name.as_deref()),
+            (None, None)
+        );
         assert!(pc.current);
 
         // The frontend gets the same names back.
@@ -914,44 +948,67 @@ mod tests {
         assert_eq!(pc.user.id, laptop.user.id, "one account");
 
         let outcome = async {
-            let listed = client.list_sessions(&pc.ctx).await.map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
+            let listed = client
+                .list_sessions(&pc.ctx)
+                .await
+                .map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
             println!("GET /v1/me/sessions -> {listed:?}");
-            let mine = current_of(&listed, pc.ctx.token.as_deref()).ok_or("no session is marked current")?;
+            let mine = current_of(&listed, pc.ctx.token.as_deref())
+                .ok_or("no session is marked current")?;
             let theirs = client
                 .list_sessions(&laptop.ctx)
                 .await
                 .map_err(|e| format!("GET /v1/me/sessions as the laptop: {e}"))?;
-            let other = current_of(&theirs, laptop.ctx.token.as_deref()).ok_or("the laptop has no current session")?;
+            let other = current_of(&theirs, laptop.ctx.token.as_deref())
+                .ok_or("the laptop has no current session")?;
             if mine.id == other.id || !listed.iter().any(|row| row.id == other.id) {
                 return Err(format!("the two launchers are not two rows: {listed:?}"));
             }
-            if listed.iter().any(|row| row.client != "launcher" || row.device.is_some()) {
-                return Err(format!("a launcher's session reads as the web app: {listed:?}"));
+            if listed
+                .iter()
+                .any(|row| row.client != "launcher" || row.device.is_some())
+            {
+                return Err(format!(
+                    "a launcher's session reads as the web app: {listed:?}"
+                ));
             }
 
             // One device: the laptop's next call is refused.
-            let target = revoke_target(Some(other.id.clone()), false, Some(&mine.id)).map_err(|e| e.to_string())?;
+            let target = revoke_target(Some(other.id.clone()), false, Some(&mine.id))
+                .map_err(|e| e.to_string())?;
             let RevokeTarget::One(id) = target else {
                 return Err("the laptop's row reads as this launcher".into());
             };
-            client.revoke_session(&pc.ctx, &id).await.map_err(|e| format!("DELETE /v1/me/sessions/{{id}}: {e}"))?;
+            client
+                .revoke_session(&pc.ctx, &id)
+                .await
+                .map_err(|e| format!("DELETE /v1/me/sessions/{{id}}: {e}"))?;
             match client.get_me(&laptop.ctx).await {
                 Err(AppError::Online { code, .. }) if code == "unauthorized" => {}
                 other => return Err(format!("the signed-out laptop still gets {other:?}")),
             }
-            let after = client.list_sessions(&pc.ctx).await.map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
+            let after = client
+                .list_sessions(&pc.ctx)
+                .await
+                .map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
             if after.iter().any(|row| row.id == id) {
                 return Err(format!("the laptop is still listed: {after:?}"));
             }
 
             // Every other device: a third comes, and goes with the others.
             let phone = sign_in(&client, &name).await;
-            client.revoke_other_sessions(&pc.ctx).await.map_err(|e| format!("DELETE /v1/me/sessions?others=true: {e}"))?;
+            client
+                .revoke_other_sessions(&pc.ctx)
+                .await
+                .map_err(|e| format!("DELETE /v1/me/sessions?others=true: {e}"))?;
             match client.get_me(&phone.ctx).await {
                 Err(AppError::Online { code, .. }) if code == "unauthorized" => {}
                 other => return Err(format!("the third device still gets {other:?}")),
             }
-            let alone = client.list_sessions(&pc.ctx).await.map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
+            let alone = client
+                .list_sessions(&pc.ctx)
+                .await
+                .map_err(|e| format!("GET /v1/me/sessions: {e}"))?;
             if alone.len() != 1 || !alone[0].current {
                 return Err(format!("this launcher is not alone: {alone:?}"));
             }

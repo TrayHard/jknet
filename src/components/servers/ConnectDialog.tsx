@@ -9,8 +9,8 @@ import { clientsOfGame, findConnectClient } from "../../lib/game";
 import {
   type Client,
   type InlineProfile,
-  type ServerInfo,
 } from "../../lib/ipc";
+import type { ConnectTarget } from "../../lib/serverInstanceConnect";
 import {
   useAddServerHistory,
   useAppearanceEvents,
@@ -93,7 +93,7 @@ export function ConnectDialog({
   server,
   onClose,
 }: {
-  server: ServerInfo;
+  server: ConnectTarget;
   onClose: () => void;
 }) {
   const { t } = useTranslation("servers");

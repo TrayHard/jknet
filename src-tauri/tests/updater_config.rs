@@ -52,7 +52,10 @@ fn every_endpoint_uses_tls() {
     let endpoints = config["plugins"]["updater"]["endpoints"]
         .as_array()
         .expect("plugins.updater.endpoints is an array");
-    assert!(!endpoints.is_empty(), "an updater with no endpoint never checks");
+    assert!(
+        !endpoints.is_empty(),
+        "an updater with no endpoint never checks"
+    );
     for endpoint in endpoints {
         let url = endpoint.as_str().expect("every endpoint is a string");
         assert!(

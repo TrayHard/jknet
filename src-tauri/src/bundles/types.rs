@@ -483,7 +483,10 @@ mod tests {
                 "publishedAt":"2026-09-15T00:00:00Z","updatedAt":"2026-09-15T00:00:00Z","likedByMe":true}"#,
         )
         .expect("the full card parses");
-        assert_eq!(full.owner.as_ref().map(|o| o.display_name.as_str()), Some("Kyle"));
+        assert_eq!(
+            full.owner.as_ref().map(|o| o.display_name.as_str()),
+            Some("Kyle")
+        );
         assert_eq!(full.liked_by_me, Some(true));
         assert!(full.has_executables);
         assert_eq!(full.components.len(), 2);
@@ -491,21 +494,29 @@ mod tests {
         assert_eq!(full.components[1].modes, vec![LaunchMode::Single]);
         assert_eq!(full.components[1].release_tag, None);
 
-        let bare: BundleCard = serde_json::from_str(r#"{"id":"01J","engineId":null}"#)
-            .expect("a bare card parses");
+        let bare: BundleCard =
+            serde_json::from_str(r#"{"id":"01J","engineId":null}"#).expect("a bare card parses");
         assert_eq!(bare.owner, None);
         assert_eq!(bare.liked_by_me, None);
         assert!(bare.components.is_empty());
-        assert_eq!(bare.language, "en", "a service from before translations names no language");
+        assert_eq!(
+            bare.language, "en",
+            "a service from before translations names no language"
+        );
         assert!(bare.translations.is_empty());
         let json = serde_json::to_value(&bare).expect("it serializes");
-        assert!(json.get("likedByMe").is_none(), "absent stays absent: {json}");
+        assert!(
+            json.get("likedByMe").is_none(),
+            "absent stays absent: {json}"
+        );
         assert_eq!(json["engineId"], "");
         assert_eq!(json["language"], "en");
         assert_eq!(json["translations"], serde_json::json!({}));
-        let null_language: BundleCard = serde_json::from_str(r#"{"id":"01J","language":null}"#).unwrap();
+        let null_language: BundleCard =
+            serde_json::from_str(r#"{"id":"01J","language":null}"#).unwrap();
         assert_eq!(null_language.language, "en");
-        let blank_language: BundleCard = serde_json::from_str(r#"{"id":"01J","language":""}"#).unwrap();
+        let blank_language: BundleCard =
+            serde_json::from_str(r#"{"id":"01J","language":""}"#).unwrap();
         assert_eq!(blank_language.language, "en");
     }
 
@@ -521,7 +532,10 @@ mod tests {
         assert_eq!(card.translations.len(), 2);
         assert_eq!(card.translations["en"].summary, "Russian edition");
         assert_eq!(card.translations["en"].description, None);
-        assert_eq!(card.translations["uk"].name, "", "an empty field is not translated");
+        assert_eq!(
+            card.translations["uk"].name, "",
+            "an empty field is not translated"
+        );
         let json = serde_json::to_value(&card).expect("it serializes");
         assert!(
             json["translations"]["en"].get("description").is_none(),
@@ -537,8 +551,14 @@ mod tests {
         .expect("the details parse");
         assert_eq!(details.card.language, "en");
         assert_eq!(details.description, "# X");
-        assert_eq!(details.card.translations["ru"].description.as_deref(), Some("# Икс"));
-        assert_eq!(details.card.translations["de"].description, None, "null reads as absent");
+        assert_eq!(
+            details.card.translations["ru"].description.as_deref(),
+            Some("# Икс")
+        );
+        assert_eq!(
+            details.card.translations["de"].description, None,
+            "null reads as absent"
+        );
         let json = serde_json::to_value(&details).expect("it serializes");
         assert_eq!(json["translations"]["ru"]["description"], "# Икс");
         assert_eq!(json["translations"]["ru"]["summary"], "");

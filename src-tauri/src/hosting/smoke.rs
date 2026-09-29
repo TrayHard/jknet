@@ -57,7 +57,9 @@ pub struct SmokeOnline {
 
 impl std::fmt::Debug for SmokeOnline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SmokeOnline").field("url", &self.url).finish_non_exhaustive()
+        f.debug_struct("SmokeOnline")
+            .field("url", &self.url)
+            .finish_non_exhaustive()
     }
 }
 
@@ -111,6 +113,7 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
     let rcon_password = server::random_password(server::RCON_PASSWORD_LEN);
     let server_config = ServerConfig {
         game,
+        mod_folder: None,
         roots,
         // Loopback only: `net_ip 127.0.0.1`.
         network: Network::Internet,
@@ -125,22 +128,47 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
         server_name: "JKNet smoke".into(),
         password: Some(server::random_password(server::PASSWORD_LEN)),
         rcon_password: rcon_password.clone(),
+        extra_commands: crate::server_configs::compile_for_host(
+            &crate::server_configs::ServerConfigDocument {
+                id: String::new(),
+                name: "Smoke server config".into(),
+                game,
+                mod_id: "base".into(),
+                text: "seta g_gravity 650; set g_maxForceRank 6".into(),
+            },
+            game,
+            None,
+        )
+        .map_err(|e| format!("server config: {e}"))?,
     };
     let cfg_dir = config.home_dir.join("base");
-    std::fs::create_dir_all(&cfg_dir).map_err(|e| format!("cannot create {}: {e}", cfg_dir.display()))?;
-    let cfg_path = cfg_dir.join(server::CONFIG_FILE);
-    std::fs::write(&cfg_path, server::host_config(&server_config))
-        .map_err(|e| format!("cannot write {}: {e}", cfg_path.display()))?;
+    std::fs::create_dir_all(&cfg_dir)
+        .map_err(|e| format!("cannot create {}: {e}", cfg_dir.display()))?;
+    let _config_files = server::write_configs(&cfg_dir, &server_config)
+        .map_err(|e| format!("cannot write smoke configs: {e}"))?;
     let args = server::server_args(&server_config);
-    report.push(format!("command line: {} tokens, ends in {:?}", args.len(), &args[args.len() - 10..]));
+    report.push(format!(
+        "command line: {} tokens, ends in {:?}",
+        args.len(),
+        &args[args.len() - 10..]
+    ));
 
     let output = Arc::new(ConsoleOutput::with_log(&config.log_file));
     let started = Instant::now();
     let process = Arc::new(
-        ServerProcess::spawn(&config.executable, &config.engine_dir, &args, output.clone())
-            .map_err(|e| format!("spawn: {e}"))?,
+        ServerProcess::spawn(
+            &config.executable,
+            &config.engine_dir,
+            &args,
+            output.clone(),
+        )
+        .map_err(|e| format!("spawn: {e}"))?,
     );
-    report.push(format!("spawned pid {} with {:?}", process.pid(), process.method()));
+    report.push(format!(
+        "spawned pid {} with {:?}",
+        process.pid(),
+        process.method()
+    ));
 
     let port = match server::wait_ready(
         config.first_port,
@@ -153,7 +181,10 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
         Ok(port) => port,
         Err(reason) => {
             process.close();
-            return Err(format!("not ready: {reason:?}; console tail: {:?}", output.tail(20)));
+            return Err(format!(
+                "not ready: {reason:?}; console tail: {:?}",
+                output.tail(20)
+            ));
         }
     };
     report.push(format!(
@@ -162,7 +193,9 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
         output.saw(Marker::GameInitialization)
     ));
 
-    let status = server::status(port).await.map_err(|e| format!("getstatus: {e}"))?;
+    let status = server::status(port)
+        .await
+        .map_err(|e| format!("getstatus: {e}"))?;
     report.push(format!(
         "getstatus: map {:?}, label {}, {} players",
         status.map(),
@@ -170,10 +203,61 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
         status.players.len()
     ));
 
+    // Exercise both worldspawn-overridden and latched cvars with fresh RCON
+    // replies, so stale console output cannot make the second check pass.
+    for changed_map in [false, true] {
+        if changed_map {
+            for command in server::change_map_commands(game, None, 0, 20, &config.map, 0, true) {
+                server::rcon(port, &rcon_password, &command)
+                    .await
+                    .map_err(|e| format!("map change: {e}"))?;
+                tokio::time::sleep(Duration::from_millis(60)).await;
+            }
+        }
+        for (name, expected) in [("g_gravity", "650"), ("g_maxForceRank", "6")] {
+            if let Err(e) = check_cvar(port, &rcon_password, name, expected).await {
+                stop(&process, port, &rcon_password).await;
+                return Err(e);
+            }
+        }
+        report.push(format!("checked server config applied g_gravity 650 and g_maxForceRank 6 after {} without pending latch",
+            if changed_map { "map change" } else { "start" }));
+    }
+
+    // The same observer the supervisor ticks must also cover an automatic
+    // round restart, where the map name and session label do not change.
+    let mut replay = server::MapSettingsReplay::default();
+    replay.reapply_after(output.game_initializations(), || true);
+    if !process.type_line("map_restart 0") {
+        return Err("cannot enqueue the smoke round restart".into());
+    }
+    let restart_started = Instant::now();
+    let mut replayed = false;
+    while restart_started.elapsed() < Duration::from_secs(5) {
+        if replay.reapply_after(output.game_initializations(), || {
+            process.type_line(&format!("exec {}", server::SETTINGS_FILE))
+        }) {
+            replayed = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
+    if !replayed {
+        return Err("the smoke round restart did not produce a game initialization".into());
+    }
+    for (name, expected) in [("g_gravity", "650"), ("g_maxForceRank", "6")] {
+        check_cvar(port, &rcon_password, name, expected).await?;
+    }
+    report.push("checked server config reapplied after map_restart 0 without pending latch".into());
+
     // A guest the way the tunnel binds one: its own loopback address.
-    let direct = probe(SocketAddrV4::new(Ipv4Addr::new(127, 77, 0, 5), 0), SocketAddrV4::new(Ipv4Addr::LOCALHOST, port), "getinfo smoke")
-        .await
-        .map_err(|e| format!("getinfo from 127.77.0.5: {e}"))?;
+    let direct = probe(
+        SocketAddrV4::new(Ipv4Addr::new(127, 77, 0, 5), 0),
+        SocketAddrV4::new(Ipv4Addr::LOCALHOST, port),
+        "getinfo smoke",
+    )
+    .await
+    .map_err(|e| format!("getinfo from 127.77.0.5: {e}"))?;
     report.push(format!("getinfo from 127.77.0.5: {direct}"));
 
     if let Some(online) = config.online.as_ref() {
@@ -183,7 +267,6 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
             Ok(lines) => report.extend(lines),
             Err(e) => {
                 stop(&process, port, &rcon_password).await;
-                let _ = std::fs::remove_file(&cfg_path);
                 return Err(format!("relay: {e}"));
             }
         }
@@ -193,14 +276,59 @@ async fn chain(config: SmokeConfig) -> Result<Vec<String>, String> {
 
     let (stopped, how) = stop(&process, port, &rcon_password).await;
     report.push(format!("stopped with {how}, exit code {stopped:?}"));
-    let _ = std::fs::remove_file(&cfg_path);
-    report.push(format!("console lines kept: {}, last: {:?}", output.tail(1000).len(), output.tail(1)));
+    report.push(format!(
+        "console lines kept: {}, last: {:?}",
+        output.tail(1000).len(),
+        output.tail(1)
+    ));
     Ok(report)
+}
+
+async fn check_cvar(port: u16, password: &str, name: &str, expected: &str) -> Result<(), String> {
+    let socket = UdpSocket::bind("127.0.0.1:0")
+        .await
+        .map_err(|e| format!("cvar probe: {e}"))?;
+    socket
+        .connect(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+        .await
+        .map_err(|e| format!("cvar probe: {e}"))?;
+    let mut buffer = [0u8; 2048];
+    let mut last = String::new();
+    for _ in 0..8 {
+        socket
+            .send(&oob_packet(&format!("rcon {password} {name}")))
+            .await
+            .map_err(|e| format!("cvar probe: {e}"))?;
+        if let Ok(Ok(read)) =
+            tokio::time::timeout(Duration::from_millis(600), socket.recv(&mut buffer)).await
+        {
+            if let Some(payload) = oob_payload(&buffer[..read]) {
+                let (command, body) = split_command(payload);
+                if command == b"print" {
+                    last = crate::servers::protocol::strip_colors(&String::from_utf8_lossy(body));
+                    if (last.contains(&format!("Cvar {name} = \"{expected}\""))
+                        || last.contains(&format!("\"{name}\" is:\"{expected}\"")))
+                        && !last.to_ascii_lowercase().contains("latched")
+                    {
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Err(format!(
+        "server config expected {name} {expected} without a pending latch, got {last:?}"
+    ))
 }
 
 /// `rcon quit`, then the console, then the job; answers the exit code and
 /// which of the three did it.
-async fn stop(process: &Arc<ServerProcess>, port: u16, rcon_password: &str) -> (Option<u32>, &'static str) {
+async fn stop(
+    process: &Arc<ServerProcess>,
+    port: u16,
+    rcon_password: &str,
+) -> (Option<u32>, &'static str) {
     let sent = Instant::now();
     let _ = server::rcon(port, rcon_password, "quit").await;
     let waiting = process.clone();
@@ -223,13 +351,25 @@ async fn stop(process: &Arc<ServerProcess>, port: u16, rcon_password: &str) -> (
 
 /// One out-of-band request from `from`, the first answer as text.
 async fn probe(from: SocketAddrV4, to: SocketAddrV4, request: &str) -> Result<String, String> {
-    let socket = UdpSocket::bind(from).await.map_err(|e| format!("bind {from}: {e}"))?;
-    socket.connect(to).await.map_err(|e| format!("connect {to}: {e}"))?;
+    let socket = UdpSocket::bind(from)
+        .await
+        .map_err(|e| format!("bind {from}: {e}"))?;
+    socket
+        .connect(to)
+        .await
+        .map_err(|e| format!("connect {to}: {e}"))?;
     let mut buffer = vec![0u8; 65_535];
     for _ in 0..3 {
-        socket.send(&oob_packet(request)).await.map_err(|e| format!("send: {e}"))?;
-        if let Ok(Ok(read)) = tokio::time::timeout(Duration::from_millis(1500), socket.recv(&mut buffer)).await {
-            let Some(payload) = oob_payload(&buffer[..read]) else { continue };
+        socket
+            .send(&oob_packet(request))
+            .await
+            .map_err(|e| format!("send: {e}"))?;
+        if let Ok(Ok(read)) =
+            tokio::time::timeout(Duration::from_millis(1500), socket.recv(&mut buffer)).await
+        {
+            let Some(payload) = oob_payload(&buffer[..read]) else {
+                continue;
+            };
             let (command, body) = split_command(payload);
             let info = parse_infostring(&String::from_utf8_lossy(body));
             return Ok(format!(
@@ -254,22 +394,36 @@ async fn through_the_relay(
     let mut report = Vec::new();
     let online = OnlineClient::new();
     let base_url = service.url.trim_end_matches('/').to_string();
-    let ctx = OnlineContext { base_url: base_url.clone(), token: Some(service.host_token.clone()) };
-    let guest = OnlineContext { base_url, token: Some(service.guest_token.clone()) };
+    let ctx = OnlineContext {
+        base_url: base_url.clone(),
+        token: Some(service.host_token.clone()),
+    };
+    let guest = OnlineContext {
+        base_url,
+        token: Some(service.guest_token.clone()),
+    };
     let grant = online
         .create_relay_session(&ctx, Game::JediAcademy.id(), &[])
         .await
         .map_err(|e| format!("POST /v1/relay/sessions: {e}"))?;
     report.push(format!(
         "relay grant: session {} on node {} ({}), control {}, expires {}",
-        grant.session_id, grant.node.id, grant.node.region, grant.node.control_address, grant.expires_at
+        grant.session_id,
+        grant.node.id,
+        grant.node.region,
+        grant.node.control_address,
+        grant.expires_at
     ));
     let config = super::tunnel_config(&grant, Some(port)).await?;
     let (events_tx, mut events) = mpsc::unbounded_channel();
     let handle = tunnel::spawn(config, events_tx);
     let public = loop {
         match tokio::time::timeout(Duration::from_secs(12), events.recv()).await {
-            Ok(Some(TunnelEvent::Active { public, expires_at, max_guests })) => {
+            Ok(Some(TunnelEvent::Active {
+                public,
+                expires_at,
+                max_guests,
+            })) => {
                 report.push(format!("tunnel active: guests reach {public}, expires at {expires_at}, max {max_guests} guests"));
                 break public;
             }
@@ -282,9 +436,29 @@ async fn through_the_relay(
         }
     };
 
-    let mut checked = relay_checks(&online, &ctx, &grant, &handle, &mut events, public, session_id, &mut report).await;
+    let mut checked = relay_checks(
+        &online,
+        &ctx,
+        &grant,
+        &handle,
+        &mut events,
+        public,
+        session_id,
+        &mut report,
+    )
+    .await;
     if checked.is_ok() {
-        checked = hosting_checks(&online, &ctx, &guest, public, port, session_id, password, &mut report).await;
+        checked = hosting_checks(
+            &online,
+            &ctx,
+            &guest,
+            public,
+            port,
+            session_id,
+            password,
+            &mut report,
+        )
+        .await;
     }
     handle.close().await;
     let closed = online
@@ -314,11 +488,26 @@ async fn relay_checks(
 
     // A guest from «the internet»: here, a socket of this process sending to
     // the public port of the node, which is on loopback in a local run.
-    let info = probe(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0), public, "getinfo relayed").await;
-    let status = probe(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0), public, "getstatus relayed").await;
+    let info = probe(
+        SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0),
+        public,
+        "getinfo relayed",
+    )
+    .await;
+    let status = probe(
+        SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0),
+        public,
+        "getstatus relayed",
+    )
+    .await;
     let label_ok = status.as_ref().is_ok_and(|text| text.contains(session_id));
-    report.push(format!("getinfo through the relay: {}", info.clone().unwrap_or_else(|e| e)));
-    report.push(format!("getstatus through the relay carries the label: {label_ok}"));
+    report.push(format!(
+        "getinfo through the relay: {}",
+        info.clone().unwrap_or_else(|e| e)
+    ));
+    report.push(format!(
+        "getstatus through the relay carries the label: {label_ok}"
+    ));
     if info.is_err() || !label_ok {
         return Err("the relay did not carry the queries".into());
     }
@@ -363,21 +552,28 @@ async fn relay_checks(
             Ok(Some(other)) => report.push(format!("tunnel event: {other:?}")),
         }
     };
-    report.push(format!("keepalive answered and counted: the node reports {counted:?} guests"));
+    report.push(format!(
+        "keepalive answered and counted: the node reports {counted:?} guests"
+    ));
     if counted.is_none() {
         return Err("no KEEPALIVE_ACK of the node counted".into());
     }
 
     // One session per account: a second one while the first is open is the
     // quota refusal, with its details.
-    match online.create_relay_session(ctx, Game::JediAcademy.id(), &[]).await {
+    match online
+        .create_relay_session(ctx, Game::JediAcademy.id(), &[])
+        .await
+    {
         Ok(extra) => {
             let _ = online.close_relay_session(ctx, &extra.session_id).await;
             Err("the service granted a second relay session to the same account".into())
         }
         Err(e) => {
             let (code, message) = super::relay_error_of(&e);
-            report.push(format!("second session refused: {code:?} ({message}); {e:?}"));
+            report.push(format!(
+                "second session refused: {code:?} ({message}); {e:?}"
+            ));
             if code == super::RelayErrorCode::QuotaActive {
                 Ok(())
             } else {
@@ -401,12 +597,29 @@ async fn hosting_checks(
     password: &str,
     report: &mut Vec<String>,
 ) -> Result<(), String> {
-    let host_id = online.get_me(host).await.map_err(|e| format!("GET /v1/me: {e}"))?.user.id;
-    let guest_id = online.get_me(guest).await.map_err(|e| format!("GET /v1/me: {e}"))?.user.id;
+    let host_id = online
+        .get_me(host)
+        .await
+        .map_err(|e| format!("GET /v1/me: {e}"))?
+        .user
+        .id;
+    let guest_id = online
+        .get_me(guest)
+        .await
+        .map_err(|e| format!("GET /v1/me: {e}"))?
+        .user
+        .id;
 
     // Friends first, or friends already from an earlier run on the same data.
-    let friends = online.get_friends(host).await.map_err(|e| format!("GET /v1/friends: {e}"))?;
-    if !friends.friends.iter().any(|friend| friend.user.id == guest_id) {
+    let friends = online
+        .get_friends(host)
+        .await
+        .map_err(|e| format!("GET /v1/friends: {e}"))?;
+    if !friends
+        .friends
+        .iter()
+        .any(|friend| friend.user.id == guest_id)
+    {
         let sent = online
             .send_friend_request(guest, &host_id)
             .await
@@ -445,14 +658,25 @@ async fn hosting_checks(
         client_name: None,
         hosting: Some(info.clone()),
     };
-    let own = online.put_presence(host, &update).await.map_err(|e| format!("PUT /v1/presence: {e}"))?;
-    let kept = own.hosting.as_ref().and_then(|hosting| hosting.relay_address.clone());
-    report.push(format!("presence with hosting accepted; the service kept the relay address: {kept:?}"));
+    let own = online
+        .put_presence(host, &update)
+        .await
+        .map_err(|e| format!("PUT /v1/presence: {e}"))?;
+    let kept = own
+        .hosting
+        .as_ref()
+        .and_then(|hosting| hosting.relay_address.clone());
+    report.push(format!(
+        "presence with hosting accepted; the service kept the relay address: {kept:?}"
+    ));
     if kept.as_deref() != Some(public.as_str()) {
         return Err("the service dropped the relay address of the host's own session".into());
     }
 
-    let friends = online.get_friends(guest).await.map_err(|e| format!("GET /v1/friends: {e}"))?;
+    let friends = online
+        .get_friends(guest)
+        .await
+        .map_err(|e| format!("GET /v1/friends: {e}"))?;
     let seen = friends
         .friends
         .iter()
@@ -482,7 +706,10 @@ async fn hosting_checks(
         message: None,
         hosting: Some(info),
     };
-    let sent = online.create_invite(host, &invite).await.map_err(|e| format!("POST /v1/invites: {e}"))?;
+    let sent = online
+        .create_invite(host, &invite)
+        .await
+        .map_err(|e| format!("POST /v1/invites: {e}"))?;
     let received = online
         .list_invites(guest)
         .await
@@ -503,7 +730,13 @@ async fn hosting_checks(
     }
 
     // The server is going: friends stop seeing it.
-    let quiet = PresenceUpdate { hosting: None, ..update };
-    online.put_presence(host, &quiet).await.map_err(|e| format!("PUT /v1/presence: {e}"))?;
+    let quiet = PresenceUpdate {
+        hosting: None,
+        ..update
+    };
+    online
+        .put_presence(host, &quiet)
+        .await
+        .map_err(|e| format!("PUT /v1/presence: {e}"))?;
     Ok(())
 }

@@ -5,6 +5,7 @@ import {
   Download,
   FolderOpen,
   Gamepad2,
+  Import,
   Package,
   PackagePlus,
   Play,
@@ -37,6 +38,7 @@ import {
   NEW_CLIENT_PARAM,
 } from "../components/MissingClientToast";
 import { NewClientDialog } from "../components/NewClientDialog";
+import { ImportClientDialog } from "../components/ImportClientDialog";
 import { Page, PageHeader } from "../components/PageHeader";
 // --- slice: selection context menu ---
 import {
@@ -221,7 +223,9 @@ export function ClientsPage() {
   const openClientWindow = useOpenClientWindow();
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   // --- slice: clients page ---
   // The client **Delete** was pressed about, until the question is answered.
   // Held here rather than on the card so that the folder the dialog names
@@ -382,16 +386,34 @@ export function ClientsPage() {
           // --- slice: bundles --- **New client** belongs to the list of
           // clients; the catalogue tab has its own buttons in its bar.
           tab === "clients" ? (
-            <Button
-              variant="primary"
-              icon={<Plus size={16} />}
-              onClick={() => setDialogOpen(true)}
-            >
-              {t("newClient")}
-            </Button>
+            <div className="flex items-center gap-8">
+              <Button
+                icon={<Import size={16} />}
+                onClick={() => setImportDialogOpen(true)}
+              >
+                {t("importClient")}
+              </Button>
+              <Button
+                variant="primary"
+                icon={<Plus size={16} />}
+                onClick={() => setDialogOpen(true)}
+              >
+                {t("newClient")}
+              </Button>
+            </div>
           ) : undefined
         }
       />
+
+      {notice ? (
+        <div
+          role="status"
+          className="flex items-start gap-8 rounded-md border border-line-success bg-success-subtle p-12 mb-16"
+        >
+          <Check size={16} className="text-fg-success shrink-0 mt-2" />
+          <span className="text-body-sm text-fg">{notice}</span>
+        </div>
+      ) : null}
 
       {failure ? (
         <div
@@ -501,6 +523,29 @@ export function ClientsPage() {
             setNewClientGame(undefined);
           }}
           onError={(message) => setError(message)}
+        />
+      ) : null}
+
+      {importDialogOpen ? (
+        <ImportClientDialog
+          onClose={() => setImportDialogOpen(false)}
+          onImported={(result) => {
+            const warnings = [
+              result.mediaWarning ? t("importDialog.mediaWarning") : null,
+              result.engineUpgradeWarning ? t("importDialog.engineUpgradeWarning") : null,
+              result.sourceDeleteWarning ? t("importDialog.sourceDeleteWarning") : null,
+            ].filter((message): message is string => message !== null);
+            setError(warnings.length > 0 ? warnings.join(" ") : null);
+            const notices = [
+              t("importDialog.done", {
+                client: result.client.name,
+                count: result.mediaImported,
+              }),
+              result.engineUpgraded ? t("importDialog.engineUpgraded") : null,
+              result.sourceDeleted ? t("importDialog.sourceDeleted") : null,
+            ].filter((message): message is string => message !== null);
+            setNotice(notices.join(" "));
+          }}
         />
       ) : null}
 
@@ -652,6 +697,7 @@ function ClientCard({
   // rewritten. A bundle job holds the client the same way, for longer.
   const installing = showProgress || installPending || bundleBusy;
   const installed = client.engineVersion !== null;
+  const imported = client.engineOrigin === "imported";
   const isRunning = running?.clientId === client.id;
   const otherIsRunning = running !== null && !isRunning;
   // --- slice: bundles ---
@@ -737,7 +783,7 @@ function ClientCard({
         id: "bundle",
         label: tBundles("clientCard.createBundleMenu"),
         icon: <PackagePlus size={14} />,
-        disabled: !installed || installing || creatingBundle,
+        disabled: imported || !installed || installing || creatingBundle,
       },
       {
         id: "folder",
@@ -861,7 +907,9 @@ function ClientCard({
             {engineName}
           </Link>
           {installed ? (
-            <span className="text-mono-xs shrink-0">{client.engineVersion}</span>
+            <span className="text-mono-xs shrink-0">
+              {imported ? t("card.imported") : client.engineVersion}
+            </span>
           ) : (
             <span className="text-fg-warm shrink-0">{t("card.engineNotInstalled")}</span>
           )}
@@ -956,8 +1004,12 @@ function ClientCard({
             className="shrink-0"
             icon={<PackagePlus size={14} />}
             onClick={onCreateBundle}
-            disabled={!installed || installing || creatingBundle}
-            title={busyHint ?? tBundles("clientCard.createBundleHint")}
+            disabled={imported || !installed || installing || creatingBundle}
+            title={
+              imported
+                ? t("card.importedBundleHint")
+                : (busyHint ?? tBundles("clientCard.createBundleHint"))
+            }
           >
             {creatingBundle ? tCommon("states.creating") : tBundles("clientCard.createBundle")}
           </Button>
@@ -1126,14 +1178,17 @@ function EngineControls({
   // --- slice: bundles ---
   const { t: tBundles } = useTranslation("bundles");
   const errorText = useErrorText();
-  const releases = useEngineReleases(installed ? null : client.engineId);
   const [checkRequested, setCheckRequested] = useState(false);
   // --- slice: bundles ---
   // A bundle that laid files over the engine folder made the build its own:
   // a release update would write over those files, so the card says so and
   // offers no check.
   const customBuild = client.bundle?.engineOverlay === true;
-  const update = useEngineUpdate(checkRequested && !customBuild ? client.id : null);
+  const imported = client.engineOrigin === "imported";
+  const releases = useEngineReleases(!installed || imported ? client.engineId : null);
+  const update = useEngineUpdate(
+    checkRequested && !customBuild && !imported ? client.id : null,
+  );
 
   const check = () => {
     if (checkRequested) void update.refetch();
@@ -1145,7 +1200,35 @@ function EngineControls({
 
   return (
     <>
-      {installed && customBuild ? (
+      {installed && imported ? (
+        <>
+          <Badge
+            tone="neutral"
+            icon={<Import size={12} />}
+            className="shrink-0"
+            title={t("card.importedHint")}
+          >
+            {t("card.imported")}
+          </Badge>
+          <Button
+            size="sm"
+            variant="primary"
+            className="shrink-0"
+            icon={<RefreshCw size={14} />}
+            onClick={onInstall}
+            disabled={installing || isRunning || !latestTag}
+          >
+            {latestTag
+              ? t("engine.adoptLatest", { version: latestTag })
+              : t("engine.updateToNewest")}
+          </Button>
+          {releases.error ? (
+            <span className="text-body-sm text-fg-danger truncate" title={errorText(releases.error)}>
+              {errorText(releases.error)}
+            </span>
+          ) : null}
+        </>
+      ) : installed && customBuild ? (
         <Badge
           tone="purple"
           icon={<Wrench size={12} />}

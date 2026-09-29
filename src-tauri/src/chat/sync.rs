@@ -165,7 +165,10 @@ pub(super) fn same_account(app: &AppHandle, ctx: &OnlineContext) -> bool {
 /// files it downloaded. The windows drop every thread it had.
 fn forget_account(app: &AppHandle) {
     let known = app.state::<ChatState>().forget();
-    log::info!("chat: the account changed, {} conversation(s) forgotten", known.len());
+    log::info!(
+        "chat: the account changed, {} conversation(s) forgotten",
+        known.len()
+    );
     if let Ok(paths) = app.state::<AppState>().paths() {
         let dir = paths.chat_cache_dir();
         tauri::async_runtime::spawn_blocking(move || {

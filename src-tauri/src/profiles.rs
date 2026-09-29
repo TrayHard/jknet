@@ -32,7 +32,9 @@
 //! field the profile does not set writes no token at all, and the engine keeps
 //! whatever its own configuration says.
 
+use std::collections::BTreeMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -45,6 +47,13 @@ use crate::state::AppState;
 
 /// The document beside `client.json`.
 const PROFILES_FILE: &str = "profiles.json";
+
+/// Largest config the importer reads into memory.
+///
+/// A generated `jampconfig.cfg` is normally tens of kilobytes. One MiB leaves
+/// room for a heavily commented hand-written config without letting a file
+/// picker turn this small parser into an arbitrary-file reader.
+const MAX_PROFILE_CONFIG_BYTES: u64 = 1024 * 1024;
 
 /// Longest profile name the launcher accepts. The same limit a client name
 /// has: both are names on a card, and a longer one says nothing extra.
@@ -186,6 +195,18 @@ pub struct PlayerProfile {
     /// on the command line; see [`launch_tokens`].
     #[serde(default)]
     pub tokens_override: Option<String>,
+}
+
+/// A player profile recognised in a selected game config.
+///
+/// Nothing is stored by the inspection command. The window opens the ordinary
+/// profile form with this draft, and `save_profile` remains the only writer of
+/// `profiles.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileConfigImport {
+    pub source_name: String,
+    pub profile: PlayerProfile,
 }
 
 // --- slice: connect dialog ---
@@ -406,15 +427,65 @@ pub fn launch_tokens(profile: &PlayerProfile, game: Game) -> Vec<String> {
 
 /// The profiles of one client and which of them is the default.
 #[tauri::command]
-pub fn list_profiles(
-    state: tauri::State<'_, AppState>,
-    client_id: String,
-) -> Result<ProfileBook> {
+pub fn list_profiles(state: tauri::State<'_, AppState>, client_id: String) -> Result<ProfileBook> {
     let paths = state.paths()?;
     // The record is read first, so an id that names nothing is a refusal
     // instead of an empty list the window would draw as «no profiles yet».
     clients::read_record(&paths, &client_id)?;
     Ok(read_book(&paths, &client_id))
+}
+
+/// Reads a selected `.cfg` and turns the player-related cvars into a draft.
+///
+/// The parser never executes the config and never copies its remaining
+/// commands. A draft goes through the same field validation as a profile made
+/// in the form, then returns to that form for review before anything is saved.
+#[tauri::command]
+pub async fn inspect_profile_config(
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+    path: String,
+) -> Result<ProfileConfigImport> {
+    let paths = state.paths()?;
+    let client = clients::read_record(&paths, &client_id)?;
+    let path = PathBuf::from(path.trim());
+    if !path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("cfg"))
+    {
+        return Err(AppError::InvalidInput(
+            "player profile import requires a .cfg file".into(),
+        ));
+    }
+
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|error| AppError::io_path("cannot inspect the player config", &path, error))?;
+    if !metadata.is_file() {
+        return Err(AppError::InvalidInput(
+            "player profile import requires a file".into(),
+        ));
+    }
+    if metadata.len() > MAX_PROFILE_CONFIG_BYTES {
+        return Err(AppError::InvalidInput(format!(
+            "the player config is larger than {MAX_PROFILE_CONFIG_BYTES} bytes"
+        )));
+    }
+
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|error| AppError::io_path("cannot read the player config", &path, error))?;
+    let text = decode_profile_config(&bytes)?;
+    let source_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("profile.cfg")
+        .to_string();
+    let profile = profile_from_config(&text, profile_name_from_path(&path), client.game)?;
+    Ok(ProfileConfigImport {
+        source_name,
+        profile,
+    })
 }
 
 /// Creates a profile or rewrites one, and answers with the whole document.
@@ -584,7 +655,10 @@ pub(crate) fn read_book(paths: &DataPaths, client_id: &str) -> ProfileBook {
     match serde_json::from_str(&text) {
         Ok(book) => book,
         Err(e) => {
-            log::warn!("cannot parse {}: {e}, starting an empty one", file.display());
+            log::warn!(
+                "cannot parse {}: {e}, starting an empty one",
+                file.display()
+            );
             ProfileBook::default()
         }
     }
@@ -597,6 +671,389 @@ fn write_book(paths: &DataPaths, client_id: &str, book: &ProfileBook) -> Result<
     let text = serde_json::to_string_pretty(book)
         .map_err(|e| AppError::json("cannot serialize the player profiles", e))?;
     fs::write(&file, text).map_err(|e| AppError::io_path("cannot write", &file, e))
+}
+
+// ---------------------------------------------------------------------------
+// Config import
+// ---------------------------------------------------------------------------
+
+/// Decodes configs written by current editors and by the legacy Windows game.
+///
+/// UTF-8 takes precedence, a BOM selects UTF-16 and a run of Cyrillic bytes
+/// distinguishes Windows-1251 from Windows-1252. This is the same set of
+/// encodings the server-config importer accepts; player configs come from the
+/// same engines and tools.
+fn decode_profile_config(bytes: &[u8]) -> Result<String> {
+    fn decode_with(encoding: &'static encoding_rs::Encoding, bytes: &[u8]) -> Option<String> {
+        let (text, _, had_errors) = encoding.decode(bytes);
+        (!had_errors).then(|| text.into_owned())
+    }
+
+    fn looks_like_windows_1251(bytes: &[u8]) -> bool {
+        fn is_cyrillic(byte: u8) -> bool {
+            matches!(
+                byte,
+                0x80 | 0x81 | 0x83 | 0x8a | 0x8c..=0x90 | 0x9a | 0x9c..=0x9f
+                    | 0xa1..=0xa3 | 0xa5 | 0xa8 | 0xaa | 0xaf | 0xb2..=0xb4 | 0xb8
+                    | 0xba | 0xbc..=0xff
+            )
+        }
+
+        let mut run = 0;
+        let mut longest = 0;
+        for byte in bytes {
+            if is_cyrillic(*byte) {
+                run += 1;
+                longest = longest.max(run);
+            } else {
+                run = 0;
+            }
+        }
+        longest >= 3
+    }
+
+    let decoded = if let Ok(text) = std::str::from_utf8(bytes) {
+        Some(text.to_owned())
+    } else if bytes.starts_with(&[0xff, 0xfe]) {
+        decode_with(encoding_rs::UTF_16LE, bytes)
+    } else if bytes.starts_with(&[0xfe, 0xff]) {
+        decode_with(encoding_rs::UTF_16BE, bytes)
+    } else {
+        let pages = if looks_like_windows_1251(bytes) {
+            [encoding_rs::WINDOWS_1251, encoding_rs::WINDOWS_1252]
+        } else {
+            [encoding_rs::WINDOWS_1252, encoding_rs::WINDOWS_1251]
+        };
+        pages
+            .into_iter()
+            .find_map(|encoding| decode_with(encoding, bytes))
+    };
+    let text = decoded.ok_or_else(|| {
+        AppError::InvalidInput("player profile import requires a supported text encoding".into())
+    })?;
+    if text.contains('\0') {
+        return Err(AppError::InvalidInput(
+            "player profile import requires a text file".into(),
+        ));
+    }
+    Ok(text)
+}
+
+/// Splits a Quake config into commands and tokens without executing anything.
+///
+/// Physical line breaks and unquoted semicolons end commands. Line and block
+/// comments are discarded. Backslashes do not escape quotes in this grammar,
+/// matching the game's parser and the server-config importer.
+fn profile_config_commands(text: &str) -> Result<Vec<Vec<String>>> {
+    let mut commands = Vec::new();
+    let mut tokens = Vec::new();
+    let mut token = String::new();
+    let mut token_started = false;
+    let mut quoted = false;
+    let mut block_comment = false;
+    let mut chars = text.trim_start_matches('\u{feff}').chars().peekable();
+
+    while let Some(character) = chars.next() {
+        if character == '\r' && chars.peek() == Some(&'\n') {
+            continue;
+        }
+        let newline = matches!(character, '\n' | '\r');
+        if block_comment {
+            if character == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                block_comment = false;
+            }
+            continue;
+        }
+        if newline || (!quoted && character == ';') {
+            if quoted {
+                return Err(AppError::InvalidInput(
+                    "the player config has an unterminated quoted value".into(),
+                ));
+            }
+            if token_started {
+                tokens.push(std::mem::take(&mut token));
+                token_started = false;
+            }
+            if !tokens.is_empty() {
+                commands.push(std::mem::take(&mut tokens));
+            }
+            continue;
+        }
+        if !quoted && character == '/' && matches!(chars.peek(), Some('/' | '*')) {
+            if token_started {
+                tokens.push(std::mem::take(&mut token));
+                token_started = false;
+            }
+            if chars.next() == Some('*') {
+                block_comment = true;
+            } else {
+                while chars
+                    .peek()
+                    .is_some_and(|next| !matches!(next, '\n' | '\r'))
+                {
+                    chars.next();
+                }
+            }
+            continue;
+        }
+        if character == '"' {
+            if quoted || token_started {
+                tokens.push(std::mem::take(&mut token));
+            }
+            quoted = !quoted;
+            token_started = quoted;
+        } else if !quoted && matches!(character, ' ' | '\t') {
+            if token_started {
+                tokens.push(std::mem::take(&mut token));
+                token_started = false;
+            }
+        } else {
+            if character.is_control() {
+                return Err(AppError::InvalidInput(
+                    "the player config contains an unsupported control character".into(),
+                ));
+            }
+            token_started = true;
+            token.push(character);
+        }
+    }
+
+    if block_comment {
+        return Err(AppError::InvalidInput(
+            "the player config has an unterminated block comment".into(),
+        ));
+    }
+    if quoted {
+        return Err(AppError::InvalidInput(
+            "the player config has an unterminated quoted value".into(),
+        ));
+    }
+    if token_started {
+        tokens.push(token);
+    }
+    if !tokens.is_empty() {
+        commands.push(tokens);
+    }
+    Ok(commands)
+}
+
+/// Profile cvars and their UI mirrors. Everything else in a config is ignored.
+fn is_profile_config_cvar(name: &str) -> bool {
+    matches!(
+        name,
+        "name"
+            | "model"
+            | "saber1"
+            | "saber2"
+            | "color1"
+            | "color2"
+            | "char_color_red"
+            | "char_color_green"
+            | "char_color_blue"
+            | "ui_char_model"
+            | "ui_char_skin_head"
+            | "ui_char_skin_torso"
+            | "ui_char_skin_legs"
+            | "ui_char_color_red"
+            | "ui_char_color_green"
+            | "ui_char_color_blue"
+            | "ui_saber"
+            | "ui_saber2"
+            | "ui_saber_color"
+            | "ui_saber2_color"
+    )
+}
+
+/// Keeps the last assignment of every recognised cvar, as the engine does.
+fn profile_config_assignments(text: &str) -> Result<BTreeMap<String, String>> {
+    let mut assignments = BTreeMap::new();
+    for tokens in profile_config_commands(text)? {
+        let command = tokens[0].to_ascii_lowercase();
+        let explicit = matches!(command.as_str(), "set" | "seta" | "sets" | "setu");
+        let name_index = usize::from(explicit);
+        if tokens.len() <= name_index + 1 {
+            continue;
+        }
+        let name = tokens[name_index].to_ascii_lowercase();
+        if is_profile_config_cvar(&name) {
+            assignments.insert(name, tokens[name_index + 1..].join(" "));
+        }
+    }
+    Ok(assignments)
+}
+
+fn imported_value(
+    assignments: &BTreeMap<String, String>,
+    names: &[&str],
+    max: usize,
+    what: &str,
+    shape: Shape,
+) -> Option<String> {
+    names.iter().find_map(|name| {
+        clean(assignments.get(*name).map(String::as_str), max, what, shape)
+            .ok()
+            .flatten()
+    })
+}
+
+fn imported_saber_color(assignments: &BTreeMap<String, String>, names: &[&str]) -> Option<u8> {
+    names.iter().find_map(|name| {
+        let value = assignments.get(*name)?.trim();
+        value
+            .parse::<u8>()
+            .ok()
+            .filter(|color| *color <= MAX_SABER_COLOR)
+            .or_else(|| {
+                ["red", "orange", "yellow", "green", "blue", "purple"]
+                    .iter()
+                    .position(|color| value.eq_ignore_ascii_case(color))
+                    .map(|color| color as u8)
+            })
+    })
+}
+
+fn imported_tint(assignments: &BTreeMap<String, String>, names: [&str; 3]) -> Option<CharColor> {
+    let channel = |name: &str| assignments.get(name)?.trim().parse::<u8>().ok();
+    Some(CharColor {
+        red: channel(names[0])?,
+        green: channel(names[1])?,
+        blue: channel(names[2])?,
+    })
+}
+
+fn imported_ui_model(assignments: &BTreeMap<String, String>) -> Option<String> {
+    let model = imported_value(
+        assignments,
+        &["ui_char_model"],
+        MAX_VALUE_LEN,
+        "model",
+        Shape::Block,
+    )?;
+    let parts = [
+        imported_value(
+            assignments,
+            &["ui_char_skin_head"],
+            MAX_SKIN_PART_LEN,
+            "model head",
+            Shape::Block,
+        ),
+        imported_value(
+            assignments,
+            &["ui_char_skin_torso"],
+            MAX_SKIN_PART_LEN,
+            "model torso",
+            Shape::Block,
+        ),
+        imported_value(
+            assignments,
+            &["ui_char_skin_legs"],
+            MAX_SKIN_PART_LEN,
+            "model legs",
+            Shape::Block,
+        ),
+    ];
+    let [Some(head), Some(torso), Some(legs)] = parts else {
+        return Some(model);
+    };
+    clean(
+        Some(&format!("{model}/{head}|{torso}|{legs}")),
+        MAX_VALUE_LEN,
+        "model",
+        Shape::Model,
+    )
+    .ok()
+    .flatten()
+    .or(Some(model))
+}
+
+fn profile_name_from_path(path: &Path) -> String {
+    let candidate = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Profile");
+    candidate.chars().take(MAX_NAME_LEN).collect()
+}
+
+/// Extracts the useful subset of a config into a validated profile draft.
+fn profile_from_config(text: &str, name: String, game: Game) -> Result<PlayerProfile> {
+    let assignments = profile_config_assignments(text)?;
+    let model = imported_value(
+        &assignments,
+        &["model"],
+        MAX_VALUE_LEN,
+        "model",
+        Shape::Model,
+    )
+    .or_else(|| imported_ui_model(&assignments));
+    let has_hilts = game.spec().has_saber_hilts;
+    let profile = validate(PlayerProfile {
+        id: String::new(),
+        name,
+        nickname: imported_value(
+            &assignments,
+            &["name"],
+            MAX_NICKNAME_LEN,
+            "nickname",
+            Shape::Free,
+        ),
+        model,
+        saber1: has_hilts
+            .then(|| {
+                imported_value(
+                    &assignments,
+                    &["saber1", "ui_saber"],
+                    MAX_VALUE_LEN,
+                    "saber1",
+                    Shape::Block,
+                )
+            })
+            .flatten(),
+        saber2: has_hilts
+            .then(|| {
+                imported_value(
+                    &assignments,
+                    &["saber2", "ui_saber2"],
+                    MAX_VALUE_LEN,
+                    "saber2",
+                    Shape::Block,
+                )
+            })
+            .flatten(),
+        color1: imported_saber_color(&assignments, &["color1", "ui_saber_color"]),
+        color2: imported_saber_color(&assignments, &["color2", "ui_saber2_color"]),
+        char_color: imported_tint(
+            &assignments,
+            ["char_color_red", "char_color_green", "char_color_blue"],
+        )
+        .or_else(|| {
+            imported_tint(
+                &assignments,
+                [
+                    "ui_char_color_red",
+                    "ui_char_color_green",
+                    "ui_char_color_blue",
+                ],
+            )
+        }),
+        tokens_override: None,
+    })?;
+
+    if profile.nickname.is_none()
+        && profile.model.is_none()
+        && profile.saber1.is_none()
+        && profile.saber2.is_none()
+        && profile.color1.is_none()
+        && profile.color2.is_none()
+        && profile.char_color.is_none()
+    {
+        return Err(AppError::InvalidInput(
+            "the config contains no supported player profile settings".into(),
+        ));
+    }
+    Ok(profile)
 }
 
 // ---------------------------------------------------------------------------
@@ -638,7 +1095,12 @@ fn validate(profile: PlayerProfile) -> Result<PlayerProfile> {
             "nickname",
             Shape::Free,
         )?,
-        model: clean(profile.model.as_deref(), MAX_VALUE_LEN, "model", Shape::Model)?,
+        model: clean(
+            profile.model.as_deref(),
+            MAX_VALUE_LEN,
+            "model",
+            Shape::Model,
+        )?,
         saber1: clean(
             profile.saber1.as_deref(),
             MAX_VALUE_LEN,
@@ -972,7 +1434,10 @@ mod tests {
             launch_tokens(&only_a_name, Game::JediAcademy),
             ["+set", "name", "Kyle"]
         );
-        assert_eq!(launch_tokens(&profile("Empty"), Game::JediAcademy), Vec::<String>::new());
+        assert_eq!(
+            launch_tokens(&profile("Empty"), Game::JediAcademy),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -986,22 +1451,44 @@ mod tests {
             saber2: Some("none".to_string()),
             color1: Some(0),
             color2: Some(5),
-            char_color: Some(CharColor { red: 255, green: 128, blue: 0 }),
+            char_color: Some(CharColor {
+                red: 255,
+                green: 128,
+                blue: 0,
+            }),
             tokens_override: None,
         };
 
         assert_eq!(
             launch_tokens(&full, Game::JediAcademy),
             [
-                "+set", "name", "^1Kyle",
-                "+set", "model", "kyle/red",
-                "+set", "saber1", "single_1",
-                "+set", "saber2", "none",
-                "+set", "color1", "0",
-                "+set", "color2", "5",
-                "+set", "char_color_red", "255",
-                "+set", "char_color_green", "128",
-                "+set", "char_color_blue", "0",
+                "+set",
+                "name",
+                "^1Kyle",
+                "+set",
+                "model",
+                "kyle/red",
+                "+set",
+                "saber1",
+                "single_1",
+                "+set",
+                "saber2",
+                "none",
+                "+set",
+                "color1",
+                "0",
+                "+set",
+                "color2",
+                "5",
+                "+set",
+                "char_color_red",
+                "255",
+                "+set",
+                "char_color_green",
+                "128",
+                "+set",
+                "char_color_blue",
+                "0",
             ]
         );
     }
@@ -1099,6 +1586,7 @@ mod tests {
             engine_id: "openjk".to_string(),
             game: Game::JediAcademy,
             engine_version: None,
+            engine_origin: clients::EngineOrigin::Managed,
             engine_installed_at: None,
             engine_published_at: None,
             fs_game: None,
@@ -1188,11 +1676,7 @@ mod tests {
         // `G_SetSaber(ent, 1, …, "none")` at `codemp/game/g_client.c:2240`.
         assert_eq!(
             launch_tokens(&saber("single_1", Some("none"), 4, None), Game::JediAcademy),
-            [
-                "+set", "saber1", "single_1",
-                "+set", "saber2", "none",
-                "+set", "color1", "4",
-            ]
+            ["+set", "saber1", "single_1", "+set", "saber2", "none", "+set", "color1", "4",]
         );
 
         // A staff is one hilt with two blades, and the engine picks the colour
@@ -1203,11 +1687,7 @@ mod tests {
         assert!(!tokens.iter().any(|token| token == "color2"), "{tokens:?}");
         assert_eq!(
             tokens,
-            [
-                "+set", "saber1", "dual_1",
-                "+set", "saber2", "none",
-                "+set", "color1", "5",
-            ]
+            ["+set", "saber1", "dual_1", "+set", "saber2", "none", "+set", "color1", "5",]
         );
     }
 
@@ -1221,9 +1701,7 @@ mod tests {
                 Game::JediAcademy
             ),
             [
-                "+set", "saber1", "single_1",
-                "+set", "saber2", "single_5",
-                "+set", "color1", "0",
+                "+set", "saber1", "single_1", "+set", "saber2", "single_5", "+set", "color1", "0",
                 "+set", "color2", "3",
             ]
         );
@@ -1276,7 +1754,10 @@ mod tests {
         assert_eq!(clean.name, "Duel");
         assert_eq!(clean.nickname, None);
         assert_eq!(clean.model, None);
-        assert_eq!(launch_tokens(&clean, Game::JediAcademy), Vec::<String>::new());
+        assert_eq!(
+            launch_tokens(&clean, Game::JediAcademy),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
@@ -1311,10 +1792,7 @@ mod tests {
         // Nineteen letters are thirty-eight bytes: the server would cut the
         // name, possibly through the middle of a letter, so the launcher says
         // so instead of promising a name nobody will read.
-        assert!(matches!(
-            validate(over),
-            Err(AppError::InvalidInput(_)),
-        ));
+        assert!(matches!(validate(over), Err(AppError::InvalidInput(_)),));
 
         // A colour code is two bytes of the limit like any other pair of Latin
         // characters, because the engine counts it in and the launcher has to
@@ -1413,7 +1891,10 @@ mod tests {
 
         let mut edge = profile("Duel");
         edge.model = Some(format!("jedi_hm/{fits}|torso_a1|lower_a1"));
-        assert!(validate(edge).is_ok(), "a part of the buffer size is a model");
+        assert!(
+            validate(edge).is_ok(),
+            "a part of the buffer size is a model"
+        );
 
         // Each of the three rows is measured on its own.
         for value in [
@@ -1519,10 +2000,9 @@ mod tests {
     fn a_document_of_an_older_shape_reads_field_by_field() {
         // The nine launch fields arrived together, but a hand-written document
         // may carry any subset of them, and every one is `serde(default)`.
-        let book: ProfileBook = serde_json::from_str(
-            r#"{"profiles":[{"id":"duel","name":"Duel","nickname":"Kyle"}]}"#,
-        )
-        .expect("a partial document parses");
+        let book: ProfileBook =
+            serde_json::from_str(r#"{"profiles":[{"id":"duel","name":"Duel","nickname":"Kyle"}]}"#)
+                .expect("a partial document parses");
         let profile = book.find("duel").expect("the profile");
         assert_eq!(profile.nickname.as_deref(), Some("Kyle"));
         assert_eq!(profile.model, None);
@@ -1533,17 +2013,28 @@ mod tests {
     #[test]
     fn the_default_is_resolved_by_id_and_never_guessed() {
         let mut book = ProfileBook::default();
-        book.profiles.push(PlayerProfile { id: "duel".into(), ..profile("Duel") });
-        book.profiles.push(PlayerProfile { id: "ffa".into(), ..profile("FFA") });
+        book.profiles.push(PlayerProfile {
+            id: "duel".into(),
+            ..profile("Duel")
+        });
+        book.profiles.push(PlayerProfile {
+            id: "ffa".into(),
+            ..profile("FFA")
+        });
 
         // No default named: no tokens, rather than the first profile.
         assert!(book.default_profile().is_none());
-        assert!(book.resolve(None).expect("no default is not a refusal").is_none());
+        assert!(book
+            .resolve(None)
+            .expect("no default is not a refusal")
+            .is_none());
 
         book.default_profile_id = Some("ffa".to_string());
         assert_eq!(book.default_profile().map(|p| p.id.as_str()), Some("ffa"));
         assert_eq!(
-            book.resolve(Some("duel")).expect("a named profile").map(|p| p.id.as_str()),
+            book.resolve(Some("duel"))
+                .expect("a named profile")
+                .map(|p| p.id.as_str()),
             Some("duel")
         );
 
@@ -1573,7 +2064,11 @@ mod tests {
                 saber2: Some("none".to_string()),
                 color1: Some(2),
                 color2: Some(4),
-                char_color: Some(CharColor { red: 1, green: 2, blue: 3 }),
+                char_color: Some(CharColor {
+                    red: 1,
+                    green: 2,
+                    blue: 3,
+                }),
                 tokens_override: Some("+set name Ben".to_string()),
             }],
             default_profile_id: Some("duel".to_string()),
@@ -1684,7 +2179,9 @@ mod tests {
             color2: None,
             char_color: None,
         };
-        let blank = empty.into_profile().expect("a profile that manages nothing");
+        let blank = empty
+            .into_profile()
+            .expect("a profile that manages nothing");
         assert!(launch_tokens(&blank, Game::JediAcademy).is_empty());
     }
 
@@ -1732,5 +2229,170 @@ mod tests {
                 .expect("the tokens of the stored profile"),
             ["+set", "name", "Padawan"],
         );
+    }
+
+    #[test]
+    fn a_config_import_keeps_the_last_supported_assignments() {
+        let imported = profile_from_config(
+            r#"
+                // Settings unrelated to a player stay outside the profile.
+                seta rate 25000
+                seta name "First name"; set name "^2Kyle Katarn"
+                seta model kyle/default
+                seta model "jedi_hm/head_a1|torso_a1|lower_a1"
+                seta saber1 single_1
+                sets saber2 none
+                setu color1 4
+                color2 5
+                seta char_color_red 255
+                seta char_color_green 128
+                seta char_color_blue 32
+                bind F1 "say hi"
+            "#,
+            "duel".into(),
+            Game::JediAcademy,
+        )
+        .expect("a profile draft");
+
+        assert_eq!(imported.id, "");
+        assert_eq!(imported.name, "duel");
+        assert_eq!(imported.nickname.as_deref(), Some("^2Kyle Katarn"));
+        assert_eq!(
+            imported.model.as_deref(),
+            Some("jedi_hm/head_a1|torso_a1|lower_a1")
+        );
+        assert_eq!(imported.saber1.as_deref(), Some("single_1"));
+        assert_eq!(imported.saber2.as_deref(), Some("none"));
+        assert_eq!(imported.color1, Some(4));
+        assert_eq!(imported.color2, Some(5));
+        assert_eq!(
+            imported.char_color,
+            Some(CharColor {
+                red: 255,
+                green: 128,
+                blue: 32,
+            })
+        );
+        assert_eq!(imported.tokens_override, None);
+    }
+
+    #[test]
+    fn a_config_import_understands_the_ui_mirrors() {
+        let imported = profile_from_config(
+            r#"
+                seta ui_char_model jedi_tf
+                seta ui_char_skin_head head_a2
+                seta ui_char_skin_torso torso_b1
+                seta ui_char_skin_legs lower_c1
+                seta ui_saber single_5
+                seta ui_saber2 single_7
+                seta ui_saber_color blue
+                seta ui_saber2_color purple
+                seta ui_char_color_red 12
+                seta ui_char_color_green 34
+                seta ui_char_color_blue 56
+            "#,
+            "appearance".into(),
+            Game::JediAcademy,
+        )
+        .expect("the UI cvars form a profile");
+
+        assert_eq!(
+            imported.model.as_deref(),
+            Some("jedi_tf/head_a2|torso_b1|lower_c1")
+        );
+        assert_eq!(imported.saber1.as_deref(), Some("single_5"));
+        assert_eq!(imported.saber2.as_deref(), Some("single_7"));
+        assert_eq!(imported.color1, Some(4));
+        assert_eq!(imported.color2, Some(5));
+        assert_eq!(
+            imported.char_color,
+            Some(CharColor {
+                red: 12,
+                green: 34,
+                blue: 56,
+            })
+        );
+    }
+
+    #[test]
+    fn canonical_cvars_take_precedence_over_ui_mirrors() {
+        let imported = profile_from_config(
+            r#"
+                seta model kyle/red
+                seta ui_char_model jedi_tf
+                seta ui_char_skin_head head_a2
+                seta ui_char_skin_torso torso_b1
+                seta ui_char_skin_legs lower_c1
+                seta color1 1
+                seta ui_saber_color purple
+            "#,
+            "canonical".into(),
+            Game::JediAcademy,
+        )
+        .expect("a profile");
+
+        assert_eq!(imported.model.as_deref(), Some("kyle/red"));
+        assert_eq!(imported.color1, Some(1));
+    }
+
+    #[test]
+    fn outcast_does_not_import_hilts_it_cannot_launch() {
+        let imported = profile_from_config(
+            "seta name Kyle\nseta saber1 single_1\nseta saber2 single_2\n",
+            "outcast".into(),
+            Game::JediOutcast,
+        )
+        .expect("a profile with a nickname");
+
+        assert_eq!(imported.nickname.as_deref(), Some("Kyle"));
+        assert_eq!(imported.saber1, None);
+        assert_eq!(imported.saber2, None);
+    }
+
+    #[test]
+    fn an_unrelated_or_malformed_config_is_refused() {
+        assert!(profile_from_config(
+            "seta rate 25000\nbind F1 +scores\n",
+            "network".into(),
+            Game::JediAcademy,
+        )
+        .is_err());
+        assert!(profile_from_config(
+            "seta name \"never closed\nseta model kyle/default",
+            "broken".into(),
+            Game::JediAcademy,
+        )
+        .is_err());
+        assert!(profile_from_config(
+            "seta model ../outside\n",
+            "unsafe".into(),
+            Game::JediAcademy,
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn legacy_cyrillic_nicknames_decode_before_import() {
+        let bytes = encoding_rs::WINDOWS_1251
+            .encode("seta name \"Рыцарь\"\n")
+            .0
+            .into_owned();
+        let text = decode_profile_config(&bytes).expect("Windows-1251 config");
+        let imported = profile_from_config(&text, "legacy".into(), Game::JediAcademy)
+            .expect("a Cyrillic profile");
+        assert_eq!(imported.nickname.as_deref(), Some("Рыцарь"));
+    }
+
+    #[test]
+    fn a_config_file_name_becomes_a_bounded_profile_name() {
+        let path = Path::new("a-name-that-is-deliberately-longer-than-forty-eight-characters.cfg");
+        let name = profile_name_from_path(path);
+        assert_eq!(name.chars().count(), MAX_NAME_LEN);
+        assert!(path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with(&name));
     }
 }

@@ -19,6 +19,7 @@ import { JkhubTree } from "./JkhubTree";
 // --- slice: i18n ---
 import { useErrorText } from "../../i18n/errors";
 import { useActiveGame, useGameNames } from "../../lib/game";
+import { jkhubModCard } from "../../lib/chat/cardDrafts";
 import type { JkhubCategory, JkhubInstallResult, JkhubSort, LibraryItem, SortDirection } from "../../lib/ipc";
 import { jkhubIpc } from "../../lib/ipc";
 import {
@@ -35,6 +36,7 @@ import {
   useRefreshJkhubListing,
 } from "../../lib/queries";
 import { isTauri } from "../../lib/runtime";
+import { useShareDialog } from "../chat/ShareToChatDialog";
 
 const SORT_IDS: JkhubSort[] = ["recentlyUpdated", "newest", "mostDownloaded", "topRated", "name"];
 
@@ -169,6 +171,7 @@ export function JkhubBrowser({
 }: JkhubBrowserProps) {
   const { t } = useTranslation("jkhub");
   const { t: tCommon } = useTranslation("common");
+  const share = useShareDialog();
   const errorText = useErrorText();
   const gameNames = useGameNames();
   // --- slice: jkhub catalog --- the eight sections are named by the launcher.
@@ -663,6 +666,7 @@ export function JkhubBrowser({
                     }}
                     onInstall={() => runInstall(card.id, false)}
                     onOpenSite={() => openSite(card.id)}
+                    onShare={share.available ? () => share.open({ kind: "card", card: jkhubModCard({ ...card, game }, game) }) : undefined}
                     onAuthor={searchAuthor}
                   />
                 ))}
@@ -715,6 +719,7 @@ export function JkhubBrowser({
         progress={progress.get(openFile) ?? null}
         onClose={() => setPreviewOpen(false)}
       /> : null}
+      {share.dialog}
     </>
   );
 }

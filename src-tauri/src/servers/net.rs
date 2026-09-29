@@ -43,7 +43,10 @@ fn next_challenge() -> String {
         .map(|d| d.subsec_nanos() as u64)
         .unwrap_or(0);
     let count = CHALLENGE_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{:x}", nanos.rotate_left(17) ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15))
+    format!(
+        "{:x}",
+        nanos.rotate_left(17) ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15)
+    )
 }
 
 /// Opens a socket bound to an ephemeral IPv4 port and points it at `peer`.
@@ -66,7 +69,9 @@ async fn connected_socket(peer: SocketAddrV4) -> Result<UdpSocket> {
 pub async fn resolve_master(master: &str) -> Result<SocketAddrV4> {
     let master = master.trim();
     if master.is_empty() {
-        return Err(AppError::InvalidInput("master server address is empty".into()));
+        return Err(AppError::InvalidInput(
+            "master server address is empty".into(),
+        ));
     }
     let with_port = if master.contains(':') {
         master.to_string()
@@ -109,11 +114,7 @@ pub struct MasterReply {
 /// distinction matters: `masterjk3.ravensoft.com` still resolves but has been
 /// silent for years, and a silent master must not be mistaken for one
 /// reporting that nobody is playing.
-pub async fn query_master(
-    master: &str,
-    protocol: u16,
-    budget: Duration,
-) -> Result<MasterReply> {
+pub async fn query_master(master: &str, protocol: u16, budget: Duration) -> Result<MasterReply> {
     let peer = resolve_master(master).await?;
     let socket = connected_socket(peer).await?;
     let request = oob_packet(&format!("getservers {protocol}"));
@@ -448,7 +449,11 @@ mod tests {
                 let payload = oob_payload(&buffer[..read]).unwrap();
                 let (_, challenge) = split_command(payload);
                 let challenge = String::from_utf8_lossy(challenge).to_string();
-                let echoed = if stale { "stale".to_string() } else { challenge };
+                let echoed = if stale {
+                    "stale".to_string()
+                } else {
+                    challenge
+                };
                 let reply = oob_packet(&format!(
                     "infoResponse\n\\challenge\\{echoed}\\hostname\\Test\\clients\\2"
                 ));

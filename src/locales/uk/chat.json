@@ -406,16 +406,16 @@
     "removeCard": "Прибрати {{name}}",
     "tooManyCards": "У повідомленні може бути до {{max}} карток.",
     "tooManyFiles": "У повідомленні може бути до {{max}} файлів.",
-    "refusedTitle_one": "{{count}} файл не прикріплено",
-    "refusedTitle_few": "{{count}} файли не прикріплено",
-    "refusedTitle_many": "{{count}} файлів не прикріплено",
-    "refusedTitle_other": "{{count}} файлу не прикріплено",
     "refusedLine": "{{name}}: {{reason}}",
     "counter": "{{used}} / {{max}}",
     "tooLong": "У повідомленні може бути до {{max}} символів.",
     "notFriends": "Ви більше не друзі, чат доступний лише для читання. Коли ви знову станете друзями, листування продовжиться.",
     "deletedPeer": "Цей обліковий запис видалено. Чат доступний лише для читання і зберігається до кінця строку 90 днів.",
-    "readOnly": "До цього чату не можна надсилати повідомлення."
+    "readOnly": "До цього чату не можна надсилати повідомлення.",
+    "refusedTitle_one": "{{count}} файл не прикріплено",
+    "refusedTitle_few": "{{count}} файли не прикріплено",
+    "refusedTitle_many": "{{count}} файлів не прикріплено",
+    "refusedTitle_other": "{{count}} файлу не прикріплено"
   },
   "attach": {
     "open": "Прикріпити",
@@ -906,5 +906,13 @@
     "tooltipUnread_few": "JKNet: {{count}} непрочитані повідомлення",
     "tooltipUnread_many": "JKNet: {{count}} непрочитаних повідомлень",
     "tooltipUnread_other": "JKNet: {{count}} непрочитаного повідомлення"
+  },
+  "serverConfig": {
+    "subtitle": "Server config · {{game}} · {{mod}}",
+    "open": "Open server editor",
+    "receiveTitle": "Save a server config",
+    "receiveHint": "Review the game, mod and rules. Saving adds a copy to your server configs. Choose it in Play with friends when you want to host.",
+    "save": "Save to server configs",
+    "sensitive": "Remove passwords or administration secrets before sharing."
   }
 }

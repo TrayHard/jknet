@@ -279,18 +279,58 @@ pub struct ConfigCard {
 fn known_fields(kind: &str) -> Option<&'static [&'static str]> {
     Some(match kind {
         "server" => &[
-            "type", "v", "fallbackText", "address", "name", "game", "map", "gametype", "mod",
+            "type",
+            "v",
+            "fallbackText",
+            "address",
+            "name",
+            "game",
+            "map",
+            "gametype",
+            "mod",
         ],
         "hostInvite" => &[
-            "type", "v", "fallbackText", "sessionId", "name", "hostId", "game", "mod", "map",
+            "type",
+            "v",
+            "fallbackText",
+            "sessionId",
+            "name",
+            "hostId",
+            "game",
+            "mod",
+            "map",
             "gametype",
         ],
-        "bundle" => &["type", "v", "fallbackText", "bundleId", "slug", "name", "game"],
-        "jkhubMod" => &["type", "v", "fallbackText", "fileId", "slug", "title", "game"],
+        "bundle" => &[
+            "type",
+            "v",
+            "fallbackText",
+            "bundleId",
+            "slug",
+            "name",
+            "game",
+        ],
+        "jkhubMod" => &[
+            "type",
+            "v",
+            "fallbackText",
+            "fileId",
+            "slug",
+            "title",
+            "game",
+        ],
         "map" => &["type", "v", "fallbackText", "game", "name", "title"],
         "profile" => &[
-            "type", "v", "fallbackText", "nickname", "model", "saber1", "saber2", "color1",
-            "color2", "charColor",
+            "type",
+            "v",
+            "fallbackText",
+            "nickname",
+            "model",
+            "saber1",
+            "saber2",
+            "color1",
+            "color2",
+            "charColor",
         ],
         "bind" => &["type", "v", "fallbackText", "binds"],
         "config" => &["type", "v", "fallbackText", "name", "text"],
@@ -344,7 +384,9 @@ fn parse(value: &Value, direction: Direction) -> std::result::Result<Card, Strin
             for bind in binds.iter_mut() {
                 if let Value::Object(bind) = bind {
                     if direction == Direction::Out {
-                        if let Some(key) = bind.keys().find(|key| !BIND_FIELDS.contains(&key.as_str())) {
+                        if let Some(key) =
+                            bind.keys().find(|key| !BIND_FIELDS.contains(&key.as_str()))
+                        {
                             return Err(format!("A bind has no field {key:?}"));
                         }
                     }
@@ -353,7 +395,8 @@ fn parse(value: &Value, direction: Direction) -> std::result::Result<Card, Strin
             }
         }
     }
-    serde_json::from_value(Value::Object(known)).map_err(|e| format!("A {kind} card is not valid: {e}"))
+    serde_json::from_value(Value::Object(known))
+        .map_err(|e| format!("A {kind} card is not valid: {e}"))
 }
 
 impl Card {
@@ -574,7 +617,12 @@ fn clamp(raw: &str, max: usize) -> String {
     if trimmed.chars().count() <= max {
         return trimmed.to_string();
     }
-    trimmed.chars().take(max).collect::<String>().trim_end().to_string()
+    trimmed
+        .chars()
+        .take(max)
+        .collect::<String>()
+        .trim_end()
+        .to_string()
 }
 
 /// A text a launcher only shows: cleaned and cut to `max` characters.
@@ -621,7 +669,9 @@ fn host_id(raw: &str) -> std::result::Result<String, String> {
     let id = raw.trim();
     if id.is_empty()
         || id.len() > HOST_ID_MAX
-        || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        || !id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
     {
         return Err("hostId is not an account id".to_string());
     }
@@ -681,7 +731,9 @@ fn valid_host_name(host: &str) -> bool {
             && label.len() <= 63
             && !label.starts_with('-')
             && !label.ends_with('-')
-            && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
     });
     // A last label of digits only is a mistyped IPv4 address, not a name.
     let numeric_tail = labels
@@ -804,7 +856,9 @@ fn refusal(reason: String) -> AppError {
 /// type, five cards at most, 8 KiB a card (40 KiB a config), 48 KiB in all.
 pub(crate) fn prepare(raw: &[Value]) -> Result<Vec<Value>> {
     if raw.len() > CARDS_MAX {
-        return Err(refusal(format!("A message carries at most {CARDS_MAX} cards")));
+        return Err(refusal(format!(
+            "A message carries at most {CARDS_MAX} cards"
+        )));
     }
     let mut total = 0usize;
     let mut cards = Vec::with_capacity(raw.len());
@@ -1126,7 +1180,10 @@ fn valid_key(key: &str) -> bool {
     !key.is_empty()
         && key.bytes().all(|b| {
             b.is_ascii_alphanumeric()
-                || matches!(b, b'_' | b'+' | b'-' | b'[' | b']' | b'\\' | b'/' | b'.' | b',' | b'=' | b'\'')
+                || matches!(
+                    b,
+                    b'_' | b'+' | b'-' | b'[' | b']' | b'\\' | b'/' | b'.' | b',' | b'=' | b'\''
+                )
         })
 }
 
@@ -1171,7 +1228,11 @@ fn binds_text(binds: &[Bind]) -> (String, Vec<String>) {
 /// bytes, cut at a character.
 fn document_name(raw: &str, fallback: &str) -> String {
     let name = stripped(raw);
-    let name = if name.is_empty() { fallback.to_string() } else { name };
+    let name = if name.is_empty() {
+        fallback.to_string()
+    } else {
+        name
+    };
     let mut end = name.len().min(DOCUMENT_NAME_BYTES);
     while !name.is_char_boundary(end) {
         end -= 1;
@@ -1184,7 +1245,11 @@ pub(crate) fn config_from_card(card: &Card, game: Game) -> Result<CardConfig> {
     let (name, text, skipped) = match card {
         Card::Bind(card) => {
             let (text, skipped) = binds_text(&card.binds);
-            (document_name(&card.fallback_text, BINDS_DOCUMENT_NAME), text, skipped)
+            (
+                document_name(&card.fallback_text, BINDS_DOCUMENT_NAME),
+                text,
+                skipped,
+            )
         }
         Card::Config(card) => {
             let mut text = card.text.clone();
@@ -1301,13 +1366,61 @@ const WRITE_VERBS: [&str; 8] = [
 /// only when `name` is none of these (`Cmd_ExecuteString`, cmd.cpp:822). The
 /// list of `vstrChain.ts`.
 const COMMANDS: &[&str] = &[
-    "set", "seta", "sets", "setu", "cvaradd", "cvarsub", "cvarmult", "cvardiv", "cvarmod",
-    "exec", "execq", "alias", "cvar_restart", "unset_usercreated", "vstr", "wait", "echo",
-    "bind", "unbind", "unbindall", "bindlist", "toggle", "reset", "unset", "print", "cvarlist",
-    "cmdlist", "help", "writeconfig", "say", "say_team", "tell", "team", "kill", "follow", "quit",
-    "disconnect", "connect", "reconnect", "record", "stoprecord", "demo", "screenshot",
-    "screenshotjpeg", "vid_restart", "snd_restart", "cmd", "rcon", "toggleconsole", "togglemenu",
-    "messagemode", "messagemode2", "messagemode3", "messagemode4", "clear",
+    "set",
+    "seta",
+    "sets",
+    "setu",
+    "cvaradd",
+    "cvarsub",
+    "cvarmult",
+    "cvardiv",
+    "cvarmod",
+    "exec",
+    "execq",
+    "alias",
+    "cvar_restart",
+    "unset_usercreated",
+    "vstr",
+    "wait",
+    "echo",
+    "bind",
+    "unbind",
+    "unbindall",
+    "bindlist",
+    "toggle",
+    "reset",
+    "unset",
+    "print",
+    "cvarlist",
+    "cmdlist",
+    "help",
+    "writeconfig",
+    "say",
+    "say_team",
+    "tell",
+    "team",
+    "kill",
+    "follow",
+    "quit",
+    "disconnect",
+    "connect",
+    "reconnect",
+    "record",
+    "stoprecord",
+    "demo",
+    "screenshot",
+    "screenshotjpeg",
+    "vid_restart",
+    "snd_restart",
+    "cmd",
+    "rcon",
+    "toggleconsole",
+    "togglemenu",
+    "messagemode",
+    "messagemode2",
+    "messagemode3",
+    "messagemode4",
+    "clear",
 ];
 
 /// A byte range of a text.
@@ -1649,7 +1762,13 @@ impl Scan {
         }
     }
 
-    fn check_command(&mut self, command: &str, entry: &mut Entry, via: &mut Vec<String>, depth: usize) {
+    fn check_command(
+        &mut self,
+        command: &str,
+        entry: &mut Entry,
+        via: &mut Vec<String>,
+        depth: usize,
+    ) {
         if !self.spend() {
             return;
         }
@@ -1947,20 +2066,31 @@ mod tests {
 
     #[test]
     fn bundle_mod_and_map_cards_check_their_formats() {
-        let bundle = one(json!({ "type": "bundle", "bundleId": "01hzx4g6q2kj3m5n7p8r9s0t1v",
-            "slug": "duel-pack", "name": "Duel pack", "game": "ja" }))
+        let bundle = one(
+            json!({ "type": "bundle", "bundleId": "01hzx4g6q2kj3m5n7p8r9s0t1v",
+            "slug": "duel-pack", "name": "Duel pack", "game": "ja" }),
+        )
         .unwrap();
         assert_eq!(bundle["bundleId"], "01HZX4G6Q2KJ3M5N7P8R9S0T1V");
         assert_eq!(bundle["fallbackText"], "Bundle: Duel pack");
-        for bad_id in ["not-a-ulid", "81HZX4G6Q2KJ3M5N7P8R9S0T1V", "01HZX4G6Q2KJ3M5N7P8R9S0T1I"] {
-            assert!(one(json!({ "type": "bundle", "bundleId": bad_id, "slug": "duel-pack",
-                "name": "Duel pack", "game": "ja" }))
+        for bad_id in [
+            "not-a-ulid",
+            "81HZX4G6Q2KJ3M5N7P8R9S0T1V",
+            "01HZX4G6Q2KJ3M5N7P8R9S0T1I",
+        ] {
+            assert!(one(
+                json!({ "type": "bundle", "bundleId": bad_id, "slug": "duel-pack",
+                "name": "Duel pack", "game": "ja" })
+            )
             .is_err());
         }
 
         let jkhub = json!({ "type": "jkhubMod", "fileId": 1234, "slug": "1234-duel-sabers",
             "title": "Duel sabers", "game": "ja" });
-        assert_eq!(one(jkhub.clone()).unwrap()["fallbackText"], "JKHub: Duel sabers");
+        assert_eq!(
+            one(jkhub.clone()).unwrap()["fallbackText"],
+            "JKHub: Duel sabers"
+        );
         for (field, value) in [
             ("fileId", json!(0)),
             ("fileId", json!(-3)),
@@ -1999,7 +2129,8 @@ mod tests {
             .collect();
         assert!(binds(json!(fifty)).is_err());
 
-        let config = |text: &str| one(json!({ "type": "config", "name": "duel.cfg", "text": text }));
+        let config =
+            |text: &str| one(json!({ "type": "config", "name": "duel.cfg", "text": text }));
         let kept = config("seta name \"Kyle\"\r\n\tbind x +attack\u{0007}\n").unwrap();
         assert_eq!(kept["text"], "seta name \"Kyle\"\r\n\tbind x +attack");
         assert_eq!(kept["fallbackText"], "Config: duel.cfg");
@@ -2017,7 +2148,10 @@ mod tests {
             .map(|index| json!({ "key": format!("F{index}"), "command": "c".repeat(200) }))
             .collect();
         let binds = json!({ "type": "bind", "binds": big });
-        assert!(prepare(&[binds]).unwrap_err().to_string().contains("larger"));
+        assert!(prepare(&[binds])
+            .unwrap_err()
+            .to_string()
+            .contains("larger"));
         let config = json!({ "type": "config", "name": "big.cfg", "text": "a".repeat(30 * 1024) });
         assert!(prepare(std::slice::from_ref(&config)).is_ok());
         assert!(prepare(&[config.clone(), config]).is_err());
@@ -2034,14 +2168,21 @@ mod tests {
         let Card::HostInvite(invite) = card else {
             panic!("a host invite");
         };
-        assert_eq!(invite.host_id.as_deref(), Some("01HZX4G6Q2KJ3M5N7P8R9S0T1V"));
+        assert_eq!(
+            invite.host_id.as_deref(),
+            Some("01HZX4G6Q2KJ3M5N7P8R9S0T1V")
+        );
         assert_eq!(invite.map.as_deref(), Some("mp/ffa3"));
         // An incoming card still meets the rules of its values.
-        assert!(check(&json!({ "type": "server", "v": 1, "fallbackText": "", "address": "127.0.0.1:29070",
-            "name": "x", "game": "ja" }))
+        assert!(check(
+            &json!({ "type": "server", "v": 1, "fallbackText": "", "address": "127.0.0.1:29070",
+            "name": "x", "game": "ja" })
+        )
         .is_err());
-        assert!(check(&json!({ "type": "server", "v": 2, "fallbackText": "", "address": "203.0.113.10:29070",
-            "name": "x", "game": "ja" }))
+        assert!(check(
+            &json!({ "type": "server", "v": 2, "fallbackText": "", "address": "203.0.113.10:29070",
+            "name": "x", "game": "ja" })
+        )
         .is_err());
     }
 
@@ -2061,7 +2202,8 @@ mod tests {
 
     #[test]
     fn a_profile_card_becomes_a_new_profile() {
-        let card = profile_card(json!({ "saber2": "none", "color2": "5", "charColor": "255 128 0" }));
+        let card =
+            profile_card(json!({ "saber2": "none", "color2": "5", "charColor": "255 128 0" }));
         let CardProfile { profile, skipped } = profile_from_card(&card);
         assert!(skipped.is_empty(), "{skipped:?}");
         assert_eq!(profile.id, "");
@@ -2073,7 +2215,11 @@ mod tests {
         assert_eq!((profile.color1, profile.color2), (Some(4), Some(5)));
         assert_eq!(
             profile.char_color,
-            Some(CharColor { red: 255, green: 128, blue: 0 })
+            Some(CharColor {
+                red: 255,
+                green: 128,
+                blue: 0
+            })
         );
         assert_eq!(profile.tokens_override, None);
     }
@@ -2089,11 +2235,17 @@ mod tests {
             "charColor": "255 255",
         }));
         let CardProfile { profile, skipped } = profile_from_card(&card);
-        assert_eq!(skipped, ["nickname", "model", "color1", "color2", "charColor"]);
+        assert_eq!(
+            skipped,
+            ["nickname", "model", "color1", "color2", "charColor"]
+        );
         assert_eq!(profile.nickname, None);
         assert_eq!(profile.model, None);
         assert_eq!(profile.saber1.as_deref(), Some("single_1"));
-        assert_eq!((profile.color1, profile.color2, profile.char_color), (None, None, None));
+        assert_eq!(
+            (profile.color1, profile.color2, profile.char_color),
+            (None, None, None)
+        );
         // Nothing left to name it by: the form still opens.
         assert_eq!(profile.name, "Profile");
     }
@@ -2109,7 +2261,11 @@ mod tests {
             saber2: None,
             color1: Some(2),
             color2: Some(3),
-            char_color: Some(CharColor { red: 10, green: 20, blue: 30 }),
+            char_color: Some(CharColor {
+                red: 10,
+                green: 20,
+                blue: 30,
+            }),
             tokens_override: None,
         };
         let card = card_from_profile(&stored).unwrap();
@@ -2125,7 +2281,11 @@ mod tests {
         let back = profile_from_card(&card);
         assert!(back.skipped.is_empty());
         assert_eq!(
-            PlayerProfile { id: stored.id.clone(), name: stored.name.clone(), ..back.profile },
+            PlayerProfile {
+                id: stored.id.clone(),
+                name: stored.name.clone(),
+                ..back.profile
+            },
             stored
         );
     }
@@ -2145,15 +2305,29 @@ mod tests {
             tokens_override: None,
         };
         let card = card_from_profile(&bare).unwrap();
-        assert_eq!((card["saber1"].as_str(), card["color1"].as_str()), (Some("Kyle"), Some("4")));
+        assert_eq!(
+            (card["saber1"].as_str(), card["color1"].as_str()),
+            (Some("Kyle"), Some("4"))
+        );
         assert!(card.get("saber2").is_none() && card.get("charColor").is_none());
 
-        let nameless = PlayerProfile { nickname: None, ..bare.clone() };
+        let nameless = PlayerProfile {
+            nickname: None,
+            ..bare.clone()
+        };
         let refusal = card_from_profile(&nameless).unwrap_err();
         assert_eq!(refusal.details()["code"], CARD);
-        assert!(card_from_profile(&PlayerProfile { model: None, ..bare.clone() }).is_err());
+        assert!(card_from_profile(&PlayerProfile {
+            model: None,
+            ..bare.clone()
+        })
+        .is_err());
         // A nickname the card cannot carry is refused, not cut.
-        assert!(card_from_profile(&PlayerProfile { nickname: Some("a;quit".into()), ..bare }).is_err());
+        assert!(card_from_profile(&PlayerProfile {
+            nickname: Some("a;quit".into()),
+            ..bare
+        })
+        .is_err());
     }
 
     #[test]
@@ -2185,13 +2359,15 @@ mod tests {
 
     #[test]
     fn a_bind_card_becomes_config_lines_with_its_dangers() {
-        let card = check(&json!({ "type": "bind", "v": 1, "fallbackText": "Duel keys", "binds": [
+        let card = check(
+            &json!({ "type": "bind", "v": 1, "fallbackText": "Duel keys", "binds": [
             { "key": "f1", "command": "say \"gg\"; +attack" },
             { "key": "\\", "command": "toggleconsole" },
             { "key": "bad key", "command": "quit" },
             { "key": "F2", "command": "" },
             { "key": "F3", "command": "quit" },
-        ] }))
+        ] }),
+        )
         .unwrap();
         let config = config_from_card(&card, Game::JediAcademy).unwrap();
         assert_eq!(config.document.name, "Duel keys");
@@ -2231,8 +2407,15 @@ mod tests {
         assert!(config.document.text.ends_with('\n'));
         let found: Vec<(u32, DangerReason)> =
             config.dangers.iter().map(|d| (d.line, d.reason)).collect();
-        assert_eq!(found, [(1, DangerReason::AllowDownload), (2, DangerReason::Exec)]);
-        assert!(config_from_card(&check(&server("203.0.113.10:29070")).unwrap(), Game::JediAcademy).is_err());
+        assert_eq!(
+            found,
+            [(1, DangerReason::AllowDownload), (2, DangerReason::Exec)]
+        );
+        assert!(config_from_card(
+            &check(&server("203.0.113.10:29070")).unwrap(),
+            Game::JediAcademy
+        )
+        .is_err());
     }
 
     #[test]
@@ -2351,7 +2534,12 @@ mod tests {
                 line: 4,
                 command: "seta fs_game evil".into(),
                 reason: DangerReason::Filesystem,
-                via: vec!["bind X".into(), "vstr a".into(), "vstr b".into(), "vstr c".into()],
+                via: vec![
+                    "bind X".into(),
+                    "vstr a".into(),
+                    "vstr b".into(),
+                    "vstr c".into()
+                ],
             }]
         );
         // A value set after the line that runs it counts too: the key is
@@ -2372,7 +2560,10 @@ mod tests {
         let found = reasons(text);
         assert!(found.contains(&(5, DangerReason::Connect)), "{found:?}");
         // The line of the variable itself runs nothing on its own.
-        assert!(found.iter().all(|(line, _)| *line == 4 || *line == 5), "{found:?}");
+        assert!(
+            found.iter().all(|(line, _)| *line == 4 || *line == 5),
+            "{found:?}"
+        );
     }
 
     #[test]
@@ -2395,7 +2586,10 @@ mod tests {
     #[test]
     fn loops_end_and_deep_chains_say_the_scan_stopped() {
         // A variable that runs itself: followed once.
-        assert_eq!(scan_commands("set loop \"say x; vstr loop\"\nvstr loop\n"), []);
+        assert_eq!(
+            scan_commands("set loop \"say x; vstr loop\"\nvstr loop\n"),
+            []
+        );
         // A chain deeper than the scan follows.
         let mut text = String::new();
         for index in 0..20 {
@@ -2404,7 +2598,9 @@ mod tests {
         text.push_str("set v20 quit\nvstr v0\n");
         let found = scan_commands(&text);
         assert!(
-            found.iter().any(|danger| danger.reason == DangerReason::TooComplex && danger.line == 1),
+            found
+                .iter()
+                .any(|danger| danger.reason == DangerReason::TooComplex && danger.line == 1),
             "{found:?}"
         );
     }
@@ -2413,7 +2609,10 @@ mod tests {
     fn a_huge_text_stops_with_a_note() {
         let text = "bind x \"say a; say b; say c; say d\"\n".repeat(60_000);
         let found = scan_commands(&text);
-        assert_eq!(found.last().map(|danger| danger.reason), Some(DangerReason::TooComplex));
+        assert_eq!(
+            found.last().map(|danger| danger.reason),
+            Some(DangerReason::TooComplex)
+        );
     }
 
     #[test]

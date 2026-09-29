@@ -311,7 +311,11 @@ impl ScannedFile {
 /// filled in for anything it does not know and pruned of anything that is
 /// gone.
 #[tauri::command]
-pub async fn list_library(app: tauri::AppHandle, state: tauri::State<'_, AppState>, client_id: String) -> Result<Vec<LibraryItem>> {
+pub async fn list_library(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    client_id: String,
+) -> Result<Vec<LibraryItem>> {
     use tauri::Manager;
     let data = state.paths()?;
     let snapshots = crate::jkhub::snapshot::bundled_dir(&app);
@@ -321,12 +325,15 @@ pub async fn list_library(app: tauri::AppHandle, state: tauri::State<'_, AppStat
         let index = crate::jkhub::index::load(&data, snapshots.as_ref(), game);
         for item in &mut items {
             if let Some(path) = &item.preview_path {
-                if !Path::new(path).is_file() || app.asset_protocol_scope().allow_file(path).is_err() {
+                if !Path::new(path).is_file()
+                    || app.asset_protocol_scope().allow_file(path).is_err()
+                {
                     item.preview_path = None;
                 }
             }
-            item.thumbnail_url = item.provenance.as_ref().and_then(|origin| {
-                index.as_ref().and_then(|loaded| loaded.index.get(origin.file_id))
+            item.thumbnail_url =
+                item.provenance.as_ref().and_then(|origin| {
+                    index.as_ref().and_then(|loaded| loaded.index.get(origin.file_id))
                     .and_then(|file| file.thumbnail_url.clone())
                     .or_else(|| {
                         let cached = crate::jkhub::cache::read::<crate::jkhub::types::JkhubFile>(
@@ -335,10 +342,12 @@ pub async fn list_library(app: tauri::AppHandle, state: tauri::State<'_, AppStat
                         let shot = cached.payload.screenshots.first()?;
                         shot.thumbnail_url.clone().or_else(|| Some(shot.url.clone()))
                     })
-            });
+                });
         }
         Ok(items)
-    }).await.map_err(|e| AppError::Image(format!("library scan did not finish: {e}")))?
+    })
+    .await
+    .map_err(|e| AppError::Image(format!("library scan did not finish: {e}")))?
 }
 
 /// Reads an archive without installing it: category, size, SHA-1 and a
@@ -477,9 +486,13 @@ pub(crate) fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<Libr
             None => meta.source,
         };
         let (map_names, preview_path) = crate::library_preview::inspect_protected(
-            &file.path, &data.cache.join("library-previews"), &preview_paths,
+            &file.path,
+            &data.cache.join("library-previews"),
+            &preview_paths,
         );
-        if let Some(path) = &preview_path { preview_paths.push(path.clone()); }
+        if let Some(path) = &preview_path {
+            preview_paths.push(path.clone());
+        }
         items.push(LibraryItem {
             id,
             folder: file.folder.clone(),
@@ -508,9 +521,11 @@ pub(crate) fn read_library(data: &DataPaths, client_id: &str) -> Result<Vec<Libr
     }
 
     items.sort_by(|a, b| {
-        a.folder
-            .cmp(&b.folder)
-            .then_with(|| a.display_name.to_lowercase().cmp(&b.display_name.to_lowercase()))
+        a.folder.cmp(&b.folder).then_with(|| {
+            a.display_name
+                .to_lowercase()
+                .cmp(&b.display_name.to_lowercase())
+        })
     });
     Ok(items)
 }
@@ -569,9 +584,7 @@ fn scan(home: &Path) -> Vec<ScannedFile> {
             .then_with(|| a.file_name.to_lowercase().cmp(&b.file_name.to_lowercase()))
             .then_with(|| b.enabled.cmp(&a.enabled))
     });
-    files.dedup_by(|a, b| {
-        a.folder == b.folder && a.file_name.eq_ignore_ascii_case(&b.file_name)
-    });
+    files.dedup_by(|a, b| a.folder == b.folder && a.file_name.eq_ignore_ascii_case(&b.file_name));
     files
 }
 
@@ -601,8 +614,7 @@ fn engine_archives(client_dir: &Path) -> HashSet<String> {
 /// file of the same name inside a mod folder is the player's own and stays
 /// theirs.
 fn is_engine_file(bundled: &HashSet<String>, folder: &str, file_name: &str) -> bool {
-    folder.eq_ignore_ascii_case(DEFAULT_FOLDER)
-        && bundled.contains(&file_name.to_ascii_lowercase())
+    folder.eq_ignore_ascii_case(DEFAULT_FOLDER) && bundled.contains(&file_name.to_ascii_lowercase())
 }
 
 /// Refuses a command that would change one of the engine's own archives.
@@ -702,12 +714,21 @@ fn parse_item_id(id: &str) -> Result<(String, String)> {
 pub(crate) fn preview_path(data: &DataPaths, client_id: &str, id: &str) -> Result<PathBuf> {
     let dir = client_dir(data, client_id)?;
     let (folder, file_name) = parse_item_id(id)?;
-    let home = dir.join("home").canonicalize().map_err(|e| AppError::io_path("cannot read client home", &dir, e))?;
+    let home = dir
+        .join("home")
+        .canonicalize()
+        .map_err(|e| AppError::io_path("cannot read client home", &dir, e))?;
     for name in [&file_name, &format!("{file_name}{DISABLED_SUFFIX}")] {
         let path = home.join(&folder).join(name);
         if path.is_file() {
-            let canonical = path.canonicalize().map_err(|e| AppError::io_path("cannot resolve library file", &path, e))?;
-            if !canonical.starts_with(&home) { return Err(AppError::InvalidInput("library preview escapes client home".into())); }
+            let canonical = path
+                .canonicalize()
+                .map_err(|e| AppError::io_path("cannot resolve library file", &path, e))?;
+            if !canonical.starts_with(&home) {
+                return Err(AppError::InvalidInput(
+                    "library preview escapes client home".into(),
+                ));
+            }
             return Ok(canonical);
         }
     }
@@ -750,22 +771,29 @@ pub(crate) fn is_engine_item(data: &DataPaths, client_id: &str, id: &str) -> Res
 /// what JKHub served, and after a rewrite it no longer is. A draft made
 /// from the client would otherwise point its manifest at the JKHub record,
 /// and an install of that bundle would fetch the original over the edit.
-pub(crate) fn refresh_rewritten_item(data: &DataPaths, client_id: &str, id: &str) -> Result<LibraryItem> {
+pub(crate) fn refresh_rewritten_item(
+    data: &DataPaths,
+    client_id: &str,
+    id: &str,
+) -> Result<LibraryItem> {
     let dir = client_dir(data, client_id)?;
     let path = item_path(data, client_id, id)?;
     let report = inspect(&path)?;
     let mut sidecar = read_sidecar(&dir);
     let file_name = parse_item_id(id)?.1;
-    let meta = sidecar.items.entry(id.to_string()).or_insert_with(|| ItemMeta {
-        display_name: default_display_name(&file_name),
-        category: report.category,
-        size: report.size,
-        sha1: None,
-        added_at: timestamp::now_rfc3339(),
-        source: Some("local".to_string()),
-        notes: None,
-        features: None,
-    });
+    let meta = sidecar
+        .items
+        .entry(id.to_string())
+        .or_insert_with(|| ItemMeta {
+            display_name: default_display_name(&file_name),
+            category: report.category,
+            size: report.size,
+            sha1: None,
+            added_at: timestamp::now_rfc3339(),
+            source: Some("local".to_string()),
+            notes: None,
+            features: None,
+        });
     meta.category = report.category;
     meta.size = report.size;
     meta.sha1 = Some(report.sha1);
@@ -775,7 +803,9 @@ pub(crate) fn refresh_rewritten_item(data: &DataPaths, client_id: &str, id: &str
     let mut provenance = read_provenance(&dir);
     if provenance.remove(id).is_some() {
         write_provenance(&dir, &provenance)?;
-        log::info!("{id} of client {client_id} was rewritten and is no longer the file JKHub served");
+        log::info!(
+            "{id} of client {client_id} was rewritten and is no longer the file JKHub served"
+        );
     }
 
     read_library(data, client_id)?
@@ -822,7 +852,13 @@ pub(crate) fn inspect(path: &Path) -> Result<Pk3Report> {
 
     let mut top_level: Vec<String> = entries
         .iter()
-        .map(|entry| entry.split('/').next().unwrap_or(entry).to_ascii_lowercase())
+        .map(|entry| {
+            entry
+                .split('/')
+                .next()
+                .unwrap_or(entry)
+                .to_ascii_lowercase()
+        })
         .collect();
     top_level.sort();
     top_level.dedup();
@@ -1075,9 +1111,7 @@ fn skip(path: &str, file_name: &str, reason: &str) -> SkippedFile {
 
 /// Appends `_2`, `_3` and so on until the name is free in the target folder.
 fn free_name(file_name: &str, taken: &BTreeSet<String>) -> String {
-    let (stem, extension) = file_name
-        .rsplit_once('.')
-        .unwrap_or((file_name, "pk3"));
+    let (stem, extension) = file_name.rsplit_once('.').unwrap_or((file_name, "pk3"));
     (2..)
         .map(|n| format!("{stem}_{n}.{extension}"))
         .find(|candidate| !taken.contains(&candidate.to_lowercase()))
@@ -1085,12 +1119,7 @@ fn free_name(file_name: &str, taken: &BTreeSet<String>) -> String {
 }
 
 /// Renames the file between `.pk3` and `.pk3.disabled`.
-fn set_enabled(
-    data: &DataPaths,
-    client_id: &str,
-    id: &str,
-    enabled: bool,
-) -> Result<LibraryItem> {
+fn set_enabled(data: &DataPaths, client_id: &str, id: &str, enabled: bool) -> Result<LibraryItem> {
     let dir = client_dir(data, client_id)?;
     let (folder, file_name) = parse_item_id(id)?;
     // --- slice: game core ---
@@ -1210,7 +1239,12 @@ fn conflicts(data: &DataPaths, client_id: &str) -> Result<ConflictReport> {
 
     let signature = files
         .iter()
-        .map(|file| format!("{}|{}|{}|{}", file.folder, file.file_name, file.size, file.modified))
+        .map(|file| {
+            format!(
+                "{}|{}|{}|{}",
+                file.folder, file.file_name, file.size, file.modified
+            )
+        })
         .collect::<Vec<_>>()
         .join("\n");
     if let Ok(cache) = CONFLICT_CACHE.lock() {
@@ -1224,17 +1258,25 @@ fn conflicts(data: &DataPaths, client_id: &str) -> Result<ConflictReport> {
     // Path to the indices of the files that carry it, already in load order.
     let mut owners: HashMap<String, Vec<usize>> = HashMap::new();
     for (index, file) in files.iter().enumerate() {
-        let Ok(archive) = File::open(&file.path).map(BufReader::new).and_then(|reader| {
-            ZipArchive::new(reader).map_err(std::io::Error::other)
-        }) else {
-            log::warn!("cannot read {} while looking for conflicts", file.path.display());
+        let Ok(archive) = File::open(&file.path)
+            .map(BufReader::new)
+            .and_then(|reader| ZipArchive::new(reader).map_err(std::io::Error::other))
+        else {
+            log::warn!(
+                "cannot read {} while looking for conflicts",
+                file.path.display()
+            );
             continue;
         };
         for entry in archive.file_names() {
             if entry.ends_with('/') || entry.ends_with('\\') {
                 continue;
             }
-            let key = format!("{}\u{1}{}", file.folder, entry.replace('\\', "/").to_ascii_lowercase());
+            let key = format!(
+                "{}\u{1}{}",
+                file.folder,
+                entry.replace('\\', "/").to_ascii_lowercase()
+            );
             owners.entry(key).or_default().push(index);
         }
     }
@@ -1520,15 +1562,27 @@ mod tests {
         );
         assert_eq!(classify(&["maps/mp/ffa3.bsp".into()]), LibraryCategory::Map);
         assert_eq!(
-            classify(&["cgamex86.dll".into(), "models/players/kyle/model.glm".into()]),
+            classify(&[
+                "cgamex86.dll".into(),
+                "models/players/kyle/model.glm".into()
+            ]),
             LibraryCategory::Mod,
             "a module binary outranks the assets shipped with it"
         );
         assert_eq!(classify(&["vm/jampgame.qvm".into()]), LibraryCategory::Mod);
-        assert_eq!(classify(&["gfx/hud/health.jpg".into()]), LibraryCategory::Hud);
-        assert_eq!(classify(&["ui/jamp/ingame.menu".into()]), LibraryCategory::Hud);
         assert_eq!(
-            classify(&["sound/chars/kyle/misc/hi.mp3".into(), "music/mp/duel.mp3".into()]),
+            classify(&["gfx/hud/health.jpg".into()]),
+            LibraryCategory::Hud
+        );
+        assert_eq!(
+            classify(&["ui/jamp/ingame.menu".into()]),
+            LibraryCategory::Hud
+        );
+        assert_eq!(
+            classify(&[
+                "sound/chars/kyle/misc/hi.mp3".into(),
+                "music/mp/duel.mp3".into()
+            ]),
             LibraryCategory::Sound
         );
         assert_eq!(
@@ -1559,10 +1613,13 @@ mod tests {
         {
             let file = File::create(&long).expect("test archive");
             let mut writer = ZipWriter::new(std::io::BufWriter::new(file));
-            let options = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            let options =
+                SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
             writer.add_directory("textures", options).expect("a folder");
             for index in 0..=crate::archive::MAX_ENTRIES {
-                writer.start_file(format!("textures/{index:06}.jpg"), options).expect("start entry");
+                writer
+                    .start_file(format!("textures/{index:06}.jpg"), options)
+                    .expect("start entry");
             }
             writer.finish().expect("finish archive");
         }
@@ -1632,8 +1689,8 @@ mod tests {
         let source = root.0.join("hilt.pk3");
         write_pk3(&source, &["ext_data/sabers/reborn.sab"]);
 
-        let first = add_files(&data, "everyday", &[source.display().to_string()], None)
-            .expect("first add");
+        let first =
+            add_files(&data, "everyday", &[source.display().to_string()], None).expect("first add");
         assert_eq!(first.added.len(), 1);
         assert_eq!(first.added[0].id, "base/hilt.pk3");
         assert_eq!(first.added[0].category, LibraryCategory::Hilt);
@@ -1646,7 +1703,10 @@ mod tests {
             .expect("second add");
         assert!(second.added.is_empty());
         assert_eq!(second.skipped.len(), 1);
-        assert_eq!(second.skipped[0].existing_id.as_deref(), Some("base/hilt.pk3"));
+        assert_eq!(
+            second.skipped[0].existing_id.as_deref(),
+            Some("base/hilt.pk3")
+        );
     }
 
     #[test]
@@ -1664,7 +1724,10 @@ mod tests {
         let result =
             add_files(&data, "everyday", &[second.display().to_string()], None).expect("second");
         assert!(result.added.is_empty());
-        assert_eq!(result.skipped[0].suggested_name.as_deref(), Some("map_2.pk3"));
+        assert_eq!(
+            result.skipped[0].suggested_name.as_deref(),
+            Some("map_2.pk3")
+        );
     }
 
     #[test]
@@ -1673,8 +1736,8 @@ mod tests {
         let (data, _home) = root.client("everyday");
         let source = root.0.join("readme.txt");
         fs::write(&source, b"hello").expect("write");
-        let result = add_files(&data, "everyday", &[source.display().to_string()], None)
-            .expect("add");
+        let result =
+            add_files(&data, "everyday", &[source.display().to_string()], None).expect("add");
         assert!(result.added.is_empty());
         assert_eq!(result.skipped.len(), 1);
         assert!(result.skipped[0].reason.contains(".pk3"));
@@ -1685,7 +1748,10 @@ mod tests {
         let root = TempRoot::new("conflicts");
         let (data, home) = root.client("everyday");
         let shared = "models/players/jaden_male/model.glm";
-        write_pk3(&home.join("a-skins.pk3"), &[shared, "models/players/a/only.md3"]);
+        write_pk3(
+            &home.join("a-skins.pk3"),
+            &[shared, "models/players/a/only.md3"],
+        );
         write_pk3(&home.join("z-skins.pk3"), &[shared]);
         write_pk3(&home.join("m-skins.pk3"), &[shared]);
 
@@ -1720,7 +1786,10 @@ mod tests {
             ConflictKind::Sound
         );
         assert_eq!(conflict_kind("music/mp/duel.mp3"), ConflictKind::Sound);
-        assert_eq!(conflict_kind("textures/mymod/wall.jpg"), ConflictKind::Texture);
+        assert_eq!(
+            conflict_kind("textures/mymod/wall.jpg"),
+            ConflictKind::Texture
+        );
         assert_eq!(conflict_kind("gfx/hud/radar.tga"), ConflictKind::Texture);
         assert_eq!(conflict_kind("maps/mp/ffa3.bsp"), ConflictKind::Map);
         assert_eq!(conflict_kind("ui/jamp/ingame.menu"), ConflictKind::Ui);
@@ -1770,8 +1839,8 @@ mod tests {
         assert_eq!(items[0].category, LibraryCategory::Map);
         assert!(items[0].sha1.is_some());
 
-        let renamed = rename_item(&data, "everyday", "base/map.pk3", "  FFA pack  ")
-            .expect("rename");
+        let renamed =
+            rename_item(&data, "everyday", "base/map.pk3", "  FFA pack  ").expect("rename");
         assert_eq!(renamed.display_name, "FFA pack");
         assert!(home.join("map.pk3").is_file(), "the file keeps its name");
 
@@ -1786,7 +1855,10 @@ mod tests {
         let root = TempRoot::new("both-names");
         let (data, home) = root.client("everyday");
         write_pk3(&home.join("skin.pk3"), &["models/players/jaden/model.glm"]);
-        write_pk3(&home.join("skin.pk3.disabled"), &["models/players/jaden/model.glm"]);
+        write_pk3(
+            &home.join("skin.pk3.disabled"),
+            &["models/players/jaden/model.glm"],
+        );
 
         let items = read_library(&data, "everyday").expect("list");
         assert_eq!(items.len(), 1);
@@ -1804,7 +1876,10 @@ mod tests {
         // Three pk3 files in `home\base\`, one of them the player's.
         let items = read_library(&data, "jk2").expect("list");
         assert_eq!(
-            items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["base/skin.pk3"]
         );
 
@@ -1822,8 +1897,14 @@ mod tests {
         let refusal = set_enabled(&data, "jk2", "base/assetsmv.pk3", false)
             .expect_err("the engine's own archive is not the player's to disable");
         assert!(matches!(refusal, AppError::EngineFile(_)), "{refusal}");
-        assert!(refusal.to_string().contains("base/assetsmv.pk3"), "{refusal}");
-        assert!(home.join("assetsmv.pk3").is_file(), "the file is left alone");
+        assert!(
+            refusal.to_string().contains("base/assetsmv.pk3"),
+            "{refusal}"
+        );
+        assert!(
+            home.join("assetsmv.pk3").is_file(),
+            "the file is left alone"
+        );
         assert!(!home.join("assetsmv.pk3.disabled").exists());
 
         let refusal = remove_item(&data, "jk2", "base/assetsmv2.pk3")
@@ -1843,11 +1924,20 @@ mod tests {
         let result = add_files(&data, "jk2", &[source.display().to_string()], None).expect("add");
         assert!(result.added.is_empty());
         assert_eq!(result.skipped.len(), 1);
-        assert!(result.skipped[0].reason.contains("engine build"), "{:?}", result.skipped[0]);
-        assert_eq!(result.skipped[0].suggested_name.as_deref(), Some("assetsmv_2.pk3"));
+        assert!(
+            result.skipped[0].reason.contains("engine build"),
+            "{:?}",
+            result.skipped[0]
+        );
+        assert_eq!(
+            result.skipped[0].suggested_name.as_deref(),
+            Some("assetsmv_2.pk3")
+        );
         // The mirrored archive keeps its own bytes.
         assert_eq!(
-            inspect(&home.join("assetsmv.pk3")).expect("inspect").notable_entries,
+            inspect(&home.join("assetsmv.pk3"))
+                .expect("inspect")
+                .notable_entries,
             vec!["ext_data/mv.txt".to_string()]
         );
     }
@@ -1878,7 +1968,10 @@ mod tests {
 
         let items = read_library(&data, "jk2").expect("list");
         assert_eq!(
-            items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["mv/assetsmv.pk3"]
         );
         assert!(set_enabled(&data, "jk2", "mv/assetsmv.pk3", false).is_ok());
@@ -1895,11 +1988,17 @@ mod tests {
 
         let base_root = data.client_dir("jk2").join("basepath").join("base");
         fs::create_dir_all(&base_root).expect("the base root");
-        write_pk3(&base_root.join("assets0.pk3"), &["models/players/kyle/model.glm"]);
+        write_pk3(
+            &base_root.join("assets0.pk3"),
+            &["models/players/kyle/model.glm"],
+        );
 
         let items = read_library(&data, "jk2").expect("list");
         assert_eq!(
-            items.iter().map(|item| item.id.as_str()).collect::<Vec<_>>(),
+            items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>(),
             vec!["base/skin.pk3"],
             "the scan starts at home\\ and goes one level down"
         );

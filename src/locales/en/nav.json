@@ -9,11 +9,13 @@
     "servers": "Servers",
     "library": "Library",
     "clients": "Clients",
+    "serverInstances": "Dedicated servers",
     "friends": "Friends",
     "settings": "Settings",
     "playerProfiles": "Player profiles",
     "media": "Media",
-    "configs": "Configs"
+    "configs": "Configs",
+    "changelog": "Changelog"
   },
   "user": {
     "guest": "Guest",

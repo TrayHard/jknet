@@ -217,16 +217,29 @@ fn catalogue_path(game: Game, query: &BundleQuery) -> String {
         path.push_str("&q=");
         path.push_str(&utf8_percent_encode(q, NON_ALPHANUMERIC).to_string());
     }
-    if let Some(engine) = query.engine_id.as_deref().map(str::trim).filter(|e| !e.is_empty()) {
+    if let Some(engine) = query
+        .engine_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|e| !e.is_empty())
+    {
         path.push_str("&engine=");
         path.push_str(&utf8_percent_encode(engine, NON_ALPHANUMERIC).to_string());
     }
-    if let Some(tag) = query.tag.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+    if let Some(tag) = query
+        .tag
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
         path.push_str("&tag=");
         path.push_str(&utf8_percent_encode(tag, NON_ALPHANUMERIC).to_string());
     }
     let limit = query.limit.unwrap_or(50).clamp(1, MAX_PAGE);
-    path.push_str(&format!("&limit={limit}&offset={}", query.offset.unwrap_or(0)));
+    path.push_str(&format!(
+        "&limit={limit}&offset={}",
+        query.offset.unwrap_or(0)
+    ));
     path
 }
 
@@ -281,7 +294,10 @@ fn local_block(clients: &[Client], details: &BundleDetails) -> BundleLocal {
         }
         None => {
             for component in &card.components {
-                engine_known.insert(component.id.clone(), engines::find(&component.engine_id).is_some());
+                engine_known.insert(
+                    component.id.clone(),
+                    engines::find(&component.engine_id).is_some(),
+                );
             }
         }
     }
@@ -424,8 +440,15 @@ pub async fn install_bundle(
             .request::<InstallsResult>(&ctx, Method::POST, &path, Some(body), Auth::Required)
             .await
         {
-            Ok(counted) => log::info!("bundle {} has {} install(s)", details.card.id, counted.installs),
-            Err(e) => log::warn!("the install of bundle {} was not counted: {e}", details.card.id),
+            Ok(counted) => log::info!(
+                "bundle {} has {} install(s)",
+                details.card.id,
+                counted.installs
+            ),
+            Err(e) => log::warn!(
+                "the install of bundle {} was not counted: {e}",
+                details.card.id
+            ),
         }
     }
     Ok(clients)
@@ -539,7 +562,13 @@ pub async fn list_pending_bundle_versions(
 ) -> Result<Vec<PendingVersion>> {
     let ctx = OnlineContext::from_settings(&state.settings()?);
     let answer: serde_json::Value = online
-        .request(&ctx, Method::GET, "/v1/bundles/admin/pending", None, Auth::Required)
+        .request(
+            &ctx,
+            Method::GET,
+            "/v1/bundles/admin/pending",
+            None,
+            Auth::Required,
+        )
         .await?;
     pending_versions(answer)
 }
@@ -562,10 +591,12 @@ fn pending_versions(answer: serde_json::Value) -> Result<Vec<PendingVersion>> {
             let bundle = item
                 .get_mut("bundle")
                 .map(serde_json::Value::take)
-                .ok_or_else(|| AppError::json(
-                    "cannot parse the review queue",
-                    serde::de::Error::custom("an entry without a bundle"),
-                ))?;
+                .ok_or_else(|| {
+                    AppError::json(
+                        "cannot parse the review queue",
+                        serde::de::Error::custom("an entry without a bundle"),
+                    )
+                })?;
             let version = match item.get_mut("version") {
                 Some(version) => version.take(),
                 None => item,
@@ -695,7 +726,9 @@ mod tests {
         // refused by them before any client exists.
         let key = version_key("01J", "01V");
         assert_eq!(key, "bundle:01J:01V");
-        let version = bundles.claim(&key, BundlesState::INSTALL).expect("the version");
+        let version = bundles
+            .claim(&key, BundlesState::INSTALL)
+            .expect("the version");
         let again = bundles
             .claim(&key, BundlesState::INSTALL)
             .expect_err("the same version twice");
@@ -705,7 +738,9 @@ mod tests {
             .expect("another version of the bundle is free");
         drop(version);
         assert_eq!(draft_key("d1"), "draft:d1");
-        let draft = bundles.claim(&draft_key("d1"), BundlesState::PUBLISH).expect("the draft");
+        let draft = bundles
+            .claim(&draft_key("d1"), BundlesState::PUBLISH)
+            .expect("the draft");
         let again = bundles
             .claim(&draft_key("d1"), BundlesState::INSTALL)
             .expect_err("a test install under a publish");
@@ -807,14 +842,23 @@ mod tests {
                                 {"id":"mme","label":"Demos","engine":{"engineId":"future-engine"},"modes":["multiplayer"]}]}}}"#,
         )
         .expect("details");
-        let local = local_block(&[from_bundle, sp, other, plain, unfinished, from_draft], &details);
+        let local = local_block(
+            &[from_bundle, sp, other, plain, unfinished, from_draft],
+            &details,
+        );
         let listed: Vec<(&str, &str, bool)> = local
             .installed_clients
             .iter()
             .map(|c| (c.client_id.as_str(), c.component_id.as_str(), c.pending))
             .collect();
-        assert_eq!(listed, [("x", "mp", false), ("y", "sp", false), ("v", "mp", true)]);
-        assert_eq!(local.installed_clients[0].version_id.as_deref(), Some("01V"));
+        assert_eq!(
+            listed,
+            [("x", "mp", false), ("y", "sp", false), ("v", "mp", true)]
+        );
+        assert_eq!(
+            local.installed_clients[0].version_id.as_deref(),
+            Some("01V")
+        );
         assert_eq!(
             local.engine_known,
             BTreeMap::from([
@@ -839,7 +883,10 @@ mod tests {
         };
         let local = local_block(&[], &card_only);
         assert!(local.installed_clients.is_empty());
-        assert_eq!(local.engine_known, BTreeMap::from([("mp".to_string(), true)]));
+        assert_eq!(
+            local.engine_known,
+            BTreeMap::from([("mp".to_string(), true)])
+        );
         let json = serde_json::to_value(&local).unwrap();
         assert_eq!(json["engineKnown"]["mp"], true);
     }
@@ -865,7 +912,9 @@ mod tests {
         assert_eq!(parsed[0].version.summary.id, "01V");
         assert_eq!(parsed[0].bundle.id, "01J");
 
-        assert!(pending_versions(serde_json::json!({ "items": [] })).expect("empty").is_empty());
+        assert!(pending_versions(serde_json::json!({ "items": [] }))
+            .expect("empty")
+            .is_empty());
         assert!(pending_versions(serde_json::json!([{ "version": version }])).is_err());
     }
 
@@ -876,7 +925,10 @@ mod tests {
             ("sp".to_string(), "  ".to_string()),
             ("".to_string(), "x".to_string()),
         ])));
-        assert_eq!(ids, HashMap::from([("mp".to_string(), "rujka-mp".to_string())]));
+        assert_eq!(
+            ids,
+            HashMap::from([("mp".to_string(), "rujka-mp".to_string())])
+        );
         assert!(trimmed_ids(None).is_empty());
     }
 
@@ -983,10 +1035,15 @@ mod tests {
                 .await
                 .expect("the mock answers the bundle");
             assert_eq!(details.card.id, card.id);
-            let latest = details.latest.expect("a published bundle has a latest version");
+            let latest = details
+                .latest
+                .expect("a published bundle has a latest version");
             manifest::validate(&latest.manifest).expect("the mock serves a valid manifest");
             assert!(!latest.manifest.components.is_empty());
-            assert_eq!(latest.summary.components.len(), latest.manifest.components.len());
+            assert_eq!(
+                latest.summary.components.len(),
+                latest.manifest.components.len()
+            );
             println!(
                 "mock: {} with {} component(s) and {} files",
                 details.card.name,
@@ -1029,7 +1086,10 @@ mod tests {
             token: Some(token),
         };
         let me = client.get_me(&ctx).await.expect("the account reads");
-        println!("mock: signed in as {}, admin: {}", me.user.display_name, me.admin);
+        println!(
+            "mock: signed in as {}, admin: {}",
+            me.user.display_name, me.admin
+        );
 
         let mine: MyBundles = client
             .request(&ctx, Method::GET, "/v1/bundles/me", None, Auth::Required)
@@ -1124,21 +1184,37 @@ mod tests {
             .request(
                 &ctx,
                 Method::POST,
-                &format!("{bundle_path}/versions/{}/publish", created.version.summary.id),
+                &format!(
+                    "{bundle_path}/versions/{}/publish",
+                    created.version.summary.id
+                ),
                 None,
                 Auth::Required,
             )
             .await
             .expect("the version publishes");
         assert_eq!(published.summary.status, BundleVersion::PUBLISHED);
-        assert_eq!(published.summary.components.len(), 2, "the service sums the components up");
+        assert_eq!(
+            published.summary.components.len(),
+            2,
+            "the service sums the components up"
+        );
         assert_eq!(published.summary.components[0].id, "mp");
 
         // The file comes back whole, and from an offset as a 206.
-        let whole = client.get_blob(&guest, &hash, 0).await.expect("the file downloads");
+        let whole = client
+            .get_blob(&guest, &hash, 0)
+            .await
+            .expect("the file downloads");
         assert_eq!(whole.status(), reqwest::StatusCode::OK);
-        assert_eq!(whole.bytes().await.expect("bytes").as_ref(), body.as_slice());
-        let tail = client.get_blob(&guest, &hash, 1000).await.expect("the tail downloads");
+        assert_eq!(
+            whole.bytes().await.expect("bytes").as_ref(),
+            body.as_slice()
+        );
+        let tail = client
+            .get_blob(&guest, &hash, 1000)
+            .await
+            .expect("the tail downloads");
         assert_eq!(tail.status(), reqwest::StatusCode::PARTIAL_CONTENT);
         assert_eq!(tail.bytes().await.expect("bytes").as_ref(), &body[1000..]);
         let missing = client
@@ -1151,7 +1227,13 @@ mod tests {
         );
 
         let liked: LikeResult = client
-            .request(&ctx, Method::PUT, &format!("{bundle_path}/like"), None, Auth::Required)
+            .request(
+                &ctx,
+                Method::PUT,
+                &format!("{bundle_path}/like"),
+                None,
+                Auth::Required,
+            )
             .await
             .expect("the like is taken");
         assert!(liked.liked_by_me);
@@ -1246,13 +1328,21 @@ mod tests {
         let picture_hash = sha256_hex(&png);
         let picture = temp.path().join("shot.png");
         std::fs::write(&picture, &png).expect("the picture");
-        assert!(!client.head_blob(&guest, &picture_hash).await.expect("HEAD answers"));
-        let body = publish::file_body(&picture, |_| {}).await.expect("the body opens");
+        assert!(!client
+            .head_blob(&guest, &picture_hash)
+            .await
+            .expect("HEAD answers"));
+        let body = publish::file_body(&picture, |_| {})
+            .await
+            .expect("the body opens");
         client
             .put_blob(&ctx, &picture_hash, png.len() as u64, body)
             .await
             .expect("the picture is taken");
-        assert!(client.head_blob(&guest, &picture_hash).await.expect("HEAD answers"));
+        assert!(client
+            .head_blob(&guest, &picture_hash)
+            .await
+            .expect("HEAD answers"));
 
         // 2. The bundle, with the description pointing at the picture.
         let description = format!("# Order check\n\n![shot](blob:{picture_hash})\n");
@@ -1285,12 +1375,27 @@ mod tests {
             })
         };
         let stale = client
-            .request::<BundleDetails>(&ctx, Method::PUT, &bundle_path, Some(fields(read.revision + 5)), Auth::Required)
+            .request::<BundleDetails>(
+                &ctx,
+                Method::PUT,
+                &bundle_path,
+                Some(fields(read.revision + 5)),
+                Auth::Required,
+            )
             .await
             .expect_err("a stale revision is refused");
-        assert!(matches!(&stale, AppError::Online { code, .. } if code == "conflict"), "{stale}");
+        assert!(
+            matches!(&stale, AppError::Online { code, .. } if code == "conflict"),
+            "{stale}"
+        );
         let updated: BundleDetails = client
-            .request(&ctx, Method::PUT, &bundle_path, Some(fields(read.revision)), Auth::Required)
+            .request(
+                &ctx,
+                Method::PUT,
+                &bundle_path,
+                Some(fields(read.revision)),
+                Auth::Required,
+            )
             .await
             .expect("the bundle is updated");
         assert_eq!(updated.card.summary, "updated");
@@ -1303,7 +1408,9 @@ mod tests {
             let mut writer = zip::ZipWriter::new(file);
             let options = zip::write::SimpleFileOptions::default()
                 .compression_method(zip::CompressionMethod::Stored);
-            writer.start_file(format!("models/run{stamp}.md3"), options).unwrap();
+            writer
+                .start_file(format!("models/run{stamp}.md3"), options)
+                .unwrap();
             writer.write_all(b"geometry").unwrap();
             writer.start_file("sound/x.wav", options).unwrap();
             writer.write_all(b"audio").unwrap();
@@ -1364,13 +1471,21 @@ mod tests {
             )
             .await
             .expect("the version is drafted");
-        let missing: Vec<&str> = created.missing_blobs.iter().map(|b| b.sha256.as_str()).collect();
+        let missing: Vec<&str> = created
+            .missing_blobs
+            .iter()
+            .map(|b| b.sha256.as_str())
+            .collect();
         assert!(missing.contains(&pk3_hash.as_str()), "{missing:?}");
         assert!(missing.contains(&cfg_hash.as_str()), "{missing:?}");
         println!(
             "mock: the version asks for {} file(s); the listing is {}",
             missing.len(),
-            if missing.contains(&listing_hash.as_str()) { "among them" } else { "not named" }
+            if missing.contains(&listing_hash.as_str()) {
+                "among them"
+            } else {
+                "not named"
+            }
         );
         for (path, hash, size) in [
             (&pk3, &pk3_hash, pk3_size),
@@ -1380,15 +1495,26 @@ mod tests {
             if client.head_blob(&guest, hash).await.expect("HEAD answers") {
                 continue;
             }
-            let body = publish::file_body(path, |_| {}).await.expect("the body opens");
-            client.put_blob(&ctx, hash, size, body).await.expect("the upload is taken");
+            let body = publish::file_body(path, |_| {})
+                .await
+                .expect("the body opens");
+            client
+                .put_blob(&ctx, hash, size, body)
+                .await
+                .expect("the upload is taken");
         }
-        assert!(client.head_blob(&guest, &listing_hash).await.expect("HEAD answers"));
+        assert!(client
+            .head_blob(&guest, &listing_hash)
+            .await
+            .expect("HEAD answers"));
         let published: BundleVersion = client
             .request(
                 &ctx,
                 Method::POST,
-                &format!("{bundle_path}/versions/{}/publish", created.version.summary.id),
+                &format!(
+                    "{bundle_path}/versions/{}/publish",
+                    created.version.summary.id
+                ),
                 None,
                 Auth::Required,
             )
@@ -1396,7 +1522,10 @@ mod tests {
             .expect("the version publishes");
         assert_eq!(published.summary.status, BundleVersion::PUBLISHED);
         assert_eq!(
-            published.manifest.components[0].files[0].listing.as_ref().map(|l| l.sha256.as_str()),
+            published.manifest.components[0].files[0]
+                .listing
+                .as_ref()
+                .map(|l| l.sha256.as_str()),
             Some(listing_hash.as_str()),
             "the listing survives the round trip"
         );
@@ -1409,17 +1538,26 @@ mod tests {
         assert_eq!(read.total, 2);
         assert_eq!(read.entries[0].path, format!("models/run{stamp}.md3"));
         assert_eq!(read.bytes, 8 + 5);
-        let cached = paths.bundle_listings_cache_dir().join(format!("{listing_hash}.json"));
+        let cached = paths
+            .bundle_listings_cache_dir()
+            .join(format!("{listing_hash}.json"));
         assert_eq!(std::fs::read(&cached).unwrap(), listing_bytes);
-        let again = listing::bundle_listing(&paths, &client, &guest, &listing_hash).await.unwrap();
+        let again = listing::bundle_listing(&paths, &client, &guest, &listing_hash)
+            .await
+            .unwrap();
         assert_eq!(again, read);
         let text = listing::bundle_text(&paths, &client, &guest, &cfg_hash, "base/autoexec.cfg")
             .await
             .expect("the config reads");
         assert_eq!(text, cfg_text);
-        assert!(paths.bundle_preview_cache_dir().join(format!("{cfg_hash}.txt")).is_file());
+        assert!(paths
+            .bundle_preview_cache_dir()
+            .join(format!("{cfg_hash}.txt"))
+            .is_file());
         assert_eq!(
-            listing::bundle_text(&paths, &client, &guest, &cfg_hash, "base/autoexec.cfg").await.unwrap(),
+            listing::bundle_text(&paths, &client, &guest, &cfg_hash, "base/autoexec.cfg")
+                .await
+                .unwrap(),
             cfg_text
         );
         // The path says what the hash is: a pk3 is not read as text, however
@@ -1428,16 +1566,30 @@ mod tests {
             .await
             .expect_err("a pk3 is not text");
         assert!(matches!(refused, AppError::InvalidInput(_)), "{refused}");
-        let unknown = listing::bundle_text(&paths, &client, &guest, &"0".repeat(64), "base/autoexec.cfg")
-            .await
-            .expect_err("an unknown hash is refused");
-        assert!(matches!(&unknown, AppError::Online { code, .. } if code == "not_found"), "{unknown}");
+        let unknown = listing::bundle_text(
+            &paths,
+            &client,
+            &guest,
+            &"0".repeat(64),
+            "base/autoexec.cfg",
+        )
+        .await
+        .expect_err("an unknown hash is refused");
+        assert!(
+            matches!(&unknown, AppError::Online { code, .. } if code == "not_found"),
+            "{unknown}"
+        );
         // A file over the limit of the reader is refused before it is read.
         let tiny = temp.path().join("tiny.bin");
-        let refused = preview::cached_blob_bytes(&client, &guest, &pk3_hash, &tiny, 4).await.expect_err("too big");
+        let refused = preview::cached_blob_bytes(&client, &guest, &pk3_hash, &tiny, 4)
+            .await
+            .expect_err("too big");
         assert!(matches!(refused, AppError::InvalidInput(_)), "{refused}");
         assert!(!tiny.exists());
-        println!("mock: bundle {} published with a picture and a listing", bundle.card.slug);
+        println!(
+            "mock: bundle {} published with a picture and a listing",
+            bundle.card.slug
+        );
     }
 
     /// The fourth edition against the stand-in: a bundle is created with a
@@ -1495,7 +1647,12 @@ mod tests {
             .await
             .expect("the bundle is created");
         assert_eq!(bundle.card.language, "en");
-        assert_eq!(bundle.card.translations.len(), 1, "{:?}", bundle.card.translations);
+        assert_eq!(
+            bundle.card.translations.len(),
+            1,
+            "{:?}",
+            bundle.card.translations
+        );
         assert_eq!(bundle.card.translations["ru"].name, russian_name);
         assert_eq!(bundle.card.translations["ru"].summary, "Русское издание");
         assert_eq!(
@@ -1508,8 +1665,14 @@ mod tests {
         // 2. What the service refuses: the main language among the
         //    translations, a code it does not know.
         for (body, why) in [
-            (fields("s", serde_json::json!({ "en": russian })), "the main language"),
-            (fields("s", serde_json::json!({ "xx": russian })), "an unknown code"),
+            (
+                fields("s", serde_json::json!({ "en": russian })),
+                "the main language",
+            ),
+            (
+                fields("s", serde_json::json!({ "xx": russian })),
+                "an unknown code",
+            ),
             (
                 serde_json::json!({
                     "name": name, "summary": "s", "description": "d", "language": "xx",
@@ -1519,10 +1682,19 @@ mod tests {
             ),
         ] {
             let refused = client
-                .request::<BundleDetails>(&ctx, Method::POST, "/v1/bundles", Some(body), Auth::Required)
+                .request::<BundleDetails>(
+                    &ctx,
+                    Method::POST,
+                    "/v1/bundles",
+                    Some(body),
+                    Auth::Required,
+                )
                 .await
                 .expect_err(why);
-            assert!(matches!(&refused, AppError::Online { code, .. } if code == "invalid"), "{why}: {refused}");
+            assert!(
+                matches!(&refused, AppError::Online { code, .. } if code == "invalid"),
+                "{why}: {refused}"
+            );
         }
 
         // 3. `PUT` replaces the set whole: Ukrainian in, Russian out.
@@ -1540,7 +1712,10 @@ mod tests {
             .await
             .expect("the bundle is updated");
         assert_eq!(updated.card.translations.keys().collect::<Vec<_>>(), ["uk"]);
-        assert_eq!(updated.card.translations["uk"].summary, "", "an empty field is kept as not translated");
+        assert_eq!(
+            updated.card.translations["uk"].summary, "",
+            "an empty field is kept as not translated"
+        );
         // And back to Russian, with the description, for the catalogue.
         let mut body = fields("updated", serde_json::json!({ "ru": russian }));
         body["revision"] = serde_json::json!(updated.revision);
@@ -1548,7 +1723,10 @@ mod tests {
             .request(&ctx, Method::PUT, &bundle_path, Some(body), Auth::Required)
             .await
             .expect("the bundle is updated again");
-        assert_eq!(restored.card.translations.keys().collect::<Vec<_>>(), ["ru"]);
+        assert_eq!(
+            restored.card.translations.keys().collect::<Vec<_>>(),
+            ["ru"]
+        );
 
         // 4. A version with one file, published, so the bundle is in the
         //    catalogue.
@@ -1584,8 +1762,14 @@ mod tests {
             )
             .await
             .expect("the version is drafted");
-        if !client.head_blob(&guest, &cfg_hash).await.expect("HEAD answers") {
-            let body = publish::file_body(&cfg, |_| {}).await.expect("the body opens");
+        if !client
+            .head_blob(&guest, &cfg_hash)
+            .await
+            .expect("HEAD answers")
+        {
+            let body = publish::file_body(&cfg, |_| {})
+                .await
+                .expect("the body opens");
             client
                 .put_blob(&ctx, &cfg_hash, cfg_text.len() as u64, body)
                 .await
@@ -1595,7 +1779,10 @@ mod tests {
             .request(
                 &ctx,
                 Method::POST,
-                &format!("{bundle_path}/versions/{}/publish", created.version.summary.id),
+                &format!(
+                    "{bundle_path}/versions/{}/publish",
+                    created.version.summary.id
+                ),
                 None,
                 Auth::Required,
             )
@@ -1606,7 +1793,11 @@ mod tests {
         // 5. The card of the catalogue: the language and the translation
         //    without its description; the details with it. The catalogue
         //    finds the bundle by its translated name too.
-        let card_of = |list: BundleList| list.items.into_iter().find(|card| card.id == bundle.card.id);
+        let card_of = |list: BundleList| {
+            list.items
+                .into_iter()
+                .find(|card| card.id == bundle.card.id)
+        };
         let path = catalogue_path(
             Game::JediAcademy,
             &BundleQuery {
@@ -1646,7 +1837,10 @@ mod tests {
             .await
             .expect("the details read");
         assert_eq!(details.card.language, "en");
-        assert_eq!(details.card.translations["ru"].description.as_deref(), Some("# Перевод"));
+        assert_eq!(
+            details.card.translations["ru"].description.as_deref(),
+            Some("# Перевод")
+        );
         assert_eq!(details.description, "# Translated");
         let mine: MyBundles = client
             .request(&ctx, Method::GET, "/v1/bundles/me", None, Auth::Required)
@@ -1672,6 +1866,9 @@ mod tests {
         let path = temp.path().join("x.bin");
         let body: Vec<u8> = (0..(300 * 1024)).map(|i| (i % 251) as u8).collect();
         std::fs::write(&path, &body).expect("written");
-        assert_eq!(sha256_of(&path).expect("hash"), test_support::sha256_hex(&body));
+        assert_eq!(
+            sha256_of(&path).expect("hash"),
+            test_support::sha256_hex(&body)
+        );
     }
 }

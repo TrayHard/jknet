@@ -1,13 +1,16 @@
-import { Pencil, Plus, Share2, Star, Trash2 } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { FileUp, Pencil, Plus, Share2, Star, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
 import { cn } from "../../lib/format";
 import type { Client, PlayerProfile } from "../../lib/ipc";
+import { isTauri } from "../../lib/runtime";
 import {
   useChatCardFromProfile,
   useDeleteProfile,
+  useInspectProfileConfig,
   useProfiles,
   useSaberHilts,
   useGameInfo,
@@ -52,6 +55,7 @@ export function PlayerProfilesCard({
   const book = useProfiles(client.id);
   const remove = useDeleteProfile(client.id);
   const setDefault = useSetDefaultProfile(client.id);
+  const inspectConfig = useInspectProfileConfig(client.id);
   // --- slice: chat cards --- the core builds the card, the hand-written
   // token line of a profile included.
   const { t: tChat } = useTranslation("chat");
@@ -63,6 +67,8 @@ export function PlayerProfilesCard({
 
   /** The profile being edited, or `null` while the list is on screen. */
   const [editing, setEditing] = useState<PlayerProfile | null>(null);
+  /** The config that filled a new draft, or `null` for ordinary editing. */
+  const [importedFrom, setImportedFrom] = useState<string | null>(null);
   /** The profile the confirmation dialog is about. */
   const [removing, setRemoving] = useState<PlayerProfile | null>(null);
 
@@ -70,7 +76,31 @@ export function PlayerProfilesCard({
   const hilts = useSaberHilts(client.id, hasHilts);
   const profiles = book.data?.profiles ?? [];
   const defaultId = book.data?.defaultProfileId ?? null;
-  const failure = book.error ?? remove.error ?? setDefault.error;
+  const failure = book.error ?? remove.error ?? setDefault.error ?? inspectConfig.error;
+
+  const openForm = (profile: PlayerProfile, source: string | null = null) => {
+    setImportedFrom(source);
+    setEditing(profile);
+  };
+
+  const closeForm = () => {
+    setImportedFrom(null);
+    setEditing(null);
+  };
+
+  const importConfig = async () => {
+    if (!isTauri()) return;
+    const path = await open({
+      multiple: false,
+      directory: false,
+      title: t("clientWindow.profiles.importTitle"),
+      filters: [{ name: t("clientWindow.profiles.importFilter"), extensions: ["cfg"] }],
+    });
+    if (typeof path !== "string") return;
+    inspectConfig.mutate(path, {
+      onSuccess: (result) => openForm(result.profile, result.sourceName),
+    });
+  };
 
   // --- slice: selection context menu ---
   // The three buttons of the row, on a right click anywhere in it. **Delete**
@@ -96,7 +126,7 @@ export function PlayerProfilesCard({
     ],
     onSelect: (id, profile) => {
       if (id === "default") setDefault.mutate(profile.id);
-      else if (id === "edit") setEditing(profile);
+      else if (id === "edit") openForm(profile);
       else if (id === "share") shareProfile(profile);
       else setRemoving(profile);
     },
@@ -107,7 +137,8 @@ export function PlayerProfilesCard({
       <ProfileForm
         client={client}
         profile={editing}
-        onDone={() => setEditing(null)}
+        importedFrom={importedFrom ?? undefined}
+        onDone={closeForm}
       />
     );
   }
@@ -172,7 +203,7 @@ export function PlayerProfilesCard({
                 icon={<Pencil size={14} />}
                 title={t("clientWindow.profiles.edit", { profile: profile.name })}
                 aria-label={t("clientWindow.profiles.edit", { profile: profile.name })}
-                onClick={() => setEditing(profile)}
+                onClick={() => openForm(profile)}
               />
               {canShare ? (
                 <Button
@@ -200,14 +231,25 @@ export function PlayerProfilesCard({
         </ul>
       )}
 
-      <span>
+      <span className="flex flex-wrap gap-8">
         <Button
           size="sm"
           variant="secondary"
           icon={<Plus size={14} />}
-          onClick={() => setEditing(blankProfile())}
+          onClick={() => openForm(blankProfile())}
         >
           {t("clientWindow.profiles.new")}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<FileUp size={14} />}
+          disabled={!isTauri() || inspectConfig.isPending}
+          onClick={() => void importConfig()}
+        >
+          {inspectConfig.isPending
+            ? t("clientWindow.profiles.importing")
+            : t("clientWindow.profiles.import")}
         </Button>
       </span>
 

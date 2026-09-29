@@ -199,7 +199,9 @@ impl Outbox {
     }
 
     pub fn get(&self, client_id: &str) -> Option<&OutboxEntry> {
-        self.entries.iter().find(|entry| entry.client_id == client_id)
+        self.entries
+            .iter()
+            .find(|entry| entry.client_id == client_id)
     }
 
     fn get_mut(&mut self, client_id: &str) -> Option<&mut OutboxEntry> {
@@ -379,7 +381,10 @@ impl Outbox {
     #[cfg(test)]
     fn busy(&self) -> bool {
         self.entries.iter().any(|entry| {
-            matches!(entry.status, OutboxStatus::Uploading | OutboxStatus::Sending)
+            matches!(
+                entry.status,
+                OutboxStatus::Uploading | OutboxStatus::Sending
+            )
         })
     }
 }
@@ -456,12 +461,16 @@ async fn run(app: &AppHandle, client_id: &str) {
             };
             let failure = classify(&error);
             if failure == Failure::FilesLost && chat.outbox().reregister(client_id) {
-                log::info!("chat: the files of {client_id} are gone on the service, uploading again");
+                log::info!(
+                    "chat: the files of {client_id} are gone on the service, uploading again"
+                );
             } else if failure == Failure::Transient {
                 let retry = chat.outbox().retry_later(client_id, &error, Instant::now());
                 match retry {
                     Retry::After(wait) => {
-                        log::debug!("chat: sending {client_id} failed ({error}), again in {wait:?}");
+                        log::debug!(
+                            "chat: sending {client_id} failed ({error}), again in {wait:?}"
+                        );
                         let handle = app.clone();
                         tauri::async_runtime::spawn(async move {
                             tokio::time::sleep(wait).await;
@@ -612,7 +621,10 @@ mod tests {
         outbox.push(entry("a1", "a"));
         let start = Instant::now();
         outbox.start_ready(start);
-        assert!(matches!(outbox.retry_later("a1", &network(), start), Retry::After(_)));
+        assert!(matches!(
+            outbox.retry_later("a1", &network(), start),
+            Retry::After(_)
+        ));
         let late = start + GIVE_UP_AFTER;
         assert_eq!(outbox.retry_later("a1", &network(), late), Retry::GaveUp);
         let failed = &outbox.all()[0];
@@ -641,7 +653,10 @@ mod tests {
         outbox.succeeded("a2");
         assert_eq!(outbox.retry("a1").as_deref(), Some("a"));
         let retried = outbox.get("a1").expect("still queued");
-        assert_eq!((retried.status, retried.error.clone()), (OutboxStatus::Queued, None));
+        assert_eq!(
+            (retried.status, retried.error.clone()),
+            (OutboxStatus::Queued, None)
+        );
         assert_eq!(outbox.start_ready(now), ["a1"]);
     }
 
@@ -658,7 +673,10 @@ mod tests {
         ));
         let now = Instant::now();
         assert_eq!(outbox.start_ready(now), ["a1"]);
-        assert_eq!(outbox.get("a1").map(|e| e.status), Some(OutboxStatus::Uploading));
+        assert_eq!(
+            outbox.get("a1").map(|e| e.status),
+            Some(OutboxStatus::Uploading)
+        );
         outbox.set_file_id("a1", 0, "f1".into());
         outbox.set_file_id("a1", 1, "f2".into());
         assert!(!outbox.get("a1").expect("queued").uploads_left());
@@ -678,7 +696,10 @@ mod tests {
         outbox.push(entry("a2", "a"));
         assert_eq!(outbox.matched("a1").as_deref(), Some("a"));
         assert_eq!(outbox.succeeded("a1"), None);
-        assert_eq!(outbox.retry_later("a1", &network(), Instant::now()), Retry::Gone);
+        assert_eq!(
+            outbox.retry_later("a1", &network(), Instant::now()),
+            Retry::Gone
+        );
         assert!(outbox.discard("a2").is_some());
         assert!(outbox.all().is_empty());
     }
@@ -755,7 +776,10 @@ mod tests {
         outbox.push(entry("01J0CLIENT", "a"));
         outbox.fail(
             "01J0CLIENT",
-            &AppError::Online { code: "too_long".into(), message: "x".into() },
+            &AppError::Online {
+                code: "too_long".into(),
+                message: "x".into(),
+            },
         );
         let json = serde_json::to_value(outbox.all()).expect("serializes");
         assert_eq!(json[0]["error"], "too_long");

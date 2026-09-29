@@ -16,7 +16,13 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { filePreviewIpc, modelPreviewIpc, type FilePreviewSource } from "./ipc";
-import { mediaIpc, configsIpc } from "./ipc";
+import {
+  mediaIpc,
+  configsIpc,
+  serverConfigsIpc,
+  serverInstanceEvents,
+  serverInstancesIpc,
+} from "./ipc";
 // --- slice: chat ---
 import {
   chatEvents,
@@ -65,6 +71,7 @@ import {
 } from "./ipc";
 // --- slice: chat notifications ---
 import { applyChatPatch } from "./chat/notifySettings";
+import { mergeJkhubCategoryPages, type JkhubCompleteListing } from "./serverModSearch";
 import {
   appendAfter,
   applyReaction,
@@ -117,6 +124,148 @@ export function useVideoJobs() {
 }
 export function useVideoPreferences() { return useQuery({ queryKey: ["video-preferences"], queryFn: mediaIpc.videoPreferences, enabled: isTauri() }); }
 export function useConfigs() { return useQuery({ queryKey: ["configs"], queryFn: configsIpc.list, enabled: isTauri() }); }
+export function useServerConfigs() {
+  const cache = useQueryClient();
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("./backend").then(({ listen }) =>
+      listen("server-configs:changed", () => void cache.invalidateQueries({ queryKey: ["server-configs"] })),
+    ).then((stop) => { if (disposed) stop(); else unlisten = stop; }).catch(console.warn);
+    return () => { disposed = true; unlisten?.(); };
+  }, [cache]);
+  return useQuery({ queryKey: ["server-configs"], queryFn: serverConfigsIpc.list, enabled: isTauri(), staleTime: 0 });
+}
+export function useServerConfigActions() {
+  const cache = useQueryClient();
+  const updated = () => void cache.invalidateQueries({ queryKey: ["server-configs"] });
+  return {
+    save: useMutation({ mutationFn: serverConfigsIpc.save, onSuccess: updated }),
+    remove: useMutation({ mutationFn: serverConfigsIpc.remove, onSuccess: updated }),
+    check: useMutation({ mutationFn: serverConfigsIpc.check }),
+  };
+}
+export function useServerConfigCheck(document: import("./ipc").ServerConfigDocument | null | undefined) {
+  return useQuery({
+    queryKey: ["server-config-check", document],
+    queryFn: () => serverConfigsIpc.check(document!),
+    enabled: isTauri() && document != null,
+    staleTime: 0,
+  });
+}
+
+// --- slice: dedicated server instances ---
+
+const serverInstanceKeys = {
+  all: ["server-instances"] as const,
+  engines: ["server-instances", "engines"] as const,
+  mods: ["server-instances", "mods"] as const,
+  files: (serverId: string) => ["server-instances", "files", serverId] as const,
+};
+
+/** Persistent dedicated servers, including their live process status. */
+export function useServerInstances() {
+  const cache = useQueryClient();
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void import("./backend").then(({ listen }) =>
+      listen<string>(serverInstanceEvents.changed, () => {
+        void cache.invalidateQueries({ queryKey: serverInstanceKeys.all });
+      }),
+    ).then((stop) => { if (disposed) stop(); else unlisten = stop; }).catch(console.warn);
+    return () => { disposed = true; unlisten?.(); };
+  }, [cache]);
+  return useQuery({
+    queryKey: serverInstanceKeys.all,
+    queryFn: serverInstancesIpc.list,
+    enabled: isTauri(),
+    refetchInterval: (query) =>
+      query.state.data?.some((server) => server.status.state === "running") ? 1_000 : false,
+  });
+}
+
+export function useServerEngines() {
+  return useQuery({
+    queryKey: serverInstanceKeys.engines,
+    queryFn: serverInstancesIpc.engines,
+    enabled: isTauri(),
+  });
+}
+
+export function useServerMods() {
+  return useQuery({
+    queryKey: serverInstanceKeys.mods,
+    queryFn: serverInstancesIpc.mods,
+    enabled: isTauri(),
+  });
+}
+
+export function useServerInstanceFiles(serverId: string | null) {
+  return useQuery({
+    queryKey: serverInstanceKeys.files(serverId ?? ""),
+    queryFn: () => serverInstancesIpc.files(serverId!),
+    enabled: isTauri() && serverId !== null,
+  });
+}
+
+/** All mutations of the dedicated-server manager and their cache effects. */
+export function useServerInstanceActions() {
+  const cache = useQueryClient();
+  const refreshAll = () => void cache.invalidateQueries({ queryKey: serverInstanceKeys.all });
+  const refreshEngines = () => void cache.invalidateQueries({ queryKey: serverInstanceKeys.engines });
+  const refreshMods = () => void cache.invalidateQueries({ queryKey: serverInstanceKeys.mods });
+  const refreshFiles = (serverId: string) =>
+    void cache.invalidateQueries({ queryKey: serverInstanceKeys.files(serverId) });
+
+  return {
+    create: useMutation({ mutationFn: serverInstancesIpc.create, onSuccess: refreshAll }),
+    clone: useMutation({
+      mutationFn: ({ serverId, name }: { serverId: string; name: string }) =>
+        serverInstancesIpc.clone(serverId, name),
+      onSuccess: refreshAll,
+    }),
+    update: useMutation({
+      mutationFn: ({ serverId, input }: { serverId: string; input: import("./ipc").UpdateServerInstanceInput }) =>
+        serverInstancesIpc.update(serverId, input),
+      onSuccess: refreshAll,
+    }),
+    remove: useMutation({ mutationFn: serverInstancesIpc.remove, onSuccess: refreshAll }),
+    openFolder: useMutation({ mutationFn: serverInstancesIpc.openFolder }),
+    start: useMutation({ mutationFn: serverInstancesIpc.start, onSuccess: refreshAll }),
+    stop: useMutation({ mutationFn: serverInstancesIpc.stop, onSuccess: refreshAll }),
+    installEngine: useMutation({
+      mutationFn: ({ engineId, tag }: { engineId: string; tag?: string | null }) =>
+        serverInstancesIpc.installEngine(engineId, tag ?? null),
+      onSuccess: refreshEngines,
+    }),
+    addModFromDisk: useMutation({ mutationFn: serverInstancesIpc.addModFromDisk, onSuccess: refreshMods }),
+    addModFromJkhub: useMutation({ mutationFn: serverInstancesIpc.addModFromJkhub, onSuccess: refreshMods }),
+    deleteMod: useMutation({ mutationFn: serverInstancesIpc.deleteMod, onSuccess: refreshMods }),
+    saveText: useMutation({
+      mutationFn: ({ serverId, path, text, template }: { serverId: string; path: string; text: string; template: boolean }) =>
+        serverInstancesIpc.saveText(serverId, path, text, template),
+      onSuccess: (_, input) => refreshFiles(input.serverId),
+    }),
+    addFiles: useMutation({
+      mutationFn: ({ serverId, destination, sourcePaths }: { serverId: string; destination: string; sourcePaths: string[] }) =>
+        serverInstancesIpc.addFiles(serverId, destination, sourcePaths),
+      onSuccess: (_, input) => refreshFiles(input.serverId),
+    }),
+    setTemplate: useMutation({
+      mutationFn: ({ serverId, path, template }: { serverId: string; path: string; template: boolean }) =>
+        serverInstancesIpc.setTemplate(serverId, path, template),
+      onSuccess: (_, input) => refreshFiles(input.serverId),
+    }),
+    deleteFile: useMutation({
+      mutationFn: ({ serverId, path }: { serverId: string; path: string }) =>
+        serverInstancesIpc.deleteFile(serverId, path),
+      onSuccess: (_, input) => refreshFiles(input.serverId),
+    }),
+  };
+}
 export function useClientConfigContext(clientId: string) { return useQuery({ queryKey: ["client-config-context", clientId], queryFn: () => configsIpc.context(clientId), enabled: isTauri() && !!clientId, staleTime: 0 }); }
 export function useClientConfigFiles(clientId: string) { return useQuery({ queryKey: ["client-config-files", clientId], queryFn: () => configsIpc.clientFiles(clientId), enabled: isTauri() && !!clientId }); }
 export function useConfigConflicts(ids: string[]) { return useQuery({ queryKey: ["config-conflicts", ids], queryFn: () => configsIpc.conflicts(ids), enabled: isTauri() && ids.length > 1 }); }
@@ -299,6 +448,7 @@ import {
   type PlayerProfile,
   type PresenceUpdated,
   type ProfileBook,
+  type ProfileConfigImport,
   type RunningGame,
   type SaberHilt,
   type ServerInfo,
@@ -453,6 +603,27 @@ export function useCreateClient() {
     }) => ipc.createClient(name, engineId, game),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+    },
+  });
+}
+
+/** Reads an existing portable client before the player confirms the copy. */
+export function useInspectClientImport(sourcePath: string | null) {
+  return useQuery({
+    queryKey: [...queryKeys.clients, "import", sourcePath],
+    queryFn: () => ipc.inspectClientImport(sourcePath as string),
+    enabled: isTauri() && sourcePath !== null,
+  });
+}
+
+/** Copies a portable client into JKNet and refreshes both clients and Media. */
+export function useImportClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ipc.importClient,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.clients });
+      queryClient.invalidateQueries({ queryKey: ["media"] });
     },
   });
 }
@@ -681,6 +852,13 @@ export function useProfiles(
     queryFn: () => profilesIpc.listProfiles(clientId),
     enabled,
     staleTime: Infinity,
+  });
+}
+
+/** Reads one selected config into a draft; saving remains a separate action. */
+export function useInspectProfileConfig(clientId: string) {
+  return useMutation<ProfileConfigImport, Error, string>({
+    mutationFn: (path) => profilesIpc.inspectConfig(clientId, path),
   });
 }
 
@@ -2153,7 +2331,7 @@ export const hostKeys = {
   /** The session, or `null` while no server was started in this run. */
   session: ["host", "session"] as const,
   options: (game: Game) => ["host", "options", game] as const,
-  maps: (clientId: string, gametype: number | null) => ["host", "maps", clientId, gametype] as const,
+  maps: (clientId: string) => ["host", "maps", clientId] as const,
 };
 
 /** The private server, `null` when none was started. Kept current by `host:session`. */
@@ -2181,16 +2359,15 @@ export function useHostOptions(game?: Game): UseQueryResult<HostOptions> {
 }
 
 /**
- * The maps of one client, only those that offer `gametype` when it is given.
+ * Every map of one client, independently of the selected game type.
  * Reading the archives costs a moment, so the answer is kept for a minute.
  */
 export function useHostMaps(
   clientId: string | null,
-  gametype?: number,
 ): UseQueryResult<HostMap[]> {
   return useQuery({
-    queryKey: hostKeys.maps(clientId ?? "", gametype ?? null),
-    queryFn: () => hostIpc.listMaps(clientId as string, gametype),
+    queryKey: hostKeys.maps(clientId ?? ""),
+    queryFn: () => hostIpc.listMaps(clientId as string),
     enabled: clientId !== null && clientId !== "",
     staleTime: 60_000,
   });
@@ -2357,6 +2534,8 @@ export const jkhubKeys = {
   categories: (game: Game) => ["jkhub", "categories", game] as const,
   list: (game: Game, categoryId: number, sort: JkhubSort, page: number) =>
     ["jkhub", "list", game, categoryId, sort, page] as const,
+  completeList: (game: Game, categoryId: number, sort: JkhubSort) =>
+    ["jkhub", "complete-list", game, categoryId, sort] as const,
   file: (id: number) => ["jkhub", "file", id] as const,
   // --- slice: jkhub index ---
   search: (
@@ -2436,6 +2615,29 @@ export function useJkhubListing(
     queryKey: jkhubKeys.list(game, categoryId ?? 0, sort, page),
     queryFn: () => jkhubIpc.list(categoryId as number, sort, page, game),
     enabled: categoryId != null && isTauri(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Every page of one category, loaded only while its search field is active. */
+export function useCompleteJkhubListing(
+  game: Game,
+  categoryId: number | null,
+  sort: JkhubSort,
+  enabled: boolean,
+): UseQueryResult<JkhubCompleteListing> {
+  return useQuery({
+    queryKey: jkhubKeys.completeList(game, categoryId ?? 0, sort),
+    queryFn: async () => {
+      const first = await jkhubIpc.list(categoryId as number, sort, 1, game);
+      const remaining = await Promise.all(
+        Array.from({ length: Math.max(0, first.pages - 1) }, (_, index) =>
+          jkhubIpc.list(categoryId as number, sort, index + 2, game),
+        ),
+      );
+      return mergeJkhubCategoryPages([first, ...remaining]);
+    },
+    enabled: categoryId != null && enabled && isTauri(),
     staleTime: 5 * 60_000,
   });
 }

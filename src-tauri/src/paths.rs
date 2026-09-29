@@ -42,7 +42,16 @@ const LEGACY_APP_FOLDER: &str = "JKNet";
 /// Everything the launcher owns inside a root. The legacy folder also holds
 /// `JKNet.exe`, `uninstall.exe` and `resources\`, which belong to the
 /// installer: the migration never touches those.
-const OWNED_ENTRIES: [&str; 5] = ["settings.json", "clients", "library", "cache", "logs"];
+const OWNED_ENTRIES: [&str; 8] = [
+    "settings.json",
+    "clients",
+    "servers",
+    "server-engines",
+    "server-mods",
+    "library",
+    "cache",
+    "logs",
+];
 
 /// The four subfolders of the data root.
 #[derive(Debug, Clone)]
@@ -51,6 +60,12 @@ pub struct DataPaths {
     pub root: PathBuf,
     /// One folder per client: `clients\<slug>\`.
     pub clients: PathBuf,
+    /// One folder per persistent dedicated-server instance.
+    pub servers: PathBuf,
+    /// Engine builds shared by dedicated-server instances.
+    pub server_engines: PathBuf,
+    /// Reusable mod templates copied into dedicated-server instances.
+    pub server_mods: PathBuf,
     /// Downloaded pk3 files shared by all clients.
     pub library: PathBuf,
     /// Server lists, JKHub responses and other throwaway data.
@@ -64,6 +79,9 @@ impl DataPaths {
     pub fn new(root: PathBuf) -> Self {
         DataPaths {
             clients: root.join("clients"),
+            servers: root.join("servers"),
+            server_engines: root.join("server-engines"),
+            server_mods: root.join("server-mods"),
             library: root.join("library"),
             cache: root.join("cache"),
             logs: root.join("logs"),
@@ -76,6 +94,9 @@ impl DataPaths {
         for path in [
             &self.root,
             &self.clients,
+            &self.servers,
+            &self.server_engines,
+            &self.server_mods,
             &self.library,
             &self.cache,
             &self.logs,
@@ -101,6 +122,26 @@ impl DataPaths {
     /// both write into.
     pub fn client_home_dir(&self, slug: &str) -> PathBuf {
         self.client_dir(slug).join(CLIENT_HOME_DIR)
+    }
+
+    /// Folder of one persistent dedicated-server instance.
+    pub fn server_dir(&self, slug: &str) -> PathBuf {
+        self.servers.join(slug)
+    }
+
+    /// Writable `fs_homepath` of one dedicated-server instance.
+    pub fn server_home_dir(&self, slug: &str) -> PathBuf {
+        self.server_dir(slug).join(CLIENT_HOME_DIR)
+    }
+
+    /// Shared installation of one dedicated-capable engine.
+    pub fn server_engine_dir(&self, engine_id: &str) -> PathBuf {
+        self.server_engines.join(engine_id)
+    }
+
+    /// Reusable files of one server mod.
+    pub fn server_mod_dir(&self, slug: &str) -> PathBuf {
+        self.server_mods.join(slug)
     }
 
     // --- slice: game core ---
@@ -142,13 +183,15 @@ impl DataPaths {
     /// `bundles\drafts\<draftId>\images\`: the pictures of the description
     /// of one draft, one file per hash, see [`crate::bundles::images`].
     pub fn bundle_draft_images_dir(&self, draft_id: &str) -> PathBuf {
-        self.bundle_draft_dir(draft_id).join(BUNDLE_DRAFT_IMAGES_DIR)
+        self.bundle_draft_dir(draft_id)
+            .join(BUNDLE_DRAFT_IMAGES_DIR)
     }
 
     /// `bundles\drafts\<draftId>\listings\`: the listings of the pk3 files
     /// of one draft, one file per pk3 hash, see [`crate::bundles::listing`].
     pub fn bundle_draft_listings_dir(&self, draft_id: &str) -> PathBuf {
-        self.bundle_draft_dir(draft_id).join(BUNDLE_DRAFT_LISTINGS_DIR)
+        self.bundle_draft_dir(draft_id)
+            .join(BUNDLE_DRAFT_LISTINGS_DIR)
     }
 
     /// `cache\bundles\listings\`: the listings downloaded from the store of
@@ -323,7 +366,10 @@ pub fn migrate_legacy_root(old_root: &Path, new_root: &Path) -> Migration {
     if new_root.join("settings.json").exists() {
         return report;
     }
-    if !OWNED_ENTRIES.iter().any(|name| old_root.join(name).exists()) {
+    if !OWNED_ENTRIES
+        .iter()
+        .any(|name| old_root.join(name).exists())
+    {
         return report;
     }
     if let Err(e) = fs::create_dir_all(new_root) {
@@ -451,6 +497,9 @@ mod tests {
     fn layout_hangs_off_the_root() {
         let paths = DataPaths::new(PathBuf::from("C:\\JKNet"));
         assert!(paths.clients.ends_with("clients"));
+        assert!(paths.servers.ends_with("servers"));
+        assert!(paths.server_engines.ends_with("server-engines"));
+        assert!(paths.server_mods.ends_with("server-mods"));
         assert!(paths.logs.ends_with("logs"));
         assert_eq!(paths.client_dir("everyday"), paths.clients.join("everyday"));
     }
@@ -487,7 +536,13 @@ mod tests {
     fn migration_moves_the_five_entries_and_nothing_else() {
         let (_temp, old_root, new_root) = two_roots();
         write(&old_root.join("settings.json"), "{}");
-        write(&old_root.join("clients").join("everyday").join("client.json"), "{}");
+        write(
+            &old_root
+                .join("clients")
+                .join("everyday")
+                .join("client.json"),
+            "{}",
+        );
         write(&old_root.join("library").join("skin.pk3"), "pk3");
         write(&old_root.join("cache").join("servers.json"), "[]");
         write(&old_root.join("logs").join("jknet.log"), "line");
@@ -496,7 +551,10 @@ mod tests {
 
         let report = migrate_legacy_root(&old_root, &new_root);
 
-        assert_eq!(report.moved, OWNED_ENTRIES);
+        assert_eq!(
+            report.moved,
+            ["settings.json", "clients", "library", "cache", "logs"]
+        );
         assert!(report.skipped.is_empty());
         assert!(!report.removed_old_root);
 
@@ -511,10 +569,7 @@ mod tests {
         assert!(new_root.join("logs").join("jknet.log").is_file());
 
         assert!(old_root.join("JKNet.exe").is_file());
-        assert!(old_root
-            .join("resources")
-            .join("extra-file.txt")
-            .is_file());
+        assert!(old_root.join("resources").join("extra-file.txt").is_file());
         assert!(!old_root.join("clients").exists());
         assert!(!old_root.join("settings.json").exists());
     }

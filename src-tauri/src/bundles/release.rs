@@ -82,7 +82,10 @@ pub(crate) async fn release_archive(
                 ))
             })?,
         None => releases.into_iter().next().ok_or_else(|| {
-            AppError::NotFound(format!("a release of {} this machine can install", engine.name))
+            AppError::NotFound(format!(
+                "a release of {} this machine can install",
+                engine.name
+            ))
         })?,
     };
     let archive = engine_install::fetch_archive(paths, engine, &release, |_| {}).await?;
@@ -296,7 +299,11 @@ mod tests {
                 ("taystjk.x86.exe", STATE_REPLACED),
             ]
         );
-        let replaced = tree.files.iter().find(|f| f.state == STATE_REPLACED).unwrap();
+        let replaced = tree
+            .files
+            .iter()
+            .find(|f| f.state == STATE_REPLACED)
+            .unwrap();
         assert_eq!(replaced.size, 9, "the size of the overlay file");
         assert_eq!(replaced.release_size, Some(10));
         assert_eq!(
@@ -306,7 +313,10 @@ mod tests {
         let plain = tree.files.iter().find(|f| f.path == "README.md").unwrap();
         assert_eq!(plain.release_size, None);
         let json = serde_json::to_value(&tree).unwrap();
-        assert_eq!(json["files"][4]["releaseSha256"], replaced.release_sha256.clone().unwrap());
+        assert_eq!(
+            json["files"][4]["releaseSha256"],
+            replaced.release_sha256.clone().unwrap()
+        );
         assert!(json["files"][0].get("releaseSize").is_none());
 
         // The origin and the spelling of an overlay file follow the release.
@@ -324,7 +334,10 @@ mod tests {
                 source_path: source.display().to_string()
             }
         );
-        assert_eq!(release_spelling(&entries, "base/CGAMEX86.DLL"), "Base/cgamex86.dll");
+        assert_eq!(
+            release_spelling(&entries, "base/CGAMEX86.DLL"),
+            "Base/cgamex86.dll"
+        );
         assert_eq!(release_spelling(&entries, "new.dll"), "new.dll");
     }
 }

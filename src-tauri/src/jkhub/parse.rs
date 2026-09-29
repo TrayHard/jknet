@@ -23,8 +23,7 @@ use crate::error::{AppError, Result};
 
 use super::richtext;
 use super::types::{
-    JkhubAuthor, JkhubCard, JkhubChangelogEntry, JkhubFile, JkhubGame, JkhubRating,
-    JkhubScreenshot,
+    JkhubAuthor, JkhubCard, JkhubChangelogEntry, JkhubFile, JkhubGame, JkhubRating, JkhubScreenshot,
 };
 
 /// Host every canonical link on the site starts with.
@@ -108,7 +107,10 @@ pub fn parse_category_index(html: &str) -> Result<Vec<TopCategory>> {
             id,
             slug,
             name: text_of(link),
-            file_count: element.select(&count).next().and_then(|node| number(&text_of(node))),
+            file_count: element
+                .select(&count)
+                .next()
+                .and_then(|node| number(&text_of(node))),
             children,
         });
     }
@@ -137,7 +139,10 @@ pub fn parse_subcategories(html: &str) -> Vec<CountedCategory> {
         else {
             continue;
         };
-        let count = element.select(&badge).next().and_then(|node| number(&text_of(node)));
+        let count = element
+            .select(&badge)
+            .next()
+            .and_then(|node| number(&text_of(node)));
         // The count sits inside the link, so the name is what is left after
         // the badge text is taken away.
         let whole = text_of(element);
@@ -307,7 +312,11 @@ fn card(element: ElementRef<'_>, id: u32, slug: String, title: String) -> JkhubC
         } else {
             continue;
         };
-        if let Some(stamp) = node.select(&time).next().and_then(|t| t.value().attr("datetime")) {
+        if let Some(stamp) = node
+            .select(&time)
+            .next()
+            .and_then(|t| t.value().attr("datetime"))
+        {
             date = Some(stamp.to_string());
             date_label = Some(label.to_string());
             break;
@@ -576,7 +585,9 @@ fn screenshots(app: &Value) -> Vec<JkhubScreenshot> {
         .filter_map(|entry| {
             Some(JkhubScreenshot {
                 url: string(entry, "url")?,
-                thumbnail_url: entry.get("thumbnail").and_then(|thumb| string(thumb, "url")),
+                thumbnail_url: entry
+                    .get("thumbnail")
+                    .and_then(|thumb| string(thumb, "url")),
             })
         })
         .collect()
@@ -757,8 +768,7 @@ mod tests {
     const SAITO: &str = include_str!("../../tests/fixtures/jkhub/file-4234-saitohajime.html");
     /// The same page with the two keys a file page may be missing taken out of
     /// its JSON-LD, because no live page the research saved is missing either.
-    const BARE: &str =
-        include_str!("../../tests/fixtures/jkhub/file-4234-no-rating-no-shots.html");
+    const BARE: &str = include_str!("../../tests/fixtures/jkhub/file-4234-no-rating-no-shots.html");
 
     #[test]
     fn the_category_index_gives_the_four_roots_and_their_children() {
@@ -780,7 +790,11 @@ mod tests {
         assert_eq!(both.name, "Both Games/Other");
         assert_eq!(both.children.len(), 2);
         assert_eq!(game_of_root(both.id), Some(JkhubGame::Both));
-        assert_eq!(game_of_root(roots[3].id), None, "contest entries have no game");
+        assert_eq!(
+            game_of_root(roots[3].id),
+            None,
+            "contest entries have no game"
+        );
     }
 
     #[test]
@@ -801,7 +815,10 @@ mod tests {
                 "Source FIles",
             ]
         );
-        let ffa = children.iter().find(|child| child.id == 13).expect("Free For All");
+        let ffa = children
+            .iter()
+            .find(|child| child.id == 13)
+            .expect("Free For All");
         assert_eq!(ffa.slug, "free-for-all");
         assert_eq!(ffa.file_count, Some(367));
     }
@@ -847,7 +864,10 @@ mod tests {
         assert_eq!(first.slug, "expedition");
         assert_eq!(first.title, "Expedition");
         assert_eq!(first.url, "https://jkhub.org/files/file/1422-expedition/");
-        assert_eq!(first.author.as_ref().map(|a| a.name.as_str()), Some("Acrobat"));
+        assert_eq!(
+            first.author.as_ref().map(|a| a.name.as_str()),
+            Some("Acrobat")
+        );
         assert_eq!(
             first.author.as_ref().and_then(|a| a.url.as_deref()),
             Some("https://jkhub.org/profile/506-acrobat/")
@@ -855,7 +875,11 @@ mod tests {
         assert_eq!(first.downloads, Some(7877));
         assert_eq!(first.date.as_deref(), Some("2026-09-02T14:15:36Z"));
         assert_eq!(first.date_label.as_deref(), Some("Updated"));
-        assert!(first.thumbnail_url.as_deref().unwrap().ends_with("120822_8.jpg"));
+        assert!(first
+            .thumbnail_url
+            .as_deref()
+            .unwrap()
+            .ends_with("120822_8.jpg"));
         assert!(first.description.starts_with("This is an academy map"));
         assert_eq!(
             first.tags,
@@ -875,9 +899,15 @@ mod tests {
         assert_eq!(file.category_id, Some(32));
         assert_eq!(file.category_name.as_deref(), Some("Configuration Files"));
         assert_eq!(file.version.as_deref(), Some("v1"));
-        assert_eq!(file.submitted_at.as_deref(), Some("2013-02-26T05:19:56+0000"));
+        assert_eq!(
+            file.submitted_at.as_deref(),
+            Some("2013-02-26T05:19:56+0000")
+        );
         assert_eq!(file.updated_at.as_deref(), Some("2013-02-26T15:33:25+0000"));
-        assert_eq!(file.author.as_ref().map(|a| a.name.as_str()), Some("Carbon"));
+        assert_eq!(
+            file.author.as_ref().map(|a| a.name.as_str()),
+            Some("Carbon")
+        );
         assert_eq!((file.views, file.downloads), (19245, 564));
         assert_eq!((file.comments, file.reviews), (1, 4));
         let rating = file.rating.as_ref().expect("four reviews mean a rating");
@@ -927,7 +957,10 @@ mod tests {
             html.contains("<a href=\"https://lugormod.com/\">https://lugormod.com/</a>"),
             "the address of a link is what plain text loses first: {html}"
         );
-        assert!(html.contains("<br />"), "the line breaks of a readme matter");
+        assert!(
+            html.contains("<br />"),
+            "the line breaks of a readme matter"
+        );
         assert!(
             html.contains("Unlock &amp; upgrade"),
             "an ampersand is written once, and reads as one: {html}"
@@ -936,7 +969,10 @@ mod tests {
             !html.contains("This file is not developed"),
             "the notice the site appends to every page is not the description"
         );
-        assert!(!html.contains("rel=\"external"), "no attribute but href survives");
+        assert!(
+            !html.contains("rel=\"external"),
+            "no attribute but href survives"
+        );
         assert!(
             !html.contains("crosshairText"),
             "the changelog is `ipsType_richText` too and is not the description: {html}"
@@ -955,8 +991,14 @@ mod tests {
     #[test]
     fn a_page_whose_block_moved_leaves_the_plain_copy_to_answer() {
         let file = parse_file_page(BARE, 4234, "saitohajime").expect("the page parses");
-        assert!(file.description_html.is_empty(), "the trimmed sample has no block");
-        assert!(!file.description.is_empty(), "and the window still has words to print");
+        assert!(
+            file.description_html.is_empty(),
+            "the trimmed sample has no block"
+        );
+        assert!(
+            !file.description.is_empty(),
+            "and the window still has words to print"
+        );
     }
 
     #[test]
@@ -975,7 +1017,10 @@ mod tests {
             download_url(1486, "saber-changer", &key),
             "https://jkhub.org/files/file/1486-saber-changer/?do=download&csrfKey=47d5ba0ec91e50b52cc7404f6879c43c"
         );
-        assert_eq!(find_csrf_key("<html><body>nothing here</body></html>"), None);
+        assert_eq!(
+            find_csrf_key("<html><body>nothing here</body></html>"),
+            None
+        );
     }
 
     #[test]
@@ -988,8 +1033,14 @@ mod tests {
     fn an_address_built_without_a_slug_still_has_a_segment() {
         // `/files/file/1486-/` is a 404, so an unknown slug becomes a
         // placeholder the site redirects away from, never an empty segment.
-        assert_eq!(file_url(1486, ""), "https://jkhub.org/files/file/1486-jknet/");
-        assert_eq!(file_url(1486, "   "), "https://jkhub.org/files/file/1486-jknet/");
+        assert_eq!(
+            file_url(1486, ""),
+            "https://jkhub.org/files/file/1486-jknet/"
+        );
+        assert_eq!(
+            file_url(1486, "   "),
+            "https://jkhub.org/files/file/1486-jknet/"
+        );
         assert_eq!(
             category_url(13, ""),
             "https://jkhub.org/files/category/13-jknet/"
@@ -1007,14 +1058,19 @@ mod tests {
             category_ref("https://jkhub.org/files/category/13-free-for-all/"),
             Some((13, "free-for-all".to_string()))
         );
-        assert_eq!(file_ref("/files/file/4234-saitohajime/"), Some((4234, "saitohajime".to_string())));
+        assert_eq!(
+            file_ref("/files/file/4234-saitohajime/"),
+            Some((4234, "saitohajime".to_string()))
+        );
         assert_eq!(category_ref("https://jkhub.org/jk3files/"), None);
         assert_eq!(file_ref("https://jkhub.org/profile/506-acrobat/"), None);
     }
 
     #[test]
     fn a_download_address_is_recognised_by_its_host_and_gives_the_file_name() {
-        assert!(is_hosted_archive("https://files.jkhub.org/jka/configs/SaberChanger.zip"));
+        assert!(is_hosted_archive(
+            "https://files.jkhub.org/jka/configs/SaberChanger.zip"
+        ));
         assert!(!is_hosted_archive("https://mrwonko.de/g2tools/jk3-to-jk2/"));
         assert_eq!(
             file_name_from_url("https://files.jkhub.org/jka/configs/SaberChanger.zip"),
@@ -1025,7 +1081,10 @@ mod tests {
             Some("g2c 2.0.zip".to_string()),
             "the path is percent-encoded, the name on disk is not"
         );
-        assert_eq!(file_name_from_url("https://mrwonko.de/g2tools/jk3-to-jk2/"), Some("jk3-to-jk2".to_string()));
+        assert_eq!(
+            file_name_from_url("https://mrwonko.de/g2tools/jk3-to-jk2/"),
+            Some("jk3-to-jk2".to_string())
+        );
     }
 
     #[test]

@@ -111,7 +111,6 @@ export function JoinPolicy({
           );
         })}
       </div>
-      <p className="text-body-sm text-fg-muted">{t("policy.hint")}</p>
     </div>
   );
 }

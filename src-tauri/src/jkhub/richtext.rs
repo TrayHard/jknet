@@ -70,9 +70,9 @@ const VOID: &[&str] = &["br", "img"];
 /// text inside them is not prose: `<script>` printed as text would be the
 /// author's markup read out loud.
 const DROPPED: &[&str] = &[
-    "script", "style", "noscript", "template", "svg", "math", "object", "embed", "applet",
-    "form", "input", "button", "select", "textarea", "option", "video", "audio", "source",
-    "canvas", "link", "meta", "head", "title", "base", "frame", "frameset",
+    "script", "style", "noscript", "template", "svg", "math", "object", "embed", "applet", "form",
+    "input", "button", "select", "textarea", "option", "video", "audio", "source", "canvas",
+    "link", "meta", "head", "title", "base", "frame", "frameset",
 ];
 
 /// What every picture of a description is written with, after its `alt`.
@@ -84,7 +84,8 @@ const DROPPED: &[&str] = &[
 /// policy, and so does `index.html` for the page as a whole; this repeats it
 /// on the element because the markup is inserted as a string and no React prop
 /// reaches it.
-const PICTURE_ATTRS: &str = "\" loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" />";
+const PICTURE_ATTRS: &str =
+    "\" loading=\"lazy\" decoding=\"async\" referrerpolicy=\"no-referrer\" />";
 
 /// Class of the notice the site appends to every description.
 ///
@@ -220,9 +221,16 @@ fn render_element(element: ElementRef<'_>, out: &mut Sink) {
             let Some(src) = element.value().attr("src").and_then(picture_url) else {
                 return;
             };
-            let emoji = element.value().classes().any(|class| matches!(class, "ipsEmoji" | "ipsEmoticon"))
+            let emoji = element
+                .value()
+                .classes()
+                .any(|class| matches!(class, "ipsEmoji" | "ipsEmoticon"))
                 || element.value().attr("data-emoticon").is_some();
-            out.html.push_str(if emoji { "<img class=\"jkhub-emoji\" src=\"" } else { "<img src=\"" });
+            out.html.push_str(if emoji {
+                "<img class=\"jkhub-emoji\" src=\""
+            } else {
+                "<img src=\""
+            });
             escape_attr(&src, &mut out.html);
             out.html.push_str("\" alt=\"");
             escape_attr(
@@ -543,8 +551,12 @@ mod tests {
         let clean = sanitize_fragment("<p>Hello <img class='ipsEmoji huge' data-emoticon='true' src='https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f604.png' alt='😄' width='720' style='width:720px' onerror='alert(1)'></p>");
         assert!(clean.contains("class=\"jkhub-emoji\""));
         assert!(clean.contains("alt=\"😄\""));
-        for dropped in ["huge", "width=", "style=", "onerror="] { assert!(!clean.contains(dropped)); }
-        assert!(!sanitize_fragment("<img src='https://jkhub.org/shot.jpg'>").contains("jkhub-emoji"));
+        for dropped in ["huge", "width=", "style=", "onerror="] {
+            assert!(!clean.contains(dropped));
+        }
+        assert!(
+            !sanitize_fragment("<img src='https://jkhub.org/shot.jpg'>").contains("jkhub-emoji")
+        );
     }
 
     #[test]
@@ -554,8 +566,7 @@ mod tests {
              <ul><li>one</li><li>two</li></ul></div>",
         );
         assert_eq!(
-            clean,
-            "<p>Install into <strong>base</strong></p><ul><li>one</li><li>two</li></ul>",
+            clean, "<p>Install into <strong>base</strong></p><ul><li>one</li><li>two</li></ul>",
             "the div is unwrapped, everything inside it is kept"
         );
     }
@@ -566,7 +577,10 @@ mod tests {
             "<p>before</p><script>window.alert('x')</script><style>p{color:red}</style><p>after</p>",
         );
         assert_eq!(clean, "<p>before</p><p>after</p>");
-        assert!(!clean.contains("alert"), "the body of a script is not prose");
+        assert!(
+            !clean.contains("alert"),
+            "the body of a script is not prose"
+        );
     }
 
     #[test]
@@ -576,8 +590,7 @@ mod tests {
              <a href='https://lugormod.com/' rel='external nofollow' target='_blank' onmouseover='x()'>site</a>",
         );
         assert_eq!(
-            clean,
-            "<p>text</p><a href=\"https://lugormod.com/\">site</a>",
+            clean, "<p>text</p><a href=\"https://lugormod.com/\">site</a>",
             "an event handler must not survive the trip"
         );
     }
@@ -628,7 +641,10 @@ mod tests {
 
     #[test]
     fn a_frame_pointing_anywhere_else_is_dropped_whole() {
-        assert_eq!(sanitize_fragment("<iframe src='https://evil.example/x'></iframe>"), "");
+        assert_eq!(
+            sanitize_fragment("<iframe src='https://evil.example/x'></iframe>"),
+            ""
+        );
         assert_eq!(sanitize_fragment("<iframe src='/local'></iframe>"), "");
         assert_eq!(sanitize_fragment("<iframe></iframe>"), "");
         assert_eq!(
@@ -761,7 +777,10 @@ mod tests {
         // The JSON of file 2672 carries `&amp;`, which is the five
         // characters `&amp;` once the JSON is parsed.
         assert_eq!(decode_entities("Unlock &amp; upgrade"), "Unlock & upgrade");
-        assert_eq!(decode_entities("Star Wars&reg; and Jedi&trade;"), "Star Wars® and Jedi™");
+        assert_eq!(
+            decode_entities("Star Wars&reg; and Jedi&trade;"),
+            "Star Wars® and Jedi™"
+        );
         assert_eq!(decode_entities("&#39;quoted&#39;"), "'quoted'");
         assert_eq!(decode_entities("&#x2014;"), "—");
         assert_eq!(decode_entities("a &nbsp; b"), "a \u{a0} b");

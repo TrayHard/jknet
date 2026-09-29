@@ -28,6 +28,7 @@ import { LanguageSync } from "./i18n/LanguageSync";
 import { isChatWindowHash } from "./lib/chatWindow";
 import { useFriendsEvents } from "./lib/queries";
 import { ChatWindowPage } from "./pages/ChatWindowPage";
+import { ChangelogPage } from "./pages/ChangelogPage";
 // --- slice: client window ---
 import { isClientWindowHash } from "./lib/clientWindow";
 import { PlayerProfilesPage } from "./pages/PlayerProfilesPage";
@@ -47,6 +48,7 @@ import { LibraryPage } from "./pages/LibraryPage";
 import { OnboardingGate } from "./pages/onboarding/OnboardingGate";
 import { OnboardingPage } from "./pages/onboarding/OnboardingPage";
 import { ServersPage } from "./pages/ServersPage";
+import { ServerInstancesPage } from "./pages/ServerInstancesPage";
 import { CommunityPage } from "./pages/CommunityPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -225,6 +227,7 @@ function getMainRouter() {
           <Route path="/community/:id" element={<CommunityPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          <Route path="/server-instances" element={<ServerInstancesPage />} />
           {/* --- slice: bundles --- the editor of one draft, a page of the main window. */}
           <Route path="/bundles/drafts/:id" element={<BundleEditorPage />} />
           <Route path="/player-profiles" element={<PlayerProfilesPage />} />
@@ -232,6 +235,7 @@ function getMainRouter() {
           <Route path="/configs" element={<ConfigsPage />} />
           <Route path="/engines/:id" element={<EnginePage />} />
           <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/changelog" element={<ChangelogPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<HomePage />} />
         </Route>

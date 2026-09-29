@@ -473,8 +473,7 @@ impl ServerInfo {
             max_clients: number(&info, "sv_maxclients").unwrap_or(0),
             needpass: number::<i32>(&info, "needpass").unwrap_or(0) != 0,
             mod_name,
-            protocol: number(&info, "protocol")
-                .unwrap_or_else(|| default_protocol(game)),
+            protocol: number(&info, "protocol").unwrap_or_else(|| default_protocol(game)),
             ping_ms,
             favorite: false,
             // --- slice: server actions ---
@@ -617,10 +616,7 @@ impl ServerInfo {
 /// A mod that reports more humans than clients is clamped rather than taken at
 /// its word: the two keys come from one loop in the engine, so a disagreement
 /// means the mod rewrote one of them.
-fn derive_players(
-    clients: u16,
-    humans: Option<u16>,
-) -> (Option<u16>, Option<u16>, PlayersSource) {
+fn derive_players(clients: u16, humans: Option<u16>) -> (Option<u16>, Option<u16>, PlayersSource) {
     match humans {
         Some(humans) => {
             let humans = humans.min(clients);
@@ -896,7 +892,11 @@ fn sort_rows(servers: &mut [ServerInfo]) {
     servers.sort_by(|a, b| {
         b.real_players()
             .cmp(&a.real_players())
-            .then_with(|| a.hostname_clean.to_lowercase().cmp(&b.hostname_clean.to_lowercase()))
+            .then_with(|| {
+                a.hostname_clean
+                    .to_lowercase()
+                    .cmp(&b.hostname_clean.to_lowercase())
+            })
             .then_with(|| a.address.cmp(&b.address))
     });
 }
@@ -1012,7 +1012,12 @@ pub async fn refresh_servers(
                 .collect::<Vec<_>>()
         })
         .filter(|list| !list.is_empty())
-        .unwrap_or_else(|| spec.masters.iter().map(|master| (*master).to_string()).collect());
+        .unwrap_or_else(|| {
+            spec.masters
+                .iter()
+                .map(|master| (*master).to_string())
+                .collect()
+        });
 
     let from_masters = collect_addresses(&masters, spec.master_protocols).await?;
     // --- slice: servers robustness ---
@@ -1603,11 +1608,7 @@ async fn merge_into_cache_locked(
 ///
 /// The other half of the rule: a whole-document write waits for a merge that is
 /// already under way instead of landing between its read and its write.
-async fn write_cache_locked(
-    lock: &tokio::sync::Mutex<()>,
-    file: &PathBuf,
-    servers: &[ServerInfo],
-) {
+async fn write_cache_locked(lock: &tokio::sync::Mutex<()>, file: &PathBuf, servers: &[ServerInfo]) {
     let _writing = lock.lock().await;
     write_cache(file, servers);
 }
@@ -1824,10 +1825,7 @@ async fn ask_master(master: &str, protocol: u16) -> Result<Vec<SocketAddrV4>> {
 ///
 /// One protocol that fails on a master the other protocol answered is not a
 /// failure: the master is alive and the query counts.
-async fn collect_addresses(
-    masters: &[String],
-    protocols: &[u16],
-) -> Result<Vec<SocketAddrV4>> {
+async fn collect_addresses(masters: &[String], protocols: &[u16]) -> Result<Vec<SocketAddrV4>> {
     let mut queries = JoinSet::new();
     for master in masters {
         for protocol in protocols.iter().copied() {
@@ -2124,7 +2122,8 @@ mod tests {
 
     #[test]
     fn survives_values_that_are_not_numbers() {
-        let server = row("\\clients\\lots\\sv_maxclients\\\\gametype\\ 6 \\needpass\\yes\\game\\  ");
+        let server =
+            row("\\clients\\lots\\sv_maxclients\\\\gametype\\ 6 \\needpass\\yes\\game\\  ");
         assert_eq!(server.clients, 0);
         assert_eq!(server.max_clients, 0);
         assert_eq!(server.gametype, 6);
@@ -2441,11 +2440,11 @@ mod tests {
     #[test]
     fn asks_the_busiest_unresolved_servers_first() {
         let mut rows = vec![
-            row("\\hostname\\A\\clients\\2"),                     // unknown, 2
-            row("\\hostname\\B\\clients\\9\\g_humanplayers\\9"),  // resolved
-            row("\\hostname\\C\\clients\\11"),                    // unknown, 11
-            row("\\hostname\\D\\clients\\0"),                     // empty
-            row("\\hostname\\E\\clients\\5"),                     // unknown, 5
+            row("\\hostname\\A\\clients\\2"),                    // unknown, 2
+            row("\\hostname\\B\\clients\\9\\g_humanplayers\\9"), // resolved
+            row("\\hostname\\C\\clients\\11"),                   // unknown, 11
+            row("\\hostname\\D\\clients\\0"),                    // empty
+            row("\\hostname\\E\\clients\\5"),                    // unknown, 5
         ];
         for (index, server) in rows.iter_mut().enumerate() {
             server.address = format!("10.0.0.{index}:29070");
@@ -2507,11 +2506,15 @@ mod tests {
     #[test]
     fn reads_an_address_with_and_without_a_port() {
         assert_eq!(
-            parse_address(Game::JediAcademy, "203.0.113.136").unwrap().to_string(),
+            parse_address(Game::JediAcademy, "203.0.113.136")
+                .unwrap()
+                .to_string(),
             "203.0.113.136:29070"
         );
         assert_eq!(
-            parse_address(Game::JediAcademy, "  203.0.113.136:29071 ").unwrap().to_string(),
+            parse_address(Game::JediAcademy, "  203.0.113.136:29071 ")
+                .unwrap()
+                .to_string(),
             "203.0.113.136:29071"
         );
         assert!(parse_address(Game::JediAcademy, "not-an-address").is_err());
@@ -2569,8 +2572,14 @@ mod tests {
 
     #[test]
     fn each_game_has_its_own_cache_document() {
-        assert_eq!(Game::JediAcademy.spec().server_cache_file, "servers-ja.json");
-        assert_eq!(Game::JediOutcast.spec().server_cache_file, "servers-jo.json");
+        assert_eq!(
+            Game::JediAcademy.spec().server_cache_file,
+            "servers-ja.json"
+        );
+        assert_eq!(
+            Game::JediOutcast.spec().server_cache_file,
+            "servers-jo.json"
+        );
 
         // And a round trip through one of them keeps the game of its rows.
         let file = std::env::temp_dir()
@@ -2647,16 +2656,22 @@ mod tests {
     #[test]
     fn an_address_without_a_port_gets_the_port_of_its_game() {
         assert_eq!(
-            parse_address(Game::JediAcademy, "203.0.113.136").unwrap().to_string(),
+            parse_address(Game::JediAcademy, "203.0.113.136")
+                .unwrap()
+                .to_string(),
             "203.0.113.136:29070"
         );
         assert_eq!(
-            parse_address(Game::JediOutcast, "203.0.113.136").unwrap().to_string(),
+            parse_address(Game::JediOutcast, "203.0.113.136")
+                .unwrap()
+                .to_string(),
             "203.0.113.136:28070"
         );
         // A port the player typed always wins over the default of the game.
         assert_eq!(
-            parse_address(Game::JediOutcast, "203.0.113.136:29070").unwrap().to_string(),
+            parse_address(Game::JediOutcast, "203.0.113.136:29070")
+                .unwrap()
+                .to_string(),
             "203.0.113.136:29070"
         );
     }
@@ -2691,11 +2706,9 @@ mod tests {
             let mut buffer = vec![0u8; 2048];
             // Answers requests until the caller's budget runs out and the test
             // that owns the runtime goes away with it.
-            while let Ok(Ok((read, from))) = tokio::time::timeout(
-                Duration::from_millis(1_200),
-                socket.recv_from(&mut buffer),
-            )
-            .await
+            while let Ok(Ok((read, from))) =
+                tokio::time::timeout(Duration::from_millis(1_200), socket.recv_from(&mut buffer))
+                    .await
             {
                 let request = String::from_utf8_lossy(&buffer[4..read]).to_string();
                 let Some(protocol) = request
@@ -2704,8 +2717,7 @@ mod tests {
                 else {
                     continue;
                 };
-                let Some((_, servers)) =
-                    answers.iter().find(|(number, _)| *number == protocol)
+                let Some((_, servers)) = answers.iter().find(|(number, _)| *number == protocol)
                 else {
                     continue;
                 };
@@ -2766,11 +2778,9 @@ mod tests {
         let counter = Arc::clone(&asked);
         tokio::spawn(async move {
             let mut buffer = vec![0u8; 2048];
-            while let Ok(Ok((read, from))) = tokio::time::timeout(
-                Duration::from_millis(4_000),
-                socket.recv_from(&mut buffer),
-            )
-            .await
+            while let Ok(Ok((read, from))) =
+                tokio::time::timeout(Duration::from_millis(4_000), socket.recv_from(&mut buffer))
+                    .await
             {
                 if !String::from_utf8_lossy(&buffer[4..read]).starts_with("getservers ") {
                     continue;
@@ -2853,11 +2863,9 @@ mod tests {
         let counter = Arc::clone(&asked);
         tokio::spawn(async move {
             let mut buffer = vec![0u8; 2048];
-            while let Ok(Ok((read, _))) = tokio::time::timeout(
-                Duration::from_millis(4_000),
-                socket.recv_from(&mut buffer),
-            )
-            .await
+            while let Ok(Ok((read, _))) =
+                tokio::time::timeout(Duration::from_millis(4_000), socket.recv_from(&mut buffer))
+                    .await
             {
                 if String::from_utf8_lossy(&buffer[4..read]).starts_with("getservers ") {
                     *counter.lock().expect("the counter") += 1;
@@ -2930,11 +2938,9 @@ mod tests {
         };
         tokio::spawn(async move {
             let mut buffer = vec![0u8; 2048];
-            while let Ok(Ok((read, from))) = tokio::time::timeout(
-                Duration::from_millis(2_500),
-                socket.recv_from(&mut buffer),
-            )
-            .await
+            while let Ok(Ok((read, from))) =
+                tokio::time::timeout(Duration::from_millis(2_500), socket.recv_from(&mut buffer))
+                    .await
             {
                 let Some(payload) = protocol::oob_payload(&buffer[..read]) else {
                     continue;
@@ -3001,9 +3007,16 @@ mod tests {
         )];
 
         let missing = silent_rows(Game::JediAcademy, &known, &[silent], &[], &marks);
-        assert_eq!(missing.len(), 1, "a favourite that vanishes looks like a bug");
+        assert_eq!(
+            missing.len(),
+            1,
+            "a favourite that vanishes looks like a bug"
+        );
         assert_eq!(missing[0].address, silent.to_string());
-        assert!(!missing[0].responded, "the screen mutes it and drops the ping");
+        assert!(
+            !missing[0].responded,
+            "the screen mutes it and drops the ping"
+        );
         assert_eq!(missing[0].hostname_clean, "Was here");
         assert_eq!(missing[0].map, "mp/ffa3");
         assert!(missing[0].favorite);
@@ -3039,7 +3052,11 @@ mod tests {
             .collect();
         let cached = vec![
             game_row(game, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
-            game_row(game, "10.0.0.9:29070", "\\hostname\\Private\\clients\\2\\g_humanplayers\\2"),
+            game_row(
+                game,
+                "10.0.0.9:29070",
+                "\\hostname\\Private\\clients\\2\\g_humanplayers\\2",
+            ),
         ];
 
         let asked: Vec<String> = merge_addresses(game, &from_masters, &cached)
@@ -3071,8 +3088,16 @@ mod tests {
         let gone: SocketAddrV4 = "10.0.0.2:29070".parse().expect("an address");
         let marks = starred(&[&gone.to_string()]);
         let cached = vec![
-            game_row(game, &live.to_string(), "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
-            game_row(game, &gone.to_string(), "\\hostname\\Bravo\\clients\\4\\g_humanplayers\\4"),
+            game_row(
+                game,
+                &live.to_string(),
+                "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1",
+            ),
+            game_row(
+                game,
+                &gone.to_string(),
+                "\\hostname\\Bravo\\clients\\4\\g_humanplayers\\4",
+            ),
         ];
 
         // First scan: Alpha answers, Bravo does not. Both rows stay.
@@ -3084,13 +3109,19 @@ mod tests {
         let first = keep_silent_rows(game, &cached, &[live, gone], &mut rows, &marks);
         assert_eq!((first.silent, first.dropped), (1, 0));
         assert_eq!(rows.len(), 2, "the server that went quiet keeps its row");
-        let muted = rows.iter().find(|row| row.address == gone.to_string()).unwrap();
+        let muted = rows
+            .iter()
+            .find(|row| row.address == gone.to_string())
+            .unwrap();
         assert!(!muted.responded, "the screen mutes it and drops the ping");
         assert_eq!(muted.hostname_clean, "Bravo", "with what was last known");
         assert_eq!(muted.missed_refreshes, 1);
         assert!(muted.favorite, "the star comes from the settings");
         // And the row that answered starts over from zero.
-        let alive = rows.iter().find(|row| row.address == live.to_string()).unwrap();
+        let alive = rows
+            .iter()
+            .find(|row| row.address == live.to_string())
+            .unwrap();
         assert_eq!(alive.missed_refreshes, 0);
 
         // Second scan, over the document the first one wrote: Bravo is gone.
@@ -3099,9 +3130,19 @@ mod tests {
             &live.to_string(),
             "\\hostname\\Alpha\\clients\\2\\g_humanplayers\\2",
         )];
-        let second = keep_silent_rows(game, &rows_of(&muted.clone(), &cached), &[live, gone], &mut rows, &marks);
+        let second = keep_silent_rows(
+            game,
+            &rows_of(&muted.clone(), &cached),
+            &[live, gone],
+            &mut rows,
+            &marks,
+        );
         assert_eq!((second.silent, second.dropped), (0, 1));
-        assert_eq!(rows.len(), 1, "two misses in a row take the row off the list");
+        assert_eq!(
+            rows.len(),
+            1,
+            "two misses in a row take the row off the list"
+        );
 
         // An address the masters named that nobody has ever seen does not
         // become a row: the cache records servers, not addresses.
@@ -3130,11 +3171,17 @@ mod tests {
 
         let remembered = server.last_players.clone().expect("a list");
         assert_eq!(remembered.len(), 2);
-        assert_eq!(remembered[0].name_clean, "Kyle", "colour codes are stripped");
+        assert_eq!(
+            remembered[0].name_clean, "Kyle",
+            "colour codes are stripped"
+        );
         assert_eq!(remembered[0].ping, 70);
         assert!(!remembered[0].is_bot);
         assert!(remembered[1].is_bot, "ping 0 is a bot");
-        assert_eq!(server.last_players_at.as_deref(), Some("2026-09-11T10:00:00Z"));
+        assert_eq!(
+            server.last_players_at.as_deref(),
+            Some("2026-09-11T10:00:00Z")
+        );
 
         // The next scan answers `getinfo`, which carries no player list at
         // all. The row must not lose the one the panel falls back to.
@@ -3152,7 +3199,10 @@ mod tests {
         // The same rule on the way to the screen, and through the cache file.
         let mut rows = vec![fresh];
         remember_from_cache(&document, &mut rows);
-        assert_eq!(rows[0].last_players_at.as_deref(), Some("2026-09-11T10:00:00Z"));
+        assert_eq!(
+            rows[0].last_players_at.as_deref(),
+            Some("2026-09-11T10:00:00Z")
+        );
 
         let file = std::env::temp_dir()
             .join("jknet-test-remembered-players")
@@ -3177,7 +3227,11 @@ mod tests {
             .map(|slot| format!("1 40 \"Player{slot}\"\n"))
             .collect();
         let printed = protocol::parse_status_players(&scoreboard);
-        assert_eq!(printed.len(), MAX_REMEMBERED_PLAYERS + 40, "the stub prints them all");
+        assert_eq!(
+            printed.len(),
+            MAX_REMEMBERED_PLAYERS + 40,
+            "the stub prints them all"
+        );
 
         server.apply_status(&printed, "2026-09-11T10:00:00Z");
         let remembered = server.last_players.as_ref().expect("a list");
@@ -3233,8 +3287,7 @@ mod tests {
     #[test]
     fn the_log_names_the_servers_the_masters_did_not() {
         let game = Game::JediAcademy;
-        let from_masters: Vec<SocketAddrV4> =
-            vec!["10.0.0.1:29070".parse().expect("an address")];
+        let from_masters: Vec<SocketAddrV4> = vec!["10.0.0.1:29070".parse().expect("an address")];
         let mut listed = game_row(game, "10.0.0.1:29070", "\\hostname\\Listed\\clients\\0");
         let mut stranger = game_row(game, "10.0.0.9:29070", "\\hostname\\Private\\clients\\1");
         let mut silent = game_row(game, "10.0.0.8:29070", "\\hostname\\Gone\\clients\\0");
@@ -3261,16 +3314,32 @@ mod tests {
         write_cache(
             &file,
             &[
-                game_row(Game::JediAcademy, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
-                game_row(Game::JediAcademy, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
+                game_row(
+                    Game::JediAcademy,
+                    "10.0.0.1:29070",
+                    "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1",
+                ),
+                game_row(
+                    Game::JediAcademy,
+                    "10.0.0.2:29070",
+                    "\\hostname\\Bravo\\clients\\0",
+                ),
             ],
         );
 
         let merged = merge_into_cache(
             &file,
             &[
-                game_row(Game::JediAcademy, "10.0.0.2:29070", "\\hostname\\Bravo renamed\\clients\\5\\g_humanplayers\\5"),
-                game_row(Game::JediAcademy, "10.0.0.9:29070", "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2"),
+                game_row(
+                    Game::JediAcademy,
+                    "10.0.0.2:29070",
+                    "\\hostname\\Bravo renamed\\clients\\5\\g_humanplayers\\5",
+                ),
+                game_row(
+                    Game::JediAcademy,
+                    "10.0.0.9:29070",
+                    "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2",
+                ),
             ],
         );
 
@@ -3280,7 +3349,10 @@ mod tests {
             .collect();
         assert_eq!(names.len(), 3, "the row nobody asked about is still there");
         assert_eq!(names["10.0.0.1:29070"], "Alpha", "untouched");
-        assert_eq!(names["10.0.0.2:29070"], "Bravo renamed", "replaced by address");
+        assert_eq!(
+            names["10.0.0.2:29070"], "Bravo renamed",
+            "replaced by address"
+        );
         assert_eq!(names["10.0.0.9:29070"], "Charlie", "appended");
         // And the document on disk says the same, not only the value returned.
         assert_eq!(read_cache(&file).len(), 3);
@@ -3308,7 +3380,11 @@ mod tests {
         write_cache(
             &file,
             &[
-                game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
+                game_row(
+                    game,
+                    "10.0.0.1:29070",
+                    "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1",
+                ),
                 game_row(game, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
             ],
         );
@@ -3322,8 +3398,16 @@ mod tests {
             let state = Arc::clone(&state);
             let file = file.clone();
             let answered = vec![
-                game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\3\\g_humanplayers\\3"),
-                game_row(game, "10.0.0.9:29070", "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2"),
+                game_row(
+                    game,
+                    "10.0.0.1:29070",
+                    "\\hostname\\Alpha\\clients\\3\\g_humanplayers\\3",
+                ),
+                game_row(
+                    game,
+                    "10.0.0.9:29070",
+                    "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2",
+                ),
             ];
             async move { merge_into_cache_locked(state.cache_lock(game), &file, &answered).await }
         });
@@ -3332,11 +3416,19 @@ mod tests {
         // the file. Without the lock it would have read it here — the two rows
         // of the old document, Bravo included.
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert_eq!(read_cache(&file).len(), 2, "the merge is waiting, not writing");
+        assert_eq!(
+            read_cache(&file).len(),
+            2,
+            "the merge is waiting, not writing"
+        );
 
         write_cache(
             &file,
-            &[game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\4\\g_humanplayers\\4")],
+            &[game_row(
+                game,
+                "10.0.0.1:29070",
+                "\\hostname\\Alpha\\clients\\4\\g_humanplayers\\4",
+            )],
         );
         drop(full_scan);
 
@@ -3349,7 +3441,11 @@ mod tests {
         // server answered this very probe, and the row is its own answer.
         assert_eq!(names["10.0.0.9:29070"], "Charlie");
         assert_eq!(names.len(), 2, "the fresh row and the one that answered");
-        assert_eq!(cached_names(&read_cache(&file)).len(), 2, "and so does the disk");
+        assert_eq!(
+            cached_names(&read_cache(&file)).len(),
+            2,
+            "and so does the disk"
+        );
         let _ = fs::remove_file(&file);
     }
 
@@ -3365,7 +3461,11 @@ mod tests {
         write_cache(
             &file,
             &[
-                game_row(game, "10.0.0.1:29070", "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1"),
+                game_row(
+                    game,
+                    "10.0.0.1:29070",
+                    "\\hostname\\Alpha\\clients\\1\\g_humanplayers\\1",
+                ),
                 game_row(game, "10.0.0.2:29070", "\\hostname\\Bravo\\clients\\0"),
             ],
         );
@@ -3385,13 +3485,21 @@ mod tests {
         });
 
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert_eq!(read_cache(&file).len(), 2, "the full scan is waiting, not writing");
+        assert_eq!(
+            read_cache(&file).len(),
+            2,
+            "the full scan is waiting, not writing"
+        );
 
         // The merge runs to its end untorn: nothing landed between its read and
         // its write, so it loses nothing it had just learned.
         let merged = merge_into_cache(
             &file,
-            &[game_row(game, "10.0.0.9:29070", "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2")],
+            &[game_row(
+                game,
+                "10.0.0.9:29070",
+                "\\hostname\\Charlie\\clients\\2\\g_humanplayers\\2",
+            )],
         );
         assert_eq!(merged.len(), 3);
         drop(merge);
@@ -3417,8 +3525,8 @@ mod tests {
             "\\hostname\\Desk\\mapname\\mp/ffa1\\clients\\1\\g_humanplayers\\1\\sv_maxclients\\8",
         )
         .await;
-        let quiet = stub_server("\\hostname\\Laptop\\mapname\\mp/duel1\\clients\\0\\game\\japlus")
-            .await;
+        let quiet =
+            stub_server("\\hostname\\Laptop\\mapname\\mp/duel1\\clients\\0\\game\\japlus").await;
 
         let rows = scan_lan(
             None,
@@ -3430,7 +3538,11 @@ mod tests {
         .expect("the sweep runs");
 
         let names: Vec<&str> = rows.iter().map(|row| row.hostname_clean.as_str()).collect();
-        assert_eq!(names, vec!["Desk", "Laptop"], "busiest first, nobody invented");
+        assert_eq!(
+            names,
+            vec!["Desk", "Laptop"],
+            "busiest first, nobody invented"
+        );
         assert!(rows.iter().all(|row| row.responded));
         assert_eq!(rows[1].mod_name, "japlus");
         // A sweep answers with rows and never with the cache, so nothing here
@@ -3481,7 +3593,9 @@ mod tests {
 
         drop(claim);
         assert!(
-            state.claim(Game::JediAcademy, RefreshScope::Favorites).is_ok(),
+            state
+                .claim(Game::JediAcademy, RefreshScope::Favorites)
+                .is_ok(),
             "the guard releases the tab however the refresh ended"
         );
     }
@@ -3723,7 +3837,11 @@ mod tests {
         let capped = status_candidates(&answered, MAX_STATUS_QUERIES).len();
 
         println!("--- pass 1: getinfo ---");
-        println!("{} of {} answered in {info_ms} ms", answered.len(), addresses.len());
+        println!(
+            "{} of {} answered in {info_ms} ms",
+            answered.len(),
+            addresses.len()
+        );
         println!("{populated} of them have at least one client");
         println!("{no_key} sent no g_humanplayers at all");
         println!("{unresolved} need getstatus, {capped} fit under the cap of {MAX_STATUS_QUERIES}");
@@ -3756,14 +3874,20 @@ mod tests {
             .iter()
             .filter(|server| server.players_source == PlayersSource::Unknown)
             .count();
-        let bots_only = answered.iter().filter(|server| server.is_bots_only()).count();
+        let bots_only = answered
+            .iter()
+            .filter(|server| server.is_bots_only())
+            .count();
         let with_bots = answered
             .iter()
             .filter(|server| server.bots.unwrap_or(0) > 0)
             .count();
         let humans: u32 = answered.iter().map(|s| u32::from(s.real_players())).sum();
         let clients: u32 = answered.iter().map(|s| u32::from(s.clients)).sum();
-        let bots: u32 = answered.iter().map(|s| u32::from(s.bots.unwrap_or(0))).sum();
+        let bots: u32 = answered
+            .iter()
+            .map(|s| u32::from(s.bots.unwrap_or(0)))
+            .sum();
 
         println!("--- pass 2: getstatus ---");
         println!("{resolved} answered in {status_ms} ms, {still_unknown} still unknown");

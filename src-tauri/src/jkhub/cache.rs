@@ -207,7 +207,10 @@ mod tests {
         // A lifetime of zero seconds is already spent by the time it is read.
         write(&data, "file-2.json", &1_u32, 0);
         let cached: Cached<u32> = read(&data, "file-2.json").expect("it is there");
-        assert!(!cached.fresh, "a spent entry is still returned, marked stale");
+        assert!(
+            !cached.fresh,
+            "a spent entry is still returned, marked stale"
+        );
         assert_eq!(cached.payload, 1);
     }
 
@@ -224,7 +227,11 @@ mod tests {
     fn the_lifetime_the_site_asks_for_wins_inside_sane_bounds() {
         assert_eq!(ttl_from(Some(900), PAGE_TTL), 900);
         assert_eq!(ttl_from(None, PAGE_TTL), PAGE_TTL);
-        assert_eq!(ttl_from(Some(0), PAGE_TTL), MIN_TTL, "no request per render");
+        assert_eq!(
+            ttl_from(Some(0), PAGE_TTL),
+            MIN_TTL,
+            "no request per render"
+        );
         assert_eq!(ttl_from(Some(u64::MAX), PAGE_TTL), MAX_TTL);
     }
 
@@ -258,7 +265,10 @@ mod tests {
     #[test]
     fn cache_names_carry_everything_that_changes_the_answer() {
         assert_eq!(categories_name("ja"), "categories-ja.json");
-        assert_eq!(listing_name(13, "file_updated", 2), "list-13-file_updated-2.json");
+        assert_eq!(
+            listing_name(13, "file_updated", 2),
+            "list-13-file_updated-2.json"
+        );
         assert_eq!(file_name(1486), "file-1486.json");
     }
 }

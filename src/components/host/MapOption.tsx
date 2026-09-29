@@ -39,7 +39,12 @@ export function MapThumb({ map }: { map: HostMap }) {
  * The badge carries **Friends need this map too.** on hover: a friend without
  * the pk3 gets a download prompt, or nothing, from the server.
  */
-export function MapOption({ map, selected = false }: { map: HostMap; selected?: boolean }) {
+export function MapOption({ map, selected = false, modeLabels, showSource = true }: {
+  map: HostMap;
+  selected?: boolean;
+  modeLabels?: string[];
+  showSource?: boolean;
+}) {
   const { t } = useTranslation("host");
   return (
     <span className="flex items-center gap-12 min-w-0">
@@ -51,7 +56,12 @@ export function MapOption({ map, selected = false }: { map: HostMap; selected?: 
         >
           {map.name}
         </span>
-        {map.source === "client" ? (
+        {modeLabels ? (
+          <span className="text-body-sm text-fg-muted leading-snug">
+            {modeLabels.length ? modeLabels.join(" · ") : t("setup.map.unspecifiedMode")}
+          </span>
+        ) : null}
+        {showSource && map.source === "client" ? (
           <Badge tone="accent" title={t("setup.map.libraryHint")}>
             {t("setup.map.library")}
           </Badge>

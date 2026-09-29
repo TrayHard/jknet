@@ -199,7 +199,10 @@ pub fn prune(game: Game, mut tree: Vec<JkhubCategory>) -> Vec<JkhubCategory> {
     tree.retain(|entry| covers(game, entry.id));
     let kept: Vec<u32> = tree.iter().map(|entry| entry.id).collect();
     for entry in &mut tree {
-        if entry.parent_id.is_some_and(|parent| !kept.contains(&parent)) {
+        if entry
+            .parent_id
+            .is_some_and(|parent| !kept.contains(&parent))
+        {
             entry.parent_id = None;
         }
     }
@@ -453,8 +456,16 @@ mod tests {
         }
         // And the eight that are, by the node of the rail they answer under.
         let maps = NODE_ID_BASE + 71;
-        assert_eq!(node_id_of(Game::JediAcademy, 13), Some(maps), "a gametype is under Maps");
-        assert_eq!(node_id_of(Game::JediAcademy, 71), Some(maps), "and so is the container");
+        assert_eq!(
+            node_id_of(Game::JediAcademy, 13),
+            Some(maps),
+            "a gametype is under Maps"
+        );
+        assert_eq!(
+            node_id_of(Game::JediAcademy, 71),
+            Some(maps),
+            "and so is the container"
+        );
         assert_eq!(
             node_id_of(Game::JediAcademy, 5),
             Some(NODE_ID_BASE + 4),
@@ -497,7 +508,10 @@ mod tests {
         let dropped = retain(Game::JediAcademy, &mut files);
         assert_eq!(dropped, 1, "cosmetic mods are not catalogue");
         assert_eq!(
-            files.iter().map(|entry| entry.category_id).collect::<Vec<_>>(),
+            files
+                .iter()
+                .map(|entry| entry.category_id)
+                .collect::<Vec<_>>(),
             vec![71, 13],
             "the rolled-up entry is kept, and kept as it was written"
         );
@@ -521,11 +535,19 @@ mod tests {
             ],
         );
         let nodes = tree(Game::JediAcademy, &site);
-        let sections: Vec<&JkhubCategory> =
-            nodes.iter().filter(|entry| entry.parent_id.is_none()).collect();
-        assert_eq!(sections.len(), 8, "every section of Jedi Academy has a node");
+        let sections: Vec<&JkhubCategory> = nodes
+            .iter()
+            .filter(|entry| entry.parent_id.is_none())
+            .collect();
+        assert_eq!(
+            sections.len(),
+            8,
+            "every section of Jedi Academy has a node"
+        );
         assert!(
-            sections.iter().all(|entry| entry.has_files && entry.section.is_some()),
+            sections
+                .iter()
+                .all(|entry| entry.has_files && entry.section.is_some()),
             "a section opens and is named by the launcher"
         );
         assert!(
@@ -553,7 +575,11 @@ mod tests {
         );
 
         let skins = sections[1];
-        assert_eq!(skins.id, NODE_ID_BASE + 4, "neither site category can be the parent");
+        assert_eq!(
+            skins.id,
+            NODE_ID_BASE + 4,
+            "neither site category can be the parent"
+        );
         assert_eq!(skins.file_count, Some(1228), "and it shows both of them");
         assert_eq!(
             children(&nodes, skins.id),
@@ -562,8 +588,14 @@ mod tests {
         );
 
         let audio = sections[7];
-        assert_eq!(audio.file_count, None, "a section the tree knows nothing about shows no badge");
-        assert!(children(&nodes, audio.id).is_empty(), "and a section of one category has no children");
+        assert_eq!(
+            audio.file_count, None,
+            "a section the tree knows nothing about shows no badge"
+        );
+        assert!(
+            children(&nodes, audio.id).is_empty(),
+            "and a section of one category has no children"
+        );
     }
 
     #[test]
@@ -583,7 +615,9 @@ mod tests {
     fn jedi_outcast_has_no_npcs_node() {
         let nodes = tree(Game::JediOutcast, &[]);
         assert_eq!(nodes.len(), 7);
-        assert!(nodes.iter().all(|entry| entry.section.as_deref() != Some("npcs")));
+        assert!(nodes
+            .iter()
+            .all(|entry| entry.section.as_deref() != Some("npcs")));
     }
 
     /// Site ids of the nodes directly under one node, in the order they are

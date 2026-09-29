@@ -281,9 +281,7 @@ impl JkhubState {
     /// that runs to the end is better than one that stops because a lock
     /// broke.
     fn asked_to_stop(&self, game: Game) -> bool {
-        self.cancels
-            .lock()
-            .is_ok_and(|games| games.contains(&game))
+        self.cancels.lock().is_ok_and(|games| games.contains(&game))
     }
 
     /// Forgets a stop, so the next run is not cancelled by the last one.
@@ -404,7 +402,10 @@ fn refresh_tree_behind(app: &AppHandle, game: Game) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let jkhub = app.state::<JkhubState>();
-        if !jkhub.trees.start(game, timestamp::now_unix(), TREE_REFRESH_INTERVAL) {
+        if !jkhub
+            .trees
+            .start(game, timestamp::now_unix(), TREE_REFRESH_INTERVAL)
+        {
             return;
         }
         let walked = match (app.state::<AppState>().paths(), jkhub.client()) {
@@ -457,7 +458,12 @@ pub async fn jkhub_list(
     let data = state.paths()?;
     let source = HtmlSource::new(jkhub.client()?, &data).forced(refresh.unwrap_or(false));
     source
-        .list(game, category_id, sort.unwrap_or_default(), page.unwrap_or(1))
+        .list(
+            game,
+            category_id,
+            sort.unwrap_or_default(),
+            page.unwrap_or(1),
+        )
         .await
 }
 
@@ -486,14 +492,25 @@ pub async fn jkhub_comments(
     let data = state.paths()?;
     let client = jkhub.client()?;
     let view = HtmlSource::new(client, &data).file(id).await?;
-    comments::fetch(client, &data, id, &view.file.slug, page, refresh.unwrap_or(false)).await
+    comments::fetch(
+        client,
+        &data,
+        id,
+        &view.file.slug,
+        page,
+        refresh.unwrap_or(false),
+    )
+    .await
 }
 
 /// An explicit preview request downloads to the cache without installing files.
 #[tauri::command]
 pub async fn jkhub_preview(
-    app: AppHandle, state: tauri::State<'_, AppState>, jkhub: tauri::State<'_, JkhubState>,
-    id: u32, client_id: Option<String>,
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+    jkhub: tauri::State<'_, JkhubState>,
+    id: u32,
+    client_id: Option<String>,
 ) -> Result<crate::file_preview::FilePreview> {
     let data = state.paths()?;
     let http = jkhub.client()?;
@@ -507,8 +524,17 @@ pub async fn jkhub_preview(
     };
     let deps = crate::file_preview::dependencies(&data, &settings, client_id.as_deref(), game)?;
     let (url, file_name, size) = match download::resolve(http, id, &view.file.slug).await? {
-        JkhubDownload::Hosted { url, file_name, size, .. } => (url, file_name, size),
-        JkhubDownload::External { .. } => return Err(AppError::JkhubDownload("This file is hosted elsewhere. Open its JKHub page to download it.".into())),
+        JkhubDownload::Hosted {
+            url,
+            file_name,
+            size,
+            ..
+        } => (url, file_name, size),
+        JkhubDownload::External { .. } => {
+            return Err(AppError::JkhubDownload(
+                "This file is hosted elsewhere. Open its JKHub page to download it.".into(),
+            ))
+        }
     };
     let dir = cache::download_dir(&data, id)?;
     let archive = download::fetch(&app, http, id, &url, &dir, &file_name, size).await?;
@@ -516,7 +542,9 @@ pub async fn jkhub_preview(
         let cache = data.cache.join("file-previews").join("packages");
         let sources = crate::file_preview::unpack(&archive, &cache)?;
         crate::file_preview::prepare(&data, sources, deps)
-    }).await.map_err(|e|AppError::State(e.to_string()))??;
+    })
+    .await
+    .map_err(|e| AppError::State(e.to_string()))??;
     crate::file_preview::allow_icons(&app, &preview);
     Ok(preview)
 }
@@ -568,7 +596,9 @@ pub async fn jkhub_install(
 
     let view = HtmlSource::new(http, &data).file(id).await?;
     if !view.file.game.matches(client.game) {
-        return Err(AppError::InvalidInput("This JKHub file belongs to another game".into()));
+        return Err(AppError::InvalidInput(
+            "This JKHub file belongs to another game".into(),
+        ));
     }
     let resolved = download::resolve(http, id, &view.file.slug).await?;
     let (url, file_name, size) = match resolved {
@@ -586,13 +616,12 @@ pub async fn jkhub_install(
                 // Nothing was written, and nothing created the folder either.
                 folder_path: None,
                 outcome: JkhubInstallOutcome::External { url },
-            })
+            });
         }
     };
 
     let dir = cache::download_dir(&data, id)?;
-    let archive =
-        download::fetch(&app, http, id, &url, &dir, &file_name, size).await?;
+    let archive = download::fetch(&app, http, id, &url, &dir, &file_name, size).await?;
 
     let target = install::target_folder(&client_dir, &folder)?;
     let replace = replace.unwrap_or(false);
@@ -1101,41 +1130,70 @@ fn unpack(archive: &Path, target: &Path, replace: bool) -> Result<JkhubInstallOu
 /// the existing explicit replacement flow. No write precedes conflict detection.
 fn unpack_recommended(archive: &Path, target: &Path) -> Result<JkhubInstallOutcome> {
     use std::io::{Read, Write};
-    let staging = tempfile::tempdir().map_err(|e| AppError::io_path("cannot stage recommended files", target, e))?;
+    let staging = tempfile::tempdir()
+        .map_err(|e| AppError::io_path("cannot stage recommended files", target, e))?;
     let outcome = unpack(archive, staging.path(), false)?;
-    let JkhubInstallOutcome::Installed { files } = &outcome else { return Ok(outcome); };
+    let JkhubInstallOutcome::Installed { files } = &outcome else {
+        return Ok(outcome);
+    };
     let mut conflicts = Vec::new();
     let mut missing = Vec::new();
     for name in files {
         let destination = target.join(name);
-        if target.join(format!("{name}.disabled")).exists() { conflicts.push(name.clone()); continue; }
-        if !destination.exists() { missing.push(name); continue; }
+        if target.join(format!("{name}.disabled")).exists() {
+            conflicts.push(name.clone());
+            continue;
+        }
+        if !destination.exists() {
+            missing.push(name);
+            continue;
+        }
         let same = (|| -> std::io::Result<bool> {
             let mut source = std::fs::File::open(staging.path().join(name))?;
             let mut existing = std::fs::File::open(&destination)?;
-            if source.metadata()?.len() != existing.metadata()?.len() { return Ok(false); }
-            let mut a = [0u8; 65536]; let mut b = [0u8; 65536];
+            if source.metadata()?.len() != existing.metadata()?.len() {
+                return Ok(false);
+            }
+            let mut a = [0u8; 65536];
+            let mut b = [0u8; 65536];
             loop {
                 let n = source.read(&mut a)?;
-                if n == 0 { return Ok(true); }
+                if n == 0 {
+                    return Ok(true);
+                }
                 existing.read_exact(&mut b[..n])?;
-                if a[..n] != b[..n] { return Ok(false); }
+                if a[..n] != b[..n] {
+                    return Ok(false);
+                }
             }
-        })().map_err(|e| AppError::io_path("cannot compare installed files", target, e))?;
-        if !same { conflicts.push(name.clone()); }
+        })()
+        .map_err(|e| AppError::io_path("cannot compare installed files", target, e))?;
+        if !same {
+            conflicts.push(name.clone());
+        }
     }
-    if !conflicts.is_empty() { return Ok(JkhubInstallOutcome::Conflicts { files: conflicts }); }
+    if !conflicts.is_empty() {
+        return Ok(JkhubInstallOutcome::Conflicts { files: conflicts });
+    }
     for name in missing {
         let staged = staging.path().join(name);
         let destination = target.join(name);
-        let mut source = std::fs::File::open(&staged).map_err(|e| AppError::io_path("cannot read staged file", target, e))?;
+        let mut source = std::fs::File::open(&staged)
+            .map_err(|e| AppError::io_path("cannot read staged file", target, e))?;
         // create_new preserves a file another install may have written meanwhile.
-        let mut output = std::fs::OpenOptions::new().write(true).create_new(true).open(&destination)
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&destination)
             .map_err(|e| AppError::io_path("cannot create recommended file", target, e))?;
         if let Err(error) = std::io::copy(&mut source, &mut output).and_then(|_| output.flush()) {
             drop(output);
             let _ = std::fs::remove_file(&destination);
-            return Err(AppError::io_path("cannot write recommended file", target, error));
+            return Err(AppError::io_path(
+                "cannot write recommended file",
+                target,
+                error,
+            ));
         }
     }
     Ok(outcome)
@@ -1225,26 +1283,52 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let archive = dir.path().join("pack.zip");
         let mut zip = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
-        for (name, bytes) in [("one.pk3", b"first".as_slice()), ("two.pk3", b"second".as_slice())] {
-            zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        for (name, bytes) in [
+            ("one.pk3", b"first".as_slice()),
+            ("two.pk3", b"second".as_slice()),
+        ] {
+            zip.start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
             zip.write_all(bytes).unwrap();
         }
         zip.finish().unwrap();
-        let target = dir.path().join("base"); std::fs::create_dir(&target).unwrap();
-        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Installed { .. }));
-        let before = std::fs::metadata(target.join("one.pk3")).unwrap().modified().unwrap();
+        let target = dir.path().join("base");
+        std::fs::create_dir(&target).unwrap();
+        assert!(matches!(
+            unpack_recommended(&archive, &target).unwrap(),
+            JkhubInstallOutcome::Installed { .. }
+        ));
+        let before = std::fs::metadata(target.join("one.pk3"))
+            .unwrap()
+            .modified()
+            .unwrap();
         std::fs::remove_file(target.join("two.pk3")).unwrap();
-        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Installed { .. }));
-        assert_eq!(std::fs::read(target.join("two.pk3")).unwrap(),b"second");
-        assert_eq!(std::fs::metadata(target.join("one.pk3")).unwrap().modified().unwrap(),before);
-        std::fs::write(target.join("one.pk3"),b"edited").unwrap();
+        assert!(matches!(
+            unpack_recommended(&archive, &target).unwrap(),
+            JkhubInstallOutcome::Installed { .. }
+        ));
+        assert_eq!(std::fs::read(target.join("two.pk3")).unwrap(), b"second");
+        assert_eq!(
+            std::fs::metadata(target.join("one.pk3"))
+                .unwrap()
+                .modified()
+                .unwrap(),
+            before
+        );
+        std::fs::write(target.join("one.pk3"), b"edited").unwrap();
         std::fs::remove_file(target.join("two.pk3")).unwrap();
-        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Conflicts { .. }));
-        assert_eq!(std::fs::read(target.join("one.pk3")).unwrap(),b"edited");
+        assert!(matches!(
+            unpack_recommended(&archive, &target).unwrap(),
+            JkhubInstallOutcome::Conflicts { .. }
+        ));
+        assert_eq!(std::fs::read(target.join("one.pk3")).unwrap(), b"edited");
         assert!(!target.join("two.pk3").exists());
         std::fs::remove_file(target.join("one.pk3")).unwrap();
-        std::fs::write(target.join("one.pk3.disabled"),b"first").unwrap();
-        assert!(matches!(unpack_recommended(&archive,&target).unwrap(), JkhubInstallOutcome::Conflicts { .. }));
+        std::fs::write(target.join("one.pk3.disabled"), b"first").unwrap();
+        assert!(matches!(
+            unpack_recommended(&archive, &target).unwrap(),
+            JkhubInstallOutcome::Conflicts { .. }
+        ));
     }
     use crate::clients::Client;
     // Only the fixture below names a shelf of the site; the commands speak
@@ -1258,6 +1342,7 @@ mod tests {
             engine_id: "openjk".into(),
             game: Game::JediAcademy,
             engine_version: None,
+            engine_origin: clients::EngineOrigin::Managed,
             created_at: timestamp::now_rfc3339(),
             engine_installed_at: None,
             engine_published_at: None,
@@ -1313,7 +1398,10 @@ mod tests {
         let day = TREE_REFRESH_INTERVAL;
         let now = 1_800_000_000;
 
-        assert!(trees.start(Game::JediAcademy, now, TREE_REFRESH_INTERVAL), "the first walk starts");
+        assert!(
+            trees.start(Game::JediAcademy, now, TREE_REFRESH_INTERVAL),
+            "the first walk starts"
+        );
         assert!(
             !trees.start(Game::JediAcademy, now + 5, TREE_REFRESH_INTERVAL),
             "a second answer must not start a second walk"
@@ -1347,7 +1435,10 @@ mod tests {
         let catalogues = Refreshes::default();
         let now = 1_800_000_000;
 
-        assert!(!catalogues.running(Game::JediAcademy), "nothing has run yet");
+        assert!(
+            !catalogues.running(Game::JediAcademy),
+            "nothing has run yet"
+        );
         // Interval zero is the **Refresh** action: it ignores how recently the
         // last one ran.
         assert!(catalogues.start(Game::JediAcademy, now, 0));
@@ -1367,11 +1458,7 @@ mod tests {
         catalogues.finish(Game::JediAcademy);
 
         // The automatic path passes the daily interval and is held to it.
-        assert!(!catalogues.start(
-            Game::JediAcademy,
-            now + 3,
-            index::AUTO_REFRESH_INTERVAL
-        ));
+        assert!(!catalogues.start(Game::JediAcademy, now + 3, index::AUTO_REFRESH_INTERVAL));
     }
 
     #[test]
@@ -1494,11 +1581,12 @@ mod tests {
             tags: Vec::new(),
             changelog: Vec::new(),
         };
-        record(&client_dir, "base", &["saitohajime.pk3".to_string()], &file)
-            .expect("it writes");
+        record(&client_dir, "base", &["saitohajime.pk3".to_string()], &file).expect("it writes");
 
         let back = library::read_provenance(&client_dir);
-        let entry = back.get("base/saitohajime.pk3").expect("the entry is there");
+        let entry = back
+            .get("base/saitohajime.pk3")
+            .expect("the entry is there");
         assert_eq!(entry.source, "jkhub");
         assert_eq!(entry.file_id, 4234);
         assert_eq!(entry.version.as_deref(), Some("1.0"));

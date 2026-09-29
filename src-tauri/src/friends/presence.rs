@@ -43,8 +43,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use crate::clients;
-use crate::online::{OnlineClient, OnlineContext, Presence, PresenceUpdate};
 use crate::launch::{GameExited, GameStarted};
+use crate::online::{OnlineClient, OnlineContext, Presence, PresenceUpdate};
 use crate::servers;
 use crate::state::AppState;
 
@@ -171,7 +171,11 @@ pub fn effective(raw: &Presence, hosting: Option<&HostPresence>) -> Presence {
         return presence;
     }
     let own_server = |hosting: &&HostPresence| {
-        let host = address.trim().rsplit_once(':').map(|(host, _)| host).unwrap_or("");
+        let host = address
+            .trim()
+            .rsplit_once(':')
+            .map(|(host, _)| host)
+            .unwrap_or("");
         (host == "127.0.0.1" || host.eq_ignore_ascii_case("localhost"))
             && port_of(address) == Some(hosting.local_port)
     };
@@ -258,7 +262,11 @@ pub(crate) async fn push(app: &AppHandle) {
         return;
     }
     let update = PresenceUpdate::from(&presence);
-    match app.state::<OnlineClient>().put_presence(&ctx, &update).await {
+    match app
+        .state::<OnlineClient>()
+        .put_presence(&ctx, &update)
+        .await
+    {
         Ok(_) => {
             log::debug!("presence: {}", update.status);
             // --- slice: chat ---
@@ -333,7 +341,10 @@ mod tests {
             client_name: Some("Everyday".into()),
             ..Presence::default()
         };
-        assert_eq!(body(&presence), r#"{"status":"in_game","clientName":"Everyday"}"#);
+        assert_eq!(
+            body(&presence),
+            r#"{"status":"in_game","clientName":"Everyday"}"#
+        );
     }
 
     // --- slice: play with friends ---
@@ -369,10 +380,16 @@ mod tests {
 
     #[test]
     fn the_host_on_its_own_server_advertises_the_address_friends_use() {
-        let relayed = effective(&joined("127.0.0.1:29070"), Some(&hosting(Some("203.0.113.5:29210"))));
+        let relayed = effective(
+            &joined("127.0.0.1:29070"),
+            Some(&hosting(Some("203.0.113.5:29210"))),
+        );
         assert_eq!(relayed.server_address.as_deref(), Some("203.0.113.5:29210"));
         assert_eq!(relayed.server_name.as_deref(), Some("Tray's game"));
-        assert_eq!(relayed.hosting.as_ref().map(|h| h.session_id.as_str()), Some("5e0b7c1f9a2d4c38"));
+        assert_eq!(
+            relayed.hosting.as_ref().map(|h| h.session_id.as_str()),
+            Some("5e0b7c1f9a2d4c38")
+        );
 
         // No relay: the first address of the network.
         let local = effective(&joined("127.0.0.1:29070"), Some(&hosting(None)));
@@ -389,7 +406,15 @@ mod tests {
     fn a_loopback_address_is_never_published() {
         // The Connect… window on a local test server, with or without a
         // private server of its own running on another port.
-        for address in ["127.0.0.1:29070", "127.0.0.1:29071", "127.77.0.5:29070", "localhost:29070", "LOCALHOST", "0.0.0.0:29070", "[::1]:29070"] {
+        for address in [
+            "127.0.0.1:29070",
+            "127.0.0.1:29071",
+            "127.77.0.5:29070",
+            "localhost:29070",
+            "LOCALHOST",
+            "0.0.0.0:29070",
+            "[::1]:29070",
+        ] {
             for host in [None, Some(hosting(Some("203.0.113.5:29210")))] {
                 let presence = effective(&joined(address), host.as_ref());
                 let expected = match (&host, address) {
@@ -404,7 +429,10 @@ mod tests {
                     assert_eq!(presence.server_name, None, "{address}");
                 }
                 let body = serde_json::to_string(&PresenceUpdate::from(&presence)).unwrap();
-                assert!(!body.contains("127.") && !body.contains("localhost"), "{body}");
+                assert!(
+                    !body.contains("127.") && !body.contains("localhost"),
+                    "{body}"
+                );
             }
         }
         // An ordinary server passes as it is.

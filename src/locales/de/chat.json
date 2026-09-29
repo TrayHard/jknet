@@ -370,14 +370,14 @@
     "removeCard": "{{name}} entfernen",
     "tooManyCards": "Eine Nachricht kann bis zu {{max}} Karten enthalten.",
     "tooManyFiles": "Eine Nachricht kann bis zu {{max}} Dateien enthalten.",
-    "refusedTitle_one": "{{count}} Datei wurde nicht angehängt",
-    "refusedTitle_other": "{{count}} Dateien wurden nicht angehängt",
     "refusedLine": "{{name}}: {{reason}}",
     "counter": "{{used}} / {{max}}",
     "tooLong": "Eine Nachricht darf bis zu {{max}} Zeichen lang sein.",
     "notFriends": "Sie sind keine Freunde mehr. Der Chat ist schreibgeschützt; sobald Sie wieder Freunde sind, geht es weiter.",
     "deletedPeer": "Dieses Konto wurde gelöscht. Der Chat ist schreibgeschützt und bleibt bis zum Ablauf der 90 Tage erhalten.",
-    "readOnly": "In diesen Chat können Sie keine Nachrichten senden."
+    "readOnly": "In diesen Chat können Sie keine Nachrichten senden.",
+    "refusedTitle_one": "{{count}} Datei wurde nicht angehängt",
+    "refusedTitle_other": "{{count}} Dateien wurden nicht angehängt"
   },
   "attach": {
     "open": "Anhängen",
@@ -848,5 +848,13 @@
     "chatCount_other": "Chats öffnen ({{count}})",
     "tooltipUnread_one": "JKNet: {{count}} ungelesene Nachricht",
     "tooltipUnread_other": "JKNet: {{count}} ungelesene Nachrichten"
+  },
+  "serverConfig": {
+    "subtitle": "Server config · {{game}} · {{mod}}",
+    "open": "Open server editor",
+    "receiveTitle": "Save a server config",
+    "receiveHint": "Review the game, mod and rules. Saving adds a copy to your server configs. Choose it in Play with friends when you want to host.",
+    "save": "Save to server configs",
+    "sensitive": "Remove passwords or administration secrets before sharing."
   }
 }

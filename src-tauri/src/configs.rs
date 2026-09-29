@@ -869,15 +869,26 @@ mod tests {
         let state = AppState::bootstrap(temp.path().into());
         let client: clients::Client = serde_json::from_value(serde_json::json!({"id":"from-bundle","name":"From bundle","engineId":"openjk","engineVersion":null,"createdAt":"2026-09-15"})).unwrap();
         let docs = vec![
-            NewDocument { name: "Binds".into(), text: "bind PGDN toggle cg_dismember 0 3\n".into(), priority: 0 },
-            NewDocument { name: "Video".into(), text: "seta r_mode 4\n".into(), priority: 1 },
+            NewDocument {
+                name: "Binds".into(),
+                text: "bind PGDN toggle cg_dismember 0 3\n".into(),
+                priority: 0,
+            },
+            NewDocument {
+                name: "Video".into(),
+                text: "seta r_mode 4\n".into(),
+                priority: 1,
+            },
         ];
 
         let first = install_documents(&state, &client, &docs).unwrap();
         assert_eq!(first.len(), 2);
         // The retry of an install that stopped after this step.
         let second = install_documents(&state, &client, &docs).unwrap();
-        assert_eq!(second.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), first.iter().map(|d| d.id.as_str()).collect::<Vec<_>>());
+        assert_eq!(
+            second.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
+            first.iter().map(|d| d.id.as_str()).collect::<Vec<_>>()
+        );
 
         let assigned = assigned_documents(&state, &client).unwrap();
         assert_eq!(assigned.len(), 2, "no layer was doubled");
@@ -887,7 +898,10 @@ mod tests {
         assert!(assigned.iter().all(|(layer, _)| layer.enabled));
         assert_eq!(super::book(&state).unwrap().documents.len(), 2);
         // And the launch path reads them back in that order.
-        assert_eq!(launch_layers(&state, &client).unwrap(), ["+exec", "jknet-active.cfg"]);
+        assert_eq!(
+            launch_layers(&state, &client).unwrap(),
+            ["+exec", "jknet-active.cfg"]
+        );
     }
 
     #[test]

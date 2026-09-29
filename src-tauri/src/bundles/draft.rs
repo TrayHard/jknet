@@ -446,7 +446,9 @@ impl DraftFile {
             replaces,
             origin,
             library: self.library.clone(),
-            listing: (kind == FileKind::Pk3).then(|| self.listing.clone()).flatten(),
+            listing: (kind == FileKind::Pk3)
+                .then(|| self.listing.clone())
+                .flatten(),
         }
     }
 }
@@ -702,7 +704,8 @@ static EDITS: Mutex<()> = Mutex::new(());
 /// Refuses an id that is not one this module made, before it becomes a
 /// folder name.
 fn check_draft_id(id: &str) -> Result<()> {
-    user_files::valid_id(id).map_err(|_| AppError::InvalidInput(format!("{id:?} is not a draft id")))
+    user_files::valid_id(id)
+        .map_err(|_| AppError::InvalidInput(format!("{id:?} is not a draft id")))
 }
 
 fn record_path(paths: &DataPaths, id: &str) -> PathBuf {
@@ -717,7 +720,8 @@ pub(crate) fn read_draft(paths: &DataPaths, id: &str) -> Result<Draft> {
         return Err(AppError::NotFound(format!("bundle draft {id}")));
     }
     let text = fs::read_to_string(&file).map_err(|e| AppError::io_path("cannot read", &file, e))?;
-    serde_json::from_str(&text).map_err(|e| AppError::json(format!("cannot parse {}", file.display()), e))
+    serde_json::from_str(&text)
+        .map_err(|e| AppError::json(format!("cannot parse {}", file.display()), e))
 }
 
 /// Writes a draft whole: into a temporary file next to `draft.json`, then a
@@ -733,7 +737,9 @@ pub(crate) fn edit_draft(
     id: &str,
     edit: impl FnOnce(&mut Draft) -> Result<()>,
 ) -> Result<Draft> {
-    let _step = EDITS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _step = EDITS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut draft = read_draft(paths, id)?;
     edit(&mut draft)?;
     draft.updated_at = timestamp::now_rfc3339();
@@ -761,12 +767,22 @@ pub(crate) fn read_all(paths: &DataPaths) -> Result<Vec<Draft>> {
             Err(e) => log::warn!("skipping bundle draft {id}: {e}"),
         }
     }
-    drafts.sort_by(|a, b| b.updated_at.cmp(&a.updated_at).then_with(|| a.id.cmp(&b.id)));
+    drafts.sort_by(|a, b| {
+        b.updated_at
+            .cmp(&a.updated_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
     Ok(drafts)
 }
 
 /// Where the file at `path` of `scope` and `root` lies inside the draft.
-pub(crate) fn file_path(paths: &DataPaths, draft_id: &str, scope: &str, root: FileRoot, path: &str) -> Result<PathBuf> {
+pub(crate) fn file_path(
+    paths: &DataPaths,
+    draft_id: &str,
+    scope: &str,
+    root: FileRoot,
+    path: &str,
+) -> Result<PathBuf> {
     manifest::check_path(path)?;
     let dir = paths.bundle_draft_files_dir(draft_id, scope, root.as_str());
     engine_install::safe_entry_path(&dir, path)
@@ -833,7 +849,9 @@ fn check_scope(draft: &Draft, scope: &str) -> Result<()> {
     if scope == SHARED_SCOPE || draft.component(scope).is_some() {
         Ok(())
     } else {
-        Err(AppError::NotFound(format!("component {scope} of the draft")))
+        Err(AppError::NotFound(format!(
+            "component {scope} of the draft"
+        )))
     }
 }
 
@@ -845,7 +863,9 @@ fn put_file(list: &mut Vec<DraftFile>, file: DraftFile) {
 
 /// Takes the entry of `path` out of a list, if it is there.
 fn take_file(list: &mut Vec<DraftFile>, path: &str) -> Option<DraftFile> {
-    let index = list.iter().position(|file| file.path.eq_ignore_ascii_case(path))?;
+    let index = list
+        .iter()
+        .position(|file| file.path.eq_ignore_ascii_case(path))?;
     Some(list.remove(index))
 }
 
@@ -888,7 +908,11 @@ fn component_id(label: &str, taken: &[String]) -> String {
             slug.push('-');
         }
     }
-    let mut base: String = slug.trim_matches('-').chars().take(manifest::MAX_ID).collect();
+    let mut base: String = slug
+        .trim_matches('-')
+        .chars()
+        .take(manifest::MAX_ID)
+        .collect();
     base = base.trim_matches('-').to_string();
     if base.is_empty() || base == SHARED_SCOPE {
         base = "component".to_string();
@@ -918,7 +942,11 @@ fn check_component_modes(engine: &Engine, modes: &[LaunchMode]) -> Result<Vec<La
         return Err(AppError::InvalidInput(format!(
             "{} starts in {:?} only",
             engine.name,
-            engine.modes().iter().map(|mode| mode.as_str()).collect::<Vec<_>>()
+            engine
+                .modes()
+                .iter()
+                .map(|mode| mode.as_str())
+                .collect::<Vec<_>>()
         )));
     }
     Ok(allowed)
@@ -936,7 +964,8 @@ fn check_label(label: &str) -> Result<String> {
 }
 
 fn trimmed_tag(tag: Option<String>) -> Option<String> {
-    tag.map(|tag| tag.trim().to_string()).filter(|tag| !tag.is_empty())
+    tag.map(|tag| tag.trim().to_string())
+        .filter(|tag| !tag.is_empty())
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,7 +1059,10 @@ fn import_file(
 ) -> Result<DraftFile> {
     let meta = fs::metadata(source).map_err(|e| AppError::io_path("cannot read", source, e))?;
     if !meta.is_file() {
-        return Err(AppError::InvalidInput(format!("{} is not a file", source.display())));
+        return Err(AppError::InvalidInput(format!(
+            "{} is not a file",
+            source.display()
+        )));
     }
     let name = path.rsplit('/').next().unwrap_or(path);
     if root == FileRoot::Home && is_game_asset(name) {
@@ -1053,8 +1085,12 @@ fn import_file(
     }
     let sha256 = sha256_of(&target)?;
     let kind = FileKind::of_path(path);
-    let library = (root == FileRoot::Home && kind == FileKind::Pk3)
-        .then(|| pk3_info(&target, display_name.unwrap_or_else(|| display_name_of(name))));
+    let library = (root == FileRoot::Home && kind == FileKind::Pk3).then(|| {
+        pk3_info(
+            &target,
+            display_name.unwrap_or_else(|| display_name_of(name)),
+        )
+    });
     let listing = (kind == FileKind::Pk3)
         .then(|| listing::listing_of_new_file(paths, draft_id, &sha256, &target))
         .flatten();
@@ -1082,7 +1118,9 @@ fn home_path(folder: &str, source: &Path) -> Result<String> {
 }
 
 /// Runs blocking file work off the runtime.
-async fn off_thread<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+async fn off_thread<T: Send + 'static>(
+    work: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T> {
     tauri::async_runtime::spawn_blocking(work)
         .await
         .map_err(|e| AppError::State(format!("the file thread stopped: {e}")))?
@@ -1130,7 +1168,10 @@ pub(crate) fn strip_passwords(text: &str) -> (String, u32) {
 // ---------------------------------------------------------------------------
 
 fn blank_to_none(value: Option<&str>) -> Option<String> {
-    value.map(str::trim).filter(|value| !value.is_empty()).map(str::to_string)
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 /// The rule the service applies to `website` and `discord`: blank, or a
@@ -1140,7 +1181,11 @@ pub(crate) fn check_link(value: Option<&str>, what: &str, discord: bool) -> Resu
     let Some(value) = blank_to_none(value) else {
         return Ok(None);
     };
-    let refuse = |why: &str| Err(AppError::InvalidInput(format!("the {what} {value:?} {why}")));
+    let refuse = |why: &str| {
+        Err(AppError::InvalidInput(format!(
+            "the {what} {value:?} {why}"
+        )))
+    };
     if value.chars().count() > LINK_MAX {
         return refuse(&format!("is longer than {LINK_MAX} characters"));
     }
@@ -1156,7 +1201,12 @@ pub(crate) fn check_link(value: Option<&str>, what: &str, discord: bool) -> Resu
     if !url.username().is_empty() || url.password().is_some() {
         return refuse("carries credentials");
     }
-    if discord && !matches!(url.host_str(), Some("discord.gg" | "discord.com" | "www.discord.com")) {
+    if discord
+        && !matches!(
+            url.host_str(),
+            Some("discord.gg" | "discord.com" | "www.discord.com")
+        )
+    {
         return refuse("does not belong to discord.gg or discord.com");
     }
     Ok(Some(value))
@@ -1251,11 +1301,20 @@ fn check_translations(
         }
         let entry = DraftTranslation {
             name: check_length(&translation.name, &format!("{code} name"), NAME_MAX)?,
-            summary: check_length(&translation.summary, &format!("{code} summary"), SUMMARY_MAX)?,
-            description: check_description(&translation.description, &format!("{code} description"))?,
+            summary: check_length(
+                &translation.summary,
+                &format!("{code} summary"),
+                SUMMARY_MAX,
+            )?,
+            description: check_description(
+                &translation.description,
+                &format!("{code} description"),
+            )?,
         };
         if checked.insert(code.clone(), entry).is_some() {
-            return Err(AppError::InvalidInput(format!("{code:?} is translated twice")));
+            return Err(AppError::InvalidInput(format!(
+                "{code:?} is translated twice"
+            )));
         }
     }
     Ok(checked)
@@ -1336,10 +1395,16 @@ fn apply_patch(draft: &mut Draft, patch: DraftPatch) -> Result<()> {
 pub(crate) fn validate(draft: &Draft) -> DraftIssues {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    let issue = |code: &str, scope: Option<&str>, path: Option<&str>, count: Option<u64>, message: String| Issue {
+    let issue = |code: &str,
+                 scope: Option<&str>,
+                 path: Option<&str>,
+                 count: Option<u64>,
+                 message: String| Issue {
         code: code.to_string(),
         scope: scope.map(str::to_string),
-        component_id: scope.filter(|scope| *scope != SHARED_SCOPE).map(str::to_string),
+        component_id: scope
+            .filter(|scope| *scope != SHARED_SCOPE)
+            .map(str::to_string),
         path: path.map(str::to_string),
         count,
         language: None,
@@ -1383,7 +1448,9 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
                     None,
                     None,
                     None,
-                    format!("the name of the bundle in {code} is {NAME_MIN} to {NAME_MAX} characters"),
+                    format!(
+                        "the name of the bundle in {code} is {NAME_MIN} to {NAME_MAX} characters"
+                    ),
                 ),
             ));
         }
@@ -1434,7 +1501,10 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
             None,
             None,
             Some(draft.description.len() as u64),
-            format!("the description is longer than {} KiB", DESCRIPTION_MAX / 1024),
+            format!(
+                "the description is longer than {} KiB",
+                DESCRIPTION_MAX / 1024
+            ),
         ));
     }
     for (code, description) in draft.descriptions() {
@@ -1479,7 +1549,9 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
             None,
             None,
             Some(unused as u64),
-            format!("{unused} picture(s) of the draft are not in any description and are not uploaded"),
+            format!(
+                "{unused} picture(s) of the draft are not in any description and are not uploaded"
+            ),
         ));
     }
 
@@ -1514,7 +1586,10 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
                             scope,
                             None,
                             None,
-                            format!("the component {} starts in no mode of {}", component.label, engine.name),
+                            format!(
+                                "the component {} starts in no mode of {}",
+                                component.label, engine.name
+                            ),
                         ));
                     }
                 }
@@ -1540,7 +1615,10 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
                     scope,
                     Some(&file.path),
                     None,
-                    format!("{} is in the overlay of {} twice", file.path, component.label),
+                    format!(
+                        "{} is in the overlay of {} twice",
+                        file.path, component.label
+                    ),
                 ));
             }
         }
@@ -1561,7 +1639,10 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
                     scope,
                     Some(&file.path),
                     None,
-                    format!("{} is both in {} and in the shared files", file.path, component.label),
+                    format!(
+                        "{} is both in {} and in the shared files",
+                        file.path, component.label
+                    ),
                 ));
             }
         }
@@ -1571,7 +1652,10 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
                 scope,
                 None,
                 Some(component.overlay.remove.len() as u64),
-                format!("{} removes more than {MAX_REMOVALS} files of the release", component.label),
+                format!(
+                    "{} removes more than {MAX_REMOVALS} files of the release",
+                    component.label
+                ),
             ));
         }
         check_config_lengths(&component.configs, scope, &mut errors, &issue);
@@ -1588,7 +1672,12 @@ pub(crate) fn validate(draft: &Draft) -> DraftIssues {
             ));
         }
     }
-    check_config_lengths(&draft.shared.configs, Some(SHARED_SCOPE), &mut errors, &issue);
+    check_config_lengths(
+        &draft.shared.configs,
+        Some(SHARED_SCOPE),
+        &mut errors,
+        &issue,
+    );
 
     // Sums. The version holds its files and the listings of its pk3 files,
     // which is what the service weighs against the limit of a version; the
@@ -1785,15 +1874,29 @@ pub(crate) fn manifest_of(draft: &Draft) -> Manifest {
                 fs_game: component.fs_game.clone(),
                 launch_args: component.launch_args.trim().to_string(),
                 overlay: manifest::ManifestOverlay {
-                    files: component.overlay.files.iter().map(DraftFile::manifest_file).collect(),
+                    files: component
+                        .overlay
+                        .files
+                        .iter()
+                        .map(DraftFile::manifest_file)
+                        .collect(),
                     remove: component.overlay.remove.clone(),
                 },
-                files: component.files.iter().map(DraftFile::manifest_file).collect(),
+                files: component
+                    .files
+                    .iter()
+                    .map(DraftFile::manifest_file)
+                    .collect(),
                 configs: configs(&component.configs),
             })
             .collect(),
         shared: manifest::ManifestShared {
-            files: draft.shared.files.iter().map(DraftFile::manifest_file).collect(),
+            files: draft
+                .shared
+                .files
+                .iter()
+                .map(DraftFile::manifest_file)
+                .collect(),
             configs: configs(&draft.shared.configs),
         },
     }
@@ -1835,7 +1938,11 @@ fn loaded_folders(client: &Client, engine: &Engine) -> Vec<String> {
     let mut folders: Vec<String> = vec!["base".to_string()];
     let mut push = |folder: &str| {
         let folder = folder.trim();
-        if !folder.is_empty() && !folders.iter().any(|known| known.eq_ignore_ascii_case(folder)) {
+        if !folder.is_empty()
+            && !folders
+                .iter()
+                .any(|known| known.eq_ignore_ascii_case(folder))
+        {
             folders.push(folder.to_string());
         }
     };
@@ -1940,12 +2047,24 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
                 continue;
             }
             let sha256 = sha256_of(&path)?;
-            if release.get(&lower).is_some_and(|entry| entry.sha256 == sha256) {
+            if release
+                .get(&lower)
+                .is_some_and(|entry| entry.sha256 == sha256)
+            {
                 continue; // the release's own file, unchanged
             }
             let origin = release::overlay_origin(release, &relative, &path);
             let spelled = release::release_spelling(release, &relative);
-            let file = import_file(paths, &inputs.draft_id, &scope, FileRoot::Engine, &spelled, &path, None, origin)?;
+            let file = import_file(
+                paths,
+                &inputs.draft_id,
+                &scope,
+                FileRoot::Engine,
+                &spelled,
+                &path,
+                None,
+                origin,
+            )?;
             put_file(&mut overlay.files, file);
         }
         let mut removed: Vec<String> = release
@@ -1962,7 +2081,9 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
     let loaded = loaded_folders(client, engine);
     let mut files = Vec::new();
     for item in library::read_library(paths, &client.id)? {
-        let loads = loaded.iter().any(|folder| folder.eq_ignore_ascii_case(&item.folder));
+        let loads = loaded
+            .iter()
+            .any(|folder| folder.eq_ignore_ascii_case(&item.folder));
         if !item.enabled || !loads || is_game_asset(&item.file_name) {
             continue;
         }
@@ -1971,7 +2092,10 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
         if manifest::check_path(&relative).is_err() {
             continue;
         }
-        let from_jkhub = item.provenance.as_ref().is_some_and(|p| p.source == "jkhub");
+        let from_jkhub = item
+            .provenance
+            .as_ref()
+            .is_some_and(|p| p.source == "jkhub");
         if !from_jkhub && item.size > MAX_FILE_BYTES {
             log::warn!("bundles: skipping {relative}: bigger than a bundle file may be");
             continue;
@@ -1989,7 +2113,8 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
             if let Some(parent) = target.parent() {
                 paths::create_dir(parent)?;
             }
-            fs::copy(&source, &target).map_err(|e| AppError::io_path("cannot copy into", &target, e))?;
+            fs::copy(&source, &target)
+                .map_err(|e| AppError::io_path("cannot copy into", &target, e))?;
             let sha256 = sha256_of(&target)?;
             let listing = listing::listing_of_new_file(paths, &inputs.draft_id, &sha256, &target);
             DraftFile {
@@ -2028,14 +2153,25 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
         let mut loose = Vec::new();
         walk(&dir, &dir, &mut loose)?;
         for (inner, path, size) in loose {
-            let name = inner.rsplit('/').next().unwrap_or(&inner).to_ascii_lowercase();
-            let extension = name.rsplit_once('.').map(|(_, ext)| ext).unwrap_or_default().to_string();
+            let name = inner
+                .rsplit('/')
+                .next()
+                .unwrap_or(&inner)
+                .to_ascii_lowercase();
+            let extension = name
+                .rsplit_once('.')
+                .map(|(_, ext)| ext)
+                .unwrap_or_default()
+                .to_string();
             if extension == "pk3" || name.ends_with(".pk3.disabled") {
                 continue; // the library's
             }
             if name.starts_with("jknet-") && extension == "cfg"
                 || extension == "log"
-                || matches!(name.as_str(), "library.json" | "client.json" | "profiles.json")
+                || matches!(
+                    name.as_str(),
+                    "library.json" | "client.json" | "profiles.json"
+                )
                 || !inner.contains('/') && personal.iter().any(|known| known == &name)
                 || !TAKEN_EXTENSIONS.contains(&extension.as_str())
                 || size > MAX_FILE_BYTES
@@ -2049,12 +2185,23 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
             let origin = DraftOrigin::Disk {
                 source_path: path.display().to_string(),
             };
-            let file = import_file(paths, &inputs.draft_id, &scope, FileRoot::Home, &relative, &path, None, origin)?;
+            let file = import_file(
+                paths,
+                &inputs.draft_id,
+                &scope,
+                FileRoot::Home,
+                &relative,
+                &path,
+                None,
+                origin,
+            )?;
             put_file(&mut files, file);
         }
     }
     files.sort_by_key(|file| file.path.to_ascii_lowercase());
-    overlay.files.sort_by_key(|file| file.path.to_ascii_lowercase());
+    overlay
+        .files
+        .sort_by_key(|file| file.path.to_ascii_lowercase());
 
     Ok(DraftComponent {
         id: scope,
@@ -2074,7 +2221,12 @@ fn component_from_client(inputs: &ClientInputs) -> Result<DraftComponent> {
 /// fields are in the language of the interface, and a client brings no
 /// translation: the name of a client is in whatever language the player
 /// typed it.
-pub(crate) async fn create(state: &AppState, game: Game, name: &str, from_client: Option<&str>) -> Result<Draft> {
+pub(crate) async fn create(
+    state: &AppState,
+    game: Game,
+    name: &str,
+    from_client: Option<&str>,
+) -> Result<Draft> {
     let paths = state.paths()?;
     let language = initial_language(&state.settings()?);
     let mut draft = new_draft(game, name, &language);
@@ -2083,6 +2235,12 @@ pub(crate) async fn create(state: &AppState, game: Game, name: &str, from_client
         return Ok(draft);
     };
     let client = clients::read_record(&paths, client_id)?;
+    if client.engine_origin == clients::EngineOrigin::Imported {
+        return Err(AppError::BundleUnavailable(format!(
+            "{} uses an imported engine snapshot. A bundle needs a published engine release as its reproducible base.",
+            client.name
+        )));
+    }
     if client.game != game {
         return Err(AppError::GameMismatch(format!(
             "{} plays {}, and the draft is for {}",
@@ -2093,9 +2251,11 @@ pub(crate) async fn create(state: &AppState, game: Game, name: &str, from_client
     }
     let engine = engines::require_for_game(&client.engine_id, game)?;
     let engine_dir = paths.client_engine_dir(&client.id);
-    let installed = client.engine_version.is_some() && engine.installed_executable(&engine_dir).is_file();
+    let installed =
+        client.engine_version.is_some() && engine.installed_executable(&engine_dir).is_file();
     let release = if installed {
-        let (_, archive) = release::release_archive(&paths, engine, client.engine_version.as_deref()).await?;
+        let (_, archive) =
+            release::release_archive(&paths, engine, client.engine_version.as_deref()).await?;
         Some(release::read_entries(&archive).await?)
     } else {
         None
@@ -2184,11 +2344,17 @@ fn translations_of_bundle(card: &BundleCard, language: &str) -> BTreeMap<String,
     let mut translations = BTreeMap::new();
     for (code, translation) in &card.translations {
         if !is_bundle_language(code) || code == language {
-            log::warn!("bundles: the translation of {} into {code:?} is left out of the draft", card.name);
+            log::warn!(
+                "bundles: the translation of {} into {code:?} is left out of the draft",
+                card.name
+            );
             continue;
         }
         if translations.len() >= MAX_TRANSLATIONS {
-            log::warn!("bundles: {} carries more than {MAX_TRANSLATIONS} translations; {code} is left out", card.name);
+            log::warn!(
+                "bundles: {} carries more than {MAX_TRANSLATIONS} translations; {code} is left out",
+                card.name
+            );
             continue;
         }
         translations.insert(code.clone(), DraftTranslation::from_contract(translation));
@@ -2214,7 +2380,13 @@ pub(crate) async fn create_from_bundle(
     let ctx = OnlineContext::from_settings(&settings);
     let bundle_path = format!("/v1/bundles/{}", path_segment(bundle_id)?);
     let details: BundleDetails = online
-        .request(&ctx, reqwest::Method::GET, &bundle_path, None, Auth::Optional)
+        .request(
+            &ctx,
+            reqwest::Method::GET,
+            &bundle_path,
+            None,
+            Auth::Optional,
+        )
         .await?;
     let version = match (details.latest.clone(), version_id) {
         (Some(latest), None) => latest,
@@ -2260,8 +2432,18 @@ pub(crate) async fn create_from_bundle(
         draft.last_version_id = Some(version.summary.id.clone());
     }
 
-    let ids = (draft.id.clone(), details.card.id.clone(), version.summary.id.clone());
-    let emit = |phase: &'static str, index: u32, count: u32, file: Option<String>, downloaded: u64, total: u64, message: String| {
+    let ids = (
+        draft.id.clone(),
+        details.card.id.clone(),
+        version.summary.id.clone(),
+    );
+    let emit = |phase: &'static str,
+                index: u32,
+                count: u32,
+                file: Option<String>,
+                downloaded: u64,
+                total: u64,
+                message: String| {
         let progress = DraftProgress {
             draft_id: ids.0.clone(),
             bundle_id: ids.1.clone(),
@@ -2301,7 +2483,9 @@ pub(crate) async fn create_from_bundle(
                     format!("Fetching picture {sha256}"),
                 );
             };
-            draft.images = images::fetch_images(online, &ctx, &paths, &draft.id, &picture_refs, &mut report).await?;
+            draft.images =
+                images::fetch_images(online, &ctx, &paths, &draft.id, &picture_refs, &mut report)
+                    .await?;
             index += pictures;
         }
         for component in &manifest.components {
@@ -2331,8 +2515,18 @@ pub(crate) async fn create_from_bundle(
             };
             for file in component.overlay.files.iter().chain(component.files.iter()) {
                 index += 1;
-                let made_file =
-                    fetch_into_draft(&source, &paths, &cache_dir, &draft.id, &component.id, file, index, count, &emit).await?;
+                let made_file = fetch_into_draft(
+                    &source,
+                    &paths,
+                    &cache_dir,
+                    &draft.id,
+                    &component.id,
+                    file,
+                    index,
+                    count,
+                    &emit,
+                )
+                .await?;
                 if file.root == FileRoot::Engine {
                     made.overlay.files.push(made_file);
                 } else {
@@ -2343,8 +2537,18 @@ pub(crate) async fn create_from_bundle(
         }
         for file in &manifest.shared.files {
             index += 1;
-            let made_file =
-                fetch_into_draft(&source, &paths, &cache_dir, &draft.id, SHARED_SCOPE, file, index, count, &emit).await?;
+            let made_file = fetch_into_draft(
+                &source,
+                &paths,
+                &cache_dir,
+                &draft.id,
+                SHARED_SCOPE,
+                file,
+                index,
+                count,
+                &emit,
+            )
+            .await?;
             draft.shared.files.push(made_file);
         }
         draft.shared.configs = manifest
@@ -2363,12 +2567,28 @@ pub(crate) async fn create_from_bundle(
     .await;
     match outcome {
         Ok(()) => {
-            emit("done", count, count, None, 0, 0, format!("{} is ready to edit", draft.name));
-            log::info!("bundles: draft {} made out of bundle {} version {}", draft.id, ids.1, ids.2);
+            emit(
+                "done",
+                count,
+                count,
+                None,
+                0,
+                0,
+                format!("{} is ready to edit", draft.name),
+            );
+            log::info!(
+                "bundles: draft {} made out of bundle {} version {}",
+                draft.id,
+                ids.1,
+                ids.2
+            );
             Ok(draft)
         }
         Err(e) => {
-            log::error!("bundles: making a draft out of bundle {} failed: {e}", ids.1);
+            log::error!(
+                "bundles: making a draft out of bundle {} failed: {e}",
+                ids.1
+            );
             let file = match &e {
                 AppError::BundleFile { path, .. } => Some(path.clone()),
                 _ => None,
@@ -2407,7 +2627,16 @@ async fn fetch_into_draft<S: FileSource + ?Sized>(
     };
     let fetched = install::fetch_file(source, cache_dir, file, &target, None, &mut report).await?;
     let origin = match (&file.source, &file.origin, &file.replaces) {
-        (ManifestSource::Jkhub { file_id, version, title, url }, _, _) => DraftOrigin::Jkhub {
+        (
+            ManifestSource::Jkhub {
+                file_id,
+                version,
+                title,
+                url,
+            },
+            _,
+            _,
+        ) => DraftOrigin::Jkhub {
             file_id: *file_id,
             version: version.clone(),
             title: title.clone(),
@@ -2415,7 +2644,13 @@ async fn fetch_into_draft<S: FileSource + ?Sized>(
             // What JKHub serves today, which may differ from the manifest.
             sha256: fetched.sha256.clone(),
         },
-        (ManifestSource::Blob, Some(FileOrigin::Jkhub { file_id, sha256, .. }), _) => DraftOrigin::Jkhub {
+        (
+            ManifestSource::Blob,
+            Some(FileOrigin::Jkhub {
+                file_id, sha256, ..
+            }),
+            _,
+        ) => DraftOrigin::Jkhub {
             file_id: *file_id,
             version: None,
             title: None,
@@ -2450,9 +2685,21 @@ async fn fetch_into_draft<S: FileSource + ?Sized>(
     // The listing is built here rather than downloaded: the archive is on
     // disk now, and its document is a pass over the central directory.
     let listing = if kind == FileKind::Pk3 {
-        let (paths_for_listing, draft_for_listing, sha256, archive) =
-            (paths.clone(), draft_id.to_string(), fetched.sha256.clone(), target.clone());
-        off_thread(move || Ok(listing::listing_of_new_file(&paths_for_listing, &draft_for_listing, &sha256, &archive))).await?
+        let (paths_for_listing, draft_for_listing, sha256, archive) = (
+            paths.clone(),
+            draft_id.to_string(),
+            fetched.sha256.clone(),
+            target.clone(),
+        );
+        off_thread(move || {
+            Ok(listing::listing_of_new_file(
+                &paths_for_listing,
+                &draft_for_listing,
+                &sha256,
+                &archive,
+            ))
+        })
+        .await?
     } else {
         None
     };
@@ -2509,7 +2756,15 @@ pub async fn create_bundle_draft_from_bundle(
     let version = version_id
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
-    create_from_bundle(&app, &state, &online, &jkhub, &bundle_id, version.as_deref()).await
+    create_from_bundle(
+        &app,
+        &state,
+        &online,
+        &jkhub,
+        &bundle_id,
+        version.as_deref(),
+    )
+    .await
 }
 
 /// One draft, whole.
@@ -2525,7 +2780,9 @@ pub fn update_bundle_draft(
     draft_id: String,
     patch: DraftPatch,
 ) -> Result<Draft> {
-    edit_draft(&state.paths()?, &draft_id, |draft| apply_patch(draft, patch))
+    edit_draft(&state.paths()?, &draft_id, |draft| {
+        apply_patch(draft, patch)
+    })
 }
 
 /// Deletes a draft with every file it copied. Refused while the draft is
@@ -2539,7 +2796,9 @@ pub fn delete_bundle_draft(
     let paths = state.paths()?;
     check_draft_id(&draft_id)?;
     let _claim = bundles.claim(&super::draft_key(&draft_id), BundlesState::DELETE)?;
-    let _step = EDITS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _step = EDITS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let dir = paths.bundle_draft_dir(&draft_id);
     if !record_path(&paths, &draft_id).is_file() {
         return Err(AppError::NotFound(format!("bundle draft {draft_id}")));
@@ -2653,9 +2912,13 @@ pub fn draft_remove_component(
     let paths = state.paths()?;
     let draft = edit_draft(&paths, &draft_id, |draft| {
         let before = draft.components.len();
-        draft.components.retain(|component| component.id != component_id);
+        draft
+            .components
+            .retain(|component| component.id != component_id);
         if draft.components.len() == before {
-            return Err(AppError::NotFound(format!("component {component_id} of the draft")));
+            return Err(AppError::NotFound(format!(
+                "component {component_id} of the draft"
+            )));
         }
         Ok(())
     })?;
@@ -2688,7 +2951,8 @@ pub async fn draft_add_files_from_disk(
     let folder = check_folder(&folder)?;
     check_scope(&read_draft(&data, &draft_id)?, &scope)?;
     let sources: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
-    let (draft_for_copy, scope_for_copy, data_for_copy) = (draft_id.clone(), scope.clone(), data.clone());
+    let (draft_for_copy, scope_for_copy, data_for_copy) =
+        (draft_id.clone(), scope.clone(), data.clone());
     let files = off_thread(move || {
         sources
             .iter()
@@ -2697,7 +2961,16 @@ pub async fn draft_add_files_from_disk(
                 let origin = DraftOrigin::Disk {
                     source_path: source.display().to_string(),
                 };
-                import_file(&data_for_copy, &draft_for_copy, &scope_for_copy, FileRoot::Home, &path, source, None, origin)
+                import_file(
+                    &data_for_copy,
+                    &draft_for_copy,
+                    &scope_for_copy,
+                    FileRoot::Home,
+                    &path,
+                    source,
+                    None,
+                    origin,
+                )
             })
             .collect::<Result<Vec<DraftFile>>>()
     })
@@ -2732,15 +3005,22 @@ pub async fn draft_add_file_from_jkhub(
     check_scope(&draft, &scope)?;
     let _guard = jkhub.claim(file_id)?;
     let mut report = |_: u64, _: u64| {};
-    let JkhubArchive { archive, file } = install::fetch_jkhub_archive(&app, &jkhub, &data, file_id, &mut report).await?;
+    let JkhubArchive { archive, file } =
+        install::fetch_jkhub_archive(&app, &jkhub, &data, file_id, &mut report).await?;
     if !file.game.matches(draft.game) {
-        return Err(AppError::InvalidInput("This JKHub file belongs to another game".into()));
+        return Err(AppError::InvalidInput(
+            "This JKHub file belongs to another game".into(),
+        ));
     }
-    let (draft_for_copy, scope_for_copy, data_for_copy) = (draft_id.clone(), scope.clone(), data.clone());
+    let (draft_for_copy, scope_for_copy, data_for_copy) =
+        (draft_id.clone(), scope.clone(), data.clone());
     let files = off_thread(move || {
         let contents = crate::jkhub::install::read_archive(&archive)?;
         let entries = crate::jkhub::install::require_pk3(&contents)?;
-        let staging = data_for_copy.cache.join(install::CACHE_FOLDER).join(format!("jkhub-{file_id}"));
+        let staging = data_for_copy
+            .cache
+            .join(install::CACHE_FOLDER)
+            .join(format!("jkhub-{file_id}"));
         paths::create_dir(&staging)?;
         let written = crate::jkhub::install::extract(&archive, entries, &staging)?;
         let mut files = Vec::with_capacity(written.len());
@@ -2755,7 +3035,16 @@ pub async fn draft_add_file_from_jkhub(
                 url: Some(file.url.clone()).filter(|url| !url.is_empty()),
                 sha256,
             };
-            let imported = import_file(&data_for_copy, &draft_for_copy, &scope_for_copy, FileRoot::Home, &path, &source, None, origin);
+            let imported = import_file(
+                &data_for_copy,
+                &draft_for_copy,
+                &scope_for_copy,
+                FileRoot::Home,
+                &path,
+                &source,
+                None,
+                origin,
+            );
             let _ = fs::remove_file(&source);
             files.push(imported?);
         }
@@ -2798,17 +3087,17 @@ pub async fn draft_add_files_from_client(
             draft.game.display_name()
         )));
     }
-    let (draft_for_copy, scope_for_copy, data_for_copy) = (draft_id.clone(), scope.clone(), data.clone());
+    let (draft_for_copy, scope_for_copy, data_for_copy) =
+        (draft_id.clone(), scope.clone(), data.clone());
     let files = off_thread(move || {
         let library = library::read_library(&data_for_copy, &client.id)?;
         let home = data_for_copy.client_home_dir(&client.id);
         item_ids
             .iter()
             .map(|id| {
-                let item = library
-                    .iter()
-                    .find(|item| &item.id == id)
-                    .ok_or_else(|| AppError::NotFound(format!("library item {id} of {}", client.name)))?;
+                let item = library.iter().find(|item| &item.id == id).ok_or_else(|| {
+                    AppError::NotFound(format!("library item {id} of {}", client.name))
+                })?;
                 let name = if item.enabled {
                     item.file_name.clone()
                 } else {
@@ -2915,7 +3204,13 @@ pub async fn draft_replace_engine_file(
     source_path: String,
 ) -> Result<Draft> {
     manifest::check_path(&path)?;
-    add_engine_files(&state, &draft_id, &component_id, vec![(path, PathBuf::from(source_path))]).await
+    add_engine_files(
+        &state,
+        &draft_id,
+        &component_id,
+        vec![(path, PathBuf::from(source_path))],
+    )
+    .await
 }
 
 /// Adds files picked on disk to a folder of `engine\` of a component. A file
@@ -2938,7 +3233,9 @@ pub async fn draft_add_engine_files(
         let name = source
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or_else(|| AppError::InvalidInput(format!("{} has no file name", source.display())))?;
+            .ok_or_else(|| {
+                AppError::InvalidInput(format!("{} has no file name", source.display()))
+            })?;
         let path = if folder.is_empty() {
             name.to_string()
         } else {
@@ -2965,17 +3262,33 @@ async fn add_engine_files(
         .ok_or_else(|| AppError::NotFound(format!("component {component_id} of the draft")))?;
     let engine = engines::require(&component.engine_id)?;
     let (_, entries) = release::component_release(&data, engine, component).await?;
-    let (draft_for_copy, scope_for_copy, data_for_copy) = (draft_id.to_string(), component_id.to_string(), data.clone());
+    let (draft_for_copy, scope_for_copy, data_for_copy) =
+        (draft_id.to_string(), component_id.to_string(), data.clone());
     let files = off_thread(move || {
         wanted
             .iter()
             .map(|(path, source)| {
                 let spelled = release::release_spelling(&entries, path);
                 let origin = release::overlay_origin(&entries, path, source);
-                let file = import_file(&data_for_copy, &draft_for_copy, &scope_for_copy, FileRoot::Engine, &spelled, source, None, origin)?;
+                let file = import_file(
+                    &data_for_copy,
+                    &draft_for_copy,
+                    &scope_for_copy,
+                    FileRoot::Engine,
+                    &spelled,
+                    source,
+                    None,
+                    origin,
+                )?;
                 if let DraftOrigin::Release { sha256, .. } = &file.origin {
                     if sha256 == &file.sha256 {
-                        remove_copy(&data_for_copy, &draft_for_copy, &scope_for_copy, FileRoot::Engine, &spelled);
+                        remove_copy(
+                            &data_for_copy,
+                            &draft_for_copy,
+                            &scope_for_copy,
+                            FileRoot::Engine,
+                            &spelled,
+                        );
                         return Err(AppError::InvalidInput(format!(
                             "{spelled} is the same file the release ships"
                         )));
@@ -3049,7 +3362,13 @@ pub async fn draft_exclude_engine_file(
         Ok(())
     })?;
     if let Some(file) = dropped {
-        remove_copy(&data, &draft_id, &component_id, FileRoot::Engine, &file.path);
+        remove_copy(
+            &data,
+            &draft_id,
+            &component_id,
+            FileRoot::Engine,
+            &file.path,
+        );
         listing::prune_draft_listings(&data, &draft);
     }
     Ok(draft)
@@ -3075,12 +3394,20 @@ pub fn draft_restore_engine_file(
             .retain(|removed| !removed.eq_ignore_ascii_case(&path));
         dropped = take_file(&mut component.overlay.files, &path);
         if dropped.is_none() && component.overlay.remove.len() == before {
-            return Err(AppError::NotFound(format!("{path} in the overlay of {component_id}")));
+            return Err(AppError::NotFound(format!(
+                "{path} in the overlay of {component_id}"
+            )));
         }
         Ok(())
     })?;
     if let Some(file) = dropped {
-        remove_copy(&data, &draft_id, &component_id, FileRoot::Engine, &file.path);
+        remove_copy(
+            &data,
+            &draft_id,
+            &component_id,
+            FileRoot::Engine,
+            &file.path,
+        );
         listing::prune_draft_listings(&data, &draft);
     }
     Ok(draft)
@@ -3088,7 +3415,10 @@ pub fn draft_restore_engine_file(
 
 /// What stands between the draft and a publish.
 #[tauri::command]
-pub fn validate_bundle_draft(state: tauri::State<'_, AppState>, draft_id: String) -> Result<DraftIssues> {
+pub fn validate_bundle_draft(
+    state: tauri::State<'_, AppState>,
+    draft_id: String,
+) -> Result<DraftIssues> {
     Ok(validate(&read_draft(&state.paths()?, &draft_id)?))
 }
 
@@ -3097,7 +3427,12 @@ pub(crate) mod test_support {
     use super::*;
 
     /// A file entry of a draft, for records built by hand.
-    pub(crate) fn draft_file(root: FileRoot, path: &str, body: &[u8], origin: DraftOrigin) -> DraftFile {
+    pub(crate) fn draft_file(
+        root: FileRoot,
+        path: &str,
+        body: &[u8],
+        origin: DraftOrigin,
+    ) -> DraftFile {
         DraftFile {
             root,
             path: path.into(),
@@ -3135,7 +3470,12 @@ pub(crate) mod test_support {
     }
 
     /// A component with nothing in it.
-    pub(crate) fn component(id: &str, label: &str, engine_id: &str, modes: &[LaunchMode]) -> DraftComponent {
+    pub(crate) fn component(
+        id: &str,
+        label: &str,
+        engine_id: &str,
+        modes: &[LaunchMode],
+    ) -> DraftComponent {
         DraftComponent {
             id: id.into(),
             label: label.into(),
@@ -3242,7 +3582,10 @@ mod tests {
         assert!(text.contains("\"sourcePath\""), "{text}");
         assert!(text.contains("\"fileId\": 1201"), "{text}");
         assert!(text.contains("\"sourceConfigId\": \"binds\""), "{text}");
-        assert!(text.contains("\"modes\": [\n        \"single\"\n      ]"), "{text}");
+        assert!(
+            text.contains("\"modes\": [\n        \"single\"\n      ]"),
+            "{text}"
+        );
         let back = read_draft(&paths, &draft.id).expect("it reads back");
         assert_eq!(back, draft);
 
@@ -3275,13 +3618,27 @@ mod tests {
         assert_eq!(read_draft(&paths, &draft.id).unwrap().name, "RUJKA v3");
 
         // The list, and an id that is not a draft.
-        let summaries: Vec<DraftSummary> = read_all(&paths).unwrap().iter().map(Draft::summary).collect();
+        let summaries: Vec<DraftSummary> = read_all(&paths)
+            .unwrap()
+            .iter()
+            .map(Draft::summary)
+            .collect();
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].component_count, 1);
         assert_eq!(summaries[0].file_count, 3);
-        assert_eq!(summaries[0].blob_bytes, 8 + 2 + 3, "the JKHub file changed, so it uploads too");
-        assert!(matches!(read_draft(&paths, "../x").unwrap_err(), AppError::InvalidInput(_)));
-        assert!(matches!(read_draft(&paths, "ghost").unwrap_err(), AppError::NotFound(_)));
+        assert_eq!(
+            summaries[0].blob_bytes,
+            8 + 2 + 3,
+            "the JKHub file changed, so it uploads too"
+        );
+        assert!(matches!(
+            read_draft(&paths, "../x").unwrap_err(),
+            AppError::InvalidInput(_)
+        ));
+        assert!(matches!(
+            read_draft(&paths, "ghost").unwrap_err(),
+            AppError::NotFound(_)
+        ));
     }
 
     #[test]
@@ -3414,9 +3771,16 @@ mod tests {
         assert_eq!(component_id("Single player", &[]), "single-player");
         assert_eq!(component_id("  jaMME (demos) ", &[]), "jamme-demos");
         assert_eq!(component_id("Мультиплеер", &[]), "component");
-        assert_eq!(component_id("Shared", &[]), "component", "never the other scope");
         assert_eq!(
-            component_id("Multiplayer", &["multiplayer".into(), "multiplayer-2".into()]),
+            component_id("Shared", &[]),
+            "component",
+            "never the other scope"
+        );
+        assert_eq!(
+            component_id(
+                "Multiplayer",
+                &["multiplayer".into(), "multiplayer-2".into()]
+            ),
             "multiplayer-3"
         );
         let long = component_id(&"x".repeat(50), &[]);
@@ -3460,7 +3824,8 @@ mod tests {
             r#"{"name":"x"}"#.replace('x', &"y".repeat(NAME_MAX + 1)),
         ] {
             let patch: DraftPatch = serde_json::from_str(&bad).unwrap();
-            let error = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).expect_err(&bad);
+            let error =
+                edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).expect_err(&bad);
             assert!(matches!(error, AppError::InvalidInput(_)), "{bad}: {error}");
         }
         // A short name is stored and reported by the validation, not refused.
@@ -3468,12 +3833,16 @@ mod tests {
         let edited = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
         assert_eq!(edited.name, "x");
         let issues = validate(&edited);
-        assert!(issues.errors.iter().any(|issue| issue.code == ISSUE_NAME_INVALID));
+        assert!(issues
+            .errors
+            .iter()
+            .any(|issue| issue.code == ISSUE_NAME_INVALID));
 
         // A description over the limit of the service is kept and reported;
         // one over the hard limit is refused.
         let long = "x".repeat(DESCRIPTION_MAX + 1);
-        let patch: DraftPatch = serde_json::from_str(&format!(r#"{{"description":"{long}"}}"#)).unwrap();
+        let patch: DraftPatch =
+            serde_json::from_str(&format!(r#"{{"description":"{long}"}}"#)).unwrap();
         let edited = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
         assert_eq!(edited.description.len(), DESCRIPTION_MAX + 1);
         let issues = validate(&edited);
@@ -3484,15 +3853,21 @@ mod tests {
             .expect("reported");
         assert_eq!(too_long.count, Some(DESCRIPTION_MAX as u64 + 1));
         let huge = "x".repeat(DESCRIPTION_HARD_MAX + 1);
-        let patch: DraftPatch = serde_json::from_str(&format!(r#"{{"description":"{huge}"}}"#)).unwrap();
-        let error = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).expect_err("refused");
+        let patch: DraftPatch =
+            serde_json::from_str(&format!(r#"{{"description":"{huge}"}}"#)).unwrap();
+        let error =
+            edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).expect_err("refused");
         assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
         // A description of Cyrillic text is measured in bytes, as the
         // service measures it: 16 385 letters of two bytes are over.
         let cyrillic = "ю".repeat(DESCRIPTION_MAX / 2 + 1);
-        let patch: DraftPatch = serde_json::from_str(&format!(r#"{{"description":"{cyrillic}"}}"#)).unwrap();
+        let patch: DraftPatch =
+            serde_json::from_str(&format!(r#"{{"description":"{cyrillic}"}}"#)).unwrap();
         let edited = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
-        assert!(validate(&edited).errors.iter().any(|issue| issue.code == ISSUE_DESCRIPTION_TOO_LONG));
+        assert!(validate(&edited)
+            .errors
+            .iter()
+            .any(|issue| issue.code == ISSUE_DESCRIPTION_TOO_LONG));
     }
 
     #[test]
@@ -3500,7 +3875,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let paths = DataPaths::new(temp.path().to_path_buf());
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         draft.components[0].configs.push(DraftConfig {
             name: "Binds".into(),
             text: "bind x +attack\n".into(),
@@ -3581,7 +3961,10 @@ mod tests {
         assert_eq!(draft.translations.len(), 2);
         assert_eq!(draft.translations["ru"].name, "Русская сборка");
         assert_eq!(draft.translations["ru"].description, "# Русская сборка");
-        assert_eq!(draft.translations["uk"].name, "", "an empty field stays empty: not translated");
+        assert_eq!(
+            draft.translations["uk"].name, "",
+            "an empty field stays empty: not translated"
+        );
         let text = fs::read_to_string(record_path(&paths, &draft.id)).unwrap();
         assert!(text.contains("\"language\": \"en\""), "{text}");
         assert!(text.contains("\"translations\": {"), "{text}");
@@ -3596,13 +3979,21 @@ mod tests {
         assert_eq!(draft.summary, "Русское издание");
         assert_eq!(draft.description, "# Русская сборка");
         assert_eq!(
-            draft.translations.keys().map(String::as_str).collect::<Vec<_>>(),
+            draft
+                .translations
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             ["en", "uk"]
         );
         assert_eq!(draft.translations["en"].name, "RUJKA");
         assert_eq!(draft.translations["en"].summary, "Russian edition");
         assert_eq!(draft.translations["en"].description, "# RUJKA");
-        assert_eq!(draft.summary().name, "Русская сборка", "the list shows the main name");
+        assert_eq!(
+            draft.summary().name,
+            "Русская сборка",
+            "the list shows the main name"
+        );
         // And back again.
         let patch: DraftPatch = serde_json::from_str(r#"{"language":"en"}"#).unwrap();
         let draft = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
@@ -3613,13 +4004,20 @@ mod tests {
         // The same language again changes nothing.
         let patch: DraftPatch = serde_json::from_str(r#"{"language":"en"}"#).unwrap();
         let same = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
-        assert_eq!((same.language.as_str(), &same.name, &same.translations), ("en", &draft.name, &draft.translations));
+        assert_eq!(
+            (same.language.as_str(), &same.name, &same.translations),
+            ("en", &draft.name, &draft.translations)
+        );
         // A language without a translation relabels the fields.
         let patch: DraftPatch = serde_json::from_str(r#"{"language":"de"}"#).unwrap();
         let draft = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
         assert_eq!(draft.language, "de");
         assert_eq!(draft.name, "RUJKA");
-        assert_eq!(draft.translations.len(), 2, "no translation appears out of nothing");
+        assert_eq!(
+            draft.translations.len(),
+            2,
+            "no translation appears out of nothing"
+        );
         assert!(!draft.translations.contains_key("en"));
 
         // A patch with both fields describes the new state whole: the
@@ -3632,7 +4030,11 @@ mod tests {
         assert_eq!(draft.language, "ru");
         assert_eq!(draft.name, "Русская сборка", "the swap came first");
         assert_eq!(
-            draft.translations.keys().map(String::as_str).collect::<Vec<_>>(),
+            draft
+                .translations
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             ["en"],
             "then the replacement"
         );
@@ -3653,23 +4055,43 @@ mod tests {
             .join(",");
         for (bad, why) in [
             (r#"{"language":"xx"}"#.to_string(), "an unknown code"),
-            (r#"{"language":"system"}"#.to_string(), "the system setting is not a language"),
-            (r#"{"language":"EN"}"#.to_string(), "codes are spelled as the folders are"),
+            (
+                r#"{"language":"system"}"#.to_string(),
+                "the system setting is not a language",
+            ),
+            (
+                r#"{"language":"EN"}"#.to_string(),
+                "codes are spelled as the folders are",
+            ),
             (r#"{"language":""}"#.to_string(), "an empty code"),
-            (r#"{"translations":{"en":{"name":"x"}}}"#.to_string(), "the main language"),
-            (r#"{"translations":{"xx":{"name":"x"}}}"#.to_string(), "an unknown code"),
-            (r#"{"translations":{" ru":{"name":"x"},"ru":{"name":"y"}}}"#.to_string(), "the same code twice"),
-            (format!(r#"{{"translations":{{{all_eight}}}}}"#), "more than seven"),
+            (
+                r#"{"translations":{"en":{"name":"x"}}}"#.to_string(),
+                "the main language",
+            ),
+            (
+                r#"{"translations":{"xx":{"name":"x"}}}"#.to_string(),
+                "an unknown code",
+            ),
+            (
+                r#"{"translations":{" ru":{"name":"x"},"ru":{"name":"y"}}}"#.to_string(),
+                "the same code twice",
+            ),
+            (
+                format!(r#"{{"translations":{{{all_eight}}}}}"#),
+                "more than seven",
+            ),
             (
                 r#"{"translations":{"ru":{"name":"x"}}}"#.replace('x', &"y".repeat(NAME_MAX + 1)),
                 "a long name",
             ),
             (
-                r#"{"translations":{"ru":{"summary":"x"}}}"#.replace('x', &"y".repeat(SUMMARY_MAX + 1)),
+                r#"{"translations":{"ru":{"summary":"x"}}}"#
+                    .replace('x', &"y".repeat(SUMMARY_MAX + 1)),
                 "a long summary",
             ),
             (
-                r#"{"translations":{"ru":{"description":"x"}}}"#.replace('x', &"y".repeat(DESCRIPTION_HARD_MAX + 1)),
+                r#"{"translations":{"ru":{"description":"x"}}}"#
+                    .replace('x', &"y".repeat(DESCRIPTION_HARD_MAX + 1)),
                 "a huge description",
             ),
             (
@@ -3677,8 +4099,10 @@ mod tests {
                 "the new main language among the translations",
             ),
         ] {
-            let patch: DraftPatch = serde_json::from_str(&bad).unwrap_or_else(|e| panic!("{why}: {e}"));
-            let error = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).expect_err(why);
+            let patch: DraftPatch =
+                serde_json::from_str(&bad).unwrap_or_else(|e| panic!("{why}: {e}"));
+            let error =
+                edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).expect_err(why);
             assert!(matches!(error, AppError::InvalidInput(_)), "{why}: {error}");
         }
         // A refused patch leaves the record as it was.
@@ -3691,7 +4115,8 @@ mod tests {
             .map(|code| format!(r#"{code:?}:{{"name":"","summary":"","description":""}}"#))
             .collect::<Vec<_>>()
             .join(",");
-        let patch: DraftPatch = serde_json::from_str(&format!(r#"{{"translations":{{{seven}}}}}"#)).unwrap();
+        let patch: DraftPatch =
+            serde_json::from_str(&format!(r#"{{"translations":{{{seven}}}}}"#)).unwrap();
         let draft = edit_draft(&paths, &draft.id, |draft| apply_patch(draft, patch)).unwrap();
         assert_eq!(draft.translations.len(), MAX_TRANSLATIONS);
         // An empty object clears them.
@@ -3705,7 +4130,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let paths = DataPaths::new(temp.path().to_path_buf());
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         draft.components[0].configs.push(DraftConfig {
             name: "Binds".into(),
             text: "bind x +attack\n".into(),
@@ -3744,10 +4174,20 @@ mod tests {
         );
 
         // The pictures of every description count, each once.
-        assert_eq!(draft.image_refs(), [shown.clone(), translated_only.clone(), gone.clone()]);
-        assert_eq!(draft.image_bytes(), 10 + 20, "a picture only a translation names is uploaded too");
         assert_eq!(
-            draft.descriptions().map(|(code, _)| code).collect::<Vec<_>>(),
+            draft.image_refs(),
+            [shown.clone(), translated_only.clone(), gone.clone()]
+        );
+        assert_eq!(
+            draft.image_bytes(),
+            10 + 20,
+            "a picture only a translation names is uploaded too"
+        );
+        assert_eq!(
+            draft
+                .descriptions()
+                .map(|(code, _)| code)
+                .collect::<Vec<_>>(),
             ["en", "ru", "uk"]
         );
 
@@ -3757,13 +4197,25 @@ mod tests {
         let errors: Vec<Finding<'_>> = issues
             .errors
             .iter()
-            .map(|issue| (issue.code.as_str(), issue.language.as_deref(), issue.path.as_deref(), issue.count))
+            .map(|issue| {
+                (
+                    issue.code.as_str(),
+                    issue.language.as_deref(),
+                    issue.path.as_deref(),
+                    issue.count,
+                )
+            })
             .collect();
         assert_eq!(
             errors,
             [
                 (ISSUE_NAME_INVALID, Some("ru"), None, None),
-                (ISSUE_DESCRIPTION_TOO_LONG, Some("uk"), None, Some(DESCRIPTION_MAX as u64 + 1)),
+                (
+                    ISSUE_DESCRIPTION_TOO_LONG,
+                    Some("uk"),
+                    None,
+                    Some(DESCRIPTION_MAX as u64 + 1)
+                ),
                 (ISSUE_IMAGE_MISSING, Some("ru"), Some(gone.as_str()), None),
             ],
             "an empty translated name is not a short one"
@@ -3773,7 +4225,11 @@ mod tests {
             .iter()
             .map(|issue| (issue.code.as_str(), issue.count))
             .collect();
-        assert_eq!(warnings, [(ISSUE_UNUSED_IMAGES, Some(1))], "only the spare picture is unused");
+        assert_eq!(
+            warnings,
+            [(ISSUE_UNUSED_IMAGES, Some(1))],
+            "only the spare picture is unused"
+        );
         assert_eq!(issues.blob_bytes, 10 + 20);
         let json = serde_json::to_value(&issues).unwrap();
         assert_eq!(json["errors"][0]["language"], "ru");
@@ -3790,7 +4246,10 @@ mod tests {
             .filter(|issue| issue.code == ISSUE_IMAGE_MISSING)
             .map(|issue| (issue.language.as_deref(), issue.path.as_deref().unwrap()))
             .collect();
-        assert_eq!(missing, [(None, gone.as_str()), (Some("ru"), gone.as_str())]);
+        assert_eq!(
+            missing,
+            [(None, gone.as_str()), (Some("ru"), gone.as_str())]
+        );
         let json = serde_json::to_value(&issues).unwrap();
         let main = json["errors"]
             .as_array()
@@ -3803,7 +4262,8 @@ mod tests {
         // Translations that pass leave no finding of their own.
         draft.description = format!("![shot](blob:{shown})");
         draft.translations.get_mut("ru").unwrap().name = "Русская сборка".into();
-        draft.translations.get_mut("ru").unwrap().description = format!("![кадр](blob:{translated_only})");
+        draft.translations.get_mut("ru").unwrap().description =
+            format!("![кадр](blob:{translated_only})");
         draft.translations.get_mut("uk").unwrap().description = String::new();
         draft.images.retain(|image| image.sha256 != spare);
         let issues = validate(&draft);
@@ -3838,14 +4298,22 @@ mod tests {
         // What the service must never send, and what this build cannot
         // hold: the main language among the translations, a code without a
         // catalog.
-        card.translations.insert("ru".into(), Translation::default());
-        card.translations.insert("xx".into(), Translation::default());
+        card.translations
+            .insert("ru".into(), Translation::default());
+        card.translations
+            .insert("xx".into(), Translation::default());
         let language = language_of_bundle(&card);
         assert_eq!(language, "ru");
         let translations = translations_of_bundle(&card, &language);
-        assert_eq!(translations.keys().map(String::as_str).collect::<Vec<_>>(), ["en", "uk"]);
+        assert_eq!(
+            translations.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["en", "uk"]
+        );
         assert_eq!(translations["en"].description, "# RUJKA");
-        assert_eq!(translations["uk"].description, "", "a description left out reads as empty");
+        assert_eq!(
+            translations["uk"].description, "",
+            "a description left out reads as empty"
+        );
         assert_eq!(translations["uk"].summary, "Українське видання");
         // A language this build does not know falls back to English, and
         // an English translation then makes no sense, while the Russian one
@@ -3854,7 +4322,10 @@ mod tests {
         let language = language_of_bundle(&card);
         assert_eq!(language, "en");
         assert_eq!(
-            translations_of_bundle(&card, &language).keys().map(String::as_str).collect::<Vec<_>>(),
+            translations_of_bundle(&card, &language)
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
             ["ru", "uk"]
         );
         // The round trip through the contract keeps the fields.
@@ -3866,7 +4337,10 @@ mod tests {
         let contract = entry.to_contract();
         assert_eq!(contract.name, "Русская сборка");
         assert_eq!(contract.description.as_deref(), Some("# Русская сборка"));
-        assert_eq!(DraftTranslation::from_contract(&contract).description, "# Русская сборка");
+        assert_eq!(
+            DraftTranslation::from_contract(&contract).description,
+            "# Русская сборка"
+        );
     }
 
     #[test]
@@ -3874,7 +4348,12 @@ mod tests {
         let temp = tempfile::tempdir().expect("a data root");
         let paths = DataPaths::new(temp.path().to_path_buf());
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         let disk = |path: &str| DraftOrigin::Disk {
             source_path: path.into(),
         };
@@ -3888,7 +4367,12 @@ mod tests {
             listing: Some(listing(100)),
             ..draft_file(FileRoot::Home, "base/x.pk3", b"xxxxxxxx", disk("a"))
         });
-        draft.components[0].files.push(draft_file(FileRoot::Home, "base/autoexec.cfg", b"cfg", disk("b")));
+        draft.components[0].files.push(draft_file(
+            FileRoot::Home,
+            "base/autoexec.cfg",
+            b"cfg",
+            disk("b"),
+        ));
         draft.shared.files.push(DraftFile {
             listing: Some(listing(1000)),
             ..draft_file(
@@ -3917,15 +4401,27 @@ mod tests {
         }
         draft.description = format!("![shot](blob:{})", shown.to_ascii_uppercase());
 
-        assert_eq!(draft.version_bytes(), 8 + 3 + 100 + 1000, "files of the store and every listing");
-        assert_eq!(draft.image_bytes(), 10_000, "the picture the description names, in either case");
+        assert_eq!(
+            draft.version_bytes(),
+            8 + 3 + 100 + 1000,
+            "files of the store and every listing"
+        );
+        assert_eq!(
+            draft.image_bytes(),
+            10_000,
+            "the picture the description names, in either case"
+        );
         assert_eq!(draft.blob_bytes(), 8 + 3 + 100 + 1000 + 10_000);
         assert_eq!(draft.summary().blob_bytes, draft.blob_bytes());
         let issues = validate(&draft);
         assert_eq!(issues.blob_bytes, draft.blob_bytes());
         assert_eq!(issues.jkhub_bytes, 5);
         assert!(issues.errors.is_empty(), "{:?}", issues.errors);
-        let unused: Vec<&str> = issues.warnings.iter().map(|issue| issue.code.as_str()).collect();
+        let unused: Vec<&str> = issues
+            .warnings
+            .iter()
+            .map(|issue| issue.code.as_str())
+            .collect();
         assert_eq!(unused, [ISSUE_UNUSED_IMAGES]);
 
         // The limit of a version weighs the files and the listings the way
@@ -3934,15 +4430,27 @@ mod tests {
         for name in ["y1", "y2", "y3"] {
             draft.components[0].files.push(DraftFile {
                 size: MAX_FILE_BYTES,
-                ..draft_file(FileRoot::Home, &format!("base/{name}.pk3"), name.as_bytes(), disk(name))
+                ..draft_file(
+                    FileRoot::Home,
+                    &format!("base/{name}.pk3"),
+                    name.as_bytes(),
+                    disk(name),
+                )
             });
         }
         draft.components[0].files[0].size = MAX_FILE_BYTES - 100 - 3 - 1000;
         assert_eq!(draft.version_bytes(), MAX_VERSION_BYTES);
-        assert!(validate(&draft).errors.is_empty(), "at the limit is allowed");
+        assert!(
+            validate(&draft).errors.is_empty(),
+            "at the limit is allowed"
+        );
         draft.components[0].files[0].listing = Some(listing(200));
         let issues = validate(&draft);
-        let codes: Vec<(&str, Option<u64>)> = issues.errors.iter().map(|issue| (issue.code.as_str(), issue.count)).collect();
+        let codes: Vec<(&str, Option<u64>)> = issues
+            .errors
+            .iter()
+            .map(|issue| (issue.code.as_str(), issue.count))
+            .collect();
         assert_eq!(codes, [(ISSUE_TOO_LARGE, Some(MAX_VERSION_BYTES + 100))]);
         draft.components[0].files[0].listing = Some(listing(100));
         draft.images[0].size = 2 * 1024 * 1024;
@@ -3954,7 +4462,10 @@ mod tests {
         // of JKHub files included, and its own check weighs them too.
         let manifest = manifest_of(&draft);
         assert_eq!(manifest.blob_bytes(), MAX_VERSION_BYTES);
-        assert_eq!(manifest.shared.files[0].listing.as_ref().map(|l| l.size), Some(1000));
+        assert_eq!(
+            manifest.shared.files[0].listing.as_ref().map(|l| l.size),
+            Some(1000)
+        );
         manifest::validate(&manifest).expect("at the limit is allowed");
         draft.components[0].files[0].listing = Some(listing(101));
         let error = manifest::validate(&manifest_of(&draft)).expect_err("over the limit");
@@ -3966,7 +4477,10 @@ mod tests {
         let text = "seta rconPassword \"x\"\nset g_password x\nsv_privatePassword \"y\"\nseta rate 1; seta cl_password z\nbind x \"say password\"\nseta name \"pass word\"\n// password comment\n";
         let (kept, stripped) = strip_passwords(text);
         assert_eq!(stripped, 4);
-        assert_eq!(kept, "bind x \"say password\"\nseta name \"pass word\"\n// password comment\n");
+        assert_eq!(
+            kept,
+            "bind x \"say password\"\nseta name \"pass word\"\n// password comment\n"
+        );
         let (kept, stripped) = strip_passwords("seta rate 1\nseta password x");
         assert_eq!((kept.as_str(), stripped), ("seta rate 1\n", 1));
         assert_eq!(strip_passwords(""), (String::new(), 0));
@@ -3977,7 +4491,10 @@ mod tests {
         assert!(is_game_asset("assets0.pk3"));
         assert!(is_game_asset("Assets3.PK3"));
         assert!(is_game_asset("assets.pk3"));
-        assert!(!is_game_asset("assetsmv.pk3"), "JK2MV's own archive is the engine's");
+        assert!(
+            !is_game_asset("assetsmv.pk3"),
+            "JK2MV's own archive is the engine's"
+        );
         assert!(!is_game_asset("my_assets0.pk3"));
     }
 
@@ -3987,30 +4504,60 @@ mod tests {
         let paths = DataPaths::new(temp.path().to_path_buf());
         let mut draft = empty_draft(&paths, Game::JediAcademy, "x");
         let issues = validate(&draft);
-        let codes: Vec<&str> = issues.errors.iter().map(|issue| issue.code.as_str()).collect();
+        let codes: Vec<&str> = issues
+            .errors
+            .iter()
+            .map(|issue| issue.code.as_str())
+            .collect();
         assert_eq!(codes, [ISSUE_NAME_INVALID, ISSUE_NO_COMPONENTS]);
         assert!(issues.warnings.is_empty());
 
         draft.name = "RUJKA".into();
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         let issues = validate(&draft);
         assert_eq!(
-            issues.errors.iter().map(|i| i.code.as_str()).collect::<Vec<_>>(),
+            issues
+                .errors
+                .iter()
+                .map(|i| i.code.as_str())
+                .collect::<Vec<_>>(),
             [ISSUE_EMPTY_BUNDLE]
         );
 
         // An engine of the other game, a wrong engine, no mode, no engine.
-        draft.components.push(component("mv", "JK2MV", "jk2mv", &[LaunchMode::Multiplayer]));
-        draft.components.push(component("q3", "Quake", "quake3", &[LaunchMode::Multiplayer]));
-        draft.components.push(component("sp", "SP", "eternaljk", &[LaunchMode::Single]));
-        draft.components.push(component("none", "None", "", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mv",
+            "JK2MV",
+            "jk2mv",
+            &[LaunchMode::Multiplayer],
+        ));
+        draft.components.push(component(
+            "q3",
+            "Quake",
+            "quake3",
+            &[LaunchMode::Multiplayer],
+        ));
+        draft
+            .components
+            .push(component("sp", "SP", "eternaljk", &[LaunchMode::Single]));
+        draft
+            .components
+            .push(component("none", "None", "", &[LaunchMode::Multiplayer]));
         let issues = validate(&draft);
         let by_scope: Vec<(Option<&str>, &str)> = issues
             .errors
             .iter()
             .map(|i| (i.scope.as_deref(), i.code.as_str()))
             .collect();
-        assert!(by_scope.contains(&(Some("mv"), ISSUE_ENGINE_UNKNOWN)), "{by_scope:?}");
+        assert!(
+            by_scope.contains(&(Some("mv"), ISSUE_ENGINE_UNKNOWN)),
+            "{by_scope:?}"
+        );
         assert!(by_scope.contains(&(Some("q3"), ISSUE_ENGINE_UNKNOWN)));
         assert!(by_scope.contains(&(Some("sp"), ISSUE_NO_MODES)));
         assert!(by_scope.contains(&(Some("none"), ISSUE_NO_ENGINE)));
@@ -4022,10 +4569,22 @@ mod tests {
         let disk = |path: &str| DraftOrigin::Disk {
             source_path: path.into(),
         };
-        mp.overlay.files.push(draft_file(FileRoot::Engine, "eternaljk.x86.exe", b"MZ", disk("a")));
-        mp.overlay.files.push(draft_file(FileRoot::Engine, "EternalJK.x86.exe", b"MZ2", disk("b")));
-        mp.files.push(draft_file(FileRoot::Home, "base/x.pk3", b"x", disk("c")));
-        mp.files.push(draft_file(FileRoot::Home, "base/y.pk3", b"y", disk("d")));
+        mp.overlay.files.push(draft_file(
+            FileRoot::Engine,
+            "eternaljk.x86.exe",
+            b"MZ",
+            disk("a"),
+        ));
+        mp.overlay.files.push(draft_file(
+            FileRoot::Engine,
+            "EternalJK.x86.exe",
+            b"MZ2",
+            disk("b"),
+        ));
+        mp.files
+            .push(draft_file(FileRoot::Home, "base/x.pk3", b"x", disk("c")));
+        mp.files
+            .push(draft_file(FileRoot::Home, "base/y.pk3", b"y", disk("d")));
         mp.files.push(DraftFile {
             size: MAX_FILE_BYTES + 1,
             ..draft_file(FileRoot::Home, "base/big.pk3", b"big", disk("e"))
@@ -4036,7 +4595,10 @@ mod tests {
             priority: 0,
             source_config_id: None,
         });
-        draft.shared.files.push(draft_file(FileRoot::Home, "base/Y.pk3", b"y", disk("f")));
+        draft
+            .shared
+            .files
+            .push(draft_file(FileRoot::Home, "base/Y.pk3", b"y", disk("f")));
         draft.shared.files.push(draft_file(
             FileRoot::Home,
             "base/japro.pk3",
@@ -4061,11 +4623,25 @@ mod tests {
             .iter()
             .map(|i| (i.scope.as_deref(), i.code.as_str(), i.path.as_deref()))
             .collect();
-        assert!(errors.contains(&(Some("mp"), ISSUE_DUPLICATE_PATH, Some("EternalJK.x86.exe"))), "{errors:?}");
-        assert!(errors.contains(&(Some("mp"), ISSUE_DUPLICATE_PATH, Some("base/y.pk3"))), "{errors:?}");
-        assert!(errors.contains(&(Some("mp"), ISSUE_TOO_LARGE, Some("base/big.pk3"))), "{errors:?}");
-        assert!(errors.contains(&(Some("shared"), ISSUE_CONFIG_TOO_LONG, None)), "{errors:?}");
-        assert!(!errors.iter().any(|(_, code, _)| *code == ISSUE_EMPTY_BUNDLE));
+        assert!(
+            errors.contains(&(Some("mp"), ISSUE_DUPLICATE_PATH, Some("EternalJK.x86.exe"))),
+            "{errors:?}"
+        );
+        assert!(
+            errors.contains(&(Some("mp"), ISSUE_DUPLICATE_PATH, Some("base/y.pk3"))),
+            "{errors:?}"
+        );
+        assert!(
+            errors.contains(&(Some("mp"), ISSUE_TOO_LARGE, Some("base/big.pk3"))),
+            "{errors:?}"
+        );
+        assert!(
+            errors.contains(&(Some("shared"), ISSUE_CONFIG_TOO_LONG, None)),
+            "{errors:?}"
+        );
+        assert!(!errors
+            .iter()
+            .any(|(_, code, _)| *code == ISSUE_EMPTY_BUNDLE));
         let warnings: Vec<(&str, Option<u64>)> = issues
             .warnings
             .iter()
@@ -4073,9 +4649,15 @@ mod tests {
             .collect();
         assert_eq!(
             warnings,
-            [(ISSUE_EXECUTABLES_PRESENT, Some(2)), (ISSUE_PASSWORDS_STRIPPED, Some(2))]
+            [
+                (ISSUE_EXECUTABLES_PRESENT, Some(2)),
+                (ISSUE_PASSWORDS_STRIPPED, Some(2))
+            ]
         );
-        assert_eq!(issues.executables, ["mp/eternaljk.x86.exe", "mp/EternalJK.x86.exe"]);
+        assert_eq!(
+            issues.executables,
+            ["mp/eternaljk.x86.exe", "mp/EternalJK.x86.exe"]
+        );
         assert_eq!(issues.file_count, 7);
         assert_eq!(issues.jkhub_bytes, 5);
         assert_eq!(issues.blob_bytes, 2 + 3 + 1 + 1 + (MAX_FILE_BYTES + 1) + 1);
@@ -4084,16 +4666,31 @@ mod tests {
         assert_eq!(json["blobBytes"], issues.blob_bytes);
         // A finding about a component names it twice, as the scope and as the
         // component; one about the shared files names the scope alone.
-        let about_mp = json["errors"].as_array().unwrap().iter().find(|e| e["scope"] == "mp").unwrap();
+        let about_mp = json["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["scope"] == "mp")
+            .unwrap();
         assert_eq!(about_mp["componentId"], "mp");
-        let about_shared = json["errors"].as_array().unwrap().iter().find(|e| e["scope"] == "shared").unwrap();
+        let about_shared = json["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["scope"] == "shared")
+            .unwrap();
         assert!(about_shared.get("componentId").is_none());
     }
 
     #[test]
     fn a_manifest_out_of_a_draft_carries_sources_replacements_and_clean_configs() {
         let mut draft = new_draft(Game::JediAcademy, "RUJKA", DEFAULT_LANGUAGE);
-        let mut mp = component("mp", " Multiplayer ", "eternaljk", &[LaunchMode::Multiplayer]);
+        let mut mp = component(
+            "mp",
+            " Multiplayer ",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        );
         mp.release_tag = Some("v1.6.3".into());
         mp.fs_game = Some("eternaljk".into());
         mp.launch_args = " +set cg_fov 97 ".into();
@@ -4134,7 +4731,12 @@ mod tests {
             source_config_id: Some("binds".into()),
         });
         draft.components.push(mp);
-        draft.components.push(component("sp", "Single player", "openjk", &[LaunchMode::Single]));
+        draft.components.push(component(
+            "sp",
+            "Single player",
+            "openjk",
+            &[LaunchMode::Single],
+        ));
         draft.shared.files.push(draft_file(
             FileRoot::Home,
             "base/rus_sp.pk3",
@@ -4159,7 +4761,10 @@ mod tests {
         assert_eq!(mp.overlay.files[0].replaces.as_ref().unwrap().size, 10);
         assert_eq!(mp.overlay.files[1].replaces, None);
         assert_eq!(mp.overlay.remove, ["rd-vulkan_x86.dll"]);
-        assert!(matches!(mp.files[0].source, ManifestSource::Jkhub { file_id: 3937, .. }));
+        assert!(matches!(
+            mp.files[0].source,
+            ManifestSource::Jkhub { file_id: 3937, .. }
+        ));
         assert_eq!(mp.configs[0].name, "RUJKA binds");
         assert_eq!(mp.configs[0].text, "bind PGDN toggle cg_dismember 0 3\n");
         assert_eq!(mp.configs[0].priority, 5);
@@ -4190,6 +4795,7 @@ mod tests {
             engine_id: "taystjk".into(),
             game: Game::JediAcademy,
             engine_version: Some("v1.6.3".into()),
+            engine_origin: clients::EngineOrigin::Managed,
             created_at: "2026-09-15T00:00:00Z".into(),
             engine_installed_at: None,
             engine_published_at: None,
@@ -4214,31 +4820,62 @@ mod tests {
 
         let engine_dir = paths.client_engine_dir("voip");
         write(&engine_dir.join("taystjk.x86.exe"), b"MZ custom");
-        write(&engine_dir.join("base").join("cgamex86.dll"), b"cgame release");
+        write(
+            &engine_dir.join("base").join("cgamex86.dll"),
+            b"cgame release",
+        );
         write(&engine_dir.join("README.md"), b"read me");
         write(&engine_dir.join("rd-vanilla_x86.dll"), b"renderer");
         write(&engine_dir.join("qconsole.log"), b"log");
         // `rd-vulkan_x86.dll` of the release is gone.
 
         let home = paths.client_home_dir("voip");
-        write_zip(&home.join("base").join("assets0.pk3"), &[("models/players/kyle/model.glm", b"retail")]);
+        write_zip(
+            &home.join("base").join("assets0.pk3"),
+            &[("models/players/kyle/model.glm", b"retail")],
+        );
         write_zip(
             &home.join("base").join("zz_skin.pk3"),
-            &[("models/players/reborn/model.glm", b"skin"), ("models/players/reborn/icon.jpg", b"i")],
+            &[
+                ("models/players/reborn/model.glm", b"skin"),
+                ("models/players/reborn/icon.jpg", b"i"),
+            ],
         );
-        write_zip(&home.join("base").join("old_map.pk3.disabled"), &[("maps/mp/old.bsp", b"map")]);
+        write_zip(
+            &home.join("base").join("old_map.pk3.disabled"),
+            &[("maps/mp/old.bsp", b"map")],
+        );
         write_zip(
             &home.join("taystjk").join("japro-assets.pk3"),
-            &[("ui/jaPRO.menu", b"menu"), ("sound/x.mp3", b"s"), ("maps/mp/duel_x.bsp", b"m")],
+            &[
+                ("ui/jaPRO.menu", b"menu"),
+                ("sound/x.mp3", b"s"),
+                ("maps/mp/duel_x.bsp", b"m"),
+            ],
         );
-        write_zip(&home.join("japlus").join("elsewhere.pk3"), &[("models/players/x/model.glm", b"x")]);
+        write_zip(
+            &home.join("japlus").join("elsewhere.pk3"),
+            &[("models/players/x/model.glm", b"x")],
+        );
         write(&home.join("base").join("autoexec.cfg"), b"seta name Kyle\n");
-        write(&home.join("taystjk").join("taystjk.cfg"), b"seta r_mode 4\n");
-        write(&home.join("taystjk").join("jknet-active.cfg"), b"seta rate 25000\n");
+        write(
+            &home.join("taystjk").join("taystjk.cfg"),
+            b"seta r_mode 4\n",
+        );
+        write(
+            &home.join("taystjk").join("jknet-active.cfg"),
+            b"seta rate 25000\n",
+        );
         write(&home.join("taystjk").join("readme.txt"), b"hello");
         write(&home.join("taystjk").join("notes.md"), b"notes");
         write(&home.join("taystjk").join("cgamex86.dll"), b"mod module");
-        write(&home.join("taystjk").join("screenshots").join("shot0001.jpg"), b"jpg");
+        write(
+            &home
+                .join("taystjk")
+                .join("screenshots")
+                .join("shot0001.jpg"),
+            b"jpg",
+        );
         write(&home.join("taystjk").join("demos").join("x.dm_26"), b"demo");
         write(&home.join("taystjk").join("qconsole.log"), b"log");
         let mut provenance = BTreeMap::new();
@@ -4308,10 +4945,22 @@ mod tests {
         );
         assert_eq!(component.overlay.files[1].sha256, sha256_hex(b"MZ custom"));
         assert_eq!(component.overlay.remove, ["rd-vulkan_x86.dll"]);
-        assert!(file_path(&paths, &draft.id, "taystjk", FileRoot::Engine, "taystjk.x86.exe").unwrap().is_file());
+        assert!(file_path(
+            &paths,
+            &draft.id,
+            "taystjk",
+            FileRoot::Engine,
+            "taystjk.x86.exe"
+        )
+        .unwrap()
+        .is_file());
 
         // The library and the loose files.
-        let files: Vec<&str> = component.files.iter().map(|file| file.path.as_str()).collect();
+        let files: Vec<&str> = component
+            .files
+            .iter()
+            .map(|file| file.path.as_str())
+            .collect();
         assert_eq!(
             files,
             [
@@ -4322,33 +4971,75 @@ mod tests {
                 "taystjk/readme.txt",
             ]
         );
-        let japro = component.files.iter().find(|f| f.path == "taystjk/japro-assets.pk3").unwrap();
+        let japro = component
+            .files
+            .iter()
+            .find(|f| f.path == "taystjk/japro-assets.pk3")
+            .unwrap();
         match &japro.origin {
-            DraftOrigin::Client { client_id, item_id, provenance } => {
+            DraftOrigin::Client {
+                client_id,
+                item_id,
+                provenance,
+            } => {
                 assert_eq!(client_id, "voip");
                 assert_eq!(item_id, "taystjk/japro-assets.pk3");
                 assert_eq!(provenance.as_ref().map(|p| p.file_id), Some(3937));
             }
             other => panic!("{other:?}"),
         }
-        assert!(!japro.is_blob(), "a JKHub file of the client is a reference");
+        assert!(
+            !japro.is_blob(),
+            "a JKHub file of the client is a reference"
+        );
         let info = japro.library.as_ref().expect("library details");
         assert_eq!(info.maps, ["mp/duel_x.bsp"]);
         assert_eq!(info.entries, 3);
-        let skin = component.files.iter().find(|f| f.path == "base/zz_skin.pk3").unwrap();
-        assert_eq!(skin.library.as_ref().unwrap().category, library::LibraryCategory::Skin);
-        assert_eq!(skin.library.as_ref().unwrap().folders.get("models"), Some(&2));
+        let skin = component
+            .files
+            .iter()
+            .find(|f| f.path == "base/zz_skin.pk3")
+            .unwrap();
+        assert_eq!(
+            skin.library.as_ref().unwrap().category,
+            library::LibraryCategory::Skin
+        );
+        assert_eq!(
+            skin.library.as_ref().unwrap().folders.get("models"),
+            Some(&2)
+        );
         assert!(skin.is_blob());
         // Every pk3 of the component has its listing, the JKHub one too.
         for pk3 in component.files.iter().filter(|f| f.kind == FileKind::Pk3) {
-            let listing = pk3.listing.as_ref().unwrap_or_else(|| panic!("{} has a listing", pk3.path));
+            let listing = pk3
+                .listing
+                .as_ref()
+                .unwrap_or_else(|| panic!("{} has a listing", pk3.path));
             let document = listing::draft_listing_path(&paths, &draft.id, &pk3.sha256);
             assert_eq!(listing.size, fs::metadata(&document).unwrap().len());
         }
-        assert!(component.files.iter().filter(|f| f.kind != FileKind::Pk3).all(|f| f.listing.is_none()));
-        let autoexec = component.files.iter().find(|f| f.path == "base/autoexec.cfg").unwrap();
-        assert!(matches!(&autoexec.origin, DraftOrigin::Disk { source_path } if source_path.ends_with("autoexec.cfg")));
-        assert!(file_path(&paths, &draft.id, "taystjk", FileRoot::Home, "base/zz_skin.pk3").unwrap().is_file());
+        assert!(component
+            .files
+            .iter()
+            .filter(|f| f.kind != FileKind::Pk3)
+            .all(|f| f.listing.is_none()));
+        let autoexec = component
+            .files
+            .iter()
+            .find(|f| f.path == "base/autoexec.cfg")
+            .unwrap();
+        assert!(
+            matches!(&autoexec.origin, DraftOrigin::Disk { source_path } if source_path.ends_with("autoexec.cfg"))
+        );
+        assert!(file_path(
+            &paths,
+            &draft.id,
+            "taystjk",
+            FileRoot::Home,
+            "base/zz_skin.pk3"
+        )
+        .unwrap()
+        .is_file());
 
         // A client whose engine is not installed has no overlay to look for.
         let mut fresh = client.clone();
@@ -4378,10 +5069,18 @@ mod tests {
         let paths = DataPaths::new(temp.path().to_path_buf());
         paths.ensure().unwrap();
         let mut draft = empty_draft(&paths, Game::JediAcademy, "RUJKA");
-        draft.components.push(component("mp", "Multiplayer", "eternaljk", &[LaunchMode::Multiplayer]));
+        draft.components.push(component(
+            "mp",
+            "Multiplayer",
+            "eternaljk",
+            &[LaunchMode::Multiplayer],
+        ));
         write_draft(&paths, &draft).unwrap();
         let picked = temp.path().join("picked");
-        write_zip(&picked.join("zz_skin.pk3"), &[("models/players/reborn/model.glm", b"skin")]);
+        write_zip(
+            &picked.join("zz_skin.pk3"),
+            &[("models/players/reborn/model.glm", b"skin")],
+        );
         write(&picked.join("autoexec.cfg"), b"seta cg_fov 97\n");
         write(&picked.join("assets1.pk3"), b"retail");
 
@@ -4391,9 +5090,18 @@ mod tests {
         for source in &files {
             let path = home_path("base", source).unwrap();
             imported.push(
-                import_file(&paths, &draft.id, "mp", FileRoot::Home, &path, source, None, DraftOrigin::Disk {
-                    source_path: source.display().to_string(),
-                })
+                import_file(
+                    &paths,
+                    &draft.id,
+                    "mp",
+                    FileRoot::Home,
+                    &path,
+                    source,
+                    None,
+                    DraftOrigin::Disk {
+                        source_path: source.display().to_string(),
+                    },
+                )
                 .unwrap(),
             );
         }
@@ -4408,8 +5116,14 @@ mod tests {
         let mp = draft.component("mp").unwrap();
         assert_eq!(mp.files.len(), 2);
         assert_eq!(mp.files[0].path, "base/zz_skin.pk3");
-        assert_eq!(mp.files[0].library.as_ref().unwrap().category, library::LibraryCategory::Skin);
-        assert_eq!(mp.files[0].library.as_ref().unwrap().display_name, "zz_skin");
+        assert_eq!(
+            mp.files[0].library.as_ref().unwrap().category,
+            library::LibraryCategory::Skin
+        );
+        assert_eq!(
+            mp.files[0].library.as_ref().unwrap().display_name,
+            "zz_skin"
+        );
         assert_eq!(mp.files[1].kind, FileKind::Cfg);
         assert_eq!(mp.files[1].sha256, sha256_hex(b"seta cg_fov 97\n"));
         // The pk3 got its listing next to the copy; the cfg has none.
@@ -4421,22 +5135,44 @@ mod tests {
         assert_eq!(mp.files[1].listing, None);
         let record = fs::read_to_string(record_path(&paths, &draft.id)).unwrap();
         assert!(record.contains("\"listing\": {"), "{record}");
-        assert!(file_path(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg").unwrap().is_file());
+        assert!(
+            file_path(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg")
+                .unwrap()
+                .is_file()
+        );
 
         // A retail archive is refused, a shared scope takes files too, a
         // folder name is checked, and the same path again replaces.
-        let error = import_file(&paths, &draft.id, "mp", FileRoot::Home, "base/assets1.pk3", &picked.join("assets1.pk3"), None, DraftOrigin::Disk {
-            source_path: String::new(),
-        })
+        let error = import_file(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Home,
+            "base/assets1.pk3",
+            &picked.join("assets1.pk3"),
+            None,
+            DraftOrigin::Disk {
+                source_path: String::new(),
+            },
+        )
         .expect_err("retail");
         assert!(error.to_string().contains("retail"), "{error}");
         assert!(check_folder("../x").is_err());
         assert!(check_folder("  ").is_err());
         assert_eq!(check_folder(" base ").unwrap(), "base");
         write(&picked.join("autoexec.cfg"), b"seta cg_fov 110\n");
-        let again = import_file(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg", &picked.join("autoexec.cfg"), None, DraftOrigin::Disk {
-            source_path: String::new(),
-        })
+        let again = import_file(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Home,
+            "base/autoexec.cfg",
+            &picked.join("autoexec.cfg"),
+            None,
+            DraftOrigin::Disk {
+                source_path: String::new(),
+            },
+        )
         .unwrap();
         let draft = edit_draft(&paths, &draft.id, |draft| {
             put_file(home_files_mut(draft, "mp")?, again);
@@ -4445,20 +5181,37 @@ mod tests {
         .unwrap();
         assert_eq!(draft.component("mp").unwrap().files.len(), 2);
         assert_eq!(
-            draft.component("mp").unwrap().files.iter().find(|f| f.path == "base/autoexec.cfg").unwrap().sha256,
+            draft
+                .component("mp")
+                .unwrap()
+                .files
+                .iter()
+                .find(|f| f.path == "base/autoexec.cfg")
+                .unwrap()
+                .sha256,
             sha256_hex(b"seta cg_fov 110\n")
         );
 
         // Removing a file takes its copy with it.
         let draft = edit_draft(&paths, &draft.id, |draft| {
-            take_file(home_files_mut(draft, "mp")?, "BASE/autoexec.cfg").ok_or_else(|| AppError::NotFound("x".into()))?;
+            take_file(home_files_mut(draft, "mp")?, "BASE/autoexec.cfg")
+                .ok_or_else(|| AppError::NotFound("x".into()))?;
             Ok(())
         })
         .unwrap();
         remove_copy(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg");
         assert_eq!(draft.component("mp").unwrap().files.len(), 1);
-        assert!(!file_path(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg").unwrap().exists());
-        assert!(file_path(&paths, &draft.id, "mp", FileRoot::Home, "base/zz_skin.pk3").unwrap().is_file(), "the folder stays for the other file");
+        assert!(
+            !file_path(&paths, &draft.id, "mp", FileRoot::Home, "base/autoexec.cfg")
+                .unwrap()
+                .exists()
+        );
+        assert!(
+            file_path(&paths, &draft.id, "mp", FileRoot::Home, "base/zz_skin.pk3")
+                .unwrap()
+                .is_file(),
+            "the folder stays for the other file"
+        );
 
         // The overlay against a release: replace, add, exclude, restore.
         let entries: HashMap<String, ArchiveEntry> = [
@@ -4487,7 +5240,11 @@ mod tests {
             &release::release_spelling(&entries, "ETERNALJK.x86.exe"),
             &picked.join("eternaljk.x86.exe"),
             None,
-            release::overlay_origin(&entries, "ETERNALJK.x86.exe", &picked.join("eternaljk.x86.exe")),
+            release::overlay_origin(
+                &entries,
+                "ETERNALJK.x86.exe",
+                &picked.join("eternaljk.x86.exe"),
+            ),
         )
         .unwrap();
         assert_eq!(replaced.path, "eternaljk.x86.exe");
@@ -4506,7 +5263,11 @@ mod tests {
             "rd-vanilla_x86.dll",
             &picked.join("rd-vanilla_x86.dll"),
             None,
-            release::overlay_origin(&entries, "rd-vanilla_x86.dll", &picked.join("rd-vanilla_x86.dll")),
+            release::overlay_origin(
+                &entries,
+                "rd-vanilla_x86.dll",
+                &picked.join("rd-vanilla_x86.dll"),
+            ),
         )
         .unwrap();
         assert!(matches!(added.origin, DraftOrigin::Disk { .. }));
@@ -4519,7 +5280,11 @@ mod tests {
         })
         .unwrap();
         let tree = release::view("v1.6.3".into(), &entries, draft.component("mp").unwrap());
-        let states: Vec<(&str, &str)> = tree.files.iter().map(|f| (f.path.as_str(), f.state)).collect();
+        let states: Vec<(&str, &str)> = tree
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.state))
+            .collect();
         assert_eq!(
             states,
             [
@@ -4533,14 +5298,27 @@ mod tests {
         // Restore: the replacement goes with its copy, the removal mark too.
         let draft = edit_draft(&paths, &draft.id, |draft| {
             let component = component_mut(draft, "mp")?;
-            component.overlay.remove.retain(|r| !r.eq_ignore_ascii_case("RD-VULKAN_x86.dll"));
+            component
+                .overlay
+                .remove
+                .retain(|r| !r.eq_ignore_ascii_case("RD-VULKAN_x86.dll"));
             take_file(&mut component.overlay.files, "eternaljk.x86.exe");
             Ok(())
         })
         .unwrap();
-        remove_copy(&paths, &draft.id, "mp", FileRoot::Engine, "eternaljk.x86.exe");
+        remove_copy(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Engine,
+            "eternaljk.x86.exe",
+        );
         let tree = release::view("v1.6.3".into(), &entries, draft.component("mp").unwrap());
-        let states: Vec<(&str, &str)> = tree.files.iter().map(|f| (f.path.as_str(), f.state)).collect();
+        let states: Vec<(&str, &str)> = tree
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.state))
+            .collect();
         assert_eq!(
             states,
             [
@@ -4549,8 +5327,24 @@ mod tests {
                 ("rd-vulkan_x86.dll", release::STATE_RELEASE),
             ]
         );
-        assert!(!file_path(&paths, &draft.id, "mp", FileRoot::Engine, "eternaljk.x86.exe").unwrap().exists());
-        assert!(file_path(&paths, &draft.id, "mp", FileRoot::Engine, "rd-vanilla_x86.dll").unwrap().is_file());
+        assert!(!file_path(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Engine,
+            "eternaljk.x86.exe"
+        )
+        .unwrap()
+        .exists());
+        assert!(file_path(
+            &paths,
+            &draft.id,
+            "mp",
+            FileRoot::Engine,
+            "rd-vanilla_x86.dll"
+        )
+        .unwrap()
+        .is_file());
 
         // The map of hashes for an upload or a test install.
         let map = files_by_hash(&paths, &draft);
@@ -4578,7 +5372,8 @@ mod tests {
                 name: "Binds".into(),
                 text: "bind x +attack
 seta rconPassword x
-".into(),
+"
+                .into(),
                 priority: 3,
             }],
         )
@@ -4596,18 +5391,28 @@ seta rconPassword x
             &paths.cache.join("downloads").join("taystjk-v1.6.3.zip"),
         );
         let draft = run(create(&state, Game::JediAcademy, "", Some("voip"))).expect("the draft");
-        assert_eq!(draft.name, "Taystjka VoIP", "an empty name takes the name of the client");
+        assert_eq!(
+            draft.name, "Taystjka VoIP",
+            "an empty name takes the name of the client"
+        );
         assert_eq!(draft.components.len(), 1);
         let component = &draft.components[0];
         assert_eq!(component.id, "taystjk");
         assert_eq!(component.configs.len(), 1);
-        assert_eq!(component.configs[0].source_config_id.as_deref(), Some(binds_id.as_str()));
+        assert_eq!(
+            component.configs[0].source_config_id.as_deref(),
+            Some(binds_id.as_str())
+        );
         assert_eq!(component.configs[0].priority, 3);
         assert_eq!(component.overlay.remove, ["rd-vulkan_x86.dll"]);
         let issues = validate(&draft);
         assert!(issues.errors.is_empty(), "{:?}", issues.errors);
         assert_eq!(
-            issues.warnings.iter().map(|w| w.code.as_str()).collect::<Vec<_>>(),
+            issues
+                .warnings
+                .iter()
+                .map(|w| w.code.as_str())
+                .collect::<Vec<_>>(),
             [ISSUE_EXECUTABLES_PRESENT, ISSUE_PASSWORDS_STRIPPED]
         );
         assert_eq!(read_all(&paths).unwrap().len(), 1);
@@ -4618,7 +5423,8 @@ seta rconPassword x
         assert!(draft.translations.is_empty());
 
         // The other game is refused, and an empty draft needs no client.
-        let error = run(create(&state, Game::JediOutcast, "x", Some("voip"))).expect_err("the other game");
+        let error =
+            run(create(&state, Game::JediOutcast, "x", Some("voip"))).expect_err("the other game");
         assert!(matches!(error, AppError::GameMismatch(_)), "{error}");
         let empty = run(create(&state, Game::JediOutcast, "JK2", None)).unwrap();
         assert!(empty.components.is_empty());

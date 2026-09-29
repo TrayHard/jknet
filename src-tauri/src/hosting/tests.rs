@@ -6,6 +6,7 @@ use crate::online::OnlineUser;
 fn settings() -> HostSettings {
     HostSettings {
         client_id: "everyday".into(),
+        server_config_id: None,
         map: "mp/ffa3".into(),
         gametype: 0,
         max_players: 8,
@@ -28,9 +29,18 @@ fn session(status: SessionStatus) -> HostSession {
         id: "5e0b7c1f9a2d4c38".into(),
         status,
         steps: vec![
-            HostStep { step: StepId::Server, state: StepState::Done },
-            HostStep { step: StepId::Map, state: StepState::Done },
-            HostStep { step: StepId::Relay, state: StepState::Done },
+            HostStep {
+                step: StepId::Server,
+                state: StepState::Done,
+            },
+            HostStep {
+                step: StepId::Map,
+                state: StepState::Done,
+            },
+            HostStep {
+                step: StepId::Relay,
+                state: StepState::Done,
+            },
         ],
         settings: settings(),
         game: Game::JediAcademy,
@@ -47,8 +57,18 @@ fn session(status: SessionStatus) -> HostSession {
             error_code: None,
         },
         players: vec![
-            HostPlayer { name: "^1Kyle".into(), score: 3, ping: 42, bot: false },
-            HostPlayer { name: "Reborn".into(), score: 0, ping: 0, bot: true },
+            HostPlayer {
+                name: "^1Kyle".into(),
+                score: 3,
+                ping: 42,
+                bot: false,
+            },
+            HostPlayer {
+                name: "Reborn".into(),
+                score: 0,
+                ping: 0,
+                bot: true,
+            },
         ],
         invited: Vec::new(),
         joined_count: 1,
@@ -73,6 +93,7 @@ fn live(status: SessionStatus) -> Arc<Live> {
         finished,
         rcon_password: "r4n9d0mr4n9d0mr4n9d0mr4".into(),
         fs_game: None,
+        has_map_settings: false,
     })
 }
 
@@ -98,8 +119,13 @@ fn a_second_start_while_the_first_is_starting_is_refused_with_host_busy() {
     let current = state.live().expect("the session is in the slot");
     current.update(|view| view.status = SessionStatus::Stopped);
     assert!(!state.is_active());
-    assert_eq!(state.live().map(|live| live.status()), Some(SessionStatus::Stopped));
-    let next = state.claim().expect("a stopped session does not hold the slot");
+    assert_eq!(
+        state.live().map(|live| live.status()),
+        Some(SessionStatus::Stopped)
+    );
+    let next = state
+        .claim()
+        .expect("a stopped session does not hold the slot");
     state.commit(next, live(SessionStatus::Running));
     assert!(state.running().is_ok());
 }
@@ -109,7 +135,7 @@ fn the_settings_of_a_start_are_checked_and_cleaned() {
     let mut raw = settings();
     raw.server_name = "  ^1Red \"quoted\";  ".into();
     raw.join_user_ids = vec!["a".into(), "a".into(), " ".into(), "b".into()];
-    let clean = validate_settings(Game::JediAcademy, &raw).expect("valid");
+    let clean = validate_settings(Game::JediAcademy, &raw, None).expect("valid");
     assert_eq!(clean.server_name, "^1Red quoted");
     assert_eq!(clean.join_user_ids, ["a", "b"]);
 
@@ -117,29 +143,79 @@ fn the_settings_of_a_start_are_checked_and_cleaned() {
     let mut siege = settings();
     siege.gametype = 7;
     siege.map = "mp/siege_hoth".into();
-    assert_eq!(validate_settings(Game::JediAcademy, &siege).unwrap().score_limit, 0);
+    assert_eq!(
+        validate_settings(Game::JediAcademy, &siege, None)
+            .unwrap()
+            .score_limit,
+        0
+    );
 
     // A blank password is no password; a bad one is refused.
     let mut open = settings();
     open.password = Some("   ".into());
-    assert_eq!(validate_settings(Game::JediAcademy, &open).unwrap().password, None);
+    assert_eq!(
+        validate_settings(Game::JediAcademy, &open, None)
+            .unwrap()
+            .password,
+        None
+    );
     let mut bad = settings();
     bad.password = Some("two words".into());
-    assert!(matches!(validate_settings(Game::JediAcademy, &bad), Err(AppError::InvalidInput(_))));
+    assert!(matches!(
+        validate_settings(Game::JediAcademy, &bad, None),
+        Err(AppError::InvalidInput(_))
+    ));
 
     for broken in [
-        HostSettings { gametype: 5, ..settings() },
-        HostSettings { max_players: 1, ..settings() },
-        HostSettings { max_players: 17, ..settings() },
-        HostSettings { bots: 9, ..settings() },
-        HostSettings { map: "../x".into(), ..settings() },
-        HostSettings { score_limit: 1000, ..settings() },
+        HostSettings {
+            gametype: 5,
+            ..settings()
+        },
+        HostSettings {
+            max_players: 1,
+            ..settings()
+        },
+        HostSettings {
+            max_players: 17,
+            ..settings()
+        },
+        HostSettings {
+            bots: 9,
+            ..settings()
+        },
+        HostSettings {
+            map: "../x".into(),
+            ..settings()
+        },
+        HostSettings {
+            score_limit: 1000,
+            ..settings()
+        },
     ] {
-        assert!(validate_settings(Game::JediAcademy, &broken).is_err(), "{broken:?}");
+        assert!(
+            validate_settings(Game::JediAcademy, &broken, None).is_err(),
+            "{broken:?}"
+        );
     }
     // Jedi Outcast numbers its modes differently: 7 is CTF there, 6 Saga.
-    assert!(validate_settings(Game::JediOutcast, &HostSettings { gametype: 6, ..settings() }).is_err());
-    assert!(validate_settings(Game::JediOutcast, &HostSettings { gametype: 7, ..settings() }).is_ok());
+    assert!(validate_settings(
+        Game::JediOutcast,
+        &HostSettings {
+            gametype: 6,
+            ..settings()
+        },
+        None
+    )
+    .is_err());
+    assert!(validate_settings(
+        Game::JediOutcast,
+        &HostSettings {
+            gametype: 7,
+            ..settings()
+        },
+        None
+    )
+    .is_ok());
 }
 
 fn client(id: &str, can_host: bool) -> HostClientOption {
@@ -147,9 +223,112 @@ fn client(id: &str, can_host: bool) -> HostClientOption {
         id: id.into(),
         name: id.into(),
         engine_id: "openjk".into(),
+        mod_folder: None,
         can_host,
         reason: (!can_host).then_some(ClientBlock::NoDedicatedServer),
     }
+}
+
+#[test]
+fn selected_server_config_survives_defaults_and_older_settings_have_no_selection() {
+    let mut selected = settings();
+    selected.server_config_id = Some("duel-night".into());
+    let mut document = Settings::default();
+    document
+        .host_defaults
+        .insert(Game::JediAcademy, defaults_of(&selected));
+    let stored = serde_json::to_value(&document).unwrap();
+    assert_eq!(stored["hostDefaults"]["ja"]["serverConfigId"], "duel-night");
+    let options = options_of(&document, Game::JediAcademy, vec![client("everyday", true)]);
+    assert_eq!(
+        options.defaults.server_config_id.as_deref(),
+        Some("duel-night")
+    );
+    let mut old = serde_json::to_value(settings()).unwrap();
+    old.as_object_mut().unwrap().remove("serverConfigId");
+    assert_eq!(
+        serde_json::from_value::<HostSettings>(old)
+            .unwrap()
+            .server_config_id,
+        None
+    );
+    assert_eq!(
+        serde_json::from_str::<HostDefaults>("{}")
+            .unwrap()
+            .server_config_id,
+        None
+    );
+}
+
+#[test]
+fn mbii_keeps_the_round_limit_for_siege_and_only_accepts_its_game_modes() {
+    let mut mbii = settings();
+    mbii.gametype = 7;
+    mbii.score_limit = 12;
+    assert_eq!(
+        validate_settings(Game::JediAcademy, &mbii, Some("MBII"))
+            .unwrap()
+            .score_limit,
+        12
+    );
+    assert_eq!(
+        validate_settings(Game::JediAcademy, &mbii, None)
+            .unwrap()
+            .score_limit,
+        0
+    );
+    mbii.gametype = 0;
+    assert!(validate_settings(Game::JediAcademy, &mbii, Some("MBII")).is_err());
+    mbii.gametype = 7;
+    mbii.bots = 1;
+    assert!(validate_settings(Game::JediAcademy, &mbii, Some("MBII")).is_err());
+}
+
+#[test]
+fn every_game_type_keeps_all_discovered_host_maps() {
+    let found: Vec<maps::MapEntry> = [
+        ("mp/ffa3", vec!["ffa", "team"]),
+        ("mp/duel1", vec!["duel", "powerduel"]),
+        ("mp/ctf1", vec!["ctf", "cty"]),
+        ("mb_custom", vec!["siege"]),
+        ("custom_without_types", Vec::new()),
+    ]
+    .into_iter()
+    .map(|(name, gametypes)| maps::MapEntry {
+        name: name.into(),
+        title: Some(format!("Title of {name}")),
+        gametypes: gametypes.into_iter().map(str::to_string).collect(),
+        retail: name.starts_with("mp/"),
+    })
+    .collect();
+    let pictures = std::collections::HashMap::from([("mp/duel1".into(), "cached-shot.png".into())]);
+    let all_maps = host_maps(found.clone(), &pictures, None);
+    assert_eq!(
+        all_maps
+            .iter()
+            .map(|map| map.name.as_str())
+            .collect::<Vec<_>>(),
+        [
+            "mp/ffa3",
+            "mp/duel1",
+            "mp/ctf1",
+            "mb_custom",
+            "custom_without_types"
+        ]
+    );
+    assert_eq!(all_maps[1].levelshot.as_deref(), Some("cached-shot.png"));
+    assert_eq!(all_maps[3].source, MapSource::Client);
+    for game in [Game::JediAcademy, Game::JediOutcast] {
+        for mode in game.spec().hosting.gametypes {
+            assert_eq!(
+                host_maps(found.clone(), &pictures, Some(u32::from(mode.index))),
+                all_maps,
+                "{game:?} mode {} must not restrict the map list",
+                mode.index
+            );
+        }
+    }
+    assert_eq!(host_maps(found, &pictures, Some(u32::MAX)), all_maps);
 }
 
 #[test]
@@ -159,10 +338,23 @@ fn the_form_opens_on_what_fits_the_account_and_the_clients() {
         online_url: "http://127.0.0.1:8787".into(),
         ..Settings::default()
     };
-    let options = options_of(&signed_out, Game::JediAcademy, vec![client("demos", false), client("everyday", true)]);
-    assert_eq!(options.relay, RelayAvailability { available: false, reason: Some(RelayBlock::SignedOut) });
+    let options = options_of(
+        &signed_out,
+        Game::JediAcademy,
+        vec![client("demos", false), client("everyday", true)],
+    );
+    assert_eq!(
+        options.relay,
+        RelayAvailability {
+            available: false,
+            reason: Some(RelayBlock::SignedOut)
+        }
+    );
     assert_eq!(options.defaults.network, Network::Lan);
-    assert_eq!(options.defaults.client_id, "everyday", "the first client that can host");
+    assert_eq!(
+        options.defaults.client_id, "everyday",
+        "the first client that can host"
+    );
     assert_eq!(options.defaults.server_name, "JKNet game");
     assert_eq!(options.defaults.map, "mp/ffa3");
     assert_eq!(options.defaults.score_limit, 20);
@@ -187,8 +379,14 @@ fn the_form_opens_on_what_fits_the_account_and_the_clients() {
         host_firewall_note_seen: true,
         ..Settings::default()
     };
-    signed_in.default_client_ids.insert(Game::JediAcademy, "everyday".into());
-    let options = options_of(&signed_in, Game::JediAcademy, vec![client("everyday", true)]);
+    signed_in
+        .default_client_ids
+        .insert(Game::JediAcademy, "everyday".into());
+    let options = options_of(
+        &signed_in,
+        Game::JediAcademy,
+        vec![client("everyday", true)],
+    );
     assert!(options.relay.available);
     assert_eq!(options.defaults.network, Network::InternetLan);
     assert_eq!(options.defaults.server_name, "Tray's game");
@@ -210,11 +408,22 @@ fn the_form_opens_on_what_fits_the_account_and_the_clients() {
             ..HostDefaults::default()
         },
     );
-    let options = options_of(&signed_in, Game::JediAcademy, vec![client("everyday", true)]);
+    let options = options_of(
+        &signed_in,
+        Game::JediAcademy,
+        vec![client("everyday", true)],
+    );
     let defaults = options.defaults;
     // The remembered client is gone: the default client of the game stands in.
     assert_eq!(defaults.client_id, "everyday");
-    assert_eq!((defaults.map.as_str(), defaults.gametype, defaults.max_players), ("mp/duel1", 3, 4));
+    assert_eq!(
+        (
+            defaults.map.as_str(),
+            defaults.gametype,
+            defaults.max_players
+        ),
+        ("mp/duel1", 3, 4)
+    );
     assert_eq!(defaults.score_limit, 5);
     assert_eq!(defaults.server_name, "Duels");
     assert_eq!(defaults.password, None);
@@ -225,7 +434,11 @@ fn the_form_opens_on_what_fits_the_account_and_the_clients() {
 
     // A remembered relay mode on a launcher that signed out falls back.
     signed_in.online_token = None;
-    let options = options_of(&signed_in, Game::JediAcademy, vec![client("everyday", true)]);
+    let options = options_of(
+        &signed_in,
+        Game::JediAcademy,
+        vec![client("everyday", true)],
+    );
     assert_eq!(options.defaults.network, Network::Lan);
 }
 
@@ -304,11 +517,19 @@ fn a_refusal_of_the_relay_api_names_its_cause() {
         resets_at: None,
     };
     assert_eq!(
-        relay_error_of(&quota("You already use the relay for another server", Some("active_session"))).0,
+        relay_error_of(&quota(
+            "You already use the relay for another server",
+            Some("active_session")
+        ))
+        .0,
         RelayErrorCode::QuotaActive
     );
     assert_eq!(
-        relay_error_of(&quota("Your relay time for today is used up", Some("daily_time"))).0,
+        relay_error_of(&quota(
+            "Your relay time for today is used up",
+            Some("daily_time")
+        ))
+        .0,
         RelayErrorCode::QuotaDaily
     );
     assert_eq!(
@@ -316,7 +537,11 @@ fn a_refusal_of_the_relay_api_names_its_cause() {
         RelayErrorCode::QuotaActive
     );
     assert_eq!(
-        relay_error_of(&quota("the account already has an active relay session", None)).0,
+        relay_error_of(&quota(
+            "the account already has an active relay session",
+            None
+        ))
+        .0,
         RelayErrorCode::QuotaActive
     );
     assert_eq!(
@@ -327,10 +552,19 @@ fn a_refusal_of_the_relay_api_names_its_cause() {
         relay_error_of(&AppError::RelayUnavailable("off".into())).0,
         RelayErrorCode::Unavailable
     );
-    let limited = AppError::Online { code: "rate_limited".into(), message: "slow down".into() };
+    let limited = AppError::Online {
+        code: "rate_limited".into(),
+        message: "slow down".into(),
+    };
     assert_eq!(relay_error_of(&limited).0, RelayErrorCode::RateLimited);
-    assert_eq!(relay_error_of(&AppError::SignedOut).0, RelayErrorCode::SignedOut);
-    assert_eq!(relay_error_of(&AppError::Network("refused".into())).0, RelayErrorCode::Network);
+    assert_eq!(
+        relay_error_of(&AppError::SignedOut).0,
+        RelayErrorCode::SignedOut
+    );
+    assert_eq!(
+        relay_error_of(&AppError::Network("refused".into())).0,
+        RelayErrorCode::Network
+    );
 }
 
 #[test]
@@ -351,7 +585,10 @@ fn the_session_reaches_the_frontend_in_the_shape_of_ipc_ts() {
     assert_eq!(json["failure"]["portFrom"], 29070);
     assert_eq!(json["relay"]["errorCode"], "node_silent");
     assert_eq!(json["relay"]["status"], "active");
-    assert_eq!(json["steps"][2], serde_json::json!({ "step": "relay", "state": "done" }));
+    assert_eq!(
+        json["steps"][2],
+        serde_json::json!({ "step": "relay", "state": "done" })
+    );
     assert_eq!(json["settings"]["network"], "internet_lan");
     assert_eq!(json["settings"]["joinPolicy"], "friends");
     assert_eq!(json["joinedCount"], 1);
@@ -395,7 +632,11 @@ fn the_switch_changes_the_running_session_and_nothing_else() {
     let live = live(SessionStatus::Running);
     let session = set_chat_from_web(&live, false);
     assert!(!session.settings.chat_from_web);
-    assert_eq!(session.settings.join_policy, JoinPolicy::Friends, "the door stays as it was");
+    assert_eq!(
+        session.settings.join_policy,
+        JoinPolicy::Friends,
+        "the door stays as it was"
+    );
     assert!(!hosting_info(&session, None).chat_from_web);
     assert!(set_chat_from_web(&live, true).settings.chat_from_web);
 }
@@ -423,7 +664,9 @@ fn the_switch_is_remembered_per_game_and_opens_on_by_default() {
     };
     let options = options_of(&document, Game::JediAcademy, vec![client("everyday", true)]);
     assert!(options.defaults.chat_from_web, "nothing remembered: on");
-    document.host_defaults.insert(Game::JediAcademy, defaults_of(&closed));
+    document
+        .host_defaults
+        .insert(Game::JediAcademy, defaults_of(&closed));
     let options = options_of(&document, Game::JediAcademy, vec![client("everyday", true)]);
     assert!(!options.defaults.chat_from_web);
     // The other game keeps its own.

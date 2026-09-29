@@ -274,7 +274,13 @@ impl NotifyBook {
     /// Thins a delivery out to the pace: a Windows notification per
     /// conversation every [`OS_PACE`] unless it mentions the player, and a
     /// sound every [`SOUND_PACE`].
-    fn pace(&mut self, conversation_id: &str, mentioned: bool, now: Instant, mut delivery: Delivery) -> Delivery {
+    fn pace(
+        &mut self,
+        conversation_id: &str,
+        mentioned: bool,
+        now: Instant,
+        mut delivery: Delivery,
+    ) -> Delivery {
         if delivery.os {
             let recent = self
                 .last_os
@@ -397,7 +403,11 @@ fn is_bidi_control(c: char) -> bool {
 }
 
 /// The name a member goes by in this conversation.
-fn name_of(user_id: Option<&str>, conversation: Option<&Conversation>, texts: &NotifyTexts) -> String {
+fn name_of(
+    user_id: Option<&str>,
+    conversation: Option<&Conversation>,
+    texts: &NotifyTexts,
+) -> String {
     let Some(user_id) = user_id else {
         return texts.deleted_account.clone();
     };
@@ -416,7 +426,11 @@ fn name_of(user_id: Option<&str>, conversation: Option<&Conversation>, texts: &N
 /// The text of a message on one line: mention tokens as `@name`, white space
 /// collapsed, cut at [`MAX_TEXT_CHARS`]. A message without text shows what
 /// its first card says of itself, or the names of its files.
-fn preview(message: &ChatMessage, conversation: Option<&Conversation>, texts: &NotifyTexts) -> String {
+fn preview(
+    message: &ChatMessage,
+    conversation: Option<&Conversation>,
+    texts: &NotifyTexts,
+) -> String {
     let mut text = collapse(&names_for_mentions(&message.body, conversation, texts));
     if text.is_empty() {
         text = message
@@ -428,7 +442,11 @@ fn preview(message: &ChatMessage, conversation: Option<&Conversation>, texts: &N
             .unwrap_or_default();
     }
     if text.is_empty() && !message.files.is_empty() {
-        let names: Vec<&str> = message.files.iter().map(|file| file.name.as_str()).collect();
+        let names: Vec<&str> = message
+            .files
+            .iter()
+            .map(|file| file.name.as_str())
+            .collect();
         text = collapse(&names.join(", "));
     }
     if text.is_empty() {
@@ -438,7 +456,11 @@ fn preview(message: &ChatMessage, conversation: Option<&Conversation>, texts: &N
 }
 
 /// Replaces `<@id>` and `<@deleted>` with the names of the members.
-fn names_for_mentions(body: &str, conversation: Option<&Conversation>, texts: &NotifyTexts) -> String {
+fn names_for_mentions(
+    body: &str,
+    conversation: Option<&Conversation>,
+    texts: &NotifyTexts,
+) -> String {
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
     while let Some(start) = rest.find("<@") {
@@ -542,7 +564,12 @@ pub(super) fn incoming(app: &AppHandle, message: &ChatMessage) {
         lock(&chat.notify).hold(&message.conversation_id, message.seq, msg.mentioned);
         return;
     }
-    let delivery = lock(&chat.notify).pace(&message.conversation_id, msg.mentioned, Instant::now(), decided);
+    let delivery = lock(&chat.notify).pace(
+        &message.conversation_id,
+        msg.mentioned,
+        Instant::now(),
+        decided,
+    );
     log::debug!(
         "chat: message {}#{} notifies {delivery:?}",
         message.conversation_id,
@@ -568,7 +595,12 @@ pub(super) fn incoming(app: &AppHandle, message: &ChatMessage) {
         }
     }
     if delivery.os {
-        show_toast(app, title, text, Some(Some(message.conversation_id.clone())));
+        show_toast(
+            app,
+            title,
+            text,
+            Some(Some(message.conversation_id.clone())),
+        );
     }
     if delivery.sound {
         play_sound(app, &s.sound_name, msg.mentioned);
@@ -646,7 +678,12 @@ fn after_game(app: &AppHandle) {
 /// Shows a Windows notification. `open` is what a click shows: `Some(None)`
 /// the list of chats, `Some(Some(id))` a conversation, `None` the launcher
 /// window.
-pub(crate) fn show_toast(app: &AppHandle, title: String, text: String, open: Option<Option<String>>) {
+pub(crate) fn show_toast(
+    app: &AppHandle,
+    title: String,
+    text: String,
+    open: Option<Option<String>>,
+) {
     #[cfg(windows)]
     {
         use tauri_winrt_notification::Toast;
@@ -699,7 +736,9 @@ pub(crate) fn play_sound(app: &AppHandle, sound_name: &str, mentioned: bool) {
     #[cfg(windows)]
     {
         use std::os::windows::ffi::OsStrExt;
-        use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_FILENAME, SND_NODEFAULT};
+        use windows_sys::Win32::Media::Audio::{
+            PlaySoundW, SND_ASYNC, SND_FILENAME, SND_NODEFAULT,
+        };
         let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
         // SAFETY: `wide` is a NUL-terminated path that lives through the
         // call; with SND_ASYNC the function takes its own copy and returns.
@@ -717,7 +756,10 @@ pub(crate) fn play_sound(app: &AppHandle, sound_name: &str, mentioned: bool) {
         }
     }
     #[cfg(not(windows))]
-    log::debug!("chat: no sound player on this system for {}", path.display());
+    log::debug!(
+        "chat: no sound player on this system for {}",
+        path.display()
+    );
 }
 
 /// The file of a sound. The folder next to the binary, where the installer
@@ -758,7 +800,11 @@ fn sound_file(name: &str, mentioned: bool) -> String {
 /// means before picking it. The settings are not read: the screen names the
 /// sound it shows.
 #[tauri::command]
-pub async fn chat_preview_sound(app: AppHandle, sound_name: String, mention: Option<bool>) -> crate::error::Result<()> {
+pub async fn chat_preview_sound(
+    app: AppHandle,
+    sound_name: String,
+    mention: Option<bool>,
+) -> crate::error::Result<()> {
     if !is_chat_sound(&sound_name) {
         return Err(crate::error::AppError::InvalidInput(format!(
             "{sound_name:?} is not a chat sound"
@@ -817,10 +863,24 @@ mod tests {
     fn own_and_system_messages_never_notify() {
         let (_, conv, s, ctx) = plain();
         for msg in [
-            Incoming { own: true, ..Incoming::default() },
-            Incoming { system: true, ..Incoming::default() },
-            Incoming { own: true, mentioned: true, ..Incoming::default() },
-            Incoming { system: true, mentioned: true, ..Incoming::default() },
+            Incoming {
+                own: true,
+                ..Incoming::default()
+            },
+            Incoming {
+                system: true,
+                ..Incoming::default()
+            },
+            Incoming {
+                own: true,
+                mentioned: true,
+                ..Incoming::default()
+            },
+            Incoming {
+                system: true,
+                mentioned: true,
+                ..Incoming::default()
+            },
         ] {
             assert!(decide(&msg, &conv, &s, &ctx).is_silent(), "{msg:?}");
         }
@@ -830,25 +890,49 @@ mod tests {
     fn levels_let_mentions_through_and_nothing_else() {
         let (_, _, s, ctx) = plain();
         let plain_msg = Incoming::default();
-        let mention = Incoming { mentioned: true, ..Incoming::default() };
-        for (level, plain_notifies) in [(Level::All, true), (Level::Mentions, false), (Level::Mute, false)] {
-            let conv = ConvCtx { notify: level, viewed: false };
-            assert_eq!(!decide(&plain_msg, &conv, &s, &ctx).is_silent(), plain_notifies, "{level:?}");
+        let mention = Incoming {
+            mentioned: true,
+            ..Incoming::default()
+        };
+        for (level, plain_notifies) in [
+            (Level::All, true),
+            (Level::Mentions, false),
+            (Level::Mute, false),
+        ] {
+            let conv = ConvCtx {
+                notify: level,
+                viewed: false,
+            };
+            assert_eq!(
+                !decide(&plain_msg, &conv, &s, &ctx).is_silent(),
+                plain_notifies,
+                "{level:?}"
+            );
             // A mention notifies at every level, muted chats included.
             assert_eq!(decide(&mention, &conv, &s, &ctx), OS_AND_SOUND, "{level:?}");
         }
         assert_eq!(Level::of("mute"), Level::Mute);
         assert_eq!(Level::of("mentions"), Level::Mentions);
         assert_eq!(Level::of("all"), Level::All);
-        assert_eq!(Level::of("everything-new"), Level::All, "an unknown level notifies");
+        assert_eq!(
+            Level::of("everything-new"),
+            Level::All,
+            "an unknown level notifies"
+        );
     }
 
     #[test]
     fn a_conversation_on_screen_is_read_not_notified() {
         let (_, _, s, ctx) = plain();
-        let conv = ConvCtx { notify: Level::All, viewed: true };
+        let conv = ConvCtx {
+            notify: Level::All,
+            viewed: true,
+        };
         assert!(decide(&Incoming::default(), &conv, &s, &ctx).is_silent());
-        let mention = Incoming { mentioned: true, ..Incoming::default() };
+        let mention = Incoming {
+            mentioned: true,
+            ..Incoming::default()
+        };
         assert!(decide(&mention, &conv, &s, &ctx).is_silent());
     }
 
@@ -860,17 +944,32 @@ mod tests {
         ctx.any_focused = true;
         assert_eq!(
             decide(&msg, &conv, &s, &ctx),
-            Delivery { in_app: true, os: false, sound: true, summary: false }
+            Delivery {
+                in_app: true,
+                os: false,
+                sound: true,
+                summary: false
+            }
         );
         // The chat window or a client window in front: no toast (it is the
         // launcher window's), no Windows notification, the sound.
         ctx.main_focused = false;
         assert_eq!(
             decide(&msg, &conv, &s, &ctx),
-            Delivery { in_app: false, os: false, sound: true, summary: false }
+            Delivery {
+                in_app: false,
+                os: false,
+                sound: true,
+                summary: false
+            }
         );
         // Switches off stay off.
-        let off = ChatNotifications { in_app: false, os: false, sound: false, ..ChatNotifications::default() };
+        let off = ChatNotifications {
+            in_app: false,
+            os: false,
+            sound: false,
+            ..ChatNotifications::default()
+        };
         ctx.main_focused = true;
         assert!(decide(&msg, &conv, &off, &ctx).is_silent());
         ctx = NotifyCtx::default();
@@ -880,25 +979,47 @@ mod tests {
     #[test]
     fn do_not_disturb_and_quiet_hours_silence_mentions_too_unless_they_break_through() {
         let (_, _, _, noon) = plain();
-        let night = NotifyCtx { minute_of_day: at(23, 30), ..noon };
-        let dnd = ChatNotifications { dnd: true, ..ChatNotifications::default() };
+        let night = NotifyCtx {
+            minute_of_day: at(23, 30),
+            ..noon
+        };
+        let dnd = ChatNotifications {
+            dnd: true,
+            ..ChatNotifications::default()
+        };
         let quiet_hours = ChatNotifications {
             quiet_hours: Some(quiet("23:00", "08:00")),
             ..ChatNotifications::default()
         };
         let plain_msg = Incoming::default();
-        let mention = Incoming { mentioned: true, ..Incoming::default() };
+        let mention = Incoming {
+            mentioned: true,
+            ..Incoming::default()
+        };
         for level in [Level::All, Level::Mentions, Level::Mute] {
-            let conv = ConvCtx { notify: level, viewed: false };
+            let conv = ConvCtx {
+                notify: level,
+                viewed: false,
+            };
             for (s, ctx) in [(&dnd, &noon), (&quiet_hours, &night)] {
                 // D7 off: everything is silent, mentions and replies included.
                 assert!(decide(&plain_msg, &conv, s, ctx).is_silent(), "{level:?}");
                 assert!(decide(&mention, &conv, s, ctx).is_silent(), "{level:?}");
                 // D7 on: a mention or a reply notifies, in a muted chat too;
                 // a plain message stays silent.
-                let breaks = ChatNotifications { mentions_break_dnd: true, ..s.clone() };
-                assert_eq!(decide(&mention, &conv, &breaks, ctx), OS_AND_SOUND, "{level:?}");
-                assert!(decide(&plain_msg, &conv, &breaks, ctx).is_silent(), "{level:?}");
+                let breaks = ChatNotifications {
+                    mentions_break_dnd: true,
+                    ..s.clone()
+                };
+                assert_eq!(
+                    decide(&mention, &conv, &breaks, ctx),
+                    OS_AND_SOUND,
+                    "{level:?}"
+                );
+                assert!(
+                    decide(&plain_msg, &conv, &breaks, ctx).is_silent(),
+                    "{level:?}"
+                );
             }
             // Outside quiet hours the same settings notify as usual.
             if level == Level::All {
@@ -939,24 +1060,45 @@ mod tests {
         ctx.in_game = true;
         assert_eq!(
             decide(&msg, &conv, &s, &ctx),
-            Delivery { summary: true, ..Delivery::default() }
+            Delivery {
+                summary: true,
+                ..Delivery::default()
+            }
         );
-        let mention = Incoming { mentioned: true, ..Incoming::default() };
+        let mention = Incoming {
+            mentioned: true,
+            ..Incoming::default()
+        };
         assert_eq!(
             decide(&mention, &conv, &s, &ctx),
-            Delivery { summary: true, ..Delivery::default() }
+            Delivery {
+                summary: true,
+                ..Delivery::default()
+            }
         );
         // No summary wanted: the game keeps them silent all the same.
-        let no_summary = ChatNotifications { summary_after_game: false, ..s.clone() };
+        let no_summary = ChatNotifications {
+            summary_after_game: false,
+            ..s.clone()
+        };
         assert!(decide(&msg, &conv, &no_summary, &ctx).is_silent());
         // Do not disturb in game off: notified as usual.
-        let loud = ChatNotifications { dnd_in_game: false, ..s.clone() };
+        let loud = ChatNotifications {
+            dnd_in_game: false,
+            ..s.clone()
+        };
         assert_eq!(decide(&msg, &conv, &loud, &ctx), OS_AND_SOUND);
         // Silenced by DND first: not kept for the summary either.
-        let dnd = ChatNotifications { dnd: true, ..s.clone() };
+        let dnd = ChatNotifications {
+            dnd: true,
+            ..s.clone()
+        };
         assert!(decide(&msg, &conv, &dnd, &ctx).is_silent());
         // A muted chat is not in the summary; its mention is.
-        let muted = ConvCtx { notify: Level::Mute, viewed: false };
+        let muted = ConvCtx {
+            notify: Level::Mute,
+            viewed: false,
+        };
         assert!(decide(&msg, &muted, &s, &ctx).is_silent());
         assert!(decide(&mention, &muted, &s, &ctx).summary);
     }
@@ -970,58 +1112,77 @@ mod tests {
         let minutes = [at(3, 0), at(12, 0), at(23, 30)];
         let mut cases = 0;
         for bits in 0..1u32 << SWITCHES {
-        for level in levels {
-        for minute in minutes {
-            cases += 1;
-            let on = |bit: u32| bits & (1 << bit) != 0;
-            let (own, system, mentioned, viewed) = (on(0), on(1), on(2), on(3));
-            let (dnd, breaks, has_range, in_game) = (on(4), on(5), on(6), on(7));
-            let (dnd_in_game, main_focused, other_focused) = (on(8), on(9), on(10));
-            let range = has_range.then(|| quiet("23:00", "08:00"));
-            let msg = Incoming { own, system, mentioned };
-            let conv = ConvCtx { notify: level, viewed };
-            let s = ChatNotifications {
-                dnd,
-                mentions_break_dnd: breaks,
-                quiet_hours: range.clone(),
-                dnd_in_game,
-                ..ChatNotifications::default()
-            };
-            let range = range.as_ref();
-            let ctx = NotifyCtx {
-                minute_of_day: minute,
-                in_game,
-                main_focused,
-                any_focused: main_focused || other_focused,
-            };
-            let d = decide(&msg, &conv, &s, &ctx);
-            let quiet_now = dnd || range.is_some_and(|r| in_quiet_hours(r, minute));
-            let case = format!("{msg:?} {conv:?} {s:?} {ctx:?} -> {d:?}");
-            if own || system || viewed {
-                assert!(d.is_silent(), "{case}");
+            for level in levels {
+                for minute in minutes {
+                    cases += 1;
+                    let on = |bit: u32| bits & (1 << bit) != 0;
+                    let (own, system, mentioned, viewed) = (on(0), on(1), on(2), on(3));
+                    let (dnd, breaks, has_range, in_game) = (on(4), on(5), on(6), on(7));
+                    let (dnd_in_game, main_focused, other_focused) = (on(8), on(9), on(10));
+                    let range = has_range.then(|| quiet("23:00", "08:00"));
+                    let msg = Incoming {
+                        own,
+                        system,
+                        mentioned,
+                    };
+                    let conv = ConvCtx {
+                        notify: level,
+                        viewed,
+                    };
+                    let s = ChatNotifications {
+                        dnd,
+                        mentions_break_dnd: breaks,
+                        quiet_hours: range.clone(),
+                        dnd_in_game,
+                        ..ChatNotifications::default()
+                    };
+                    let range = range.as_ref();
+                    let ctx = NotifyCtx {
+                        minute_of_day: minute,
+                        in_game,
+                        main_focused,
+                        any_focused: main_focused || other_focused,
+                    };
+                    let d = decide(&msg, &conv, &s, &ctx);
+                    let quiet_now = dnd || range.is_some_and(|r| in_quiet_hours(r, minute));
+                    let case = format!("{msg:?} {conv:?} {s:?} {ctx:?} -> {d:?}");
+                    if own || system || viewed {
+                        assert!(d.is_silent(), "{case}");
+                    }
+                    if level != Level::All && !mentioned {
+                        assert!(d.is_silent(), "{case}");
+                    }
+                    if quiet_now && !(mentioned && breaks) {
+                        assert!(d.is_silent(), "{case}");
+                    }
+                    if in_game && dnd_in_game {
+                        assert!(!d.in_app && !d.os && !d.sound, "{case}");
+                    }
+                    if d.summary {
+                        assert!(
+                            in_game && dnd_in_game && !d.in_app && !d.os && !d.sound,
+                            "{case}"
+                        );
+                    }
+                    assert!(
+                        !(d.in_app && d.os),
+                        "a toast and a notification never both: {case}"
+                    );
+                    assert!(!d.in_app || main_focused, "{case}");
+                    assert!(!d.os || !(main_focused || other_focused), "{case}");
+                    // And the one case that must notify: a mention that breaks
+                    // through, nobody looking, no game.
+                    if !own
+                        && !system
+                        && mentioned
+                        && !viewed
+                        && breaks
+                        && !(in_game && dnd_in_game)
+                    {
+                        assert!(!d.is_silent(), "{case}");
+                    }
+                }
             }
-            if level != Level::All && !mentioned {
-                assert!(d.is_silent(), "{case}");
-            }
-            if quiet_now && !(mentioned && breaks) {
-                assert!(d.is_silent(), "{case}");
-            }
-            if in_game && dnd_in_game {
-                assert!(!d.in_app && !d.os && !d.sound, "{case}");
-            }
-            if d.summary {
-                assert!(in_game && dnd_in_game && !d.in_app && !d.os && !d.sound, "{case}");
-            }
-            assert!(!(d.in_app && d.os), "a toast and a notification never both: {case}");
-            assert!(!d.in_app || main_focused, "{case}");
-            assert!(!d.os || !(main_focused || other_focused), "{case}");
-            // And the one case that must notify: a mention that breaks
-            // through, nobody looking, no game.
-            if !own && !system && mentioned && !viewed && breaks && !(in_game && dnd_in_game) {
-                assert!(!d.is_silent(), "{case}");
-            }
-        }
-        }
         }
         assert_eq!(cases, (1 << SWITCHES) * 3 * 3);
     }
@@ -1076,9 +1237,13 @@ mod tests {
                 system: case.message.system,
                 mentioned: case.message.mentioned,
             };
-            let conv = ConvCtx { notify: Level::of(&case.notify), viewed: case.viewing };
+            let conv = ConvCtx {
+                notify: Level::of(&case.notify),
+                viewed: case.viewing,
+            };
             let ctx = NotifyCtx {
-                minute_of_day: crate::settings::parse_clock(&case.context.time).expect("a time of day"),
+                minute_of_day: crate::settings::parse_clock(&case.context.time)
+                    .expect("a time of day"),
                 in_game: case.context.in_game,
                 main_focused: case.context.focused,
                 any_focused: case.context.focused || case.context.other_window_focused,
@@ -1112,8 +1277,10 @@ mod tests {
         assert!(Incoming::of(&message, Some(ME)).mentioned);
         message.mentions.clear();
         message.reply_to = Some(
-            serde_json::from_value(serde_json::json!({ "seq": 2, "senderId": ME, "excerpt": "gg" }))
-                .expect("a reply"),
+            serde_json::from_value(
+                serde_json::json!({ "seq": 2, "senderId": ME, "excerpt": "gg" }),
+            )
+            .expect("a reply"),
         );
         assert!(Incoming::of(&message, Some(ME)).mentioned);
         // Signed out, nobody is mentioned; a deleted account is nobody.
@@ -1124,7 +1291,10 @@ mod tests {
         let own = super::super::test_support::message("c", 6, Some(ME));
         assert!(Incoming::of(&own, Some(ME)).own);
         let deleted = super::super::test_support::message("c", 7, None);
-        assert!(!Incoming::of(&deleted, Some(ME)).own, "a deleted account is never the player");
+        assert!(
+            !Incoming::of(&deleted, Some(ME)).own,
+            "a deleted account is never the player"
+        );
         let mut system = super::super::test_support::message("c", 8, None);
         system.kind = "system".into();
         assert!(Incoming::of(&system, Some(ME)).system);
@@ -1158,16 +1328,25 @@ mod tests {
         group.kind = "group".into();
         group.title = Some("Saber school".into());
         group.members.push(ChatMember {
-            user: OnlineUser { display_name: "Jan Ors".into(), ..user("01HJAN") },
+            user: OnlineUser {
+                display_name: "Jan Ors".into(),
+                ..user("01HJAN")
+            },
             ..ChatMember::default()
         });
         let mut m = message("g", 2, Some("01HJAN"));
         m.body = "<@deleted> left, <@01HJAN> stays, <@ broken".into();
         let (title, text) = compose(&m, Some(&group), true, &texts());
         assert_eq!(title, "Saber school");
-        assert_eq!(text, "Jan Ors: @Deleted account left, @Jan Ors stays, <@ broken");
+        assert_eq!(
+            text,
+            "Jan Ors: @Deleted account left, @Jan Ors stays, <@ broken"
+        );
         let (title, text) = compose(&m, Some(&group), false, &texts());
-        assert_eq!((title.as_str(), text.as_str()), ("Saber school", "New message"));
+        assert_eq!(
+            (title.as_str(), text.as_str()),
+            ("Saber school", "New message")
+        );
 
         // An untitled group is titled with the sender; a deleted account's
         // message with "Deleted account".
@@ -1188,16 +1367,34 @@ mod tests {
         let conversation = conversation("c", 1, 1);
         let mut m = message("c", 2, Some(KYLE));
         m.body = "   ".into();
-        m.cards = vec![serde_json::json!({ "type": "map", "fallbackText": "Map: Bespin (mp/duel7)" })];
-        assert_eq!(compose(&m, Some(&conversation), true, &texts()).1, "Map: Bespin (mp/duel7)");
+        m.cards =
+            vec![serde_json::json!({ "type": "map", "fallbackText": "Map: Bespin (mp/duel7)" })];
+        assert_eq!(
+            compose(&m, Some(&conversation), true, &texts()).1,
+            "Map: Bespin (mp/duel7)"
+        );
         m.cards.clear();
         m.files = vec![
-            FileRef { id: "f1".into(), name: "shot.png".into(), ..FileRef::default() },
-            FileRef { id: "f2".into(), name: "duel.dm_26".into(), ..FileRef::default() },
+            FileRef {
+                id: "f1".into(),
+                name: "shot.png".into(),
+                ..FileRef::default()
+            },
+            FileRef {
+                id: "f2".into(),
+                name: "duel.dm_26".into(),
+                ..FileRef::default()
+            },
         ];
-        assert_eq!(compose(&m, Some(&conversation), true, &texts()).1, "shot.png, duel.dm_26");
+        assert_eq!(
+            compose(&m, Some(&conversation), true, &texts()).1,
+            "shot.png, duel.dm_26"
+        );
         m.files.clear();
-        assert_eq!(compose(&m, Some(&conversation), true, &texts()).1, "New message");
+        assert_eq!(
+            compose(&m, Some(&conversation), true, &texts()).1,
+            "New message"
+        );
         // A long text is cut.
         m.body = "a".repeat(500);
         let text = compose(&m, Some(&conversation), true, &texts()).1;
@@ -1221,7 +1418,12 @@ mod tests {
     fn notifications_keep_a_pace_and_mentions_skip_the_queue() {
         let mut book = NotifyBook::default();
         let start = Instant::now();
-        let all = Delivery { in_app: false, os: true, sound: true, summary: false };
+        let all = Delivery {
+            in_app: false,
+            os: true,
+            sound: true,
+            summary: false,
+        };
         assert_eq!(book.pace("c", false, start, all), all);
         // Half a second later, same conversation: no second notification or
         // chime.
@@ -1230,7 +1432,10 @@ mod tests {
         // Another conversation gets its notification; the chime still waits.
         assert_eq!(
             book.pace("d", false, soon, all),
-            Delivery { sound: false, ..all }
+            Delivery {
+                sound: false,
+                ..all
+            }
         );
         // A mention is never held back.
         let later = start + Duration::from_millis(1500);
@@ -1258,22 +1463,36 @@ mod tests {
         });
         assert_eq!(
             summary,
-            Summary { messages: 2, conversations: 2, mentioned: true, only: None }
+            Summary {
+                messages: 2,
+                conversations: 2,
+                mentioned: true,
+                only: None
+            }
         );
         let one = count_unread(&held, |id, _| id == "b");
         assert_eq!(one.only.as_deref(), Some("b"));
-        assert_eq!(summary_text("Messages: {messages}, chats: {chats}", 12, 3), "Messages: 12, chats: 3");
+        assert_eq!(
+            summary_text("Messages: {messages}, chats: {chats}", 12, 3),
+            "Messages: 12, chats: 3"
+        );
     }
 
     #[test]
     fn every_sound_has_both_files_in_the_repository() {
         for name in CHAT_SOUNDS {
             for mentioned in [false, true] {
-                let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(sound_file(name, mentioned));
-                let bytes = std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                let path =
+                    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(sound_file(name, mentioned));
+                let bytes =
+                    std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
                 assert_eq!(&bytes[..4], b"RIFF", "{}", path.display());
                 assert_eq!(&bytes[8..12], b"WAVE", "{}", path.display());
-                assert!(bytes.len() < 64 * 1024, "a chime, not a song: {}", path.display());
+                assert!(
+                    bytes.len() < 64 * 1024,
+                    "a chime, not a song: {}",
+                    path.display()
+                );
             }
         }
     }

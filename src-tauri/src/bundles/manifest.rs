@@ -116,9 +116,9 @@ pub(crate) fn is_library_feature(code: &str) -> bool {
     !code.is_empty()
         && code.len() <= MAX_LIBRARY_FEATURE_LEN
         && code.split(':').count() <= 2
-        && code
-            .bytes()
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b':')
+        && code.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-' || byte == b':'
+        })
 }
 
 /// Bytes of one file the service stores: `JKNET_ONLINE_BUNDLE_MAX_FILE_BYTES`
@@ -667,7 +667,11 @@ fn check_file(file: &ManifestFile, blob_bytes: &mut u64) -> Result<()> {
                 file.path
             )));
         }
-        if let Some(code) = library.features.iter().find(|code| !is_library_feature(code)) {
+        if let Some(code) = library
+            .features
+            .iter()
+            .find(|code| !is_library_feature(code))
+        {
             return Err(AppError::InvalidInput(format!(
                 "{} carries the badge {code:?}, which is not lowercase letters, digits and hyphens with one optional colon",
                 file.path
@@ -923,7 +927,11 @@ pub(crate) mod test_support {
                     fs_game: None,
                     launch_args: String::new(),
                     overlay: ManifestOverlay::default(),
-                    files: vec![file(FileRoot::Home, "base/autoexec_sp.cfg", FileSource::Blob)],
+                    files: vec![file(
+                        FileRoot::Home,
+                        "base/autoexec_sp.cfg",
+                        FileSource::Blob,
+                    )],
                     configs: Vec::new(),
                 },
             ],
@@ -953,13 +961,22 @@ mod tests {
         assert_eq!(mp["launchArgs"], "+set cg_fov 97");
         assert_eq!(mp["overlay"]["files"][0]["root"], "engine");
         assert_eq!(mp["overlay"]["files"][0]["kind"], "exe");
-        assert_eq!(mp["overlay"]["files"][0]["source"], serde_json::json!({ "kind": "blob" }));
+        assert_eq!(
+            mp["overlay"]["files"][0]["source"],
+            serde_json::json!({ "kind": "blob" })
+        );
         assert_eq!(mp["overlay"]["files"][0]["replaces"]["size"], 1_146_368);
-        assert_eq!(mp["overlay"]["remove"], serde_json::json!(["rd-vulkan_x86.dll"]));
+        assert_eq!(
+            mp["overlay"]["remove"],
+            serde_json::json!(["rd-vulkan_x86.dll"])
+        );
         assert_eq!(mp["files"][0]["source"]["kind"], "jkhub");
         assert_eq!(mp["files"][0]["source"]["fileId"], 3937);
         assert_eq!(mp["files"][0]["library"]["folders"]["sound"], 879);
-        assert!(mp["files"][0].get("replaces").is_none(), "absent stays absent");
+        assert!(
+            mp["files"][0].get("replaces").is_none(),
+            "absent stays absent"
+        );
         assert!(mp["files"][0].get("origin").is_none());
         assert_eq!(mp["configs"][0]["priority"], 0);
         let sp = &json["components"][1];
@@ -987,7 +1004,10 @@ mod tests {
             sha256: "d".repeat(64),
             size: 8,
         });
-        assert!(!listed.components[0].files[0].source.is_blob(), "japro comes from JKHub");
+        assert!(
+            !listed.components[0].files[0].source.is_blob(),
+            "japro comes from JKHub"
+        );
         assert_eq!(listed.blob_bytes(), 9 + 120 + 8);
         assert_eq!(back.all_files().count(), 4);
         assert!(back.component("mp").unwrap().has_engine_overlay());
@@ -1010,7 +1030,11 @@ mod tests {
         assert_eq!(component.launch_args, "");
         assert_eq!(component.engine.release_tag, None);
         assert!(component.overlay.is_empty());
-        assert_eq!(component.files[0].kind, FileKind::Other, "left out reads as other");
+        assert_eq!(
+            component.files[0].kind,
+            FileKind::Other,
+            "left out reads as other"
+        );
         assert_eq!(component.configs[0].priority, 0);
         assert!(parsed.shared.files.is_empty());
         validate(&parsed).expect("valid");
@@ -1075,7 +1099,10 @@ mod tests {
     #[test]
     fn a_hash_is_sixty_four_lowercase_hex_characters() {
         check_sha256(&"0123456789abcdef".repeat(4)).expect("lowercase hex");
-        assert!(check_sha256(&"0123456789ABCDEF".repeat(4)).is_err(), "uppercase");
+        assert!(
+            check_sha256(&"0123456789ABCDEF".repeat(4)).is_err(),
+            "uppercase"
+        );
         assert!(check_sha256(&"0".repeat(63)).is_err(), "too short");
         assert!(check_sha256(&"g".repeat(64)).is_err(), "not hex");
     }
@@ -1107,7 +1134,10 @@ mod tests {
 
         let mut other_game = manifest();
         other_game.game = "q3".into();
-        assert!(matches!(validate(&other_game), Err(AppError::BundleUnavailable(_))));
+        assert!(matches!(
+            validate(&other_game),
+            Err(AppError::BundleUnavailable(_))
+        ));
 
         let mut none = manifest();
         none.components.clear();
@@ -1177,23 +1207,35 @@ mod tests {
             "EternalJK.x86.exe",
             FileSource::Blob,
         ));
-        assert!(validate(&twice).is_err(), "the same overlay path in another case");
+        assert!(
+            validate(&twice).is_err(),
+            "the same overlay path in another case"
+        );
         let mut twice_home = manifest();
         twice_home.components[0].files.push(file(
             FileRoot::Home,
             "EternalJK/japro-assets.pk3",
             FileSource::Blob,
         ));
-        assert!(validate(&twice_home).is_err(), "the same home path in another case");
+        assert!(
+            validate(&twice_home).is_err(),
+            "the same home path in another case"
+        );
         let mut shared_too = manifest();
         shared_too.shared.files.push(file(
             FileRoot::Home,
             "eternaljk/japro-assets.pk3",
             FileSource::Blob,
         ));
-        assert!(validate(&shared_too).is_err(), "a component path repeated in shared");
+        assert!(
+            validate(&shared_too).is_err(),
+            "a component path repeated in shared"
+        );
         let mut twice_shared = manifest();
-        twice_shared.shared.files.push(file(FileRoot::Home, "base/RUS_SP.pk3", FileSource::Blob));
+        twice_shared
+            .shared
+            .files
+            .push(file(FileRoot::Home, "base/RUS_SP.pk3", FileSource::Blob));
         assert!(validate(&twice_shared).is_err());
         // The same home path in two components is two clients: allowed.
         let mut two_clients = manifest();
@@ -1245,7 +1287,10 @@ mod tests {
             size: 1,
             ..file(FileRoot::Home, "base/tiny.pk3", FileSource::Blob)
         });
-        assert!(validate(&over_the_version).is_err(), "four halves and a byte");
+        assert!(
+            validate(&over_the_version).is_err(),
+            "four halves and a byte"
+        );
         // A listing weighs the same as a byte of a file.
         over_the_version.shared.files.pop();
         validate(&over_the_version).expect("four halves fill a version");
@@ -1253,14 +1298,20 @@ mod tests {
             sha256: "d".repeat(64),
             size: 1,
         });
-        assert!(validate(&over_the_version).is_err(), "four halves and a listing of a byte");
+        assert!(
+            validate(&over_the_version).is_err(),
+            "four halves and a listing of a byte"
+        );
 
         let mut listing_on_cfg = manifest();
         listing_on_cfg.components[1].files[0].listing = Some(ListingRef {
             sha256: "b".repeat(64),
             size: 120,
         });
-        assert!(validate(&listing_on_cfg).is_err(), "only a pk3 has a listing");
+        assert!(
+            validate(&listing_on_cfg).is_err(),
+            "only a pk3 has a listing"
+        );
         let mut listing_bad_hash = manifest();
         listing_bad_hash.components[0].files[0].listing = Some(ListingRef {
             sha256: "not a hash".into(),
@@ -1279,7 +1330,10 @@ mod tests {
         validate(&listing_on_pk3).expect("a listing on a pk3 of home and of shared");
         let json = serde_json::to_value(&listing_on_pk3).unwrap();
         assert_eq!(json["components"][0]["files"][0]["listing"]["size"], 120);
-        assert!(json["components"][1]["files"][0].get("listing").is_none(), "absent stays absent");
+        assert!(
+            json["components"][1]["files"][0].get("listing").is_none(),
+            "absent stays absent"
+        );
         let back: Manifest = serde_json::from_value(json).unwrap();
         assert_eq!(back, listing_on_pk3);
 
@@ -1294,28 +1348,62 @@ mod tests {
         });
         assert!(validate(&library_on_exe).is_err());
         let mut many_folders = manifest();
-        many_folders.components[0].files[0].library.as_mut().unwrap().folders =
-            (0..=MAX_LIBRARY_FOLDERS).map(|i| (format!("f{i}"), 1)).collect();
+        many_folders.components[0].files[0]
+            .library
+            .as_mut()
+            .unwrap()
+            .folders = (0..=MAX_LIBRARY_FOLDERS)
+            .map(|i| (format!("f{i}"), 1))
+            .collect();
         assert!(validate(&many_folders).is_err());
         let mut many_maps = manifest();
-        many_maps.components[0].files[0].library.as_mut().unwrap().maps =
-            (0..=MAX_LIBRARY_MAPS).map(|i| format!("m{i}")).collect();
+        many_maps.components[0].files[0]
+            .library
+            .as_mut()
+            .unwrap()
+            .maps = (0..=MAX_LIBRARY_MAPS).map(|i| format!("m{i}")).collect();
         assert!(validate(&many_maps).is_err());
         let mut many_features = manifest();
-        many_features.components[0].files[0].library.as_mut().unwrap().features =
-            (0..=MAX_LIBRARY_FEATURES).map(|i| format!("f{i}")).collect();
+        many_features.components[0].files[0]
+            .library
+            .as_mut()
+            .unwrap()
+            .features = (0..=MAX_LIBRARY_FEATURES)
+            .map(|i| format!("f{i}"))
+            .collect();
         assert!(validate(&many_features).is_err(), "33 badges");
-        for code in ["Levelshots", "strings:RU", "strings:ru:x", "", "hilts weapons", "strings:русский"] {
+        for code in [
+            "Levelshots",
+            "strings:RU",
+            "strings:ru:x",
+            "",
+            "hilts weapons",
+            "strings:русский",
+        ] {
             let mut bad_feature = manifest();
-            bad_feature.components[0].files[0].library.as_mut().unwrap().features = vec![code.into()];
-            assert!(validate(&bad_feature).is_err(), "{code:?} is not a badge code");
+            bad_feature.components[0].files[0]
+                .library
+                .as_mut()
+                .unwrap()
+                .features = vec![code.into()];
+            assert!(
+                validate(&bad_feature).is_err(),
+                "{code:?} is not a badge code"
+            );
         }
         let mut long_feature = manifest();
-        long_feature.components[0].files[0].library.as_mut().unwrap().features =
-            vec!["x".repeat(MAX_LIBRARY_FEATURE_LEN + 1)];
+        long_feature.components[0].files[0]
+            .library
+            .as_mut()
+            .unwrap()
+            .features = vec!["x".repeat(MAX_LIBRARY_FEATURE_LEN + 1)];
         assert!(validate(&long_feature).is_err());
         let mut badges = manifest();
-        badges.components[0].files[0].library.as_mut().unwrap().features = vec![
+        badges.components[0].files[0]
+            .library
+            .as_mut()
+            .unwrap()
+            .features = vec![
             "levelshots".into(),
             "strings:russian".into(),
             "hud-2".into(),

@@ -406,16 +406,16 @@
     "removeCard": "Usuń {{name}}",
     "tooManyCards": "Wiadomość może zawierać do {{max}} kart.",
     "tooManyFiles": "Wiadomość może zawierać do {{max}} plików.",
-    "refusedTitle_one": "{{count}} plik nie został dołączony",
-    "refusedTitle_few": "{{count}} pliki nie zostały dołączone",
-    "refusedTitle_many": "{{count}} plików nie zostało dołączonych",
-    "refusedTitle_other": "{{count}} pliku nie dołączono",
     "refusedLine": "{{name}}: {{reason}}",
     "counter": "{{used}} / {{max}}",
     "tooLong": "Wiadomość może mieć najwyżej {{max}} znaków.",
     "notFriends": "Nie jesteście już znajomymi. Czat jest tylko do odczytu; gdy znów będziecie znajomymi, rozmowa potoczy się dalej.",
     "deletedPeer": "To konto zostało usunięte. Czat jest tylko do odczytu i zostanie zachowany do limitu 90 dni.",
-    "readOnly": "Nie możesz wysyłać wiadomości na ten czat."
+    "readOnly": "Nie możesz wysyłać wiadomości na ten czat.",
+    "refusedTitle_one": "{{count}} plik nie został dołączony",
+    "refusedTitle_few": "{{count}} pliki nie zostały dołączone",
+    "refusedTitle_many": "{{count}} plików nie zostało dołączonych",
+    "refusedTitle_other": "{{count}} pliku nie dołączono"
   },
   "attach": {
     "open": "Załącz",
@@ -906,5 +906,13 @@
     "tooltipUnread_few": "JKNet: {{count}} nieprzeczytane wiadomości",
     "tooltipUnread_many": "JKNet: {{count}} nieprzeczytanych wiadomości",
     "tooltipUnread_other": "JKNet: {{count}} nieprzeczytanej wiadomości"
+  },
+  "serverConfig": {
+    "subtitle": "Server config · {{game}} · {{mod}}",
+    "open": "Open server editor",
+    "receiveTitle": "Save a server config",
+    "receiveHint": "Review the game, mod and rules. Saving adds a copy to your server configs. Choose it in Play with friends when you want to host.",
+    "save": "Save to server configs",
+    "sensitive": "Remove passwords or administration secrets before sharing."
   }
 }

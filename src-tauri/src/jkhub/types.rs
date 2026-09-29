@@ -188,7 +188,11 @@ pub enum JkhubSort {
 
 impl JkhubSort {
     pub fn default_direction(self) -> SortDirection {
-        if self == Self::Name { SortDirection::Asc } else { SortDirection::Desc }
+        if self == Self::Name {
+            SortDirection::Asc
+        } else {
+            SortDirection::Desc
+        }
     }
 
     /// `(sortby, sortdirection)` as the site spells them.

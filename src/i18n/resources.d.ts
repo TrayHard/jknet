@@ -16,6 +16,7 @@ import type account from "../locales/en/account.json";
 import type bundles from "../locales/en/bundles.json";
 // --- slice: chat ---
 import type chat from "../locales/en/chat.json";
+import type changelog from "../locales/en/changelog.json";
 import type clients from "../locales/en/clients.json";
 import type common from "../locales/en/common.json";
 import type errors from "../locales/en/errors.json";
@@ -31,6 +32,9 @@ import type onboarding from "../locales/en/onboarding.json";
 import type pk3 from "../locales/en/pk3.json";
 import type servers from "../locales/en/servers.json";
 import type settings from "../locales/en/settings.json";
+import type serverConfigs from "../locales/en/serverConfigs.json";
+import type serverConfigFields from "../locales/en/serverConfigFields.json";
+import type serverInstances from "../locales/en/serverInstances.json";
 import type update from "../locales/en/update.json";
 // --- slice: web app --- the strings only the web app prints, kept outside
 // `src/locales` so the launcher never loads them. A type, no runtime import.
@@ -52,6 +56,10 @@ declare module "i18next" {
       friends: typeof friends;
       account: typeof account;
       settings: typeof settings;
+      changelog: typeof changelog;
+      serverConfigs: typeof serverConfigs;
+      serverConfigFields: typeof serverConfigFields;
+      serverInstances: typeof serverInstances;
       onboarding: typeof onboarding;
       errors: typeof errors;
       games: typeof games;

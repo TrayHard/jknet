@@ -32,7 +32,7 @@ import type { CardViewProps } from "./withFields";
  * them has the map. While the player's private server runs in the map's game,
  * **Play on my server** changes its map; otherwise **Host on this map**
  * starts one with the last settings of the Play with friends screen and this
- * map, in a mode the map offers. Both ask first: a card never starts a server
+ * map, keeping the saved game mode. Both ask first: a card never starts a server
  * or moves the players of one by itself.
  *
  * --- slice: web app --- a platform without game files and without the game
@@ -184,8 +184,8 @@ function ChangeMapDialog({
 
 /**
  * **Host on this map**: the last settings of the Play with friends screen of
- * the map's game, this map, and the mode of those settings when the map
- * offers it, else the first mode it offers. A map the client of those
+ * the map's game, this map, and the mode of those settings. Arena metadata
+ * does not restrict or replace that mode. A map the client of those
  * settings does not have cannot be hosted, and the dialog says so.
  */
 function HostMapDialog({
@@ -208,8 +208,8 @@ function HostMapDialog({
 
   const map = maps.data?.find((entry) => entry.name.toLowerCase() === fields.name.toLowerCase()) ?? null;
   const client = options.data?.clients.find((entry) => entry.id === clientId) ?? null;
-  const offered = (options.data?.gametypes ?? []).filter((mode) => map?.gametypes.includes(mode.id) ?? false);
-  const mode = offered.find((entry) => entry.index === defaults?.gametype) ?? offered[0] ?? null;
+  const modes = options.data?.gametypes ?? [];
+  const mode = modes.find((entry) => entry.index === defaults?.gametype) ?? modes[0] ?? null;
   // A query that never runs — no client to read maps of — stays pending.
   const loading = options.isPending || (client !== null && maps.isPending);
   const ready = defaults !== null && map !== null && mode !== null && client?.canHost === true;

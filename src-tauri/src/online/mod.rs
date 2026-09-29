@@ -29,11 +29,6 @@ mod client;
 pub(crate) mod mock_tests;
 mod types;
 
-pub use client::{
-    default_online_url, is_http_url, is_local_online, normalize_display_name,
-    normalize_online_url, online_configured, path_segment, Auth, OnlineClient, OnlineContext,
-    PROVIDERS,
-};
 /// The development service by name, for the tests of `account`, `settings` and
 /// `friends`: they are about the account and not about which service a build
 /// profile ships with, so they must not read `default_online_url()`.
@@ -44,6 +39,10 @@ pub use client::{
 /// `online_configured()`.
 #[cfg(test)]
 pub use client::DEV_ONLINE_URL;
+pub use client::{
+    default_online_url, is_http_url, is_local_online, normalize_display_name, normalize_online_url,
+    online_configured, path_segment, Auth, OnlineClient, OnlineContext, PROVIDERS,
+};
 /// The answer of `GET /v1/me`, for the test of `account` that pins how the
 /// `admin` flag reads out of an older service and a newer one.
 #[cfg(test)]
@@ -67,17 +66,17 @@ pub use types::DeviceSessions;
 // The chat API: its wire types, which `crate::chat` keeps and forwards to the
 // windows as they are, and the helpers that read its refusals. Only what
 // `crate::chat` names; the structures nested inside these travel with them.
+/// A refusal of the chat API as the core reads it, for the failure cases the
+/// outbox shares with the web client.
+#[cfg(test)]
+pub(crate) use client::chat_error_for_test;
 pub use client::{is_chat_unavailable, is_retryable, PageAnchor, SearchQuery};
+/// The member entry of a conversation, which the tests of `crate::chat` build
+/// summaries from.
+#[cfg(test)]
+pub use types::ChatMember;
 pub use types::{
     AddResult, ChatMessage, ChatPrivacy, ChatPrivacyPatch, ChatQuota, ChatSyncDoc, Conversation,
     FileMeta, FileRef, GroupInvite, GroupResult, MessagePage, NewMessage, ReactionGroup,
     SearchPage, ServerChatRef,
 };
-/// The member entry of a conversation, which the tests of `crate::chat` build
-/// summaries from.
-#[cfg(test)]
-pub use types::ChatMember;
-/// A refusal of the chat API as the core reads it, for the failure cases the
-/// outbox shares with the web client.
-#[cfg(test)]
-pub(crate) use client::chat_error_for_test;
