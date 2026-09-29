@@ -44,3 +44,5 @@ dev.cmd
 
 # Chat sounds the web build copies from src-tauri/resources/sounds
 web/public/sounds/
+# Engine marks the web build copies from public/brand/engines
+web/public/brand/engines/

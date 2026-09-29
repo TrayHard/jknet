@@ -18,7 +18,7 @@
     "web:build": "vite build --config web/vite.config.ts && node web/scripts/build-sw.mjs && node web/scripts/write-version.mjs && node web/scripts/check-bundle.mjs",
     "web:build:e2e": "vite build --config web/vite.config.ts --mode e2e --outDir e2e/dist && node web/scripts/build-sw.mjs --out web/e2e/dist && node web/scripts/write-version.mjs --out web/e2e/dist",
     "web:preview": "vite preview --config web/vite.config.ts",
-    "web:typecheck": "tsc -p web/tsconfig.json --noEmit && tsc -p web/src/sw/tsconfig.json --noEmit",
+    "web:typecheck": "tsc -p web/tsconfig.json --noEmit && tsc -p web/src/sw/tsconfig.json --noEmit && tsc -p web/e2e/tsconfig.json --noEmit",
     "web:test": "node --test \"web/src/**/*.test.mjs\"",
     "web:test:online": "node --test \"web/src/**/*.online-test.mjs\"",
     "web:e2e": "npm run web:build:e2e && playwright test -c web/e2e/playwright.config.ts"
@@ -70,6 +70,7 @@
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2",
+    "@types/node": "~24.19.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@types/three": "^0.186.0",
