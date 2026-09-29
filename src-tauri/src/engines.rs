@@ -830,16 +830,9 @@ fn admit_engine_install<'a>(
 ///
 /// Only an installed engine is protected: a client whose bundle install
 /// stopped before the engine arrived has nothing to lose yet, and the retry
-/// of that install goes through the same unpacking.
+/// of that install goes through the same unpacking. Imported engines are safe:
+/// the installer moves their snapshot aside and restores it on failure.
 fn refuse_overlay_update(client: &Client) -> Result<()> {
-    if client.engine_origin == crate::clients::EngineOrigin::Imported
-        && client.engine_version.is_some()
-    {
-        return Err(AppError::InvalidInput(format!(
-            "{} uses an imported engine snapshot. Create another client to install a managed release without overwriting it.",
-            client.name
-        )));
-    }
     let overlaid = client
         .bundle
         .as_ref()
@@ -871,14 +864,6 @@ pub async fn check_engine_update(
     let paths = state.paths()?;
     let client = crate::clients::read_record(&paths, &client_id)?;
     let engine = require(&client.engine_id)?;
-    if client.engine_origin == crate::clients::EngineOrigin::Imported {
-        return Ok(EngineUpdate {
-            installed: client.engine_version.clone(),
-            latest: None,
-            latest_published_at: None,
-            update_available: false,
-        });
-    }
     let releases = engine_install::releases(engine, &paths.cache).await?;
 
     let latest = releases.first();
@@ -895,9 +880,6 @@ pub async fn check_engine_update(
 /// RFC 3339 in UTC with a fixed width sorts the same as time does, so the
 /// publication times compare as plain strings.
 fn is_update_available(client: &Client, latest: Option<&EngineRelease>) -> bool {
-    if client.engine_origin == crate::clients::EngineOrigin::Imported {
-        return false;
-    }
     let Some(latest) = latest else {
         return false;
     };
@@ -1594,14 +1576,13 @@ mod tests {
     }
 
     #[test]
-    fn an_imported_snapshot_is_neither_updated_nor_reinstalled() {
+    fn an_imported_snapshot_is_offered_a_managed_release() {
         let mut client = client_with(Some("imported"), None);
         client.engine_origin = crate::clients::EngineOrigin::Imported;
         let release = release_at("latest", "2026-09-01T00:00:00Z");
 
-        assert!(!is_update_available(&client, Some(&release)));
-        let error = refuse_overlay_update(&client).expect_err("the snapshot is protected");
-        assert!(matches!(error, AppError::InvalidInput(_)), "{error}");
+        assert!(is_update_available(&client, Some(&release)));
+        refuse_overlay_update(&client).expect("the installer preserves the snapshot");
     }
 
     fn client_with(version: Option<&str>, published: Option<&str>) -> Client {

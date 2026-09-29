@@ -67,6 +67,7 @@ export const NAMESPACES = [
   "friends",
   "account",
   "settings",
+  "changelog",
   "onboarding",
   "errors",
   "games",

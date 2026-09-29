@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 
-use crate::clients::{self, Client};
+use crate::clients::{self, Client, EngineOrigin};
 use crate::engines::{self, Engine, EngineRelease};
 use crate::error::{AppError, Result};
 use crate::host_system::HostSystem;
@@ -41,6 +41,7 @@ const CACHE_TTL: u64 = 10 * 60;
 
 /// Event the frontend listens to while an engine is being installed.
 const PROGRESS_EVENT: &str = "launch:engine-install-progress";
+const IMPORTED_SNAPSHOT_DIR: &str = "imported-engine-backup";
 
 /// Shortest gap between two download progress events, in milliseconds. A
 /// 50 MB archive would otherwise emit thousands of them.
@@ -502,6 +503,7 @@ async fn install_inner(
     let archive = download(app, paths, client_id, engine, &release).await?;
 
     let engine_dir = extract_target(paths, client_id);
+    let imported_snapshot = ImportedSnapshotGuard::stage(paths, &client)?;
     let executable = engine.executable_for_asset(&release.asset_name);
     emit(
         app,
@@ -542,9 +544,13 @@ async fn install_inner(
     }
 
     client.engine_version = Some(release.tag.clone());
+    client.engine_origin = EngineOrigin::Managed;
     client.engine_installed_at = Some(timestamp::now_rfc3339());
     client.engine_published_at = Some(release.published_at.clone());
     clients::write_record(paths, &client)?;
+    if let Some(snapshot) = imported_snapshot {
+        snapshot.commit();
+    }
 
     log::info!(
         "installed {} {} into {}",
@@ -563,6 +569,79 @@ async fn install_inner(
         },
     );
     Ok(client)
+}
+
+/// The original imported engine kept beside a client after it switches to a
+/// managed release. It is intentionally outside `engine\`, which every later
+/// release update may empty.
+pub(crate) fn imported_snapshot_dir(paths: &DataPaths, client_id: &str) -> PathBuf {
+    paths.client_dir(client_id).join(IMPORTED_SNAPSHOT_DIR)
+}
+
+/// Moves an imported engine out of the installer's target and restores it if
+/// any later step fails. A successful install keeps the folder as a rollback
+/// snapshot and changes the client record to `Managed`.
+struct ImportedSnapshotGuard {
+    engine: PathBuf,
+    backup: PathBuf,
+    committed: bool,
+}
+
+impl ImportedSnapshotGuard {
+    fn stage(paths: &DataPaths, client: &Client) -> Result<Option<Self>> {
+        if client.engine_origin != EngineOrigin::Imported {
+            return Ok(None);
+        }
+        let engine = paths.client_engine_dir(&client.id);
+        let backup = imported_snapshot_dir(paths, &client.id);
+        if !engine.is_dir() {
+            return Err(AppError::NotFound(format!(
+                "the imported engine folder of {}",
+                client.name
+            )));
+        }
+        if backup.exists() {
+            return Err(AppError::AlreadyExists(backup.display().to_string()));
+        }
+        fs::rename(&engine, &backup).map_err(|error| {
+            AppError::io_path("cannot preserve the imported engine", &engine, error)
+        })?;
+        Ok(Some(Self {
+            engine,
+            backup,
+            committed: false,
+        }))
+    }
+
+    fn commit(mut self) {
+        self.committed = true;
+    }
+
+    fn restore(&self) -> Result<()> {
+        if self.engine.exists() {
+            fs::remove_dir_all(&self.engine).map_err(|error| {
+                AppError::io_path("cannot clear the failed engine update", &self.engine, error)
+            })?;
+        }
+        fs::rename(&self.backup, &self.engine).map_err(|error| {
+            AppError::io_path("cannot restore the imported engine", &self.backup, error)
+        })
+    }
+}
+
+impl Drop for ImportedSnapshotGuard {
+    fn drop(&mut self) {
+        if self.committed {
+            return;
+        }
+        if let Err(error) = self.restore() {
+            log::error!(
+                "cannot roll back imported engine {} from {}: {error}",
+                self.engine.display(),
+                self.backup.display()
+            );
+        }
+    }
 }
 
 /// Streams the release archive into `cache\downloads\`.
@@ -1247,8 +1326,28 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game::Game;
     use std::io::{Cursor, Write};
+    use tempfile::tempdir;
     use zip::write::SimpleFileOptions;
+
+    fn imported_client(id: &str) -> Client {
+        Client {
+            id: id.into(),
+            name: "Imported".into(),
+            engine_id: "openjk".into(),
+            game: Game::JediAcademy,
+            engine_version: Some("imported".into()),
+            engine_origin: EngineOrigin::Imported,
+            created_at: "2026-09-29T00:00:00Z".into(),
+            engine_installed_at: Some("2026-09-29T00:00:00Z".into()),
+            engine_published_at: None,
+            fs_game: None,
+            launch_args: String::new(),
+            modes: Vec::new(),
+            bundle: None,
+        }
+    }
 
     /// Builds a zip in memory and writes it next to the target folder.
     fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
@@ -1273,6 +1372,51 @@ mod tests {
         assert_eq!(sanitize_file_stem("release/2026-09"), "release-2026-09");
         assert_eq!(sanitize_file_stem("../../etc"), "..-..-etc");
         assert_eq!(sanitize_file_stem("///"), "release");
+    }
+
+    #[test]
+    fn a_failed_imported_engine_update_restores_the_snapshot() {
+        let temp = tempdir().unwrap();
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        let client = imported_client("imported");
+        let engine = paths.client_engine_dir(&client.id);
+        fs::create_dir_all(&engine).unwrap();
+        fs::write(engine.join("old.exe"), b"old").unwrap();
+
+        {
+            let _guard = ImportedSnapshotGuard::stage(&paths, &client)
+                .unwrap()
+                .expect("an imported snapshot");
+            fs::create_dir_all(&engine).unwrap();
+            fs::write(engine.join("partial.exe"), b"partial").unwrap();
+        }
+
+        assert_eq!(fs::read(engine.join("old.exe")).unwrap(), b"old");
+        assert!(!engine.join("partial.exe").exists());
+        assert!(!imported_snapshot_dir(&paths, &client.id).exists());
+    }
+
+    #[test]
+    fn a_successful_imported_engine_update_keeps_the_snapshot() {
+        let temp = tempdir().unwrap();
+        let paths = DataPaths::new(temp.path().to_path_buf());
+        let client = imported_client("imported");
+        let engine = paths.client_engine_dir(&client.id);
+        fs::create_dir_all(&engine).unwrap();
+        fs::write(engine.join("old.exe"), b"old").unwrap();
+
+        let guard = ImportedSnapshotGuard::stage(&paths, &client)
+            .unwrap()
+            .expect("an imported snapshot");
+        fs::create_dir_all(&engine).unwrap();
+        fs::write(engine.join("fresh.exe"), b"fresh").unwrap();
+        guard.commit();
+
+        assert_eq!(fs::read(engine.join("fresh.exe")).unwrap(), b"fresh");
+        assert_eq!(
+            fs::read(imported_snapshot_dir(&paths, &client.id).join("old.exe")).unwrap(),
+            b"old"
+        );
     }
 
     #[test]

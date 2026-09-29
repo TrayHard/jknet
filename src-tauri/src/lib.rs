@@ -619,6 +619,7 @@ pub fn run() {
             launch::launch_client,
             // --- slice: player profiles ---
             profiles::list_profiles,
+            profiles::inspect_profile_config,
             profiles::save_profile,
             profiles::delete_profile,
             profiles::set_default_profile,

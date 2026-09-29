@@ -55,7 +55,9 @@ export function ClientEngineRow({
       : null,
   );
   const installed = client.engineVersion !== null;
-  const releases = useEngineReleases(installed || !engine?.installable ? null : client.engineId);
+  const releases = useEngineReleases(
+    (!installed || imported) && engine?.installable ? client.engineId : null,
+  );
   const [failure, setFailure] = useState<string | null>(null);
 
   const progress = installs[client.id];
@@ -107,13 +109,26 @@ export function ClientEngineRow({
       ) : (
         <div className="flex items-center gap-8 flex-wrap">
           {installed && imported ? (
-            <Badge
-              tone="neutral"
-              icon={<Import size={12} />}
-              title={t("card.importedHint")}
-            >
-              {t("card.imported")}
-            </Badge>
+            <>
+              <Badge
+                tone="neutral"
+                icon={<Import size={12} />}
+                title={t("card.importedHint")}
+              >
+                {t("card.imported")}
+              </Badge>
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<RefreshCw size={14} />}
+                onClick={install}
+                disabled={installing || !latestTag}
+              >
+                {latestTag
+                  ? t("engine.adoptLatest", { version: latestTag })
+                  : t("engine.updateToNewest")}
+              </Button>
+            </>
           ) : installed && customBuild ? (
             <Badge
               tone="purple"

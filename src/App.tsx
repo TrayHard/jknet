@@ -28,6 +28,7 @@ import { LanguageSync } from "./i18n/LanguageSync";
 import { isChatWindowHash } from "./lib/chatWindow";
 import { useFriendsEvents } from "./lib/queries";
 import { ChatWindowPage } from "./pages/ChatWindowPage";
+import { ChangelogPage } from "./pages/ChangelogPage";
 // --- slice: client window ---
 import { isClientWindowHash } from "./lib/clientWindow";
 import { PlayerProfilesPage } from "./pages/PlayerProfilesPage";
@@ -234,6 +235,7 @@ function getMainRouter() {
           <Route path="/configs" element={<ConfigsPage />} />
           <Route path="/engines/:id" element={<EnginePage />} />
           <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/changelog" element={<ChangelogPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<HomePage />} />
         </Route>

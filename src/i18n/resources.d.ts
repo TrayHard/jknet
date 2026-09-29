@@ -16,6 +16,7 @@ import type account from "../locales/en/account.json";
 import type bundles from "../locales/en/bundles.json";
 // --- slice: chat ---
 import type chat from "../locales/en/chat.json";
+import type changelog from "../locales/en/changelog.json";
 import type clients from "../locales/en/clients.json";
 import type common from "../locales/en/common.json";
 import type errors from "../locales/en/errors.json";
@@ -55,6 +56,7 @@ declare module "i18next" {
       friends: typeof friends;
       account: typeof account;
       settings: typeof settings;
+      changelog: typeof changelog;
       serverConfigs: typeof serverConfigs;
       serverConfigFields: typeof serverConfigFields;
       serverInstances: typeof serverInstances;

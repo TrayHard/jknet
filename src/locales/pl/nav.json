@@ -14,7 +14,8 @@
     "settings": "Ustawienia",
     "playerProfiles": "Player profiles",
     "media": "Media",
-    "configs": "Configs"
+    "configs": "Configs",
+    "changelog": "Dziennik zmian"
   },
   "user": {
     "guest": "Gość",

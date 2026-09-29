@@ -1,4 +1,4 @@
-import { ContactRound, Library, Monitor, Server, ServerCog, Settings, Users, Images, FileSliders, Globe, Swords } from "lucide-react";
+import { ContactRound, History, Library, Monitor, Server, ServerCog, Settings, Users, Images, FileSliders, Globe, Swords } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -106,6 +106,11 @@ export function Sidebar() {
             icon={<Users size={20} />}
             label={t("items.friends")}
             count={friendsOnline}
+          />
+          <NavItem
+            to="/changelog"
+            icon={<History size={20} />}
+            label={t("items.changelog")}
           />
         </Group>
       </div>

@@ -530,15 +530,21 @@ export function ClientsPage() {
         <ImportClientDialog
           onClose={() => setImportDialogOpen(false)}
           onImported={(result) => {
-            setError(
+            const warnings = [
               result.mediaWarning ? t("importDialog.mediaWarning") : null,
-            );
-            setNotice(
+              result.engineUpgradeWarning ? t("importDialog.engineUpgradeWarning") : null,
+              result.sourceDeleteWarning ? t("importDialog.sourceDeleteWarning") : null,
+            ].filter((message): message is string => message !== null);
+            setError(warnings.length > 0 ? warnings.join(" ") : null);
+            const notices = [
               t("importDialog.done", {
                 client: result.client.name,
                 count: result.mediaImported,
               }),
-            );
+              result.engineUpgraded ? t("importDialog.engineUpgraded") : null,
+              result.sourceDeleted ? t("importDialog.sourceDeleted") : null,
+            ].filter((message): message is string => message !== null);
+            setNotice(notices.join(" "));
           }}
         />
       ) : null}
@@ -1172,7 +1178,6 @@ function EngineControls({
   // --- slice: bundles ---
   const { t: tBundles } = useTranslation("bundles");
   const errorText = useErrorText();
-  const releases = useEngineReleases(installed ? null : client.engineId);
   const [checkRequested, setCheckRequested] = useState(false);
   // --- slice: bundles ---
   // A bundle that laid files over the engine folder made the build its own:
@@ -1180,6 +1185,7 @@ function EngineControls({
   // offers no check.
   const customBuild = client.bundle?.engineOverlay === true;
   const imported = client.engineOrigin === "imported";
+  const releases = useEngineReleases(!installed || imported ? client.engineId : null);
   const update = useEngineUpdate(
     checkRequested && !customBuild && !imported ? client.id : null,
   );
@@ -1195,14 +1201,33 @@ function EngineControls({
   return (
     <>
       {installed && imported ? (
-        <Badge
-          tone="neutral"
-          icon={<Import size={12} />}
-          className="shrink-0"
-          title={t("card.importedHint")}
-        >
-          {t("card.imported")}
-        </Badge>
+        <>
+          <Badge
+            tone="neutral"
+            icon={<Import size={12} />}
+            className="shrink-0"
+            title={t("card.importedHint")}
+          >
+            {t("card.imported")}
+          </Badge>
+          <Button
+            size="sm"
+            variant="primary"
+            className="shrink-0"
+            icon={<RefreshCw size={14} />}
+            onClick={onInstall}
+            disabled={installing || isRunning || !latestTag}
+          >
+            {latestTag
+              ? t("engine.adoptLatest", { version: latestTag })
+              : t("engine.updateToNewest")}
+          </Button>
+          {releases.error ? (
+            <span className="text-body-sm text-fg-danger truncate" title={errorText(releases.error)}>
+              {errorText(releases.error)}
+            </span>
+          ) : null}
+        </>
       ) : installed && customBuild ? (
         <Badge
           tone="purple"

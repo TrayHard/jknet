@@ -448,6 +448,7 @@ import {
   type PlayerProfile,
   type PresenceUpdated,
   type ProfileBook,
+  type ProfileConfigImport,
   type RunningGame,
   type SaberHilt,
   type ServerInfo,
@@ -851,6 +852,13 @@ export function useProfiles(
     queryFn: () => profilesIpc.listProfiles(clientId),
     enabled,
     staleTime: Infinity,
+  });
+}
+
+/** Reads one selected config into a draft; saving remains a separate action. */
+export function useInspectProfileConfig(clientId: string) {
+  return useMutation<ProfileConfigImport, Error, string>({
+    mutationFn: (path) => profilesIpc.inspectConfig(clientId, path),
   });
 }
 

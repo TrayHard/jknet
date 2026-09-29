@@ -798,6 +798,11 @@ export interface Client {
 }
 
 /** What JKNet found in a portable client folder before copying it. */
+export interface ClientImportFile {
+  path: string;
+  sizeBytes: number;
+}
+
 export interface ClientImportPreview {
   sourcePath: string;
   suggestedName: string;
@@ -807,9 +812,48 @@ export interface ClientImportPreview {
   fileCount: number;
   sizeBytes: number;
   screenshotCount: number;
+  screenshotSizeBytes: number;
   demoCount: number;
+  demoSizeBytes: number;
+  configCount: number;
+  configSizeBytes: number;
+  configFiles: ClientImportFile[];
+  pk3Count: number;
+  pk3SizeBytes: number;
+  pk3Files: ClientImportFile[];
+  /** Files copied on every import, excluding the shared retail assets. */
+  requiredFiles: ClientImportFile[];
   modFolders: string[];
   recommendedFsGame: string | null;
+  canUpgradeEngine: boolean;
+}
+
+export interface ClientImportSelection {
+  screenshots: boolean;
+  demos: boolean;
+  configs: boolean;
+  pk3: boolean;
+  excludedConfigs: string[];
+  excludedPk3: string[];
+}
+
+export type ClientImportPhase =
+  | "copy"
+  | "prepare"
+  | "media"
+  | "upgrade"
+  | "delete"
+  | "done"
+  | "error";
+
+/** Payload of `clients:import-progress`. */
+export interface ClientImportProgress {
+  requestId: string;
+  clientId: string | null;
+  phase: ClientImportPhase;
+  processedBytes: number;
+  totalBytes: number;
+  currentFile: string | null;
 }
 
 /** The imported client and the media recovered from its snapshot. */
@@ -817,6 +861,10 @@ export interface ClientImportResult {
   client: Client;
   mediaImported: number;
   mediaWarning: string | null;
+  engineUpgraded: boolean;
+  engineUpgradeWarning: string | null;
+  sourceDeleted: boolean;
+  sourceDeleteWarning: string | null;
 }
 
 // --- slice: client window ---
@@ -836,6 +884,7 @@ export interface ClientsChanged {
  */
 export const clientEvents = {
   changed: "clients:changed",
+  importProgress: "clients:import-progress",
 } as const;
 
 // --- slice: clients page ---
@@ -913,6 +962,10 @@ export const ipc = {
     name: string;
     fsGame: string | null;
     launchArgs: string;
+    selection: ClientImportSelection;
+    deleteSource: boolean;
+    upgradeEngine: boolean;
+    requestId: string;
   }) => call<ClientImportResult>("import_client", input),
   /**
    * Changes the name, the mod folder, the launch arguments, or any of them. A
@@ -1418,6 +1471,12 @@ export interface ProfileBook {
   defaultProfileId: string | null;
 }
 
+/** `src-tauri/src/profiles.rs`: a profile draft read from a selected `.cfg`. */
+export interface ProfileConfigImport {
+  sourceName: string;
+  profile: PlayerProfile;
+}
+
 /** `src-tauri/src/appearance.rs`: one skin a profile may name. */
 export interface PlayerModel {
   /** What goes into the cvar `model`. */
@@ -1564,6 +1623,9 @@ export const SABER_BLADE_RGB: readonly string[] = [
 export const profilesIpc = {
   listProfiles: (clientId: string) =>
     call<ProfileBook>("list_profiles", { clientId }),
+  /** Reads supported profile cvars without saving or executing the config. */
+  inspectConfig: (clientId: string, path: string) =>
+    call<ProfileConfigImport>("inspect_profile_config", { clientId, path }),
   /** Creates a profile when `id` is empty, rewrites it otherwise. */
   saveProfile: (clientId: string, profile: PlayerProfile) =>
     call<ProfileBook>("save_profile", { clientId, profile }),

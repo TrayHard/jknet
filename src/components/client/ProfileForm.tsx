@@ -54,6 +54,7 @@ export function ProfileForm({
   profile,
   onDone,
   onSaved,
+  importedFrom,
 }: {
   client: Client;
   profile: PlayerProfile;
@@ -61,6 +62,8 @@ export function ProfileForm({
   // --- slice: chat cards ---
   /** Runs after a save, instead of `onDone`: the chat says the profile was kept. */
   onSaved?: () => void;
+  /** Selected config whose supported cvars filled this unsaved draft. */
+  importedFrom?: string;
 }) {
   const { t } = useTranslation("clients");
   const errorText = useErrorText();
@@ -129,6 +132,12 @@ export function ProfileForm({
           ? t("clientWindow.profiles.form.newHeading")
           : t("clientWindow.profiles.form.editHeading", { profile: profile.name })}
       </h3>
+
+      {importedFrom ? (
+        <p className="rounded-md border border-line bg-input p-12 text-body-sm text-fg-secondary break-words">
+          {t("clientWindow.profiles.imported", { file: importedFrom })}
+        </p>
+      ) : null}
 
       {/* --- slice: profiles polish ---
           Every field below still edits the profile, and none of them reaches
