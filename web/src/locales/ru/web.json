@@ -37,8 +37,7 @@
       "jkhub": "Выберите мод"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Закрыть сведения",
-    "pending": "Этот раздел JKNet появится в одном из следующих обновлений веб-приложения."
+    "closeDetails": "Закрыть сведения"
   },
   "signin": {
     "title": "Вход в JKNet",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Список серверов",
+    "lead": "Серверы из списков мастер-серверов, их проверяет JKNet Online. Подключайтесь из JKNet на компьютере.",
+    "loading": "Загружаем список серверов…",
     "unavailable": "Список серверов сейчас недоступен",
+    "unavailableText": "JKNet Online пока не собирает список серверов. Попробуйте позже.",
+    "errorTitle": "Список серверов не загрузился",
     "updating": "Обновление…",
-    "playNote": "Чтобы играть здесь, откройте JKNet на компьютере.",
+    "emptyText": "JKNet Online опрашивает мастер-серверы. Список появится в течение минуты.",
+    "clearSearch": "Очистить поиск",
+    "filters": "Фильтры",
+    "filtersActive": "Фильтры ({{count}})",
+    "sort": "Сортировка",
+    "sortBy": {
+      "players": "Игроки",
+      "name": "Название",
+      "map": "Карта",
+      "mode": "Режим",
+      "mod": "Мод"
+    },
     "friendsHere": "Друзья на сервере",
-    "lastSeen": "Отвечал {{time}}"
+    "friendHere": "{{name}} играет здесь",
+    "friendsHereCount": "Друзей здесь: {{count}}",
+    "lastSeen": "отвечал {{age}} назад",
+    "copied": "Скопировано",
+    "baseGame": "Основная игра",
+    "passwordYes": "Нужен",
+    "passwordNo": "Нет",
+    "notListedTitle": "Этого сервера сейчас нет в списке",
+    "notListedText": "Он не ответил на последние проверки, или мастер-серверы его больше не называют.",
+    "fields": {
+      "map": "Карта",
+      "mode": "Режим",
+      "players": "Игроки",
+      "slots": "Мест",
+      "mod": "Мод",
+      "password": "Пароль"
+    }
   },
   "jkhub": {
     "title": "Моды JKHub",
-    "installNote": "Устанавливайте из JKNet на компьютере.",
-    "open": "Открыть на JKHub",
-    "indexedAt": "Каталог от {{date}}"
+    "lead": "Карты, скины, мечи и другие файлы с JKHub. Устанавливайте их из JKNet на компьютере.",
+    "search": "Поиск по JKHub",
+    "indexedAt": "Каталог от {{date}}",
+    "unavailableTitle": "Каталог JKHub пока недоступен",
+    "unavailableText": "JKNet Online ещё не собрал свою копию каталога JKHub. Попробуйте позже.",
+    "emptyText": "В каталоге ничего не нашлось. Попробуйте меньше слов или другую категорию.",
+    "results": "Файлы",
+    "categoryLine": "Категория: {{name}}",
+    "allCategories": "Все категории",
+    "ascending": "По возрастанию",
+    "descending": "По убыванию",
+    "pages": "Страницы",
+    "previous": "Назад",
+    "next": "Дальше",
+    "page": "Страница {{page}} из {{pages}}",
+    "description": "Описание",
+    "tags": "Теги",
+    "notFoundTitle": "Этого файла нет в каталоге",
+    "notFoundText": "Возможно, его удалили с JKHub, или каталог JKNet Online о нём ещё не знает."
   },
   "about": {
     "title": "О приложении",

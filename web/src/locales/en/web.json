@@ -37,8 +37,7 @@
       "jkhub": "Pick a mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Close details",
-    "pending": "This part of JKNet arrives with a later update of the web app."
+    "closeDetails": "Close details"
   },
   "signin": {
     "title": "Sign in to JKNet",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Server list",
+    "lead": "Servers the master servers list, checked by JKNet Online. Join them from JKNet on your PC.",
+    "loading": "Loading the server list…",
     "unavailable": "The server list is not available right now",
+    "unavailableText": "JKNet Online is not collecting the server list yet. Try again later.",
+    "errorTitle": "The server list did not load",
     "updating": "Updating…",
-    "playNote": "To play here, open JKNet on your PC.",
+    "emptyText": "JKNet Online is asking the master servers. The list fills in within a minute.",
+    "clearSearch": "Clear the search",
+    "filters": "Filters",
+    "filtersActive": "Filters ({{count}})",
+    "sort": "Sort by",
+    "sortBy": {
+      "players": "Players",
+      "name": "Name",
+      "map": "Map",
+      "mode": "Mode",
+      "mod": "Mod"
+    },
     "friendsHere": "Friends here",
-    "lastSeen": "Answered {{time}}"
+    "friendHere": "{{name}} is playing here",
+    "friendsHereCount": "Friends here: {{count}}",
+    "lastSeen": "answered {{age}} ago",
+    "copied": "Copied",
+    "baseGame": "Base game",
+    "passwordYes": "Required",
+    "passwordNo": "None",
+    "notListedTitle": "This server is not in the list right now",
+    "notListedText": "It did not answer the last checks, or the master servers no longer name it.",
+    "fields": {
+      "map": "Map",
+      "mode": "Mode",
+      "players": "Players",
+      "slots": "Slots",
+      "mod": "Mod",
+      "password": "Password"
+    }
   },
   "jkhub": {
     "title": "JKHub mods",
-    "installNote": "Install from JKNet on your PC.",
-    "open": "Open on JKHub",
-    "indexedAt": "Catalog of {{date}}"
+    "lead": "Maps, skins, sabers and more from JKHub. Install them from JKNet on your PC.",
+    "search": "Search JKHub",
+    "indexedAt": "Catalog of {{date}}",
+    "unavailableTitle": "The JKHub catalog is not available yet",
+    "unavailableText": "JKNet Online has not built its copy of the JKHub catalog yet. Try again later.",
+    "emptyText": "Nothing in the catalog matches this search. Try fewer words, or another category.",
+    "results": "Files",
+    "categoryLine": "Category: {{name}}",
+    "allCategories": "All categories",
+    "ascending": "Ascending order",
+    "descending": "Descending order",
+    "pages": "Pages",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {{page}} of {{pages}}",
+    "description": "Description",
+    "tags": "Tags",
+    "notFoundTitle": "This file is not in the catalog",
+    "notFoundText": "JKHub may have removed it, or the catalog of JKNet Online does not know it yet."
   },
   "about": {
     "title": "About",

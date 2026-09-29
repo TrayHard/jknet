@@ -2,13 +2,16 @@
  * The screens of each route: `RouteView` out of a row of `routeTable.ts` and
  * the route's params. The layouts decide where each pane goes.
  *
- * A screen a later part of the web app brings is `PendingScreen` until then;
- * its route, its panes and its parent are already final.
+ * The server list and the JKHub catalog load on first use, each screen in a
+ * chunk of its own with the launcher's filters, tree and cards it draws, so
+ * the first download of the app does not carry them.
  */
 
 import type { TFunction } from "i18next";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
+import type { Game } from "../../../src/lib/ipc.ts";
 import type { RouteView } from "./layouts/types.ts";
 import { parentOf, type RouteSpec, type ScreenId } from "./routeTable.ts";
 import { AboutScreen } from "./screens/AboutScreen.tsx";
@@ -23,14 +26,44 @@ import { FriendsScreen } from "./screens/FriendsScreen.tsx";
 import { GroupInfoScreen } from "./screens/GroupInfoScreen.tsx";
 import { InstallScreen } from "./screens/InstallScreen.tsx";
 import { NotificationsScreen } from "./screens/NotificationsScreen.tsx";
-import { PendingScreen } from "./screens/PendingScreen.tsx";
 import { PrivacyScreen } from "./screens/PrivacyScreen.tsx";
 import { RequestsScreen } from "./screens/RequestsScreen.tsx";
 import { SessionsScreen } from "./screens/SessionsScreen.tsx";
 import { SettingsScreen } from "./screens/SettingsScreen.tsx";
 import { ThreadScreen } from "./screens/ThreadScreen.tsx";
 
+const ServerListScreen = lazy(() =>
+  import("./screens/ServerListScreen.tsx").then((module) => ({ default: module.ServerListScreen })),
+);
+const ServerDetailsScreen = lazy(() =>
+  import("./screens/ServerDetailsScreen.tsx").then((module) => ({ default: module.ServerDetailsScreen })),
+);
+const JkhubScreen = lazy(() => import("./screens/JkhubScreen.tsx").then((module) => ({ default: module.JkhubScreen })));
+const JkhubDetailsScreen = lazy(() =>
+  import("./screens/JkhubDetailsScreen.tsx").then((module) => ({ default: module.JkhubDetailsScreen })),
+);
+
+/** What a pane shows while the chunk of its screen is on the way. */
+function Loading() {
+  const { t } = useTranslation("common");
+  return (
+    <p role="status" className="px-16 py-12 text-body-sm text-fg-muted">
+      {t("states.loading")}
+    </p>
+  );
+}
+
+/** A screen of its own chunk. */
+function Deferred({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<Loading />}>{children}</Suspense>;
+}
+
 type Params = Record<string, string | undefined>;
+
+/** `ja` or `jo` of a route's param; anything else reads as Jedi Academy. */
+function gameParam(value: string | undefined): Game {
+  return value === "jo" ? "jo" : "ja";
+}
 
 function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
   switch (id) {
@@ -62,6 +95,38 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
       return <BundlesScreen selectedId={params.bundleId} />;
     case "bundleDetails":
       return <BundleDetailsScreen key={params.bundleId} bundleId={params.bundleId ?? ""} />;
+    case "serverList":
+      return (
+        <Deferred>
+          <ServerListScreen selectedAddress={params.address} />
+        </Deferred>
+      );
+    case "serverDetails":
+      return (
+        <Deferred>
+          <ServerDetailsScreen
+            key={`${params.game}/${params.address}`}
+            game={gameParam(params.game)}
+            address={params.address ?? ""}
+          />
+        </Deferred>
+      );
+    case "jkhub":
+      return (
+        <Deferred>
+          <JkhubScreen />
+        </Deferred>
+      );
+    case "jkhubDetails":
+      return (
+        <Deferred>
+          <JkhubDetailsScreen
+            key={`${params.game}/${params.fileId}`}
+            game={gameParam(params.game)}
+            fileId={Number(params.fileId ?? "")}
+          />
+        </Deferred>
+      );
     case "settings":
       return <SettingsScreen current={spec.path.split("/")[2]} />;
     case "account":
@@ -71,7 +136,7 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
     case "about":
       return <AboutScreen />;
     default:
-      return <PendingScreen />;
+      return null;
   }
 }
 

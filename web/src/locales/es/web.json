@@ -37,8 +37,7 @@
       "jkhub": "Elija un mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Cerrar detalles",
-    "pending": "Esta parte de JKNet llegará con una próxima actualización de la aplicación web."
+    "closeDetails": "Cerrar detalles"
   },
   "signin": {
     "title": "Iniciar sesión en JKNet",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Lista de servidores",
+    "lead": "Servidores de las listas de los servidores maestros, comprobados por JKNet Online. Conéctese desde JKNet en su PC.",
+    "loading": "Cargando la lista de servidores…",
     "unavailable": "La lista de servidores no está disponible ahora",
+    "unavailableText": "JKNet Online todavía no recopila la lista de servidores. Inténtelo más tarde.",
+    "errorTitle": "La lista de servidores no se cargó",
     "updating": "Actualizando…",
-    "playNote": "Para jugar aquí, abra JKNet en su PC.",
+    "emptyText": "JKNet Online está consultando a los servidores maestros. La lista aparecerá en un minuto.",
+    "clearSearch": "Borrar la búsqueda",
+    "filters": "Filtros",
+    "filtersActive": "Filtros ({{count}})",
+    "sort": "Ordenar por",
+    "sortBy": {
+      "players": "Jugadores",
+      "name": "Nombre",
+      "map": "Mapa",
+      "mode": "Modo",
+      "mod": "Mod"
+    },
     "friendsHere": "Amigos en el servidor",
-    "lastSeen": "Respondió {{time}}"
+    "friendHere": "{{name}} está jugando aquí",
+    "friendsHereCount": "Amigos aquí: {{count}}",
+    "lastSeen": "respondió hace {{age}}",
+    "copied": "Copiada",
+    "baseGame": "Juego base",
+    "passwordYes": "Necesaria",
+    "passwordNo": "Ninguna",
+    "notListedTitle": "Este servidor no está en la lista ahora",
+    "notListedText": "No respondió a las últimas comprobaciones, o los servidores maestros ya no lo incluyen.",
+    "fields": {
+      "map": "Mapa",
+      "mode": "Modo",
+      "players": "Jugadores",
+      "slots": "Plazas",
+      "mod": "Mod",
+      "password": "Contraseña"
+    }
   },
   "jkhub": {
     "title": "Mods de JKHub",
-    "installNote": "Instálelo desde JKNet en su PC.",
-    "open": "Abrir en JKHub",
-    "indexedAt": "Catálogo del {{date}}"
+    "lead": "Mapas, skins, sables y más de JKHub. Instálelos desde JKNet en su PC.",
+    "search": "Buscar en JKHub",
+    "indexedAt": "Catálogo del {{date}}",
+    "unavailableTitle": "El catálogo de JKHub todavía no está disponible",
+    "unavailableText": "JKNet Online aún no ha creado su copia del catálogo de JKHub. Inténtelo más tarde.",
+    "emptyText": "Nada del catálogo coincide con esta búsqueda. Pruebe con menos palabras o con otra categoría.",
+    "results": "Archivos",
+    "categoryLine": "Categoría: {{name}}",
+    "allCategories": "Todas las categorías",
+    "ascending": "Orden ascendente",
+    "descending": "Orden descendente",
+    "pages": "Páginas",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "page": "Página {{page}} de {{pages}}",
+    "description": "Descripción",
+    "tags": "Etiquetas",
+    "notFoundTitle": "Este archivo no está en el catálogo",
+    "notFoundText": "Puede que JKHub lo haya retirado, o que el catálogo de JKNet Online todavía no lo conozca."
   },
   "about": {
     "title": "Acerca de",

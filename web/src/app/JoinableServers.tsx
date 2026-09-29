@@ -1,5 +1,5 @@
 import { AlertTriangle, MessageCircle, Monitor, Server } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -37,6 +37,8 @@ export interface JoinChat {
   pendingKey: string | null;
   /** The last refusal, kept after the list dropped its row. */
   error: unknown;
+  /** Forgets the last refusal. */
+  clearError(): void;
 }
 
 function keyOf(server: { hostUserId: string; sessionId: string }): string {
@@ -66,8 +68,48 @@ export function useJoinChat(): JoinChat {
     },
     [mutateAsync, navigate],
   );
+  const clearError = useCallback(() => setError(null), []);
 
-  return { join: start, pendingKey, error };
+  return { join: start, pendingKey, error, clearError };
+}
+
+/** What a row of the list says, for telling one list from the next. */
+function signatureOf(servers: JoinableServer[] | undefined): string {
+  return JSON.stringify(
+    (servers ?? []).map((server) => [server.hostUserId, server.sessionId, server.map, server.gametype, server.mod, server.members, server.invited]),
+  );
+}
+
+/**
+ * Keeps a refusal of **Join chat** on screen through the read of the list
+ * that follows it — the one that takes the refused row away — and lets it
+ * go once the list changes after that: the row came back, another server
+ * opened, a map changed. The reason then no longer describes what is on
+ * screen.
+ */
+function useRefusalUntilListChanges(chat: JoinChat, servers: JoinableServer[] | undefined, updatedAt: number): void {
+  const { error, clearError } = chat;
+  const signature = signatureOf(servers);
+  const watch = useRef<{ error: unknown; at: number; baseline: string | null }>({ error: null, at: 0, baseline: null });
+
+  useEffect(() => {
+    const current = watch.current;
+    if (error === null) {
+      watch.current = { error: null, at: 0, baseline: null };
+      return;
+    }
+    if (current.error !== error) {
+      watch.current = { error, at: Date.now(), baseline: null };
+      return;
+    }
+    // The read the refusal started has not answered yet.
+    if (updatedAt < current.at) return;
+    if (current.baseline === null) {
+      current.baseline = signature;
+      return;
+    }
+    if (signature !== current.baseline) clearError();
+  }, [error, signature, updatedAt, clearError]);
 }
 
 /** The facts of a row: the map, the mode, how many are in the chat. */
@@ -153,6 +195,7 @@ export function JoinableServers() {
   const facts = useFacts();
   const hostOf = useHostName();
   const servers = joinable.data ?? [];
+  useRefusalUntilListChanges(chat, joinable.data, joinable.dataUpdatedAt);
 
   if (servers.length === 0 && chat.error === null) return null;
 

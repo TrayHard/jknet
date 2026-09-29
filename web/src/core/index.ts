@@ -23,6 +23,8 @@
  * | cards           | `chat/cards.ts` |
  * | friends' server chats | `chat/serverChats.ts` |
  * | catalogs        | `catalogs.ts`  |
+ * | the server list | `servers.ts`   |
+ * | the JKHub catalog | `jkhub.ts`   |
  * | push notifications | `push.ts`   |
  * | one active tab  | `tabs.ts`      |
  */
@@ -41,10 +43,12 @@ import { statusOf } from "./errors.ts";
 import { EventBus } from "./events.ts";
 import { createFriends, type FriendsCore } from "./friends.ts";
 import { createHttp, type Http } from "./http.ts";
+import { createJkhub, type JkhubCore } from "./jkhub.ts";
 import { attachLifecycle, visibleNow } from "./lifecycle.ts";
 import type { PrefsStore } from "./prefs.ts";
 import { createPush, webPushTransport, type PushCore, type PushTransport } from "./push.ts";
 import { createRouter, createStats, type CommandRouter, type CoreStats } from "./router.ts";
+import { createServerList, type ServerList } from "./servers.ts";
 import { createSession, type Session } from "./session.ts";
 import { createSessions, type SessionsCore } from "./sessions.ts";
 import { createSettings, DEFAULT_CHAT_NOTIFICATIONS, type SettingsCore } from "./settings.ts";
@@ -97,6 +101,8 @@ export interface WebCore {
   readonly chat: ChatCore;
   readonly files: WebChatFiles;
   readonly serverChats: ServerChats;
+  readonly servers: ServerList;
+  readonly jkhub: JkhubCore;
   readonly push: PushCore;
   readonly socket: LiveSocket;
   readonly prefs: PrefsStore;
@@ -207,6 +213,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     chat.forget();
     files.forget();
     serverChats.stop();
+    servers.forget();
     sessions.forget();
     await storage.wipe();
     await prefs.restoreDevicePrefs();
@@ -299,6 +306,17 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     activeGame: () => settings.get().activeGame,
   });
 
+  const servers = createServerList({
+    http,
+    events,
+    signedIn: () => session.signedIn(),
+  });
+
+  const jkhub = createJkhub({
+    http,
+    activeGame: () => settings.get().activeGame,
+  });
+
   const push = createPush({
     http,
     prefs,
@@ -325,6 +343,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     files,
     serverChats,
     catalogs,
+    servers,
+    jkhub,
     stats,
   });
 
@@ -362,6 +382,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     socket.stop();
     friends.stop();
     chat.stop();
+    servers.forget();
     session.stop();
     storage.close();
   }
@@ -378,6 +399,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     chat,
     files,
     serverChats,
+    servers,
+    jkhub,
     push,
     socket,
     prefs,

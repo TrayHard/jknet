@@ -9,8 +9,6 @@
  * refused.
  */
 
-import type { Page } from "@playwright/test";
-
 import {
   expect,
   launcherSignIn,
@@ -22,28 +20,9 @@ import {
   visit,
   type LauncherClient,
 } from "./fixtures.ts";
-import { deviceKeys, webText } from "./push-fixtures.ts";
+import { deviceKeys, tokenOf, webText } from "./push-fixtures.ts";
 
 const DEVICES = sharedCatalog("en", "account").devices as Record<string, string>;
-
-/** The token of the signed-in player of a page, read from the web app's database. */
-async function tokenOf(page: Page): Promise<string> {
-  return page.evaluate(
-    () =>
-      new Promise<string>((resolve, reject) => {
-        const open = indexedDB.open("jknet-web", 1);
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const read = open.result.transaction("session", "readonly").objectStore("session").get("current");
-          read.onsuccess = () => {
-            open.result.close();
-            resolve((read.result as { token?: string } | undefined)?.token ?? "");
-          };
-          read.onerror = () => reject(read.error);
-        };
-      }),
-  );
-}
 
 /** A launcher's live socket, as JKNet on a PC keeps one, and the code it closes with. */
 async function launcherSocket(launcher: LauncherClient): Promise<{ closed: Promise<number>; close(): void }> {

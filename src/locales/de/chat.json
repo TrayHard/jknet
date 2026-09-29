@@ -615,7 +615,8 @@
     },
     "server": {
       "title": "Server teilen",
-      "empty": "Noch keine Server. Klicken Sie unter „Server“ auf „Get new list“."
+      "empty": "Noch keine Server. Klicken Sie unter „Server“ auf „Get new list“.",
+      "emptyWeb": "Die Serverliste enthält gerade keine Server."
     },
     "map": {
       "title": "Karte teilen",

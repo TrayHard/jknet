@@ -137,6 +137,9 @@ function MediaPicker({ onPick, onClose }: PickerProps) {
 function ServerPicker({ onPick, onClose }: PickerProps) {
   const { t } = useTranslation("chat");
   const errorText = useErrorText();
+  // --- slice: web app --- a platform that cannot ask the servers itself
+  // lists the server list of JKNet Online, which has no Get new list button.
+  const { serverQuery } = usePlatform();
   const servers = useCachedServers();
   const items = useMemo<PickerItem[]>(
     () =>
@@ -158,7 +161,7 @@ function ServerPicker({ onPick, onClose }: PickerProps) {
       items={items}
       loading={servers.isPending}
       error={servers.error ? errorText(servers.error) : null}
-      emptyText={t("pickers.server.empty")}
+      emptyText={serverQuery ? t("pickers.server.empty") : t("pickers.server.emptyWeb")}
       onClose={onClose}
       onPick={(address) => {
         const server = servers.data?.find((row) => row.address === address);

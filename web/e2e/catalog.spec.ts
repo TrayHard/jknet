@@ -15,9 +15,8 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
-import type { Page } from "@playwright/test";
-
-import { chatText, conversationIdOf, escape, makeFriends, openFromList } from "./chat-fixtures.ts";
+import { expectNoGameControls, friends, launcherCards, shareWith, wideLayout } from "./catalog-fixtures.ts";
+import { chatText, conversationIdOf, escape, openFromList } from "./chat-fixtures.ts";
 import {
   expect,
   launcherSignIn,
@@ -29,8 +28,8 @@ import {
   userIdOf,
   visit,
   webCatalog,
-  type LauncherClient,
 } from "./fixtures.ts";
+import { tokenOf } from "./push-fixtures.ts";
 
 const WEB = webCatalog("en") as Record<string, Record<string, string>>;
 const COMMUNITY = (sharedCatalog("en", "servers") as Record<string, Record<string, string>>).community;
@@ -43,25 +42,6 @@ function bundlesText(path: string, values: Record<string, string> = {}): string 
   let text = String(node);
   for (const [name, value] of Object.entries(values)) text = text.replaceAll(`{{${name}}}`, value);
   return text;
-}
-
-/** The token of the signed-in player, read from the web app's database. */
-async function tokenOf(page: Page): Promise<string> {
-  return page.evaluate(
-    () =>
-      new Promise<string>((resolve, reject) => {
-        const open = indexedDB.open("jknet-web", 1);
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const read = open.result.transaction("session", "readonly").objectStore("session").get("current");
-          read.onsuccess = () => {
-            open.result.close();
-            resolve((read.result as { token?: string } | undefined)?.token ?? "");
-          };
-          read.onerror = () => reject(read.error);
-        };
-      }),
-  );
 }
 
 /** One call to the e2e service with a player's token; answers the JSON body. */
@@ -162,49 +142,6 @@ async function publishBundle(token: string, name: string): Promise<string> {
   expect(upload.ok, `the bundle's file (${upload.status})`).toBe(true);
   await api(token, "POST", `/v1/bundles/${bundle.id}/versions/${created.version.id}/publish`, {});
   return bundle.id;
-}
-
-/** Two signed-in friends: the player in the test's page, the friend in a browser of their own. */
-async function friends(page: Page, players: { open(): Promise<Page> }) {
-  const kyle = uniqueName("Kyle");
-  const jan = uniqueName("Jan");
-  await signIn(page, kyle);
-  const other = await players.open();
-  await signIn(other, jan);
-  await makeFriends(page, kyle, other, jan);
-  return { kyle, jan, other };
-}
-
-async function wideLayout(page: Page): Promise<boolean> {
-  return (await page.locator("[data-layout]").first().getAttribute("data-layout")) === "wide";
-}
-
-/** Shares what is on screen with a friend through the share dialog. */
-async function shareWith(page: Page, friend: string): Promise<void> {
-  await page.getByRole("button", { name: chatText("share.action"), exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: chatText("share.title") });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("option").filter({ hasText: friend }).getByRole("button").click();
-  await dialog.getByRole("button", { name: chatText("share.send"), exact: true }).click();
-  await expect(dialog).toBeHidden({ timeout: 15_000 });
-  await expect(page.getByText(chatText("share.sent", { name: friend }))).toBeVisible();
-}
-
-/** The cards of the newest messages of a conversation, as a launcher reads them. */
-async function launcherCards(launcher: LauncherClient, conversationId: string): Promise<Array<Record<string, unknown>>> {
-  const response = await fetch(`${SERVICE}/v1/chat/conversations/${encodeURIComponent(conversationId)}/messages`, {
-    headers: { authorization: `Bearer ${launcher.token}` },
-  });
-  expect(response.status).toBe(200);
-  const page = (await response.json()) as { messages: Array<{ cards?: Array<Record<string, unknown>> }> };
-  return page.messages.flatMap((message) => message.cards ?? []);
-}
-
-/** No control of the game anywhere on screen: no join, no play, no connect, no install. */
-async function expectNoGameControls(page: Page): Promise<void> {
-  const game = /^(Join|Play|Connect|Install)\b/i;
-  await expect(page.getByRole("button", { name: game })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: game })).toHaveCount(0);
 }
 
 test("community servers: the list, a server's page, and the server shared to a friend's chat", async ({ page, players }) => {

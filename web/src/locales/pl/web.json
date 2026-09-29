@@ -37,8 +37,7 @@
       "jkhub": "Wybierz mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Zamknij szczegóły",
-    "pending": "Ta część JKNet pojawi się w jednej z kolejnych aktualizacji aplikacji webowej."
+    "closeDetails": "Zamknij szczegóły"
   },
   "signin": {
     "title": "Zaloguj się do JKNet",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Lista serwerów",
+    "lead": "Serwery z list serwerów głównych, sprawdzane przez JKNet Online. Dołączaj do nich z JKNet na komputerze.",
+    "loading": "Wczytywanie listy serwerów…",
     "unavailable": "Lista serwerów jest teraz niedostępna",
+    "unavailableText": "JKNet Online jeszcze nie zbiera listy serwerów. Spróbuj później.",
+    "errorTitle": "Nie udało się wczytać listy serwerów",
     "updating": "Aktualizowanie…",
-    "playNote": "Aby tu zagrać, otwórz JKNet na komputerze.",
+    "emptyText": "JKNet Online odpytuje serwery główne. Lista pojawi się w ciągu minuty.",
+    "clearSearch": "Wyczyść wyszukiwanie",
+    "filters": "Filtry",
+    "filtersActive": "Filtry ({{count}})",
+    "sort": "Sortuj według",
+    "sortBy": {
+      "players": "Gracze",
+      "name": "Nazwa",
+      "map": "Mapa",
+      "mode": "Tryb",
+      "mod": "Mod"
+    },
     "friendsHere": "Znajomi na serwerze",
-    "lastSeen": "Odpowiedział {{time}}"
+    "friendHere": "{{name}} gra tutaj",
+    "friendsHereCount": "Znajomi tutaj: {{count}}",
+    "lastSeen": "odpowiedział {{age}} temu",
+    "copied": "Skopiowano",
+    "baseGame": "Gra podstawowa",
+    "passwordYes": "Wymagane",
+    "passwordNo": "Brak",
+    "notListedTitle": "Tego serwera nie ma teraz na liście",
+    "notListedText": "Nie odpowiedział na ostatnie sprawdzenia albo serwery główne już go nie wymieniają.",
+    "fields": {
+      "map": "Mapa",
+      "mode": "Tryb",
+      "players": "Gracze",
+      "slots": "Miejsca",
+      "mod": "Mod",
+      "password": "Hasło"
+    }
   },
   "jkhub": {
     "title": "Mody z JKHub",
-    "installNote": "Instaluj z JKNet na komputerze.",
-    "open": "Otwórz na JKHub",
-    "indexedAt": "Katalog z {{date}}"
+    "lead": "Mapy, skórki, miecze i więcej z JKHub. Instaluj je z JKNet na komputerze.",
+    "search": "Szukaj w JKHub",
+    "indexedAt": "Katalog z {{date}}",
+    "unavailableTitle": "Katalog JKHub nie jest jeszcze dostępny",
+    "unavailableText": "JKNet Online nie zbudował jeszcze swojej kopii katalogu JKHub. Spróbuj później.",
+    "emptyText": "Nic w katalogu nie pasuje do tego wyszukiwania. Spróbuj mniej słów albo innej kategorii.",
+    "results": "Pliki",
+    "categoryLine": "Kategoria: {{name}}",
+    "allCategories": "Wszystkie kategorie",
+    "ascending": "Rosnąco",
+    "descending": "Malejąco",
+    "pages": "Strony",
+    "previous": "Poprzednia",
+    "next": "Następna",
+    "page": "Strona {{page}} z {{pages}}",
+    "description": "Opis",
+    "tags": "Tagi",
+    "notFoundTitle": "Tego pliku nie ma w katalogu",
+    "notFoundText": "Być może JKHub go usunął albo katalog JKNet Online jeszcze go nie zna."
   },
   "about": {
     "title": "O aplikacji",

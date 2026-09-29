@@ -37,8 +37,7 @@
       "jkhub": "Виберіть мод"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Закрити відомості",
-    "pending": "Цей розділ JKNet з'явиться в одному з наступних оновлень вебзастосунку."
+    "closeDetails": "Закрити відомості"
   },
   "signin": {
     "title": "Вхід до JKNet",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Список серверів",
+    "lead": "Сервери зі списків майстер-серверів, їх перевіряє JKNet Online. Підключайтеся з JKNet на комп’ютері.",
+    "loading": "Завантажуємо список серверів…",
     "unavailable": "Список серверів зараз недоступний",
+    "unavailableText": "JKNet Online поки не збирає список серверів. Спробуйте пізніше.",
+    "errorTitle": "Список серверів не завантажився",
     "updating": "Оновлення…",
-    "playNote": "Щоб грати тут, відкрийте JKNet на комп’ютері.",
+    "emptyText": "JKNet Online опитує майстер-сервери. Список з’явиться протягом хвилини.",
+    "clearSearch": "Очистити пошук",
+    "filters": "Фільтри",
+    "filtersActive": "Фільтри ({{count}})",
+    "sort": "Сортування",
+    "sortBy": {
+      "players": "Гравці",
+      "name": "Назва",
+      "map": "Карта",
+      "mode": "Режим",
+      "mod": "Мод"
+    },
     "friendsHere": "Друзі на сервері",
-    "lastSeen": "Відповідав {{time}}"
+    "friendHere": "{{name}} грає тут",
+    "friendsHereCount": "Друзів тут: {{count}}",
+    "lastSeen": "відповідав {{age}} тому",
+    "copied": "Скопійовано",
+    "baseGame": "Основна гра",
+    "passwordYes": "Потрібен",
+    "passwordNo": "Немає",
+    "notListedTitle": "Цього сервера зараз немає в списку",
+    "notListedText": "Він не відповів на останні перевірки, або майстер-сервери його більше не називають.",
+    "fields": {
+      "map": "Карта",
+      "mode": "Режим",
+      "players": "Гравці",
+      "slots": "Місць",
+      "mod": "Мод",
+      "password": "Пароль"
+    }
   },
   "jkhub": {
     "title": "Моди JKHub",
-    "installNote": "Встановлюйте з JKNet на комп’ютері.",
-    "open": "Відкрити на JKHub",
-    "indexedAt": "Каталог від {{date}}"
+    "lead": "Карти, скіни, мечі та інші файли з JKHub. Встановлюйте їх із JKNet на комп’ютері.",
+    "search": "Пошук на JKHub",
+    "indexedAt": "Каталог від {{date}}",
+    "unavailableTitle": "Каталог JKHub поки недоступний",
+    "unavailableText": "JKNet Online ще не зібрав свою копію каталогу JKHub. Спробуйте пізніше.",
+    "emptyText": "У каталозі нічого не знайшлося. Спробуйте менше слів або іншу категорію.",
+    "results": "Файли",
+    "categoryLine": "Категорія: {{name}}",
+    "allCategories": "Усі категорії",
+    "ascending": "За зростанням",
+    "descending": "За спаданням",
+    "pages": "Сторінки",
+    "previous": "Назад",
+    "next": "Далі",
+    "page": "Сторінка {{page}} з {{pages}}",
+    "description": "Опис",
+    "tags": "Теги",
+    "notFoundTitle": "Цього файлу немає в каталозі",
+    "notFoundText": "Можливо, його видалили з JKHub, або каталог JKNet Online про нього ще не знає."
   },
   "about": {
     "title": "Про застосунок",

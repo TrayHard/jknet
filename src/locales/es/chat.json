@@ -640,7 +640,8 @@
     },
     "server": {
       "title": "Compartir un servidor",
-      "empty": "Todavía no hay servidores. Pulse «Get new list» en la pantalla «Servidores»."
+      "empty": "Todavía no hay servidores. Pulse «Get new list» en la pantalla «Servidores».",
+      "emptyWeb": "La lista de servidores no tiene servidores ahora."
     },
     "map": {
       "title": "Compartir un mapa",

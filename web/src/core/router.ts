@@ -6,8 +6,8 @@
  *
  * - implemented: the account with its devices and sessions, the settings,
  *   the friends, the chat with its files and cards, the chats of friends'
- *   servers, and the reads of the community servers and the bundles (plus a
- *   bundle's like); the server list and JKHub join as their slice lands;
+ *   servers, the reads of the community servers and the bundles (plus a
+ *   bundle's like), the general server list and the JKHub catalog;
  * - neutral: read-only launcher state whose empty answer is true in a
  *   browser (`neutral.ts`), counted in `stats.neutral`;
  * - refused with `needs_launcher`: anything that needs the game, local files
@@ -22,8 +22,10 @@ import type { ChatCore } from "./chat/index.ts";
 import type { ServerChats } from "./chat/serverChats.ts";
 import { needsLauncher, signedOut } from "./errors.ts";
 import type { FriendsCore } from "./friends.ts";
+import type { JkhubCore } from "./jkhub.ts";
 import { neutralAnswer } from "./neutral.ts";
 import type { Session } from "./session.ts";
+import { gameOf, isCatalogDisabled, type ServerList } from "./servers.ts";
 import { readTarget, type SessionsCore } from "./sessions.ts";
 import type { SettingsCore } from "./settings.ts";
 import type { ChatMessagePage, ChatSearchPage, OnlineProvider } from "../../../src/lib/ipc.ts";
@@ -52,6 +54,8 @@ export interface RouterDeps {
   files: WebChatFiles;
   serverChats: ServerChats;
   catalogs: Catalogs;
+  servers: ServerList;
+  jkhub: JkhubCore;
   stats: CoreStats;
 }
 
@@ -76,7 +80,7 @@ function object(args: Args, name: string): Args {
 }
 
 export function createRouter(deps: RouterDeps): CommandRouter {
-  const { session, sessions, settings, friends, chat, files, serverChats, catalogs, stats } = deps;
+  const { session, sessions, settings, friends, chat, files, serverChats, catalogs, servers, jkhub, stats } = deps;
 
   const requireAccount = () => {
     if (!session.signedIn()) throw signedOut();
@@ -230,6 +234,25 @@ export function createRouter(deps: RouterDeps): CommandRouter {
       case "like_bundle":
         requireAccount();
         return catalogs.like(text(args, "bundleId"), args.liked === true);
+      case "get_cached_servers": {
+        // The service's list of the game. A service with the list switched
+        // off has no servers to offer: the empty list is true, and neutral.
+        const game = gameOf(args.game, settings.get().activeGame);
+        try {
+          return await servers.cached(game);
+        } catch (error) {
+          if (!isCatalogDisabled(error)) throw error;
+          stats.neutral += 1;
+          if (!stats.neutralCommands.includes(command)) stats.neutralCommands.push(command);
+          return [];
+        }
+      }
+      case "jkhub_categories":
+        return jkhub.categories(args.game);
+      case "jkhub_search":
+        return jkhub.search(args.request);
+      case "jkhub_index_status":
+        return jkhub.indexStatus(args.game);
 
       default: {
         const neutral = neutralAnswer(command, args);

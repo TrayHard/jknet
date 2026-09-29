@@ -615,7 +615,8 @@
     },
     "server": {
       "title": "Szerver megosztása",
-      "empty": "Még nincsenek szerverek. Nyomja meg a „Get new list” gombot a „Szerverek” képernyőn."
+      "empty": "Még nincsenek szerverek. Nyomja meg a „Get new list” gombot a „Szerverek” képernyőn.",
+      "emptyWeb": "A szerverlistán most nincs szerver."
     },
     "map": {
       "title": "Pálya megosztása",

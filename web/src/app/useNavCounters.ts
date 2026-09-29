@@ -28,7 +28,8 @@ export interface NavCounters {
  * A badge asks for attention: chats with unread messages (`@` when one of
  * them mentions me), incoming friend requests and live server invites. A
  * muted count only informs: friends online, the community servers, the
- * bundles of the active game. A catalog's count appears once its screen has
+ * servers of the active game with players on them, the bundles of the
+ * active game. A catalog's count appears once its screen has
  * loaded the list (`catalog/counts.ts`): no request is ever made for a
  * counter.
  *
@@ -45,6 +46,7 @@ export function useNavCounters(): NavCounters {
   const game = useActiveGame();
   const community = useCatalogCount("community");
   const bundles = useCatalogCount(`bundles:${game}`);
+  const servers = useCatalogCount(`servers:${game}`);
 
   return useMemo(() => {
     const bySection: Partial<Record<Section, NavCounter>> = {};
@@ -73,13 +75,14 @@ export function useNavCounters(): NavCounters {
 
     if (community !== undefined) bySection.community = { count: community };
     if (bundles !== undefined) bySection.bundles = { count: bundles };
+    if (servers !== undefined) bySection.servers = { count: servers };
 
     return {
       bySection,
       unreadChats,
       attention: bySection.chats?.badge !== undefined || bySection.friends?.badge !== undefined,
     };
-  }, [chat, friends, community, bundles]);
+  }, [chat, friends, community, bundles, servers]);
 }
 
 /**

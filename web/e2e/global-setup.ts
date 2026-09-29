@@ -9,6 +9,11 @@
  *
  * The workers find the folder and the environment in `JKNET_E2E_SERVICE`,
  * for the administrator's command the developer-account test runs.
+ *
+ * The catalogs are on (spec 1.12, 1.13), fed by the fakes of
+ * `catalog-fakes.ts` on 127.0.0.1: the server list asks fake master and game
+ * servers, and the JKHub catalog serves a seeded index and links to a fake
+ * site. The workers find the fakes in `JKNET_E2E_CATALOG`.
  */
 
 import { spawn } from "node:child_process";
@@ -16,6 +21,8 @@ import { generateKeyPairSync } from "node:crypto";
 import { closeSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { seedJkhubCatalog, startJkhubFake, startServerFakes, type CatalogFakesInfo } from "./catalog-fakes.ts";
 
 export const SERVICE = "http://127.0.0.1:8788";
 
@@ -43,6 +50,10 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   const dir = mkdtempSync(join(tmpdir(), "jknet-web-e2e-"));
   const vapid = generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey.export({ format: "jwk" }).d ?? "";
+  const serverFakes = await startServerFakes();
+  const jkhubFake = await startJkhubFake();
+  const jkhubDir = join(dir, "jkhub");
+  seedJkhubCatalog(jkhubDir);
   const clean = Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith("JKNET_ONLINE_")));
   const env: Record<string, string> = {
     ...(clean as Record<string, string>),
@@ -62,6 +73,14 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     JKNET_ONLINE_WEB_HIDDEN_GRACE_SECS: "5",
     JKNET_ONLINE_WEB_CLOSE_GRACE_SECS: "5",
     JKNET_ONLINE_PRESENCE_SWEEP_SECS: "2",
+    // The server list and the JKHub catalog, on the loopback fakes only:
+    // the dev provider lets a loopback master through.
+    JKNET_ONLINE_SERVER_LIST_ENABLED: "1",
+    JKNET_ONLINE_SERVER_LIST_MASTERS_JA: serverFakes.mastersJa,
+    JKNET_ONLINE_SERVER_LIST_MASTERS_JO: serverFakes.mastersJo,
+    JKNET_ONLINE_JKHUB_CATALOG_ENABLED: "1",
+    JKNET_ONLINE_JKHUB_BASE_URL: jkhubFake.base,
+    JKNET_ONLINE_JKHUB_CATALOG_DIR: jkhubDir,
   };
 
   const log = openSync(join(dir, "service.log"), "a");
@@ -73,10 +92,16 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   await waitForHealth(Date.now() + 30_000);
   process.env.JKNET_E2E_SERVICE = JSON.stringify({ bin, dir, env });
+  process.env.JKNET_E2E_CATALOG = JSON.stringify({
+    servers: serverFakes.servers,
+    jkhubBase: jkhubFake.base,
+  } satisfies CatalogFakesInfo);
 
   return async () => {
     child.kill();
     await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 5_000))]);
+    await serverFakes.stop();
+    await jkhubFake.stop();
     closeSync(log);
     for (let attempt = 0; attempt < 5; attempt += 1) {
       try {

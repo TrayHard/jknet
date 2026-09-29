@@ -37,8 +37,7 @@
       "jkhub": "Válasszon modot"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Részletek bezárása",
-    "pending": "A JKNet ezen része a webalkalmazás egy későbbi frissítésével érkezik."
+    "closeDetails": "Részletek bezárása"
   },
   "signin": {
     "title": "Bejelentkezés a JKNetbe",
@@ -179,7 +178,7 @@
   },
   "sessions": {
     "title": "Eszközök és munkamenetek",
-    "signedOut": "Ezt az eszközt egy másik eszközről jelentették ki."
+    "signedOut": "Ezt az eszközt egy másik eszközről jelentkeztették ki."
   },
   "serverChats": {
     "title": "Barátok szerverei",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Szerverlista",
+    "lead": "A mesterszerverek listáin szereplő szerverek, a JKNet Online ellenőrzi őket. Csatlakozni a számítógépén futó JKNetből tud.",
+    "loading": "A szerverlista betöltése…",
     "unavailable": "A szerverlista most nem érhető el",
+    "unavailableText": "A JKNet Online még nem gyűjti a szerverlistát. Próbálja újra később.",
+    "errorTitle": "A szerverlista nem töltődött be",
     "updating": "Frissítés…",
-    "playNote": "Ha itt szeretne játszani, nyissa meg a JKNetet a számítógépén.",
+    "emptyText": "A JKNet Online lekérdezi a mesterszervereket. A lista egy percen belül megjelenik.",
+    "clearSearch": "Keresés törlése",
+    "filters": "Szűrők",
+    "filtersActive": "Szűrők ({{count}})",
+    "sort": "Rendezés",
+    "sortBy": {
+      "players": "Játékosok",
+      "name": "Név",
+      "map": "Pálya",
+      "mode": "Mód",
+      "mod": "Mod"
+    },
     "friendsHere": "Barátok a szerveren",
-    "lastSeen": "Válaszolt: {{time}}"
+    "friendHere": "{{name}} itt játszik",
+    "friendsHereCount": "Barátok itt: {{count}}",
+    "lastSeen": "{{age}} ezelőtt válaszolt",
+    "copied": "Másolva",
+    "baseGame": "Alapjáték",
+    "passwordYes": "Szükséges",
+    "passwordNo": "Nincs",
+    "notListedTitle": "Ez a szerver most nincs a listán",
+    "notListedText": "Nem válaszolt az utolsó ellenőrzésekre, vagy a mesterszerverek már nem sorolják fel.",
+    "fields": {
+      "map": "Pálya",
+      "mode": "Mód",
+      "players": "Játékosok",
+      "slots": "Helyek",
+      "mod": "Mod",
+      "password": "Jelszó"
+    }
   },
   "jkhub": {
     "title": "JKHub-modok",
-    "installNote": "Telepítse a számítógépen futó JKNetből.",
-    "open": "Megnyitás a JKHubon",
-    "indexedAt": "Katalógus: {{date}}"
+    "lead": "Pályák, skinek, fénykardok és más fájlok a JKHubról. Telepítse őket a számítógépén futó JKNetből.",
+    "search": "Keresés a JKHubon",
+    "indexedAt": "Katalógus: {{date}}",
+    "unavailableTitle": "A JKHub-katalógus még nem érhető el",
+    "unavailableText": "A JKNet Online még nem készítette el a JKHub-katalógus saját másolatát. Próbálja újra később.",
+    "emptyText": "A katalógusban semmi sem felel meg a keresésnek. Próbálja kevesebb szóval vagy másik kategóriában.",
+    "results": "Fájlok",
+    "categoryLine": "Kategória: {{name}}",
+    "allCategories": "Minden kategória",
+    "ascending": "Növekvő sorrend",
+    "descending": "Csökkenő sorrend",
+    "pages": "Oldalak",
+    "previous": "Előző",
+    "next": "Következő",
+    "page": "{{page}}. oldal / {{pages}}",
+    "description": "Leírás",
+    "tags": "Címkék",
+    "notFoundTitle": "Ez a fájl nincs a katalógusban",
+    "notFoundText": "Lehet, hogy a JKHub eltávolította, vagy a JKNet Online katalógusa még nem ismeri."
   },
   "about": {
     "title": "Névjegy",

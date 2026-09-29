@@ -6,9 +6,10 @@ import { AccountProvider } from "../../../src/components/AccountProvider.tsx";
 import { ChatProvider } from "../../../src/components/chat/ChatProvider.tsx";
 import { ToastsProvider } from "../../../src/components/ToastsProvider.tsx";
 import { listen } from "../../../src/lib/backend.ts";
-import { ACCOUNT_CHANGED_EVENT, type AccountChanged } from "../../../src/lib/ipc.ts";
-import { useFriendsEvents } from "../../../src/lib/queries.ts";
+import { ACCOUNT_CHANGED_EVENT, type AccountChanged, type ServerInfo } from "../../../src/lib/ipc.ts";
+import { serverKeys, useFriendsEvents } from "../../../src/lib/queries.ts";
 import type { WebCore } from "../core/index.ts";
+import { SERVERS_UPDATED_EVENT, type ServersUpdated } from "../core/servers.ts";
 import { CoreProvider } from "./CoreContext.tsx";
 import { OneTabGate } from "./OneTabGate.tsx";
 import { routes } from "./routes.tsx";
@@ -16,6 +17,24 @@ import { routes } from "./routes.tsx";
 /** The one subscription to the `friends:*` events, above the router. */
 function FriendsEvents() {
   useFriendsEvents();
+  return null;
+}
+
+/**
+ * Every answer of the service's server list, from the screen's refresh or a
+ * picker's retry, goes into the list the chat's server picker reads
+ * (`get_cached_servers`), which never refetches on its own.
+ */
+function ServerListSync({ core }: { core: WebCore }) {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      core.events.on(SERVERS_UPDATED_EVENT, (payload) => {
+        const { game, servers } = payload as ServersUpdated;
+        queryClient.setQueryData<ServerInfo[]>(serverKeys.cached(game), servers);
+      }),
+    [core, queryClient],
+  );
   return null;
 }
 
@@ -71,6 +90,7 @@ export function App({ core }: { core: WebCore }) {
             <AccountProvider expiredToast={false}>
               <AccountSwitch />
               <FriendsEvents />
+              <ServerListSync core={core} />
               <ChatProvider role="main">
                 <RouterProvider router={router} />
               </ChatProvider>

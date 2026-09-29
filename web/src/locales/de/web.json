@@ -37,8 +37,7 @@
       "jkhub": "Wählen Sie eine Mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Details schließen",
-    "pending": "Dieser Teil von JKNet kommt mit einem späteren Update der Web-App."
+    "closeDetails": "Details schließen"
   },
   "signin": {
     "title": "Bei JKNet anmelden",
@@ -191,17 +190,64 @@
   },
   "serverList": {
     "title": "Serverliste",
+    "lead": "Server aus den Listen der Master-Server, geprüft von JKNet Online. Verbinden Sie sich über JKNet auf Ihrem PC.",
+    "loading": "Serverliste wird geladen…",
     "unavailable": "Die Serverliste ist gerade nicht verfügbar",
+    "unavailableText": "JKNet Online sammelt die Serverliste noch nicht. Versuchen Sie es später erneut.",
+    "errorTitle": "Die Serverliste wurde nicht geladen",
     "updating": "Wird aktualisiert…",
-    "playNote": "Um hier zu spielen, öffnen Sie JKNet auf Ihrem PC.",
+    "emptyText": "JKNet Online fragt die Master-Server ab. Die Liste erscheint innerhalb einer Minute.",
+    "clearSearch": "Suche leeren",
+    "filters": "Filter",
+    "filtersActive": "Filter ({{count}})",
+    "sort": "Sortieren nach",
+    "sortBy": {
+      "players": "Spieler",
+      "name": "Name",
+      "map": "Map",
+      "mode": "Modus",
+      "mod": "Mod"
+    },
     "friendsHere": "Freunde auf dem Server",
-    "lastSeen": "Antwortete {{time}}"
+    "friendHere": "{{name}} spielt hier",
+    "friendsHereCount": "Freunde hier: {{count}}",
+    "lastSeen": "antwortete vor {{age}}",
+    "copied": "Kopiert",
+    "baseGame": "Basisspiel",
+    "passwordYes": "Erforderlich",
+    "passwordNo": "Keines",
+    "notListedTitle": "Dieser Server ist gerade nicht in der Liste",
+    "notListedText": "Er hat auf die letzten Prüfungen nicht geantwortet, oder die Master-Server nennen ihn nicht mehr.",
+    "fields": {
+      "map": "Map",
+      "mode": "Modus",
+      "players": "Spieler",
+      "slots": "Plätze",
+      "mod": "Mod",
+      "password": "Passwort"
+    }
   },
   "jkhub": {
     "title": "JKHub-Mods",
-    "installNote": "Installieren Sie über JKNet auf Ihrem PC.",
-    "open": "Auf JKHub öffnen",
-    "indexedAt": "Katalog vom {{date}}"
+    "lead": "Maps, Skins, Lichtschwerter und mehr von JKHub. Installieren Sie sie über JKNet auf Ihrem PC.",
+    "search": "JKHub durchsuchen",
+    "indexedAt": "Katalog vom {{date}}",
+    "unavailableTitle": "Der JKHub-Katalog ist noch nicht verfügbar",
+    "unavailableText": "JKNet Online hat seine Kopie des JKHub-Katalogs noch nicht erstellt. Versuchen Sie es später erneut.",
+    "emptyText": "Nichts im Katalog passt zu dieser Suche. Versuchen Sie weniger Wörter oder eine andere Kategorie.",
+    "results": "Dateien",
+    "categoryLine": "Kategorie: {{name}}",
+    "allCategories": "Alle Kategorien",
+    "ascending": "Aufsteigend",
+    "descending": "Absteigend",
+    "pages": "Seiten",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "page": "Seite {{page}} von {{pages}}",
+    "description": "Beschreibung",
+    "tags": "Tags",
+    "notFoundTitle": "Diese Datei ist nicht im Katalog",
+    "notFoundText": "JKHub hat sie vielleicht entfernt, oder der Katalog von JKNet Online kennt sie noch nicht."
   },
   "about": {
     "title": "Über",

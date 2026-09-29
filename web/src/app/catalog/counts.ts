@@ -11,7 +11,11 @@ import { useSyncExternalStore } from "react";
 
 import type { Game } from "../../../../src/lib/ipc.ts";
 
-export type CatalogCountKey = "community" | `bundles:${Game}`;
+/**
+ * `community`: the community servers; `bundles:<game>`: the bundles of a
+ * game; `servers:<game>`: the servers of a game with players on them.
+ */
+export type CatalogCountKey = "community" | `bundles:${Game}` | `servers:${Game}`;
 
 const counts = new Map<CatalogCountKey, number>();
 const listeners = new Set<() => void>();
