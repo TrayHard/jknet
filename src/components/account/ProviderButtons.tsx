@@ -88,7 +88,10 @@ function ProviderButton({
       disabled={disabled}
       onClick={onClick}
       className={[
-        "flex items-center gap-12 h-56 px-16 rounded-md border border-line bg-input",
+        // The height follows the text: a note that wraps (a narrow card, a
+        // long language) grows the button instead of pressing the label and
+        // the note against the border. One line keeps the design's 56 px.
+        "flex items-center gap-12 min-h-56 px-16 py-8 rounded-md border border-line bg-input",
         "text-left transition-colors duration-150",
         "enabled:cursor-pointer enabled:hover:bg-surface-hover",
         "disabled:cursor-not-allowed disabled:opacity-60",
@@ -99,8 +102,9 @@ function ProviderButton({
       </span>
       <span className="flex-1 min-w-0 flex flex-col">
         <span className="text-body-md-medium text-fg">{label}</span>
-        {/* Two lines at most: on a phone one line cuts the sentence in half. */}
-        <span className="text-body-sm text-fg-muted line-clamp-2">{note}</span>
+        {/* The whole sentence, however many lines it takes: a clamp cut the
+            longer languages mid-word on a phone. */}
+        <span className="text-body-sm text-fg-muted">{note}</span>
       </span>
     </button>
   );
