@@ -27,6 +27,9 @@ export function Toggle({
       className={cn(
         // --- slice: selection context menu ---
         "relative inline-flex items-center w-40 h-24 shrink-0 rounded-full select-none",
+        // --- slice: web app --- on a touch screen the switch answers a
+        // finger over 60 × 44 px, drawn the same size.
+        "pointer-coarse:after:absolute pointer-coarse:after:-inset-x-10 pointer-coarse:after:-inset-y-10 pointer-coarse:after:content-['']",
         "transition-colors duration-150 cursor-pointer",
         "disabled:cursor-not-allowed disabled:opacity-50",
         checked ? "bg-accent" : "bg-elevated",

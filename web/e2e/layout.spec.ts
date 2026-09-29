@@ -167,6 +167,9 @@ test.describe("wide: W1", () => {
     await expect(page.getByTestId("details-column")).toBeHidden();
     await page.getByRole("button", { name: "Close details" }).click();
     await expect(page).toHaveURL(`${BASE}/c/01TESTGROUP`);
+    // Closing added no history entry: Back does not open the details again.
+    await page.goBack();
+    await expect(page).not.toHaveURL(/\/info$/);
   });
 
   test("resizing across 900 px keeps the route", async ({ page, isMobile }) => {

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import type { ChatMessage } from "../../lib/ipc";
+import { useCoarsePointer } from "../../lib/pointer";
 import { Floating } from "./Floating";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageText } from "./MessageText";
@@ -30,6 +31,10 @@ interface MessageItemProps {
  * replies to me, is outlined in the warm colour. The tools appear on hover
  * and on focus: **React**, **Reply** and **Copy text**. There is no edit and
  * no delete: a sent message stays as it is.
+ *
+ * --- slice: web app --- a touch screen has no hover: a tap on the message
+ * shows its tools, 44 px each, and a tap elsewhere hides them. Hidden, they
+ * cannot be tapped by accident.
  */
 export function MessageItem({ message, mine }: MessageItemProps) {
   const { t } = useTranslation("chat");
@@ -38,6 +43,8 @@ export function MessageItem({ message, mine }: MessageItemProps) {
   const times = useChatTimes();
   const reactButton = useRef<HTMLButtonElement>(null);
   const [reacting, setReacting] = useState(false);
+  const coarse = useCoarsePointer();
+  const [tapped, setTapped] = useState(false);
 
   const hasText = message.body.trim() !== "";
   const pinged =
@@ -59,8 +66,25 @@ export function MessageItem({ message, mine }: MessageItemProps) {
   return (
     <div
       data-seq={message.seq}
+      tabIndex={coarse ? -1 : undefined}
+      onFocus={coarse ? () => setTapped(true) : undefined}
+      onBlur={
+        coarse
+          ? (event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTapped(false);
+            }
+          : undefined
+      }
+      onClick={
+        coarse
+          ? (event) => {
+              // A browser that does not focus on a tap: the message still takes it.
+              if (!event.currentTarget.contains(document.activeElement)) event.currentTarget.focus({ preventScroll: true });
+            }
+          : undefined
+      }
       className={cn(
-        "group/msg relative flex items-center gap-6 rounded-md",
+        "group/msg relative flex items-center gap-6 rounded-md outline-none",
         mine && "flex-row-reverse",
         highlightSeq === message.seq && "bg-accent-glow",
       )}
@@ -91,8 +115,13 @@ export function MessageItem({ message, mine }: MessageItemProps) {
       <div
         className={cn(
           "flex shrink-0 items-center gap-2 transition-opacity duration-100",
-          reacting ? "opacity-100" : "opacity-0 group-hover/msg:opacity-100 group-focus-within/msg:opacity-100",
+          reacting || tapped
+            ? "opacity-100"
+            : coarse
+              ? "invisible opacity-0"
+              : "opacity-0 group-hover/msg:opacity-100 group-focus-within/msg:opacity-100",
         )}
+        data-testid="message-tools"
       >
         {conversation.canSend ? (
           <>
@@ -145,7 +174,7 @@ function ToolButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex size-24 items-center justify-center rounded-sm text-fg-muted cursor-pointer hover:bg-hover-overlay hover:text-fg"
+      className="flex size-24 pointer-coarse:size-44 items-center justify-center rounded-sm text-fg-muted cursor-pointer hover:bg-hover-overlay hover:text-fg"
     >
       {children}
     </button>

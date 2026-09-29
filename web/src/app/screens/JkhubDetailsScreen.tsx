@@ -1,4 +1,4 @@
-import { ArrowDownCircle, Download, ExternalLink, Library, Share2 } from "lucide-react";
+import { ArrowDownCircle, ExternalLink, ImageOff, Library, Share2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -34,7 +34,7 @@ function Thumbnail({ url }: { url: string | null }) {
           className="size-full object-cover"
         />
       ) : (
-        <Download size={32} aria-hidden="true" />
+        <ImageOff size={32} aria-hidden="true" />
       )}
     </div>
   );
@@ -87,7 +87,7 @@ function FileFacts({ card, game }: { card: JkhubCardData; game: Game }) {
           {card.downloads != null ? (
             <span className="inline-flex items-center gap-4">
               <ArrowDownCircle size={14} aria-hidden="true" />
-              {t("details.downloads", { count: card.downloads })}
+              {t("details.downloads", { count: format.number(card.downloads) })}
             </span>
           ) : null}
           {date !== "" && date !== card.date ? (

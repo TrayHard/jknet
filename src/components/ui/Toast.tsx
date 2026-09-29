@@ -76,7 +76,9 @@ export function Toast({
           aria-label={t("actions.dismiss")}
           onClick={onDismiss}
           className={cn(
-            "shrink-0 flex items-center justify-center size-20 rounded-sm cursor-pointer",
+            "relative shrink-0 flex items-center justify-center size-20 rounded-sm cursor-pointer",
+            // --- slice: web app --- 44 × 44 px under a finger, drawn the same size.
+            "pointer-coarse:after:absolute pointer-coarse:after:-inset-12 pointer-coarse:after:content-['']",
             "text-fg-muted hover:text-fg hover:bg-hover-overlay transition-colors duration-150",
           )}
         >

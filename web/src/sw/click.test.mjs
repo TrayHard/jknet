@@ -28,3 +28,12 @@ test("only a path of the app is opened", () => {
   }
   assert.equal(appPath("/c/abc"), "/c/abc");
 });
+
+test("a window that runs the app wins over the one-tab gate or a frozen page, whatever their focus", () => {
+  const gate = { ...focused, live: false };
+  const app = { ...hidden, live: true };
+  assert.equal(clickPlan([gate, app], "/c/C1").index, 1);
+  assert.equal(clickPlan([app, { ...visible, live: true }], "/c/C1").index, 1, "among live windows the visible one");
+  // No window answered: the choice is the one of before.
+  assert.equal(clickPlan([{ ...hidden, live: false }, { ...focused, live: false }], "/c/C1").index, 1);
+});

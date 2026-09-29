@@ -102,16 +102,16 @@ async function settle() {
  * A chat core over a fake service. `routes` answers `METHOD path` with a
  * value or a function of the body; anything else is a 404.
  */
-function harness({ visible = true, notifications = {}, pushSubscribed = false, routes = {} } = {}) {
+function harness({ visible = true, notifications = {}, pushSubscribed = false, routes = {}, storage = memoryStorage() } = {}) {
   const clock = manualClock();
   const events = new EventBus();
-  const storage = memoryStorage();
   const calls = [];
   const sounds = [];
   const shown = [];
+  const closed = [];
   const emitted = [];
   const page = { visible };
-  for (const name of ["chat:notify", "chat:message", "chat:outbox"]) {
+  for (const name of ["chat:notify", "chat:message", "chat:outbox", "chat:resync", "chat:joinable"]) {
     events.on(name, (payload) => emitted.push({ name, payload }));
   }
   const http = {
@@ -146,9 +146,10 @@ function harness({ visible = true, notifications = {}, pushSubscribed = false, r
       online: () => true,
       playSound: (name, mentioned) => sounds.push({ name, mentioned }),
       showNotification: (title, options) => shown.push({ title, ...options }),
+      closeNotifications: (tag) => closed.push(tag),
     },
   });
-  return { chat, clock, calls, sounds, shown, emitted, page, storage };
+  return { chat, clock, calls, sounds, shown, closed, emitted, page, storage };
 }
 
 /** Starts the core and reads the sync document with one direct chat. */
@@ -325,6 +326,159 @@ describe("sending", () => {
     await settle();
     assert.deepEqual(order, ["first", "second", "third"]);
     assert.deepEqual(chat.view().outbox, []);
+  });
+});
+
+describe("keeping in step with the service", () => {
+  const SYNC = "GET /v1/chat/conversations";
+
+  test("a failed sync document is read again while the socket stays up", async () => {
+    let answers = 0;
+    const run = harness({
+      routes: {
+        [SYNC]: () => {
+          answers += 1;
+          if (answers <= 4) throw networkError("timed out");
+          return { conversations: [conversation(1)], groupInvites: [] };
+        },
+      },
+    });
+    await run.chat.start();
+    run.chat.connected();
+    await settle();
+    await run.clock.advance(2_000);
+    assert.equal(run.chat.synced(), false, "the socket open, the first timer and a retry failed");
+    await run.clock.advance(60_000);
+    assert.equal(run.chat.synced(), true, "a retry came without the socket dropping");
+    const gets = run.calls.filter((call) => call.method === "GET" && call.path === "/v1/chat/conversations").length;
+    assert.equal(gets, 5);
+    await run.clock.advance(10 * 60_000);
+    assert.equal(
+      run.calls.filter((call) => call.method === "GET" && call.path === "/v1/chat/conversations").length,
+      5,
+      "no retry once a document arrived",
+    );
+  });
+
+  test("a message that lands while the sync document is on its way is not undone by it", async () => {
+    let release = null;
+    let held = false;
+    // What the service holds when it computes the document.
+    let serviceSeq = 2;
+    const run = await synced({
+      visible: false,
+      routes: {
+        [SYNC]: async () => {
+          const seq = serviceSeq;
+          if (held) await new Promise((resolve) => (release = resolve));
+          return { conversations: [conversation(seq)], groupInvites: [] };
+        },
+      },
+    });
+    held = true;
+    run.chat.connected();
+    await settle();
+    // Message 3 is stored after the document was computed, and its frame
+    // comes before the answer.
+    serviceSeq = 3;
+    arrive(run.chat, 3);
+    await settle();
+    assert.equal(run.chat.view().conversations[0].lastSeq, 3);
+    release();
+    await settle();
+    // The stale document is dropped and read again; the second answer is held too.
+    assert.equal(run.chat.view().conversations[0].lastSeq, 3, "the book keeps message 3");
+    held = false;
+    release();
+    await settle();
+    const resets = run.emitted.filter((event) => event.name === "chat:resync").flatMap((event) => event.payload.reset);
+    assert.deepEqual(resets, [], "nothing counts as a restored database");
+  });
+
+  test("after another tab took over, the next start reads the queue and the drafts from IndexedDB", async () => {
+    const storage = memoryStorage();
+    const run = harness({
+      storage,
+      routes: {
+        [SYNC]: { conversations: [conversation(1)], groupInvites: [] },
+        [`POST /v1/chat/conversations/${DIRECT}/messages`]: () => {
+          throw networkError("offline");
+        },
+      },
+    });
+    await run.chat.start();
+    run.chat.connected();
+    await settle();
+    await run.chat.setDraft(DIRECT, "half a thought");
+    await run.chat.send(DIRECT, { body: "queued" });
+    await settle();
+    assert.equal(run.chat.view().outbox.length, 1);
+
+    run.chat.stop();
+    await settle();
+    // The other tab sent the draft and discarded the queued message.
+    for (const { key } of await storage.entries("outbox")) await storage.delete("outbox", key);
+    for (const { key } of await storage.entries("drafts")) await storage.delete("drafts", key);
+
+    const postsBefore = run.calls.filter((call) => call.method === "POST").length;
+    await run.chat.start();
+    run.chat.connected();
+    await settle();
+    await run.clock.advance(60_000);
+    assert.equal(await run.chat.getDraft(DIRECT), "", "the draft sent elsewhere does not come back");
+    assert.deepEqual(run.chat.view().outbox, [], "the discarded message does not come back");
+    assert.equal(run.calls.filter((call) => call.method === "POST").length, postsBefore, "and is never sent");
+  });
+
+  test("a message queued just before another tab takes over still reaches IndexedDB", async () => {
+    const storage = memoryStorage();
+    const run = harness({
+      storage,
+      routes: {
+        [SYNC]: { conversations: [conversation(1)], groupInvites: [] },
+        [`POST /v1/chat/conversations/${DIRECT}/messages`]: () => {
+          throw networkError("offline");
+        },
+      },
+    });
+    await run.chat.start();
+    run.chat.connected();
+    await settle();
+    await run.chat.send(DIRECT, { body: "right before" });
+    run.chat.stop();
+    await settle();
+    const rows = await storage.entries("outbox");
+    assert.equal(rows.length, 1, "the tab that takes over finds it");
+    assert.equal(rows[0].value.draft.body, "right before");
+  });
+
+  test("reading a conversation closes its system notifications", async () => {
+    const run = await synced({ visible: false, routes: { [`POST /v1/chat/conversations/${DIRECT}/read`]: { readSeq: 2 } } });
+    arrive(run.chat, 2);
+    await settle();
+    assert.deepEqual(run.closed, []);
+    await run.chat.markRead(DIRECT);
+    await settle();
+    assert.deepEqual(run.closed, [`c:${DIRECT}`]);
+  });
+
+  test("leaving a server chat tells the joinable list to refresh", async () => {
+    const server = {
+      ...conversation(1),
+      kind: "server",
+      server: { sessionId: "01HSESSION0000000000000000", hostId: KYLE, name: "Duel", game: "ja", ended: false },
+    };
+    const run = harness({
+      routes: {
+        [SYNC]: { conversations: [server], groupInvites: [] },
+        [`DELETE /v1/chat/conversations/${DIRECT}/members/${ME}`]: undefined,
+      },
+    });
+    await run.chat.start();
+    run.chat.connected();
+    await settle();
+    await run.chat.leave(DIRECT);
+    assert.equal(run.emitted.filter((event) => event.name === "chat:joinable").length, 1);
   });
 });
 

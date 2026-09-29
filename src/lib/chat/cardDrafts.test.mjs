@@ -21,6 +21,7 @@ import {
   hostInviteCard,
   isScreenshotName,
   jkhubFileUrl,
+  jkhubSourceUrl,
   jkhubModCard,
   lineCount,
   mapCard,
@@ -345,6 +346,26 @@ describe("files", () => {
     assert.equal(isScreenshotName("shot.png"), true);
     assert.equal(isScreenshotName("shot.jpeg"), true);
     assert.equal(isScreenshotName("shot.tga"), false);
+  });
+
+  test("jkhubSourceUrl keeps the record's own page and nothing else", () => {
+    const page = "https://jkhub.org/files/file/4391-legends-hilt-pack/";
+    assert.equal(jkhubSourceUrl({ fileId: 4391, url: page }), page);
+    assert.equal(jkhubSourceUrl({ fileId: 4391, url: "https://jkhub.org/files/file/4391/" }), "https://jkhub.org/files/file/4391/");
+    for (const bad of [
+      "https://jkhub-login.example/",
+      "https://jkhub.org.example.com/files/file/4391/",
+      "https://jkhub.org/files/file/4392-other/",
+      "http://jkhub.org/files/file/4391/",
+      "search-ms:query=x&crumb=location:\\\\attacker\\share",
+      "steam://run/6020",
+      "javascript:alert(1)",
+      "https://jkhub.org/files/file/4391-x/../../../evil",
+    ]) {
+      assert.equal(jkhubSourceUrl({ fileId: 4391, url: bad }), "https://jkhub.org/files/file/4391/", bad);
+    }
+    assert.equal(jkhubSourceUrl({ fileId: 0, url: page }), null);
+    assert.equal(jkhubSourceUrl({ fileId: 1.5, url: page }), null);
   });
 
   test("jkhubFileUrl", () => {

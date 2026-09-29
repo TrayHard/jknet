@@ -150,7 +150,7 @@ export function ThreadHeader({
           aria-label={t("thread.back")}
           title={t("thread.back")}
           onClick={onBack}
-          className="flex size-28 shrink-0 items-center justify-center rounded-sm text-fg-secondary cursor-pointer hover:bg-hover-overlay hover:text-fg"
+          className="flex size-28 pointer-coarse:size-44 shrink-0 items-center justify-center rounded-sm text-fg-secondary cursor-pointer hover:bg-hover-overlay hover:text-fg"
         >
           <ArrowLeft size={16} />
         </button>
@@ -181,7 +181,7 @@ export function ThreadHeader({
             aria-pressed={searching}
             onClick={onSearch}
             className={cn(
-              "flex size-28 items-center justify-center rounded-sm cursor-pointer hover:bg-hover-overlay hover:text-fg",
+              "flex size-28 pointer-coarse:size-44 items-center justify-center rounded-sm cursor-pointer hover:bg-hover-overlay hover:text-fg",
               searching ? "bg-selected-overlay text-fg" : "text-fg-secondary",
             )}
           >

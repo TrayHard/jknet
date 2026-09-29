@@ -26,6 +26,7 @@ import {
 } from "../../lib/chat/mentions";
 import { CARDS_MAX } from "../../lib/chat/cardDrafts";
 import { cn } from "../../lib/format";
+import { useCoarsePointer } from "../../lib/pointer";
 import type {
   ChatCard,
   ChatMessage,
@@ -81,7 +82,8 @@ const FILES_MAX = 10;
  * Where a message is written: the reply bar, the staged files, the text
  * field with its `@` list, and the attach, emoji and send buttons.
  *
- * Enter sends and Shift+Enter breaks the line. The draft lives in the core
+ * Enter sends and Shift+Enter breaks the line; on a touch screen Enter
+ * breaks the line and the send button sends. The draft lives in the core
  * and follows the player between the drawer and the chat window; a mention
  * is kept as `@Name` in the field and turned into its token when the message
  * leaves. A chat that cannot take messages any more — a friend removed, an
@@ -108,6 +110,7 @@ export function Composer({
   // --- slice: web app --- a platform without the core's file dialogs picks,
   // pastes and drops files of the page, which its core stages like a drop.
   const caps = usePlatform();
+  const coarse = useCoarsePointer();
   const fileSource = useContext(ComposerFileSourceContext);
   const kinds = attachKindsFor(caps);
   // Every kind listed can act: the cards slice gave each its picker.
@@ -134,6 +137,25 @@ export function Composer({
   // whether a draft of the core was put into the field since it last ran.
   const unsaved = useRef<{ conversationId: string; text: string } | null>(null);
   const justLoaded = useRef(false);
+
+  // --- slice: web app --- files left in the tray when the player moves to
+  // another chat or closes this one are let go: the core would otherwise
+  // hold them (and a waiting update) until a reload. A file already handed
+  // to a send is the outbox's, and the core keeps what it holds anyway.
+  const trayRef = useRef<ChatStagedFile[]>([]);
+  trayRef.current = staged;
+  const sendingRef = useRef(new Set<string>());
+  const unstageRef = useRef(stage.unstage.mutate);
+  unstageRef.current = stage.unstage.mutate;
+  useEffect(
+    () => () => {
+      for (const file of trayRef.current) {
+        if (!sendingRef.current.has(file.handle)) unstageRef.current(file.handle);
+      }
+      sendingRef.current = new Set();
+    },
+    [conversationId],
+  );
 
   // A new conversation starts from its own draft and its own files.
   useEffect(() => {
@@ -329,6 +351,7 @@ export function Composer({
     // --- slice: chat layout --- the text goes into the outbox now, not
     // into a draft, even if the thread closes before the core answers.
     unsaved.current = null;
+    for (const file of staged) sendingRef.current.add(file.handle);
     send.mutate(
       {
         conversationId,
@@ -383,7 +406,9 @@ export function Composer({
       onClearReply();
       return;
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    // --- slice: web app --- a touch keyboard has no Shift+Enter: Enter
+    // breaks the line there, and the send button sends.
+    if (event.key === "Enter" && !event.shiftKey && (!coarse || event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       submit();
     }
@@ -500,10 +525,11 @@ export function Composer({
           }}
           onSelect={(event) => updateMention(event.currentTarget.value, event.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
+          enterKeyHint={coarse ? "enter" : "send"}
           onPaste={onPaste}
           onBlur={() => setMention(null)}
           className={cn(
-            "min-h-32 flex-1 resize-none rounded-md border bg-input px-10 py-6 text-body-md text-fg outline-none",
+            "min-h-32 pointer-coarse:min-h-44 flex-1 resize-none rounded-md border bg-input px-10 py-6 pointer-coarse:py-11 text-body-md text-fg outline-none",
             "placeholder:text-fg-muted [overflow-wrap:anywhere]",
             tooLong ? "border-line-danger" : "border-line focus:border-line-focus",
           )}
@@ -514,7 +540,7 @@ export function Composer({
           aria-label={t("composer.emoji")}
           title={t("composer.emoji")}
           onClick={() => setEmojiOpen((open) => !open)}
-          className="flex size-32 shrink-0 items-center justify-center rounded-md text-fg-secondary cursor-pointer hover:bg-hover-overlay hover:text-fg"
+          className="flex size-32 pointer-coarse:size-44 shrink-0 items-center justify-center rounded-md text-fg-secondary cursor-pointer hover:bg-hover-overlay hover:text-fg"
         >
           <Smile size={16} />
         </button>
@@ -524,7 +550,7 @@ export function Composer({
           title={t("composer.send")}
           disabled={empty || tooLong || send.isPending}
           onClick={submit}
-          className="flex size-32 shrink-0 items-center justify-center rounded-md bg-accent text-fg-on-accent cursor-pointer hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-elevated disabled:text-fg-disabled"
+          className="flex size-32 pointer-coarse:size-44 shrink-0 items-center justify-center rounded-md bg-accent text-fg-on-accent cursor-pointer hover:bg-accent-hover disabled:cursor-not-allowed disabled:bg-elevated disabled:text-fg-disabled"
         >
           <SendHorizontal size={16} />
         </button>

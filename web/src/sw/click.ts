@@ -14,6 +14,8 @@
 export interface WindowInfo {
   focused: boolean;
   visibilityState: DocumentVisibilityState;
+  /** It answered that the app runs in it: not a frozen page, not the one-tab gate. */
+  live?: boolean;
 }
 
 export type ClickPlan = { action: "focus"; index: number; url: string } | { action: "open"; url: string };
@@ -31,12 +33,19 @@ export function appPath(raw: unknown): string | null {
   return raw;
 }
 
-/** The window to bring forward: a focused one, else a visible one, else the most recent. */
+/**
+ * The window to bring forward: among the windows that run the app (all of
+ * them when none answered), a focused one, else a visible one, else the most
+ * recent. A tab showing "open in another tab" has no layout to open the
+ * address in.
+ */
 export function clickPlan(windows: readonly WindowInfo[], rawUrl: unknown): ClickPlan {
   const url = appPath(rawUrl) ?? FALLBACK_URL;
   if (windows.length === 0) return { action: "open", url };
-  let index = windows.findIndex((window) => window.focused);
-  if (index < 0) index = windows.findIndex((window) => window.visibilityState === "visible");
-  if (index < 0) index = 0;
+  const anyLive = windows.some((window) => window.live === true);
+  const indexes = windows.flatMap((window, index) => (!anyLive || window.live === true ? [index] : []));
+  let index = indexes.find((at) => windows[at].focused);
+  index ??= indexes.find((at) => windows[at].visibilityState === "visible");
+  index ??= indexes[0];
   return { action: "focus", index, url };
 }

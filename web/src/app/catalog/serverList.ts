@@ -45,7 +45,8 @@ export function useServerList(game: Game): UseQueryResult<ServerListAnswer> {
   return useQuery({
     queryKey: webServerKeys.list(game),
     queryFn: () => core.servers.load(game),
-    staleTime: 30_000,
+    // At most one read a minute (spec 3.15): a remount within it takes the answer held.
+    staleTime: REFRESH_MS,
     refetchInterval: (query) => {
       if (query.state.error !== null && catalogUnavailable(query.state.error)) return false;
       return query.state.data?.stale ? STALE_RETRY_MS : REFRESH_MS;

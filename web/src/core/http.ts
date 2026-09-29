@@ -73,34 +73,43 @@ export function createHttp(options: HttpOptions): Http {
       body = JSON.stringify(request.body);
     }
 
+    // One deadline covers the whole call, the body included: an answer whose
+    // headers arrive and whose body then stalls must fail like no answer.
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+        reject(new Error("timeout"));
+      }, timeoutMs);
+    });
+    deadline.catch(() => {});
     let response: Response;
+    let text: string;
     try {
-      response = await fetchImpl(`${apiBase}${path}`, {
-        method,
-        headers,
-        body,
-        signal: controller.signal,
-        // The API is on its own origin and carries no cookie of ours.
-        credentials: "omit",
-        cache: "no-store",
-        referrerPolicy: "no-referrer",
-      });
+      response = await Promise.race([
+        fetchImpl(`${apiBase}${path}`, {
+          method,
+          headers,
+          body,
+          signal: controller.signal,
+          // The API is on its own origin and carries no cookie of ours.
+          credentials: "omit",
+          cache: "no-store",
+          referrerPolicy: "no-referrer",
+        }),
+        deadline,
+      ]);
+      text = await Promise.race([response.text(), deadline]);
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (timedOut || controller.signal.aborted) {
         throw networkError(`the service did not answer ${method} ${path} within ${timeoutMs / 1000} s`);
       }
       throw networkError(`${method} ${path}: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       clearTimeout(timer);
-    }
-
-    let text: string;
-    try {
-      text = await response.text();
-    } catch (error) {
-      throw networkError(`${method} ${path}: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     if (!response.ok) {

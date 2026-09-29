@@ -139,6 +139,28 @@ function chatSounds(): Plugin {
 }
 
 /**
+ * The engine marks of the launcher, `public/brand/engines/<engineId>.png`,
+ * copied to `web/public/brand/engines/` the same way: `EngineLogo` asks for
+ * them by that path on the bundle screens, and without them every card falls
+ * back to the engine's initials.
+ */
+function engineIcons(): Plugin {
+  const source = fileURLToPath(new URL("../public/brand/engines", import.meta.url));
+  const target = fileURLToPath(new URL("./public/brand/engines", import.meta.url));
+  const copy = () => {
+    mkdirSync(target, { recursive: true });
+    for (const file of readdirSync(source)) {
+      if (!file.endsWith(".png")) continue;
+      const bytes = readFileSync(join(source, file));
+      const to = join(target, file);
+      if (existsSync(to) && readFileSync(to).equals(bytes)) continue;
+      writeFileSync(to, bytes);
+    }
+  };
+  return { name: "jknet-engine-icons", buildStart: copy };
+}
+
+/**
  * Records which modules went into which output chunk, as paths relative to
  * the repository, in `.vite/modules.json`: `check-bundle.mjs` reads it to
  * refuse a build that pulled in a launcher-only module.
@@ -169,7 +191,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: webRoot,
-    plugins: [launcherOnly(), chatSounds(), react(), tailwindcss(), buildInfo(info), moduleMap()],
+    plugins: [launcherOnly(), chatSounds(), engineIcons(), react(), tailwindcss(), buildInfo(info), moduleMap()],
     resolve: {
       alias: { "@app": fileURLToPath(new URL("../src", import.meta.url)) },
     },

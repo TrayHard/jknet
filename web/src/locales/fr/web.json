@@ -37,7 +37,8 @@
       "jkhub": "Choisissez un mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Fermer les détails"
+    "closeDetails": "Fermer les détails",
+    "skipToContent": "Aller au contenu"
   },
   "signin": {
     "title": "Se connecter à JKNet",
@@ -49,7 +50,9 @@
     "failed": "La connexion n’a pas abouti.",
     "retry": "Réessayer",
     "done": "Connecté. Ouverture de JKNet…",
-    "installFirst": "Sur iPhone, ajoutez d’abord JKNet à l’écran d’accueil et connectez-vous-y : l’application installée a sa propre connexion."
+    "installFirst": "Sur iPhone, ajoutez d’abord JKNet à l’écran d’accueil et connectez-vous-y : l’application installée a sa propre connexion.",
+    "doneElsewhere": "Aucune connexion n’est à terminer dans ce navigateur. Si la connexion a commencé dans l’app JKNet installée ou dans un autre navigateur, revenez-y : elle y est terminée.",
+    "signInHere": "Se connecter dans ce navigateur"
   },
   "install": {
     "title": "Installer l’application",
@@ -160,7 +163,8 @@
     "noOtherDevices": "Aucun autre appareil ne reçoit de notifications.",
     "unnamed": "Appareil sans nom",
     "since": "Ajouté le {{date}}",
-    "failed": "Non enregistré : {{error}}"
+    "failed": "Non enregistré : {{error}}",
+    "pushTextNew": "Les notifications arrivent sur cet appareil quand JKNet est fermé."
   },
   "push": {
     "activity": "Activité dans JKNet",
@@ -178,14 +182,14 @@
   },
   "sessions": {
     "title": "Appareils et sessions",
-    "signedOut": "Cet appareil a été déconnecté depuis un autre appareil."
+    "signedOut": "Cet appareil a été déconnecté."
   },
   "serverChats": {
     "title": "Serveurs d’amis",
     "hosts": "{{name}} héberge un serveur",
     "invited": "Invité",
     "joining": "Connexion au chat…",
-    "guestNote": "Vous êtes invité sur ce serveur. Discutez d’ici, rejoignez la partie depuis JKNet sur votre PC.",
+    "guestNote": "Vous êtes simple visiteur sur ce serveur. Discutez d’ici, rejoignez la partie depuis JKNet sur votre PC.",
     "gone": "Cette discussion n’est plus disponible"
   },
   "serverList": {
@@ -261,7 +265,8 @@
     "inviteNote": "Rejoignez la partie depuis JKNet sur votre PC.",
     "none": "Aucune demande d'ami ni invitation sur un serveur pour le moment.",
     "gone": "Ce joueur n'est pas dans votre liste d'amis.",
-    "since": "Amis depuis le {{date}}"
+    "since": "Amis depuis le {{date}}",
+    "search": "Chercher ou ajouter"
   },
   "account": {
     "signOutText": "Déconnecte ce navigateur. Votre compte et vos amis restent.",

@@ -37,7 +37,8 @@
       "jkhub": "Pick a mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Close details"
+    "closeDetails": "Close details",
+    "skipToContent": "Skip to content"
   },
   "signin": {
     "title": "Sign in to JKNet",
@@ -49,7 +50,9 @@
     "failed": "The sign-in did not finish.",
     "retry": "Try again",
     "done": "Signed in. Opening JKNet…",
-    "installFirst": "On iPhone, add JKNet to the Home Screen first and sign in there: the installed app keeps its own sign-in."
+    "installFirst": "On iPhone, add JKNet to the Home Screen first and sign in there: the installed app keeps its own sign-in.",
+    "doneElsewhere": "This browser has no sign-in to finish. If you signed in from the installed JKNet app or another browser, go back there: you are signed in there.",
+    "signInHere": "Sign in in this browser"
   },
   "install": {
     "title": "Install the app",
@@ -160,7 +163,8 @@
     "noOtherDevices": "No other device gets notifications.",
     "unnamed": "Unnamed device",
     "since": "Added {{date}}",
-    "failed": "Not saved: {{error}}"
+    "failed": "Not saved: {{error}}",
+    "pushTextNew": "Notifications reach this device while JKNet is closed."
   },
   "push": {
     "activity": "Activity in JKNet",
@@ -178,7 +182,7 @@
   },
   "sessions": {
     "title": "Devices and sessions",
-    "signedOut": "This device was signed out from another device."
+    "signedOut": "This device was signed out."
   },
   "serverChats": {
     "title": "Friends’ servers",
@@ -261,7 +265,8 @@
     "inviteNote": "Join the game from JKNet on your PC.",
     "none": "No friend requests or server invites right now.",
     "gone": "This player is not on your friends list.",
-    "since": "Friends since {{date}}"
+    "since": "Friends since {{date}}",
+    "search": "Search or add by name"
   },
   "account": {
     "signOutText": "Signs this browser out. Your account and your friends stay.",

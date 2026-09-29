@@ -31,10 +31,17 @@
   }
 }
 
-/* The edge swipe that opens the menu: vertical scrolling stays the
-   browser's, a horizontal move reaches the page. */
+/* The edge swipe that opens the menu: vertical scrolling and pinch zoom
+   stay the browser's, a horizontal move reaches the page. */
 .touch-pan-y {
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Muted text reads at 4.5:1 on the page and on its surfaces (WCAG AA for
+   small text): the launcher's gray-400 gives 3.4:1 and 3.0:1, too little on
+   a phone outdoors. */
+:root {
+  --color-text-muted: #808ba3;
 }
 
 /* Clear of the notch and the home indicator, whichever edge they are on. */

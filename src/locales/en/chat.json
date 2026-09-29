@@ -799,7 +799,7 @@
     },
     "privacy": {
       "title": "Privacy",
-      "text": "Kept on JKNet Online, so they follow you to every computer you sign in on.",
+      "text": "Kept on JKNet Online, so they follow you to every device you sign in on.",
       "notConfigured": "This build of JKNet has no JKNet Online service to keep chats on.",
       "signedOut": "Sign in to JKNet Online to change these.",
       "unavailable": "JKNet Online does not have chats yet.",

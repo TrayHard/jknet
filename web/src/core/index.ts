@@ -55,6 +55,7 @@ import { createSettings, DEFAULT_CHAT_NOTIFICATIONS, type SettingsCore } from ".
 import { createSocket, type Frame, type LiveSocket, type SocketStatus } from "./socket.ts";
 import type { Storage } from "./storage.ts";
 import { createTabGate, type TabGate } from "./tabs.ts";
+import { isAliveQuestion } from "../sw/alive.ts";
 
 /** Nothing the web app can do that needs the PC. */
 export const WEB_CAPS: PlatformCaps = Object.freeze({
@@ -290,6 +291,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
       online: () => typeof navigator === "undefined" || navigator.onLine !== false,
       playSound,
       showNotification: (title, notification) => void showPageNotification(title, notification),
+      closeNotifications: (tag) => void closePageNotifications(tag),
     },
   });
 
@@ -423,7 +425,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
         },
       });
       await chat.start();
-      detachWorker = watchWorker(push);
+      detachWorker = watchWorker(push, () => socket.status() === "open");
       if (session.signedIn()) {
         socket.start();
         void session.refreshMe().catch(() => undefined);
@@ -486,6 +488,7 @@ async function showPageNotification(title: string, notification: { body: string;
       body: notification.body,
       tag: notification.tag,
       icon: "/icons/icon-192.png",
+      badge: "/icons/badge-96.png",
       data: { url: notification.url },
     });
   } catch (error) {
@@ -493,14 +496,44 @@ async function showPageNotification(title: string, notification: { body: string;
   }
 }
 
+/** Closes the system notifications of one tag, shown by the page or by a push. */
+async function closePageNotifications(tag: string): Promise<void> {
+  await closeNotificationsWhere((shown) => shown === tag);
+}
+
+/**
+ * Closes the system notifications whose tag passes `wanted`: what they say
+ * was seen on this device. The requests screen closes those of friend
+ * requests and server invites this way.
+ */
+export async function closeNotificationsWhere(wanted: (tag: string) => boolean): Promise<void> {
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration?.();
+    if (registration === undefined) return;
+    for (const notification of await registration.getNotifications()) {
+      if (wanted(notification.tag)) notification.close();
+    }
+  } catch (error) {
+    console.debug("Closing notifications failed", error);
+  }
+}
+
 /**
  * Hears the service worker: after `pushsubscriptionchange` it saved the
- * browser's new subscription on the service and names its id here.
+ * browser's new subscription on the service and names its id here; before a
+ * push it asks `alive?`, and this page answers while the core runs with its
+ * socket open, the one state in which the page plays the chat's sound. The
+ * listener lives from the core's start to its stop, so a tab showing "open in
+ * another tab" never answers.
  */
-function watchWorker(push: PushCore): () => void {
+function watchWorker(push: PushCore, live: () => boolean): () => void {
   const workers = typeof navigator === "undefined" ? undefined : navigator.serviceWorker;
   if (workers === undefined) return () => {};
   const onMessage = (event: MessageEvent) => {
+    if (isAliveQuestion(event.data)) {
+      if (live()) event.ports[0]?.postMessage({ alive: true });
+      return;
+    }
     const data = event.data as { type?: unknown; id?: unknown } | null;
     if (data?.type !== "push-subscription" || typeof data.id !== "string") return;
     void push.adopt(data.id);

@@ -59,6 +59,13 @@ export const PROGRESS_EVERY_MS = 250;
 export const KNOWN_LIMIT = 10_000;
 /** The code of a save the player has to confirm first, as the launcher's core refuses one. */
 export const CONFIRM_DANGER = "confirm_danger";
+/**
+ * How long an upload or a download may go without a byte moving before it
+ * counts as a network failure: a connection left half-open by a change of
+ * network never ends by itself, and the queue waits behind it.
+ */
+export const STALL_MS = 60_000;
+
 /** How much of a file tells its class and whether it is a program. */
 const HEAD_BYTES = 4096;
 
@@ -68,6 +75,17 @@ const PROGRAM_EXTENSIONS = new Set([
   "hta", "msi", "msp", "msix", "appx", "lnk", "url", "pif", "cpl", "dll", "sys", "inf", "reg",
   "jar", "scf", "chm", "iso", "img", "vhd", "vhdx", "application", "gadget", "xll", "docm",
   "xlsm", "pptm",
+]);
+
+/**
+ * Programs and installers of the other systems the web app runs on —
+ * Android, macOS, Linux — that no byte of their head gives away. They ask
+ * for a confirmation before a save as a Windows program does, and keep the
+ * class the service gives them (an `.apk` is still an archive there).
+ */
+const OTHER_PROGRAM_EXTENSIONS = new Set([
+  "apk", "apks", "xapk", "aab", "sh", "bash", "zsh", "csh", "ksh", "command", "tool", "pkg", "mpkg",
+  "dmg", "app", "deb", "rpm", "appimage", "run", "desktop", "workflow", "flatpakref", "snap",
 ]);
 
 /** Magic numbers of Mach-O programs, both byte orders, and of fat binaries. */
@@ -222,7 +240,9 @@ export function classify(name: string, head: Uint8Array): ChatFileClass {
 
 /** Why a file must be confirmed before it is saved; empty when it need not. */
 export function dangerReasons(name: string, head: Uint8Array, flagged: boolean): string[] {
-  return flagged || isProgram(name, head) ? [`${name} is a program`] : [];
+  const ext = extension(name);
+  const program = flagged || isProgram(name, head) || (ext !== null && OTHER_PROGRAM_EXTENSIONS.has(ext));
+  return program ? [`${name} is a program`] : [];
 }
 
 /** Whether `needle` occurs in `haystack`: the session token in a file, say. */
@@ -317,6 +337,8 @@ export interface FilesDeps {
   createObjectURL?: (blob: Blob) => string;
   revokeObjectURL?: (url: string) => void;
   now?: () => number;
+  /** How long a download may go without a byte: `STALL_MS`, shorter in tests. */
+  stallMs?: number;
 }
 
 export interface WebChatFiles {
@@ -339,17 +361,55 @@ export interface WebChatFiles {
   forget(): void;
 }
 
+/**
+ * A timer that fires once nothing moved for `ms`, and when the browser goes
+ * offline: whatever the transfer waits for then is not coming.
+ */
+function stallWatch(ms: number, fire: (why: string) => void) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const offline = () => fire("the browser went offline");
+  const kick = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = setTimeout(() => fire(`nothing moved for ${ms / 1000} s`), ms);
+  };
+  kick();
+  if (typeof window !== "undefined") window.addEventListener("offline", offline);
+  return {
+    kick,
+    stop() {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      if (typeof window !== "undefined") window.removeEventListener("offline", offline);
+    },
+  };
+}
+
 function browserPut(url: string, token: string, body: Blob, onProgress: (sent: number) => void) {
   return new Promise<{ status: number; text: string }>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    let stalled: string | null = null;
+    const watch = stallWatch(STALL_MS, (why) => {
+      stalled = why;
+      xhr.abort();
+    });
+    const done = (settle: () => void) => {
+      watch.stop();
+      settle();
+    };
     xhr.open("PUT", url);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    xhr.upload.onprogress = (event) => onProgress(event.loaded);
-    xhr.onload = () => resolve({ status: xhr.status, text: xhr.responseText });
-    xhr.onerror = () => reject(networkError(`PUT ${url}: the upload failed`));
-    xhr.onabort = () => reject(networkError(`PUT ${url}: the upload was cut off`));
-    xhr.ontimeout = () => reject(networkError(`PUT ${url}: the upload took too long`));
+    xhr.upload.onprogress = (event) => {
+      watch.kick();
+      onProgress(event.loaded);
+    };
+    // Every byte is out: the answer gets the same time again.
+    xhr.upload.onload = () => watch.kick();
+    xhr.onload = () => done(() => resolve({ status: xhr.status, text: xhr.responseText }));
+    xhr.onerror = () => done(() => reject(networkError(`PUT ${url}: the upload failed`)));
+    xhr.onabort = () =>
+      done(() => reject(networkError(`PUT ${url}: the upload was cut off${stalled === null ? "" : ` (${stalled})`}`)));
+    xhr.ontimeout = () => done(() => reject(networkError(`PUT ${url}: the upload took too long`)));
     xhr.send(body);
   });
 }
@@ -392,6 +452,7 @@ export function createChatFiles(deps: FilesDeps): WebChatFiles {
   const createUrl = deps.createObjectURL ?? ((blob: Blob) => URL.createObjectURL(blob));
   const revokeUrl = deps.revokeObjectURL ?? ((url: string) => URL.revokeObjectURL(url));
   const now = deps.now ?? (() => Date.now());
+  const stallMs = deps.stallMs ?? STALL_MS;
   const cacheStorage = deps.caches === undefined ? (typeof caches === "undefined" ? null : caches) : deps.caches;
 
   const staged = new Map<string, Staged>();
@@ -510,66 +571,91 @@ export function createChatFiles(deps: FilesDeps): WebChatFiles {
     const path = `/v1/chat/files/${segment(fileId)}/content`;
     const token = deps.token();
     if (token === null) throw signedOut();
-    let response: Response;
+    // A download that stops moving is cut, so the file does not stay
+    // "downloading" for good; the next look at it starts over.
+    const controller = new AbortController();
+    let stalled: string | null = null;
+    let stall: () => void = () => {};
+    const stopped = new Promise<never>((_, reject) => {
+      stall = () => reject(networkError(`the download of ${fileId} stopped: ${stalled ?? "cut off"}`));
+    });
+    stopped.catch(() => undefined);
+    const watch = stallWatch(stallMs, (why) => {
+      stalled = why;
+      controller.abort();
+      stall();
+    });
     try {
-      response = await fetchImpl(http.url(path), {
-        headers: { Authorization: `Bearer ${token}` },
-        credentials: "omit",
-        cache: "no-store",
-        referrerPolicy: "no-referrer",
-      });
-    } catch (error) {
-      throw networkError(`GET ${path}: ${error instanceof Error ? error.message : String(error)}`);
+      return await Promise.race([download(), stopped]);
+    } finally {
+      watch.stop();
     }
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      if (response.status === 401) deps.onUnauthorized();
-      throw refusal(response.status, text, path);
-    }
-    const stated = Number(response.headers.get("content-length"));
-    const total = Number.isFinite(stated) && stated > 0 ? stated : (known.get(fileId)?.size ?? 0);
-    const type = response.headers.get("content-type") ?? known.get(fileId)?.mediaType ?? "";
-    const chunks: Uint8Array[] = [];
-    let received = 0;
-    let last = 0;
-    progress(fileId, 0, total, "downloading", null);
-    const reader = response.body?.getReader();
-    if (reader === undefined) {
-      const whole = new Uint8Array(await response.arrayBuffer());
-      chunks.push(whole);
-      received = whole.length;
-    } else {
-      for (;;) {
-        let step: ReadableStreamReadResult<Uint8Array>;
-        try {
-          step = await reader.read();
-        } catch (error) {
-          throw networkError(`the download stopped: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        if (step.done) break;
-        chunks.push(step.value);
-        received += step.value.length;
-        if (received > MAX_FILE_BYTES) {
-          void reader.cancel().catch(() => undefined);
-          throw networkError(`the file ${fileId} is larger than a chat file may be`);
-        }
-        if (mine === generation && now() - last >= PROGRESS_EVERY_MS) {
-          last = now();
-          progress(fileId, received, total, "downloading", null);
+
+    async function download(): Promise<Blob> {
+      let response: Response;
+      try {
+        response = await fetchImpl(http.url(path), {
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "omit",
+          cache: "no-store",
+          referrerPolicy: "no-referrer",
+          signal: controller.signal,
+        });
+      } catch (error) {
+        throw networkError(`GET ${path}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      watch.kick();
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        if (response.status === 401) deps.onUnauthorized();
+        throw refusal(response.status, text, path);
+      }
+      const stated = Number(response.headers.get("content-length"));
+      const total = Number.isFinite(stated) && stated > 0 ? stated : (known.get(fileId)?.size ?? 0);
+      const type = response.headers.get("content-type") ?? known.get(fileId)?.mediaType ?? "";
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      let last = 0;
+      progress(fileId, 0, total, "downloading", null);
+      const reader = response.body?.getReader();
+      if (reader === undefined) {
+        const whole = new Uint8Array(await response.arrayBuffer());
+        chunks.push(whole);
+        received = whole.length;
+      } else {
+        for (;;) {
+          let step: ReadableStreamReadResult<Uint8Array>;
+          try {
+            step = await reader.read();
+          } catch (error) {
+            throw networkError(`the download stopped: ${error instanceof Error ? error.message : String(error)}`);
+          }
+          if (step.done) break;
+          watch.kick();
+          chunks.push(step.value);
+          received += step.value.length;
+          if (received > MAX_FILE_BYTES) {
+            void reader.cancel().catch(() => undefined);
+            throw networkError(`the file ${fileId} is larger than a chat file may be`);
+          }
+          if (mine === generation && now() - last >= PROGRESS_EVERY_MS) {
+            last = now();
+            progress(fileId, received, total, "downloading", null);
+          }
         }
       }
+      // Fewer bytes than the service stated: the answer was cut. More is not a
+      // fault — a proxy that compressed the answer states its compressed size.
+      if (Number.isFinite(stated) && stated > 0 && received < stated) {
+        throw networkError(`the download of ${fileId} stopped at ${received} of ${stated} bytes`);
+      }
+      const blob = new Blob(chunks as BlobPart[], { type });
+      const expected = hashes.get(fileId);
+      if (expected !== undefined && (await sha256Hex(await blob.arrayBuffer())) !== expected) {
+        throw networkError(`the download of ${fileId} does not match its hash`);
+      }
+      return blob;
     }
-    // Fewer bytes than the service stated: the answer was cut. More is not a
-    // fault — a proxy that compressed the answer states its compressed size.
-    if (Number.isFinite(stated) && stated > 0 && received < stated) {
-      throw networkError(`the download of ${fileId} stopped at ${received} of ${stated} bytes`);
-    }
-    const blob = new Blob(chunks as BlobPart[], { type });
-    const expected = hashes.get(fileId);
-    if (expected !== undefined && (await sha256Hex(await blob.arrayBuffer())) !== expected) {
-      throw networkError(`the download of ${fileId} does not match its hash`);
-    }
-    return blob;
   }
 
   /**

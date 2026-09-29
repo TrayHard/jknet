@@ -37,7 +37,8 @@
       "jkhub": "Válasszon modot"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Részletek bezárása"
+    "closeDetails": "Részletek bezárása",
+    "skipToContent": "Ugrás a tartalomra"
   },
   "signin": {
     "title": "Bejelentkezés a JKNetbe",
@@ -49,7 +50,9 @@
     "failed": "A bejelentkezés nem fejeződött be.",
     "retry": "Újra",
     "done": "Bejelentkezve. A JKNet megnyílik…",
-    "installFirst": "iPhone-on előbb adja hozzá a JKNetet a Főképernyőhöz, és ott jelentkezzen be: a telepített alkalmazásnak saját bejelentkezése van."
+    "installFirst": "iPhone-on előbb adja hozzá a JKNetet a Főképernyőhöz, és ott jelentkezzen be: a telepített alkalmazásnak saját bejelentkezése van.",
+    "doneElsewhere": "Ebben a böngészőben nincs befejezendő bejelentkezés. Ha a telepített JKNet alkalmazásból vagy egy másik böngészőből jelentkezett be, térjen vissza oda: ott be van jelentkezve.",
+    "signInHere": "Bejelentkezés ebben a böngészőben"
   },
   "install": {
     "title": "Alkalmazás telepítése",
@@ -160,7 +163,8 @@
     "noOtherDevices": "Más eszköz nem kap értesítéseket.",
     "unnamed": "Névtelen eszköz",
     "since": "Hozzáadva: {{date}}",
-    "failed": "Nincs mentve: {{error}}"
+    "failed": "Nincs mentve: {{error}}",
+    "pushTextNew": "Az értesítések akkor is megérkeznek erre az eszközre, amikor a JKNet zárva van."
   },
   "push": {
     "activity": "Tevékenység a JKNetben",
@@ -178,7 +182,7 @@
   },
   "sessions": {
     "title": "Eszközök és munkamenetek",
-    "signedOut": "Ezt az eszközt egy másik eszközről jelentkeztették ki."
+    "signedOut": "Ez az eszköz ki lett jelentkeztetve."
   },
   "serverChats": {
     "title": "Barátok szerverei",
@@ -261,7 +265,8 @@
     "inviteNote": "A játékhoz a számítógépeden futó JKNet-ből csatlakozhatsz.",
     "none": "Most nincs se barátkérés, se szervermeghívás.",
     "gone": "Ez a játékos nincs a barátlistádon.",
-    "since": "Barátok ekkor óta: {{date}}"
+    "since": "Barátok ekkor óta: {{date}}",
+    "search": "Keresés vagy hozzáadás"
   },
   "account": {
     "signOutText": "Kijelentkezteti ezt a böngészőt. A fiókod és a barátaid megmaradnak.",

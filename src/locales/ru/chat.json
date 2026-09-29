@@ -853,7 +853,7 @@
     },
     "privacy": {
       "title": "Приватность",
-      "text": "Хранятся в JKNet Online и действуют на любом компьютере, где вы вошли.",
+      "text": "Хранятся в JKNet Online и действуют на любом устройстве, где вы вошли.",
       "notConfigured": "В этой сборке JKNet нет службы JKNet Online, на которой хранятся чаты.",
       "signedOut": "Войдите в JKNet Online, чтобы изменить эти настройки.",
       "unavailable": "В JKNet Online пока нет чатов.",

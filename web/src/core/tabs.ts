@@ -8,7 +8,8 @@
  * broadcast channel: the holder stops its core, lets the lock go and shows
  * the same screen, and the asking tab gets the lock.
  *
- * A browser without `navigator.locks` runs without the gate. Sign-out in one
+ * A browser without `navigator.locks`, or one that refuses every request
+ * (site data blocked), runs without the gate. Sign-out in one
  * tab posts `signed-out`, and every other tab reloads onto the sign-in.
  */
 
@@ -61,6 +62,12 @@ export function createTabGate(options: {
         : null;
   const listeners = new Set<(event: "lost" | "signedOut") => void>();
   let holding = locks === undefined;
+  /** The browser refused a lock request outright: there is no gate to keep. */
+  let refused = false;
+  const noGate = () => {
+    refused = true;
+    holding = true;
+  };
   let letGo: (() => void) | null = null;
   // The request in flight, if any. Overlapping calls share it: React runs an
   // effect twice in development, and two requests from one tab would race
@@ -112,7 +119,13 @@ export function createTabGate(options: {
           resolve(held !== false);
           return held === false ? undefined : held;
         })
-        .catch(() => resolve(false));
+        .catch((error: unknown) => {
+          // Not "another tab holds it" (that answers a null lock): the
+          // browser denies Web Locks, and no other tab can hold them either.
+          console.warn("Web Locks refused the request; running without the one-tab gate", error);
+          noGate();
+          resolve(true);
+        });
     });
 
   /** Queues for the lock, then asks the holder to let it go. */
@@ -123,11 +136,17 @@ export function createTabGate(options: {
     await new Promise<void>((resolve) => {
       // Queue for the lock first, then ask the holder to let it go: the
       // lock goes to the first request waiting for it.
-      void lockManager.request(LOCK_NAME, {}, (lock) => {
-        const held = hold(lock);
-        resolve();
-        return held === false ? undefined : held;
-      });
+      void lockManager
+        .request(LOCK_NAME, {}, (lock) => {
+          const held = hold(lock);
+          resolve();
+          return held === false ? undefined : held;
+        })
+        .catch((error: unknown) => {
+          console.warn("Web Locks refused the request; running without the one-tab gate", error);
+          noGate();
+          resolve();
+        });
       channel?.postMessage({ type: "takeover" });
     });
   };
@@ -135,7 +154,7 @@ export function createTabGate(options: {
   return {
     active: () => holding,
     tryAcquire: () => {
-      if (locks === undefined || holding) return Promise.resolve(true);
+      if (locks === undefined || refused || holding) return Promise.resolve(true);
       // A takeover in flight ends with this tab holding the lock.
       if (takingOver !== null) return takingOver.then(() => holding);
       acquiring ??= acquire(locks).finally(() => {
@@ -145,7 +164,7 @@ export function createTabGate(options: {
     },
     takeOver: () => {
       // The holder is this tab: nothing to ask for.
-      if (locks === undefined || holding) return Promise.resolve();
+      if (locks === undefined || refused || holding) return Promise.resolve();
       takingOver ??= queueAndAsk(locks).finally(() => {
         takingOver = null;
       });

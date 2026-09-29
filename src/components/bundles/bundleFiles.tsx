@@ -5,6 +5,7 @@ import { useEffect, type MouseEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFormat } from "../../i18n/useFormat";
+import { jkhubSourceUrl } from "../../lib/chat/cardDrafts";
 import { cn } from "../../lib/format";
 import type {
   BundleComponentSummary,
@@ -100,10 +101,12 @@ export function FileSourceBadge({ source }: { source: BundleFileSource }) {
   const { t } = useTranslation("bundles");
   if (source.kind === "jkhub") {
     const label = t("details.source.jkhub");
-    if (source.url) {
+    // The author writes the address: only the record's own page is linked.
+    const url = source.url ? jkhubSourceUrl(source) : null;
+    if (url !== null) {
       return (
         <ExternalAnchor
-          href={source.url}
+          href={url}
           title={t("details.openOnJkhub", { title: source.title ?? label })}
           className="shrink-0"
         >
@@ -326,7 +329,8 @@ export function Section({
  *
  * The same mechanism as the links inside a JKHub description: inside Tauri
  * the click is taken over and the address goes to the system browser through
- * the opener plugin; in a plain browser the anchor works as anchors do.
+ * the opener plugin; in a plain browser the anchor works as anchors do, for
+ * an http(s) address only: anything else is drawn without a link.
  */
 export function ExternalAnchor({
   href,
@@ -339,6 +343,13 @@ export function ExternalAnchor({
   className?: string;
   children: ReactNode;
 }) {
+  if (!/^https?:\/\//i.test(href)) {
+    return (
+      <span title={title} className={cn("inline-flex items-center gap-4", className)}>
+        {children}
+      </span>
+    );
+  }
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!isTauri()) return;
     event.preventDefault();

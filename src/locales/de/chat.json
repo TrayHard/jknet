@@ -799,7 +799,7 @@
     },
     "privacy": {
       "title": "Privatsphäre",
-      "text": "Bei JKNet Online gespeichert, daher gelten sie auf jedem Computer, an dem Sie angemeldet sind.",
+      "text": "Bei JKNet Online gespeichert, daher gelten sie auf jedem Gerät, an dem Sie angemeldet sind.",
       "notConfigured": "Dieser Build von JKNet hat keinen JKNet-Online-Dienst, auf dem Chats liegen.",
       "signedOut": "Melden Sie sich bei JKNet Online an, um das zu ändern.",
       "unavailable": "JKNet Online hat noch keine Chats.",

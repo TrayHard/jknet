@@ -255,6 +255,41 @@ test("sign-out tells the service, then forgets everything", async () => {
   assert.deepEqual(changes.at(-1), { signedIn: false, reason: "signedOut" });
 });
 
+test("a socket closed by the sign-out before its answer is still the sign-out", async () => {
+  let session;
+  const setupResult = setup({
+    "POST /v1/auth/logout": () => {
+      // The service closes the token's sockets while it answers: the close
+      // reaches the page first.
+      void session.expire();
+      return { status: 204 };
+    },
+    "DELETE /v1/me": () => {
+      void session.expire();
+      return { status: 204 };
+    },
+  });
+  session = setupResult.session;
+  const { storage, changes, wiped } = setupResult;
+  await storage.put("session", "current", { token: "T", userId: "u", apiBase: "https://api.example.com", createdAt: "x" });
+  await session.load();
+  await session.signOut();
+  assert.deepEqual(wiped, ["signedOut"]);
+  assert.deepEqual(changes.map((change) => change.reason), ["signedOut"]);
+  assert.equal(session.endedElsewhere(), false, "no 'signed out on another device' notice");
+
+  await storage.put("session", "current", { token: "T2", userId: "u", apiBase: "https://api.example.com", createdAt: "x" });
+  await session.load();
+  await session.deleteAccount();
+  assert.deepEqual(wiped, ["signedOut", "deleted"]);
+  assert.equal(session.endedElsewhere(), false);
+  // A later refusal is an expiry again.
+  await storage.put("session", "current", { token: "T3", userId: "u", apiBase: "https://api.example.com", createdAt: "x" });
+  await session.load();
+  await session.expire();
+  assert.deepEqual(wiped, ["signedOut", "deleted", "expired"]);
+});
+
 test("sign-out still forgets the token when the service refuses the logout", async () => {
   const { session, storage, wiped } = setup({});
   await storage.put("session", "current", { token: "T", userId: "u", apiBase: "https://api.example.com", createdAt: "x" });

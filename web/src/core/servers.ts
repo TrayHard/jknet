@@ -38,6 +38,8 @@ export const CACHE_MS = 30_000;
 
 /** How long after a stale answer the list is asked for again. */
 export const STALE_RETRY_MS = 5_000;
+/** Reads after a stale answer while the scan is still running: a minute in all. */
+export const STALE_RETRIES = 12;
 
 /** The service's code of a list that is switched off. */
 export const CATALOG_DISABLED = "catalog_disabled";
@@ -202,8 +204,12 @@ export function createServerList(deps: ServerListDeps): ServerList {
     return copy(answer);
   };
 
-  /** One more read a few seconds after a stale answer, for whoever holds the rows. */
-  const retryLater = (game: Game) => {
+  /**
+   * Another read a few seconds after a stale answer, for whoever holds the
+   * rows, and again while the answer stays stale: a scan may take longer
+   * than one wait. At most `STALE_RETRIES` in a row.
+   */
+  const retryLater = (game: Game, attempt = 1) => {
     if (retries.has(game)) return;
     const started = generation;
     retries.set(
@@ -211,7 +217,11 @@ export function createServerList(deps: ServerListDeps): ServerList {
       timers.setTimeout(() => {
         retries.delete(game);
         if (started !== generation || !deps.signedIn()) return;
-        void load(game).catch(() => undefined);
+        void load(game)
+          .then((answer) => {
+            if (answer.stale && attempt < STALE_RETRIES && started === generation) retryLater(game, attempt + 1);
+          })
+          .catch(() => undefined);
       }, STALE_RETRY_MS),
     );
   };

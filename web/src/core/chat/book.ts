@@ -97,13 +97,23 @@ export class Book {
    * Replaces everything with a fresh sync document, and answers the
    * conversations whose `lastSeq` went back: the service database was
    * restored, and the screens must drop what they hold of those threads.
+   *
+   * `keepNewer` takes a document that may be older than the book (frames
+   * landed while it was on its way): a summary the book holds further on
+   * stays, and nothing counts as reset.
    */
-  replace(doc: SyncDoc): string[] {
+  replace(doc: SyncDoc, keepNewer = false): string[] {
     const reset: string[] = [];
     const summaries = new Map<string, Conversation>();
     for (const conversation of doc.conversations) {
       const previous = this.summaries.get(conversation.id);
-      if (previous !== undefined && conversation.lastSeq < previous.lastSeq) reset.push(conversation.id);
+      if (previous !== undefined && conversation.lastSeq < previous.lastSeq) {
+        if (keepNewer) {
+          summaries.set(conversation.id, previous);
+          continue;
+        }
+        reset.push(conversation.id);
+      }
       summaries.set(conversation.id, conversation);
     }
     for (const id of [...this.typing.keys()]) {

@@ -64,6 +64,8 @@ export interface NotificationPlan {
     renotify: boolean;
     silent: boolean;
     icon: string;
+    /** The monochrome mark in the status bar of Android. */
+    badge: string;
     data: { url: string };
   };
   /** The number for the app icon, or `null` when the payload has none. */
@@ -73,6 +75,8 @@ export interface NotificationPlan {
 /** The app's name: the title of a notification that names no one. */
 export const APP_TITLE = "JKNet";
 export const ICON = "/icons/icon-192.png";
+/** White on transparent: Android draws only its alpha, in its own colour. */
+export const BADGE_ICON = "/icons/badge-96.png";
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -195,6 +199,7 @@ export function notificationOf(raw: unknown, stringsFor: (lang: string) => PushS
       renotify: payload.mention === true,
       silent: windowOpen || payload.silent === true,
       icon: ICON,
+      badge: BADGE_ICON,
       data: { url },
     },
     badge: payload.badge ?? null,

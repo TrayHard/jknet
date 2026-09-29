@@ -224,6 +224,12 @@ describe("names and classes follow the service", () => {
     assert.deepEqual(dangerReasons("shot.png", bytes("MZ\x90"), false), ["shot.png is a program"]);
     assert.deepEqual(dangerReasons("notes.txt", bytes("hello"), true), ["notes.txt is a program"]);
     assert.deepEqual(dangerReasons("notes.txt", bytes("hello"), false), []);
+    // Programs of Android, macOS and Linux ask too, without a byte to tell them.
+    for (const name of ["update.apk", "fix.command", "run.sh", "app.dmg", "a.deb", "x.pkg", "tool.AppImage", "open.desktop"]) {
+      assert.deepEqual(dangerReasons(name, bytes("PK\x03\x04"), false), [`${name} is a program`], name);
+    }
+    // Their class stays the service's.
+    assert.equal(classify("update.apk", bytes("PK\x03\x04")), "archive");
   });
 });
 
@@ -506,6 +512,40 @@ describe("download and save", () => {
     }
     assert.equal(heard.filter(([name]) => name === "chat:download").at(-1)[1].status, "remote");
     assert.equal((await files.local("FLAKY", false)).status, "remote");
+  });
+
+  test("a download whose body stops moving is cut, and the file can be asked for again", async () => {
+    const service = fakeService();
+    let aborted = false;
+    service.routes.downloadAnswer = () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3]));
+            // Then nothing, ever: a connection left half-open.
+          },
+        }),
+        { status: 200, headers: { "content-length": "100" } },
+      );
+    const { files, heard } = filesWith(service, {
+      stallMs: 40,
+      fetchImpl: async (url, init) => {
+        init.signal?.addEventListener("abort", () => (aborted = true));
+        return service.fetchImpl(url, init);
+      },
+    });
+    const originalWarn = console.warn;
+    console.warn = () => {};
+    try {
+      assert.equal((await files.local("STALL", true)).status, "downloading");
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await flush();
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(heard.filter(([name]) => name === "chat:download").at(-1)[1].status, "remote");
+    assert.equal((await files.local("STALL", false)).status, "remote", "not downloading for good");
+    assert.ok(aborted, "the request is aborted");
   });
 
   test("a download of a file this device sent is checked against its hash", async () => {

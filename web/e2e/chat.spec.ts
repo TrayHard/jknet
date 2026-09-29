@@ -6,6 +6,7 @@ import {
   conversationIdOf,
   makeFriends,
   messageRow,
+  messageTool,
   openDirect,
   send,
 } from "./chat-fixtures.ts";
@@ -66,7 +67,17 @@ test("two friends write, reply, react and see each other type and read", async (
 
   // Jan replies to the message.
   await composer(other).fill("");
-  await messageRow(other, "Hello there").getByRole("button", { name: chatText("message.reply") }).click();
+  const replyTool = await messageTool(other, "Hello there", chatText("message.reply"));
+  if (await other.evaluate(() => matchMedia("(pointer: coarse)").matches)) {
+    // A touch screen has no hover: the tap shows the tools, full size.
+    await expect(replyTool).toHaveCSS("opacity", "1");
+    const box = await replyTool.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    const sendBox = await other.getByRole("button", { name: chatText("composer.send") }).boundingBox();
+    expect(sendBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+  await replyTool.click();
   await expect(other.getByText(chatText("composer.replyingTo", { name: kyle }))).toBeVisible();
   await send(other, "General Kenobi");
   const reply = messageRow(page, "General Kenobi");
@@ -74,7 +85,7 @@ test("two friends write, reply, react and see each other type and read", async (
   await expect(reply).toContainText("Hello there");
 
   // Kyle reacts to the reply; Jan sees the reaction.
-  await reply.getByRole("button", { name: chatText("message.react") }).click();
+  await (await messageTool(page, "General Kenobi", chatText("message.react"))).click();
   await page.getByRole("menu", { name: chatText("reactions.pick") }).getByRole("menuitem").first().click();
   await expect(messageRow(other, "General Kenobi").locator("button[aria-pressed]")).toHaveAttribute("title", new RegExp(kyle));
 

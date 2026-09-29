@@ -99,7 +99,8 @@ function ProviderButton({
       </span>
       <span className="flex-1 min-w-0 flex flex-col">
         <span className="text-body-md-medium text-fg">{label}</span>
-        <span className="text-body-sm text-fg-muted truncate">{note}</span>
+        {/* Two lines at most: on a phone one line cuts the sentence in half. */}
+        <span className="text-body-sm text-fg-muted line-clamp-2">{note}</span>
       </span>
     </button>
   );

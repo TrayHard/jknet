@@ -37,7 +37,8 @@
       "jkhub": "Wybierz mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Zamknij szczegóły"
+    "closeDetails": "Zamknij szczegóły",
+    "skipToContent": "Przejdź do treści"
   },
   "signin": {
     "title": "Zaloguj się do JKNet",
@@ -49,7 +50,9 @@
     "failed": "Logowanie się nie zakończyło.",
     "retry": "Spróbuj ponownie",
     "done": "Zalogowano. Otwieranie JKNet…",
-    "installFirst": "Na iPhonie najpierw dodaj JKNet do ekranu początkowego i zaloguj się tam: zainstalowana aplikacja ma własne logowanie."
+    "installFirst": "Na iPhonie najpierw dodaj JKNet do ekranu początkowego i zaloguj się tam: zainstalowana aplikacja ma własne logowanie.",
+    "doneElsewhere": "W tej przeglądarce nie ma logowania do dokończenia. Jeśli logowanie zaczęło się w zainstalowanej aplikacji JKNet lub innej przeglądarce, wróć tam: tam logowanie jest zakończone.",
+    "signInHere": "Zaloguj się w tej przeglądarce"
   },
   "install": {
     "title": "Zainstaluj aplikację",
@@ -160,25 +163,26 @@
     "noOtherDevices": "Żadne inne urządzenie nie dostaje powiadomień.",
     "unnamed": "Urządzenie bez nazwy",
     "since": "Dodano {{date}}",
-    "failed": "Nie zapisano: {{error}}"
+    "failed": "Nie zapisano: {{error}}",
+    "pushTextNew": "Powiadomienia docierają na to urządzenie, gdy JKNet jest zamknięty."
   },
   "push": {
     "activity": "Aktywność w JKNet",
     "newMessage": "Nowa wiadomość",
-    "sentFiles": "Wysłał pliki",
-    "sharedCard": "Udostępnił kartę",
-    "reaction": "Zareagował {{emoji}} na Twoją wiadomość",
+    "sentFiles": "Nowe pliki",
+    "sharedCard": "Nowa karta",
+    "reaction": "Reakcja {{emoji}} na Twoją wiadomość",
     "groupInvite": "Zaprasza Cię do grupy {{title}}",
     "friendRequest": "Chce dodać Cię do znajomych",
-    "friendAccepted": "Przyjął Twoje zaproszenie do znajomych",
+    "friendAccepted": "Zaproszenie do znajomych przyjęte",
     "invite": "Zaprasza Cię na swój serwer",
     "test": "Powiadomienia JKNet działają na tym urządzeniu.",
-    "reactionPlain": "Zareagował na Twoją wiadomość",
+    "reactionPlain": "Reakcja na Twoją wiadomość",
     "groupInvitePlain": "Zaprasza Cię do grupy"
   },
   "sessions": {
     "title": "Urządzenia i sesje",
-    "signedOut": "To urządzenie zostało wylogowane z innego urządzenia."
+    "signedOut": "To urządzenie zostało wylogowane."
   },
   "serverChats": {
     "title": "Serwery znajomych",
@@ -261,7 +265,8 @@
     "inviteNote": "Do gry dołączysz z JKNet na komputerze.",
     "none": "Nie ma teraz zaproszeń do znajomych ani na serwery.",
     "gone": "Tego gracza nie ma na twojej liście znajomych.",
-    "since": "Znajomi od {{date}}"
+    "since": "Znajomi od {{date}}",
+    "search": "Szukaj lub dodaj"
   },
   "account": {
     "signOutText": "Wylogowuje tę przeglądarkę. Konto i znajomi zostają.",

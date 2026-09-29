@@ -37,7 +37,8 @@
       "jkhub": "Wählen Sie eine Mod"
     },
     "where": "online.jknet.app",
-    "closeDetails": "Details schließen"
+    "closeDetails": "Details schließen",
+    "skipToContent": "Zum Inhalt springen"
   },
   "signin": {
     "title": "Bei JKNet anmelden",
@@ -49,7 +50,9 @@
     "failed": "Die Anmeldung wurde nicht abgeschlossen.",
     "retry": "Erneut versuchen",
     "done": "Angemeldet. JKNet wird geöffnet…",
-    "installFirst": "Fügen Sie JKNet auf dem iPhone zuerst zum Home-Bildschirm hinzu und melden Sie sich dort an: Die installierte App hat eine eigene Anmeldung."
+    "installFirst": "Fügen Sie JKNet auf dem iPhone zuerst zum Home-Bildschirm hinzu und melden Sie sich dort an: Die installierte App hat eine eigene Anmeldung.",
+    "doneElsewhere": "In diesem Browser ist keine Anmeldung abzuschließen. Wenn Sie sich in der installierten JKNet-App oder einem anderen Browser angemeldet haben, kehren Sie dorthin zurück: Dort sind Sie angemeldet.",
+    "signInHere": "In diesem Browser anmelden"
   },
   "install": {
     "title": "App installieren",
@@ -160,7 +163,8 @@
     "noOtherDevices": "Kein anderes Gerät bekommt Benachrichtigungen.",
     "unnamed": "Gerät ohne Namen",
     "since": "Hinzugefügt am {{date}}",
-    "failed": "Nicht gespeichert: {{error}}"
+    "failed": "Nicht gespeichert: {{error}}",
+    "pushTextNew": "Benachrichtigungen erreichen dieses Gerät, während JKNet geschlossen ist."
   },
   "push": {
     "activity": "Aktivität in JKNet",
@@ -178,7 +182,7 @@
   },
   "sessions": {
     "title": "Geräte und Sitzungen",
-    "signedOut": "Dieses Gerät wurde von einem anderen Gerät abgemeldet."
+    "signedOut": "Dieses Gerät wurde abgemeldet."
   },
   "serverChats": {
     "title": "Server von Freunden",
@@ -261,7 +265,8 @@
     "inviteNote": "Ins Spiel geht es mit JKNet auf deinem PC.",
     "none": "Gerade gibt es keine Freundschaftsanfragen und keine Servereinladungen.",
     "gone": "Dieser Spieler ist nicht in deiner Freundesliste.",
-    "since": "Befreundet seit {{date}}"
+    "since": "Befreundet seit {{date}}",
+    "search": "Suchen oder hinzufügen"
   },
   "account": {
     "signOutText": "Meldet diesen Browser ab. Dein Konto und deine Freunde bleiben.",

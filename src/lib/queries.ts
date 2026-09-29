@@ -1854,8 +1854,11 @@ export function useAccountState(): UseQueryResult<AccountState> {
     let stop: UnlistenFn | undefined;
 
     void (async () => {
-      const unlisten = await listen<AccountChanged>(ACCOUNT_CHANGED_EVENT, () => {
+      const unlisten = await listen<AccountChanged>(ACCOUNT_CHANGED_EVENT, (event) => {
         queryClient.invalidateQueries({ queryKey: accountKeys.state });
+        // --- slice: web app --- the devices of the account before are not
+        // the next account's: a sign-in on the same run never shows them.
+        if (event.payload?.reason !== "renamed") queryClient.removeQueries({ queryKey: accountKeys.sessions });
         // The account is cached in the settings document too, and the Settings
         // screen reads the service address out of it.
         queryClient.invalidateQueries({ queryKey: queryKeys.settings });
@@ -2047,9 +2050,13 @@ function useAccountRefresh() {
 /** Forgets the account here and invalidates the token on the service. */
 export function useSignOut() {
   const refresh = useAccountRefresh();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => accountIpc.signOut(),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh();
+      queryClient.removeQueries({ queryKey: accountKeys.sessions });
+    },
   });
 }
 
@@ -2065,9 +2072,13 @@ export function useUpdateDisplayName() {
 /** Deletes the account on the service. Nothing on this machine is touched. */
 export function useDeleteAccount() {
   const refresh = useAccountRefresh();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => accountIpc.deleteAccount(),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh();
+      queryClient.removeQueries({ queryKey: accountKeys.sessions });
+    },
   });
 }
 

@@ -112,7 +112,7 @@ export function AttachMenu({ available, kinds = ATTACH_KINDS, onPick, disabled =
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
-        className="flex size-32 shrink-0 items-center justify-center rounded-md text-fg-secondary cursor-pointer hover:bg-hover-overlay hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+        className="flex size-32 pointer-coarse:size-44 shrink-0 items-center justify-center rounded-md text-fg-secondary cursor-pointer hover:bg-hover-overlay hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
       >
         <Paperclip size={16} />
       </button>

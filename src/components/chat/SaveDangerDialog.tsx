@@ -1,6 +1,7 @@
 import { ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { usePlatform } from "../../lib/backend";
 import { fileExtension } from "../../lib/chat/cardDrafts";
 import type { ChatFileRef } from "../../lib/ipc";
 import { Button, Dialog } from "../ui";
@@ -29,6 +30,7 @@ interface SaveDangerDialogProps {
  * before it runs, and JKNet never opens it.
  */
 export function SaveDangerDialog({ file, senderName, reasons, onConfirm, onCancel, pending = false }: SaveDangerDialogProps) {
+  const caps = usePlatform();
   const { t } = useTranslation("chat");
   const { t: tCommon } = useTranslation("common");
   const extension = fileExtension(file.name);
@@ -71,7 +73,9 @@ export function SaveDangerDialog({ file, senderName, reasons, onConfirm, onCance
             </p>
           </div>
         ) : null}
-        <p className="text-body-sm text-fg-muted">{t("safety.save.marked")}</p>
+        {/* --- slice: web app --- the mark of the web is the launcher's save; a
+            browser download on a phone gets no such line. */}
+        {caps.nativeDialogs ? <p className="text-body-sm text-fg-muted">{t("safety.save.marked")}</p> : null}
       </div>
     </Dialog>
   );

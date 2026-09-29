@@ -72,7 +72,7 @@ export function LayoutHost() {
 
   const history = useHistoryModel();
   const up = useUp(history, view?.parent);
-  const actions = useMemo<LayoutActions>(() => ({ up: wide ? null : up, wide }), [up, wide]);
+  const actions = useMemo<LayoutActions>(() => ({ up: wide ? null : up, close: up, wide }), [up, wide]);
 
   const navigate = useCallback(
     (path: string, options?: { replace?: boolean }) => void routerNavigate(path, { replace: options?.replace }),

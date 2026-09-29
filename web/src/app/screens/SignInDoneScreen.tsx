@@ -33,11 +33,34 @@ export function SignInDoneScreen() {
   }
 
   const failed = status.phase === "expired" || status.phase === "error";
+  // No sign-in of this browser to wait for. The sign-in may well have
+  // finished: in the installed app, which keeps storage of its own, or in
+  // the browser that started it. So it says so, and offers a new one.
   const idle = status.phase === "idle" && account !== undefined;
+  const again = status.next === null ? "/signin" : `/signin?next=${encodeURIComponent(status.next)}`;
+
+  if (idle && !failed) {
+    return (
+      <SignInFrame>
+        <div className="flex flex-col gap-16" data-testid="signin-elsewhere">
+          <p role="status" className="text-body-md text-fg-secondary">
+            {t("signin.doneElsewhere")}
+          </p>
+          <Link
+            to={again}
+            replace
+            className="inline-flex h-36 items-center justify-center rounded-md border border-line px-16 text-body-md-medium text-fg hover:bg-hover-overlay"
+          >
+            {t("signin.signInHere")}
+          </Link>
+        </div>
+      </SignInFrame>
+    );
+  }
 
   return (
     <SignInFrame>
-      {failed || idle ? (
+      {failed ? (
         <div className="flex flex-col gap-16">
           <div role="alert" className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12">
             <AlertTriangle size={16} className="mt-2 shrink-0 text-fg-warm" />
@@ -46,7 +69,7 @@ export function SignInDoneScreen() {
             </span>
           </div>
           <Link
-            to={status.next === null ? "/signin" : `/signin?next=${encodeURIComponent(status.next)}`}
+            to={again}
             replace
             className="inline-flex h-36 items-center justify-center rounded-md bg-accent px-16 text-body-md-medium text-fg-on-accent hover:bg-accent-hover"
           >

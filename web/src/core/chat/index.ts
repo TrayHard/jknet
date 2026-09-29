@@ -57,6 +57,7 @@ import { applyFrame, CHAT_EVENTS, parseFrame, type Effect } from "./frames.ts";
 import { checkLink, CONFIRM_LINK } from "./links.ts";
 import { compose, decide, incomingOf, isSilent, levelOf, NotifyPace, type NotifyTexts } from "./notify.ts";
 import {
+  backoff,
   classify,
   fromRecord,
   newClientId,
@@ -67,6 +68,7 @@ import {
 } from "./outbox.ts";
 import { READ_DEBOUNCE_MS, ReadMarks } from "./reads.ts";
 import { searchPath } from "./search.ts";
+import { JOINABLE_EVENT } from "./serverChats.ts";
 import { FIRST_SYNC_DELAY_MS, keepReads, OFFLINE_REFRESH_MS, STATE_DEBOUNCE_MS } from "./sync.ts";
 import { TypingThrottle, typingFrame } from "./typing.ts";
 import { NOT_VIEWING, sees, viewingOf, type Viewing } from "./viewing.ts";
@@ -80,6 +82,9 @@ import {
 } from "./wire.ts";
 
 export { CHAT_EVENTS } from "./frames.ts";
+
+/** Sync documents dropped in a row as older than the book before one is taken anyway. */
+const MAX_STALE_DOCS = 3;
 
 /** The files of the chat: staging, upload and the cache. The files of the web app bring it. */
 export interface ChatFiles {
@@ -104,6 +109,8 @@ export interface ChatPage {
   playSound(name: string, mentioned: boolean): void;
   /** A system notification shown by the page, for a device without push. */
   showNotification(title: string, options: { body: string; tag: string; url: string }): void;
+  /** Closes the system notifications shown under a tag: the conversation was read. */
+  closeNotifications?(tag: string): void;
 }
 
 export interface ChatClock {
@@ -246,11 +253,32 @@ export function createChat(deps: ChatDeps): ChatCore {
   let available = true;
   let syncedOnce = false;
   let syncedAt: number | null = null;
-  /** Bumped when the account goes: an answer for the account before is dropped. */
+  /**
+   * Bumped when the account goes and when another tab takes over: an answer
+   * for the account, or the tab, of before is dropped.
+   */
   let generation = 0;
+  /**
+   * Bumped only when the account goes: the outbox rows queued for writing
+   * before another tab took over are still this account's, and land.
+   */
+  let accountEpoch = 0;
   let running = false;
   let syncing: Promise<void> | null = null;
   let syncAgain = false;
+  /** A failed sync document is read again after a backoff, even while the socket is up. */
+  let syncFailures = 0;
+  let syncRetryTimer: unknown = null;
+  /**
+   * Bumped by everything that moves the summaries outside a sync document: a
+   * frame, a conversation kept, a message sent. A document asked for before
+   * such a change may be older than the book, and is read again.
+   */
+  let changes = 0;
+  /** Documents dropped in a row because the book moved while they were on their way. */
+  let staleDocs = 0;
+  /** Conversations whose queue was in memory when another tab took over: told again on the next start. */
+  const releasedOutbox = new Set<string>();
   let stateTimer: unknown = null;
   let readTimer: unknown = null;
   let firstSyncTimer: unknown = null;
@@ -349,6 +377,7 @@ export function createChat(deps: ChatDeps): ChatCore {
   };
 
   const keep = (conversation: Conversation) => {
+    changes += 1;
     book.upsert(conversation);
     scheduleState();
   };
@@ -363,7 +392,7 @@ export function createChat(deps: ChatDeps): ChatCore {
   let persistChain: Promise<void> = Promise.resolve();
 
   const persist = () => {
-    const mine = generation;
+    const mine = accountEpoch;
     const rows = outbox.entries.map((entry) => {
       if (entry.firstTry !== null && !firstTryAt.has(entry.clientId)) {
         firstTryAt.set(entry.clientId, new Date(clock.now()).toISOString());
@@ -376,16 +405,16 @@ export function createChat(deps: ChatDeps): ChatCore {
       );
     });
     persistChain = persistChain.then(async () => {
-      if (mine !== generation) return;
+      if (mine !== accountEpoch) return;
       const alive = new Set(rows.map((row) => row.clientId));
       try {
         for (const row of rows) {
-          if (mine !== generation) return;
+          if (mine !== accountEpoch) return;
           await storage.put("outbox", row.clientId, row);
           stored.add(row.clientId);
         }
         for (const clientId of [...stored]) {
-          if (alive.has(clientId) || mine !== generation) continue;
+          if (alive.has(clientId) || mine !== accountEpoch) continue;
           await storage.delete("outbox", clientId);
           stored.delete(clientId);
           firstTryAt.delete(clientId);
@@ -447,6 +476,7 @@ export function createChat(deps: ChatDeps): ChatCore {
 
   async function run(clientId: string): Promise<void> {
     const mine = generation;
+    const handles = [...(outbox.get(clientId)?.attachments ?? [])];
     let result: { message: ChatMessage; uploaded: Array<[string, string]> } | null = null;
     let failure: unknown = null;
     try {
@@ -457,6 +487,7 @@ export function createChat(deps: ChatDeps): ChatCore {
     if (mine !== generation) return;
 
     if (result !== null) {
+      changes += 1;
       const entry = outbox.take(clientId);
       deps.files?.settleSent(result.uploaded);
       // The frame of the message may be late or never come: the socket may
@@ -471,7 +502,12 @@ export function createChat(deps: ChatDeps): ChatCore {
     }
 
     const entry = outbox.get(clientId);
-    if (entry === undefined) return;
+    if (entry === undefined) {
+      // Its frame settled it, or the player dropped it, while the attempt
+      // was out: the files it staged are let go.
+      if (handles.length > 0) deps.files?.drop(handles);
+      return;
+    }
     const kind = classify(failure);
     if (kind === "filesLost" && outbox.reregister(clientId)) {
       console.info(`chat: the files of ${clientId} are gone on the service, uploading again`);
@@ -514,14 +550,33 @@ export function createChat(deps: ChatDeps): ChatCore {
 
   // -- Sync ---------------------------------------------------------------
 
+  /** Reads the sync document again after a failure, with the backoff of the queue: 1 s up to 30 s. */
+  function retrySync(): void {
+    if (!running || syncRetryTimer !== null) return;
+    syncFailures += 1;
+    syncRetryTimer = clock.setTimeout(() => {
+      syncRetryTimer = null;
+      if (running && deps.signedIn()) void resync();
+    }, backoff(syncFailures));
+  }
+
+  function syncSucceeded(): void {
+    syncFailures = 0;
+    if (syncRetryTimer !== null) clock.clearTimeout(syncRetryTimer);
+    syncRetryTimer = null;
+  }
+
   async function syncOnce(): Promise<void> {
     if (!deps.signedIn()) return;
     const mine = generation;
+    const changesBefore = changes;
     let raw: unknown;
     try {
       raw = await request<unknown>("GET", "/v1/chat/conversations");
     } catch (error) {
+      if (mine !== generation) return;
       if (serviceCode(error) === CHAT_UNAVAILABLE_CODE) console.info("chat: this JKNet Online service has no chat API");
+      else retrySync();
       return;
     }
     if (mine !== generation) return;
@@ -530,9 +585,22 @@ export function createChat(deps: ChatDeps): ChatCore {
       doc = readSyncDoc(raw);
     } catch (error) {
       console.warn("chat: the sync document does not read", error);
+      retrySync();
       return;
     }
-    const reset = book.replace(doc);
+    // A frame, a kept conversation or a sent message landed while the
+    // document was on its way: the document may be older than the book. It
+    // is read again, a few times; after that it is taken, keeping every
+    // summary the book holds further on.
+    const moved = changes !== changesBefore;
+    if (moved && staleDocs < MAX_STALE_DOCS) {
+      staleDocs += 1;
+      syncAgain = true;
+      return;
+    }
+    staleDocs = 0;
+    syncSucceeded();
+    const reset = book.replace(doc, moved);
     syncedAt = clock.now();
     if (reset.length > 0) console.warn(`chat: ${reset.length} conversation(s) went back in history, the service was restored`);
     for (const conversationId of reset) reads.remove(conversationId);
@@ -557,15 +625,16 @@ export function createChat(deps: ChatDeps): ChatCore {
       syncAgain = true;
       return syncing;
     }
-    syncing = (async () => {
+    const current: Promise<void> = (async () => {
       do {
         syncAgain = false;
         await syncOnce();
       } while (syncAgain);
     })().finally(() => {
-      syncing = null;
+      if (syncing === current) syncing = null;
     });
-    return syncing;
+    syncing = current;
+    return current;
   }
 
   /** Fetches one conversation the book does not know, or cannot count. */
@@ -585,6 +654,8 @@ export function createChat(deps: ChatDeps): ChatCore {
 
   /** Drops a conversation the player left or lost, and tells the screens. */
   function dropConversation(conversationId: string, reason: string): void {
+    changes += 1;
+    closeNotifications(conversationId);
     const known = book.remove(conversationId);
     const queued = outbox.removeConversation(conversationId);
     drafts.remove(conversationId);
@@ -600,11 +671,17 @@ export function createChat(deps: ChatDeps): ChatCore {
     }
   }
 
+  /** The system notifications of a conversation go once it is read here or elsewhere, or gone. */
+  function closeNotifications(conversationId: string): void {
+    deps.page.closeNotifications?.(`c:${conversationId}`);
+  }
+
   // -- Read markers -------------------------------------------------------
 
   function queueRead(conversationId: string): void {
     const seq = book.get(conversationId)?.lastSeq ?? 0;
     if (seq === 0 || !book.readLocally(deps.me(), conversationId, seq)) return;
+    closeNotifications(conversationId);
     reads.queue(conversationId, seq);
     scheduleState();
     scheduleReads(READ_DEBOUNCE_MS);
@@ -747,6 +824,9 @@ export function createChat(deps: ChatDeps): ChatCore {
     dropDraft: (conversationId: string) => {
       drafts.remove(conversationId);
     },
+    dropFiles: (handles: string[]) => {
+      deps.files?.drop(handles);
+    },
     isViewed,
   };
 
@@ -777,7 +857,12 @@ export function createChat(deps: ChatDeps): ChatCore {
         console.debug(`unreadable ${frame.type}`, error);
         return true;
       }
+      if (parsed.kind !== "typing" && parsed.kind !== "unknown") changes += 1;
       runEffects(applyFrame(frameState, deps.me(), parsed, clock.now()));
+      if (parsed.kind === "read" && parsed.mark.userId === deps.me() && (book.get(parsed.mark.conversationId)?.unread ?? 0) === 0) {
+        closeNotifications(parsed.mark.conversationId);
+      }
+      if (parsed.kind === "removed") closeNotifications(parsed.removal.conversationId);
       return true;
     },
 
@@ -793,6 +878,9 @@ export function createChat(deps: ChatDeps): ChatCore {
       if (!deps.signedIn()) return;
       await drafts.load();
       await restoreOutbox();
+      for (const conversationId of releasedOutbox) emitOutbox(conversationId);
+      if (releasedOutbox.size > 0) scheduleState();
+      releasedOutbox.clear();
       kick();
       if (firstSyncTimer !== null) clock.clearTimeout(firstSyncTimer);
       firstSyncTimer = clock.setTimeout(() => {
@@ -821,6 +909,7 @@ export function createChat(deps: ChatDeps): ChatCore {
 
     forget() {
       generation += 1;
+      accountEpoch += 1;
       const known = book.clear();
       outbox.clear();
       drafts.clear();
@@ -839,6 +928,11 @@ export function createChat(deps: ChatDeps): ChatCore {
       readTimer = null;
       if (firstSyncTimer !== null) clock.clearTimeout(firstSyncTimer);
       firstSyncTimer = null;
+      if (syncRetryTimer !== null) clock.clearTimeout(syncRetryTimer);
+      syncRetryTimer = null;
+      syncFailures = 0;
+      staleDocs = 0;
+      releasedOutbox.clear();
       emitStateNow();
       if (known.length > 0) emit(CHAT_EVENTS.resync, { reset: known });
       tell();
@@ -846,11 +940,28 @@ export function createChat(deps: ChatDeps): ChatCore {
 
     stop() {
       running = false;
+      // Another tab holds the account now and writes the queue and the
+      // drafts: what this tab keeps in memory goes, and the next start reads
+      // both back from IndexedDB. An attempt still out finds a new
+      // generation and writes nothing.
+      generation += 1;
       void drafts.flush();
+      drafts.forgetMemory();
+      const held = outbox.entries;
+      for (const entry of held) releasedOutbox.add(entry.conversationId);
+      outbox.clear();
+      deps.files?.drop(held.flatMap((entry) => entry.attachments));
+      reads.clear();
+      stored.clear();
+      firstTryAt.clear();
+      syncing = null;
+      syncAgain = false;
+      staleDocs = 0;
+      syncFailures = 0;
       for (const handle of waits) clock.clearTimeout(handle);
       waits.clear();
-      for (const handle of [stateTimer, readTimer, firstSyncTimer]) if (handle !== null) clock.clearTimeout(handle);
-      stateTimer = readTimer = firstSyncTimer = null;
+      for (const handle of [stateTimer, readTimer, firstSyncTimer, syncRetryTimer]) if (handle !== null) clock.clearTimeout(handle);
+      stateTimer = readTimer = firstSyncTimer = syncRetryTimer = null;
       if (offlineTimer !== null) clock.clearInterval(offlineTimer);
       offlineTimer = null;
       if (typeof window !== "undefined") {
@@ -1026,8 +1137,12 @@ export function createChat(deps: ChatDeps): ChatCore {
       const me = deps.me();
       if (me === null) throw signedOut();
       const target = id(conversationId);
+      const server = book.get(target)?.kind === "server";
       await request("DELETE", `/v1/chat/conversations/${segment(target)}/members/${segment(me)}`);
       dropConversation(target, "left");
+      // The service tells a guest nothing when it leaves: the server it
+      // left is open to it again.
+      if (server) emit(JOINABLE_EVENT, {});
     },
 
     async answerGroupInvite(conversationId, accept) {

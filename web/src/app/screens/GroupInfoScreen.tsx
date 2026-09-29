@@ -5,6 +5,7 @@ import { Navigate, useLocation, useNavigate } from "react-router";
 import { GroupInfoPanel } from "../../../../src/components/chat/GroupInfoPanel.tsx";
 import { useChatConversation } from "../../../../src/lib/queries.ts";
 import { useWebCore } from "../CoreContext.tsx";
+import { useLayoutActions } from "../layouts/LayoutActions.ts";
 import { threadPath } from "./chatPaths.ts";
 
 /**
@@ -20,6 +21,7 @@ export function GroupInfoScreen({ conversationId }: { conversationId: string }) 
   const synced = useSyncExternalStore(core.chat.subscribe, core.chat.synced, core.chat.synced);
   const conversation = useChatConversation(conversationId);
   const navigate = useNavigate();
+  const { close } = useLayoutActions();
   const location = useLocation();
   const mode = new URLSearchParams(location.search).get("mode");
 
@@ -40,7 +42,7 @@ export function GroupInfoScreen({ conversationId }: { conversationId: string }) 
       header={false}
       renaming={mode === "rename"}
       adding={mode === "add"}
-      onClose={() => void navigate(threadPath(conversationId))}
+      onClose={close}
       onLeft={() => void navigate("/chats", { replace: true })}
     />
   );

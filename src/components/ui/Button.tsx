@@ -29,10 +29,12 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "disabled:bg-elevated disabled:text-fg-disabled",
 };
 
+// --- slice: web app --- a finger needs 44 px: on a touch screen every
+// size is at least that tall and wide. A mouse never matches.
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-28 px-12 gap-6 rounded-sm",
-  md: "h-36 px-16 gap-8 rounded-md",
-  lg: "h-44 px-20 gap-8 rounded-md",
+  sm: "h-28 px-12 gap-6 rounded-sm pointer-coarse:min-h-44 pointer-coarse:min-w-44",
+  md: "h-36 px-16 gap-8 rounded-md pointer-coarse:min-h-44 pointer-coarse:min-w-44",
+  lg: "h-44 px-20 gap-8 rounded-md pointer-coarse:min-w-44",
 };
 
 const TEXT: Record<ButtonSize, string> = {

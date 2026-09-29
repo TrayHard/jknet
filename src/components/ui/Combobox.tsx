@@ -355,6 +355,8 @@ export function Combobox({
             : size === "sm"
               ? "h-28 gap-6 pl-10 pr-28"
               : "h-36 gap-8 pl-12 pr-32",
+          // --- slice: web app --- 44 px for a finger.
+          "pointer-coarse:min-h-44",
           className,
         )}
       >

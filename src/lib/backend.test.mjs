@@ -24,6 +24,15 @@ import {
 } from "./backend.ts";
 import { NO_RUNTIME_MESSAGE } from "./runtime.ts";
 
+const ALL_ON = {
+  game: true,
+  localFiles: true,
+  nativeDialogs: true,
+  tray: true,
+  windows: true,
+  serverQuery: true,
+};
+
 const ALL_OFF = {
   game: false,
   localFiles: false,
@@ -62,9 +71,9 @@ function recordingBackend() {
 }
 
 describe("without a backend", () => {
-  test("nothing answers and nothing is possible", () => {
+  test("nothing answers, and the screens draw the launcher's controls for the browser stand", () => {
     assert.equal(hasBackend(), false);
-    assert.deepEqual(usePlatform(), ALL_OFF);
+    assert.deepEqual(usePlatform(), ALL_ON);
   });
 
   test("a call fails with the sentence the IPC wrappers print", () => {
@@ -75,9 +84,9 @@ describe("without a backend", () => {
 
   test("the answer of usePlatform cannot be changed by a caller", () => {
     assert.throws(() => {
-      usePlatform().game = true;
+      usePlatform().game = false;
     });
-    assert.equal(usePlatform().game, false);
+    assert.equal(usePlatform().game, true);
   });
 });
 

@@ -103,6 +103,31 @@ test("a network failure is a network error, 204 is undefined", async () => {
   assert.equal(await ok.request("DELETE", "/v1/invites/1"), undefined);
 });
 
+test("the timeout also covers a body that stalls after the headers", async () => {
+  let aborted = false;
+  const http = createHttp({
+    apiBase: "https://api.example.com",
+    token: () => "T",
+    onUnauthorized: () => {},
+    timeoutMs: 50,
+    fetchImpl: async (_url, init) => {
+      init.signal.addEventListener("abort", () => {
+        aborted = true;
+      });
+      // Headers arrive at once; the body never ends.
+      return new Response(new ReadableStream({ start() {} }), { status: 200 });
+    },
+  });
+  const started = Date.now();
+  await assert.rejects(http.request("GET", "/v1/chat/conversations"), (error) => {
+    assert.equal(error.code, "network");
+    assert.match(error.message, /within/);
+    return true;
+  });
+  assert.ok(Date.now() - started < 2_000);
+  assert.ok(aborted, "the request is aborted when the deadline passes");
+});
+
 const USER = (id, name) => ({ id, displayName: name, avatarUrl: null, provider: "dev", providerName: name, createdAt: "x" });
 
 function friendsWith(routes, signedIn = true) {

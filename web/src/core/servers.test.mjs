@@ -11,6 +11,7 @@ import {
   isCatalogDisabled,
   readServerList,
   SERVERS_UPDATED_EVENT,
+  STALE_RETRIES,
   STALE_RETRY_MS,
   toServerInfo,
 } from "./servers.ts";
@@ -163,7 +164,7 @@ test("the pickers' list comes from memory for 30 s, then from the service", asyn
   assert.equal(calls.length, 2);
 });
 
-test("a stale answer is asked again five seconds later, once", async () => {
+test("a stale answer is asked again five seconds later, once for both reads", async () => {
   const fresh = { game: "ja", scannedAt: "2026-09-29T10:00:00Z", stale: false, servers: [DUEL] };
   const { calls, heard, list, time } = listAnswering([{ game: "ja", scannedAt: null, stale: true, servers: [] }, fresh]);
   assert.deepEqual(await list.cached("ja"), []);
@@ -175,6 +176,30 @@ test("a stale answer is asked again five seconds later, once", async () => {
   assert.deepEqual(heard.at(-1), { game: "ja", servers: [toServerInfo(DUEL, "ja")] });
   assert.deepEqual(await list.cached("ja"), [toServerInfo(DUEL, "ja")]);
   assert.equal(calls.length, 3);
+});
+
+test("a scan longer than one wait is asked for again until it ends, a minute at most", async () => {
+  const stale = { game: "ja", scannedAt: null, stale: true, servers: [] };
+  const fresh = { game: "ja", scannedAt: "2026-09-29T10:00:00Z", stale: false, servers: [DUEL] };
+  const { calls, heard, list, time } = listAnswering([stale, stale, stale, fresh]);
+  await list.cached("ja");
+  for (let step = 0; step < 3; step += 1) {
+    time.advance(STALE_RETRY_MS);
+    await settle();
+  }
+  assert.equal(calls.length, 4);
+  assert.deepEqual(heard.at(-1), { game: "ja", servers: [toServerInfo(DUEL, "ja")] }, "the picker fills in");
+  time.advance(10 * STALE_RETRY_MS);
+  await settle();
+  assert.equal(calls.length, 4, "a fresh answer ends the retries");
+
+  const stuck = listAnswering([stale]);
+  await stuck.list.cached("ja");
+  for (let step = 0; step < STALE_RETRIES + 5; step += 1) {
+    stuck.time.advance(STALE_RETRY_MS);
+    await settle();
+  }
+  assert.equal(stuck.calls.length, 1 + STALE_RETRIES, "a scan that never ends is not asked for forever");
 });
 
 test("a sign-out forgets the rows and stops the retry", async () => {

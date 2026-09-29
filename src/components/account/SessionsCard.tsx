@@ -40,6 +40,8 @@ type Confirming = { kind: "one"; session: DeviceSession } | { kind: "others" } |
 
 interface SessionsCardProps {
   className?: string;
+  /** Leave the card's own title out: the screen around it already names it. */
+  heading?: boolean;
 }
 
 /**
@@ -59,7 +61,7 @@ interface SessionsCardProps {
  * The list is read when the card mounts and after every sign-out, not on a
  * timer: the service keeps these calls to a small budget.
  */
-export function SessionsCard({ className }: SessionsCardProps) {
+export function SessionsCard({ className, heading = true }: SessionsCardProps) {
   const { t } = useTranslation("account");
   const { t: tCommon } = useTranslation("common");
   const errorText = useErrorText();
@@ -93,7 +95,7 @@ export function SessionsCard({ className }: SessionsCardProps) {
       id={SESSIONS_SECTION_ID}
       className={cn("rounded-lg border border-line bg-surface p-16 mb-24 scroll-mt-24", className)}
     >
-      <h2 className="text-heading-sm text-fg pb-4">{t("devices.title")}</h2>
+      {heading ? <h2 className="text-heading-sm text-fg pb-4">{t("devices.title")}</h2> : null}
       <p className="text-body-sm text-fg-secondary">{t("devices.hint")}</p>
 
       {failure ? (
@@ -102,10 +104,15 @@ export function SessionsCard({ className }: SessionsCardProps) {
           className="flex items-start gap-8 rounded-md border border-line-danger bg-danger-subtle p-12 mt-12"
         >
           <AlertTriangle size={16} className="text-fg-danger shrink-0 mt-2" />
-          <span className="flex flex-col gap-2 min-w-0">
+          <span className="flex flex-1 flex-col gap-2 min-w-0">
             {failure.title ? <span className="text-body-sm-medium text-fg">{failure.title}</span> : null}
             <span className="text-body-sm text-fg break-words">{failure.detail}</span>
           </span>
+          {refused === null && sessions.isError ? (
+            <Button size="sm" className="shrink-0" disabled={sessions.isFetching} onClick={() => void sessions.refetch()}>
+              {tCommon("actions.tryAgain")}
+            </Button>
+          ) : null}
         </div>
       ) : null}
 

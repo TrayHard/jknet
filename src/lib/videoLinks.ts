@@ -80,7 +80,10 @@ export function videoLink(href: string): VideoLink | null {
 
 /** The still YouTube serves for a video, at 480 × 360. */
 export function youtubeThumbnail(id: string): string {
-  return `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+  // `i.ytimg.com` is the host YouTube serves stills from, and the one the
+  // web app's Content-Security-Policy lists: `img.youtube.com` answers too,
+  // but a policy checks the host asked, before any redirect.
+  return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
 }
 
 /** The player of a video on the cookieless domain, started at once: it is loaded only after a click. */

@@ -342,6 +342,12 @@ export function createSession(deps: SessionDeps): Session {
     return { sessionId: session.id, url: session.url };
   };
 
+  /** A sign-out or an account deletion on its way: a token refused meanwhile is that, not an expiry. */
+  let leaving: AccountChangeReason | null = null;
+  /** The refusal came first and already wiped the account with the reason of `leaving`. */
+  let leftEarly = false;
+  const leave = (reason: AccountChangeReason) => (leftEarly ? (wiping ?? Promise.resolve()) : wipe(reason));
+
   const wipe = (reason: AccountChangeReason): Promise<void> => {
     if (wiping !== null) return wiping;
     wiping = (async () => {
@@ -413,18 +419,31 @@ export function createSession(deps: SessionDeps): Session {
       setStatus({ phase: "idle", next: null, error: null });
     },
     signOut: async () => {
-      if (record !== null) {
-        try {
-          await http.request("POST", "/v1/auth/logout");
-        } catch (error) {
-          // The token is forgotten here either way; a service that did not
-          // hear the logout lets it expire.
-          if (!(error instanceof CoreError)) throw error;
+      // The service closes the sockets of the token while it answers, so the
+      // socket may report the token gone first: that is this sign-out too.
+      leaving = "signedOut";
+      leftEarly = false;
+      try {
+        if (record !== null) {
+          try {
+            await http.request("POST", "/v1/auth/logout");
+          } catch (error) {
+            // The token is forgotten here either way; a service that did not
+            // hear the logout lets it expire.
+            if (!(error instanceof CoreError)) throw error;
+          }
         }
+        await leave("signedOut");
+      } finally {
+        leaving = null;
+        leftEarly = false;
       }
-      await wipe("signedOut");
     },
-    expire: () => wipe("expired"),
+    expire: () => {
+      if (leaving === null) return wipe("expired");
+      leftEarly = true;
+      return wipe(leaving);
+    },
     endedElsewhere: () => ended,
     refreshMe,
     updateDisplayName: async (displayName: string) => {
@@ -438,8 +457,15 @@ export function createSession(deps: SessionDeps): Session {
       return user;
     },
     deleteAccount: async () => {
-      await http.request("DELETE", "/v1/me");
-      await wipe("deleted");
+      leaving = "deleted";
+      leftEarly = false;
+      try {
+        await http.request("DELETE", "/v1/me");
+        await leave("deleted");
+      } finally {
+        leaving = null;
+        leftEarly = false;
+      }
     },
     setUser: (user: OnlineUser) => {
       if (record === null) return;

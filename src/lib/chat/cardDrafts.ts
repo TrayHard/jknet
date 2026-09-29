@@ -591,6 +591,19 @@ export function jkhubFileUrl(fileId: number, slug: string): string {
   return `https://jkhub.org/files/file/${tail}/`;
 }
 
+/**
+ * The address of a JKHub record a bundle names. The author writes `url`
+ * freely, so it is taken only when it is that record's page on jkhub.org;
+ * anything else — another host, another scheme — becomes the page of
+ * `fileId`. `null` when the file id is not one.
+ */
+export function jkhubSourceUrl(source: { fileId: number; url?: string | null }): string | null {
+  if (!Number.isSafeInteger(source.fileId) || source.fileId <= 0) return null;
+  const url = source.url?.trim() ?? "";
+  const own = new RegExp(`^https://jkhub\\.org/files/file/${source.fileId}(-[A-Za-z0-9%._~-]*)?/?$`);
+  return own.test(url) ? url : jkhubFileUrl(source.fileId, "");
+}
+
 /** `"R G B"` as three channels, or `null` when it is not three numbers of 0 to 255. */
 export function parseCharColor(value: string | null): { red: number; green: number; blue: number } | null {
   if (value === null) return null;

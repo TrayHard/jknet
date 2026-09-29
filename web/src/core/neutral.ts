@@ -169,8 +169,6 @@ export function neutralAnswer(command: string, args: Record<string, unknown> = {
     case "host_get_session":
     case "get_levelshot":
       return { value: null };
-    case "chat_scan_commands":
-      return { value: [] };
     default:
       return undefined;
   }

@@ -1,4 +1,3 @@
-import { useCallback } from "react";
 import { Navigate } from "react-router";
 
 import { DETAILS_COLUMN_QUERY, useMedia } from "../useMedia.ts";
@@ -17,12 +16,11 @@ import type { LayoutProps } from "./types.ts";
  * below that. There is no back button: the list stays on screen and the
  * browser's back walks the history. Dialogs stay centred, as in the launcher.
  */
-export function WideThreePaneLayout({ view, nav, me, navigate, banners }: LayoutProps) {
+export function WideThreePaneLayout({ view, nav, me, up, banners }: LayoutProps) {
   const column = useMedia(DETAILS_COLUMN_QUERY);
-  const { parent } = view;
-  const closeAside = useCallback(() => {
-    if (parent !== undefined) navigate(parent);
-  }, [navigate, parent]);
+  // Closing the details goes up by the history rule: back to the chat when
+  // it is the entry before, so Back does not open the details again.
+  const closeAside = up;
 
   if (view.detail === undefined && view.defaultDetail !== undefined) {
     return <Navigate to={view.defaultDetail} replace />;
@@ -51,7 +49,7 @@ export function WideThreePaneLayout({ view, nav, me, navigate, banners }: Layout
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{view.list}</div>
           </section>
 
-          <main data-pane="detail" className="relative flex min-w-500 flex-1 flex-col bg-surface">
+          <main id="content" tabIndex={-1} data-pane="detail" className="relative flex min-w-500 flex-1 flex-col bg-surface outline-none">
             {view.detail !== undefined && view.ownHeader === true ? (
               <div className="flex min-h-0 flex-1 flex-col">{view.detail}</div>
             ) : view.detail !== undefined ? (

@@ -13,21 +13,27 @@
  *   chat files and the pictures of other hosts go straight to the network.
  * - `message`: `SKIP_WAITING` is the **Update** button.
  * - `push`: every push becomes a notification (`content.ts`), in the
- *   subscription's language (`strings.ts`), silent while a window of the app
- *   is open — the page has played the chat's sound — and with the system's
- *   sound otherwise; the app icon's badge follows the unread count.
- * - `notificationclick`: brings an open window forward and names the address
- *   (`{type: "open", url}`), or opens a new window on it (`click.ts`).
+ *   subscription's language (`strings.ts`), silent while a window runs the
+ *   app with its live connection — the page has played the chat's sound —
+ *   and with the system's sound otherwise; the app icon's badge follows the
+ *   unread count. A window counts only when it answers `alive?` in time: a
+ *   frozen page and a tab showing "open in another tab" do not, and neither
+ *   plays a sound.
+ * - `notificationclick`: brings an open window forward, one that answered
+ *   first, and names the address (`{type: "open", url}`), or opens a new
+ *   window on it (`click.ts`).
  * - `pushsubscriptionchange`: saves the browser's new subscription on the
  *   service (`resubscribe.ts`).
  *
  * The e2e build (`__E2E__`) keeps its notifications in a list the tests read
- * (`shownNotifications`) instead of handing them to the system: a system
- * notification may sound, and a test run makes no sound.
+ * instead of handing them to the system: a system notification may sound,
+ * and a test run makes no sound. The hooks the tests call are
+ * `jknetServiceWorker.e2e`, left out of the production build.
  */
 
 import { clickPlan, type ClickPlan } from "./click.ts";
 import { notificationOf, type NotificationPlan } from "./content.ts";
+import { ALIVE_QUESTION, isAliveAnswer } from "./alive.ts";
 import { readPref, readSession, writePref } from "./idb.ts";
 import { resubscribe, type SubscriptionJson } from "./resubscribe.ts";
 import { stringsFor } from "./strings.ts";
@@ -111,8 +117,8 @@ self.addEventListener("message", (event) => {
 /** What the e2e build showed, oldest first. */
 const shown: Array<{ title: string; options: NotificationPlan["options"] }> = [];
 
-/** The notifications the e2e build recorded; always empty in production. */
-export function shownNotifications(): Array<{ title: string; options: NotificationPlan["options"] }> {
+/** The notifications the e2e build recorded. */
+function shownNotifications(): Array<{ title: string; options: NotificationPlan["options"] }> {
   return shown.map((entry) => ({ title: entry.title, options: { ...entry.options, data: { ...entry.options.data } } }));
 }
 
@@ -128,6 +134,39 @@ async function display(plan: NotificationPlan): Promise<void> {
 /** Every window of the app, the most recently focused first. */
 function appWindows(): Promise<readonly WindowClient[]> {
   return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+}
+
+/** How long a window has to answer that the app runs in it. */
+const ALIVE_WAIT_MS = 300;
+
+/**
+ * Whether a window runs the app with its live connection. The page answers
+ * `alive?` only while its core runs and its socket is open; a frozen page
+ * cannot answer, and the one-tab gate has no core to.
+ */
+function answersAlive(client: WindowClient): Promise<boolean> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const done = (alive: boolean) => {
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(alive);
+    };
+    const timer = setTimeout(() => done(false), ALIVE_WAIT_MS);
+    channel.port1.onmessage = (event) => done(isAliveAnswer(event.data));
+    try {
+      client.postMessage(ALIVE_QUESTION, [channel.port2]);
+    } catch {
+      done(false);
+    }
+  });
+}
+
+/** The windows of the app, each with whether it answered. */
+async function windowsWithLife(): Promise<Array<{ client: WindowClient; live: boolean }>> {
+  const windows = await appWindows();
+  const live = await Promise.all(windows.map(answersAlive));
+  return windows.map((client, index) => ({ client, live: live[index] }));
 }
 
 async function setBadge(count: number | null): Promise<void> {
@@ -153,7 +192,7 @@ self.addEventListener("push", (event) => {
       } catch {
         // Not JSON: the generic notification still shows, as a push must.
       }
-      const windowOpen = (await appWindows()).length > 0;
+      const windowOpen = (await windowsWithLife()).some((window) => window.live);
       const plan = notificationOf(payload, stringsFor, windowOpen);
       await display(plan);
       await setBadge(plan.badge);
@@ -161,27 +200,32 @@ self.addEventListener("push", (event) => {
   );
 });
 
+/** What `clickPlan` reads of each window. */
+function infoOf(window: { client: WindowClient; live: boolean }) {
+  return { focused: window.client.focused, visibilityState: window.client.visibilityState, live: window.live };
+}
+
 /**
  * Where a click on a notification whose address is `url` would lead now.
- * Exported for the e2e run: only a real click may open a window.
+ * For the e2e run: only a real click may open a window.
  */
-export async function clickTarget(url: unknown): Promise<ClickPlan> {
-  return clickPlan(await appWindows(), url);
+async function clickTarget(url: unknown): Promise<ClickPlan> {
+  return clickPlan((await windowsWithLife()).map(infoOf), url);
 }
 
 /**
  * The click of a notification whose address is `url`: an open window comes
- * forward and navigates, or a new one opens. Exported for the e2e run, which
+ * forward and navigates, or a new one opens. The e2e run calls it too: it
  * cannot click a notification.
  */
-export async function openFromNotification(url: unknown): Promise<"focused" | "opened"> {
-  const windows = await appWindows();
-  const plan = clickPlan(windows, url);
+async function openFromNotification(url: unknown): Promise<"focused" | "opened"> {
+  const windows = await windowsWithLife();
+  const plan = clickPlan(windows.map(infoOf), url);
   if (plan.action === "open") {
     await self.clients.openWindow(plan.url);
     return "opened";
   }
-  const target = windows[plan.index];
+  const target = windows[plan.index].client;
   try {
     await target.focus();
   } catch {
@@ -190,6 +234,9 @@ export async function openFromNotification(url: unknown): Promise<"focused" | "o
   target.postMessage({ type: "open", url: plan.url });
   return "focused";
 }
+
+/** The hooks of the e2e run; `undefined`, and the functions left out, in production. */
+export const e2e = __E2E__ ? { shownNotifications, clickTarget, openFromNotification } : undefined;
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

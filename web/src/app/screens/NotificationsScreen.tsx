@@ -145,7 +145,8 @@ function PushSection() {
       <SettingsCard
         icon={mine?.settings.enabled === false ? <BellOff size={20} /> : <Bell size={20} />}
         title={t("notifications.pushTitle")}
-        text={t("notifications.pushText")}
+        // "The settings below" are there once this device receives push.
+        text={local.subscriptionId === null ? t("notifications.pushTextNew") : t("notifications.pushText")}
       >
         {!local.supported ? (
           <Note tone="warm">{t("notifications.unsupported")}</Note>

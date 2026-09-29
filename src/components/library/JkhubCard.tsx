@@ -1,9 +1,10 @@
-import { ArrowDownCircle, Check, Download, Share2 } from "lucide-react";
+import { ArrowDownCircle, Check, Download, ImageOff, Share2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // --- slice: i18n ---
 import { useFormat, type Formatters } from "../../i18n/useFormat";
+import { usePlatform } from "../../lib/backend";
 import type { JkhubCardData } from "../../lib/ipc";
 import { Badge, Button } from "../ui";
 import { JkhubRating } from "./JkhubRating";
@@ -88,6 +89,7 @@ export function JkhubCard({
   const { t } = useTranslation("jkhub");
   const { t: tChat } = useTranslation("chat");
   const format = useFormat();
+  const caps = usePlatform();
   // The address that failed rather than a flag: a card reused for another file
   // gets its picture back without an effect to reset anything.
   const [broken, setBroken] = useState<string | null>(null);
@@ -119,7 +121,9 @@ export function JkhubCard({
           />
         ) : (
           <span className="flex size-full items-center justify-center text-fg-muted">
-            <Download size={28} />
+            {/* --- slice: web app --- where nothing installs, the placeholder
+                is a missing picture, not a download arrow. */}
+            {caps.localFiles ? <Download size={28} /> : <ImageOff size={28} aria-hidden />}
           </span>
         )}
       </button>

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import type { Friend } from "../../lib/ipc";
+import { useCoarsePointer } from "../../lib/pointer";
 // --- slice: selection context menu ---
 import { hasTextSelection } from "../../lib/selection";
 import { Avatar, Button } from "../ui";
@@ -51,6 +52,7 @@ export function FriendRow({
 }: FriendRowProps) {
   const { t } = useTranslation("friends");
   const { t: tHost } = useTranslation("host");
+  const coarse = useCoarsePointer();
   const statusLine = useStatusLine();
   const offline = friend.presence.status === "offline";
   // --- slice: play with friends ---
@@ -118,9 +120,10 @@ export function FriendRow({
             onMessage();
           }}
           className={cn(
-            "flex size-28 shrink-0 items-center justify-center rounded-sm cursor-pointer select-none",
+            "flex size-28 pointer-coarse:size-44 shrink-0 items-center justify-center rounded-sm cursor-pointer select-none",
             "text-fg-secondary hover:bg-hover-overlay hover:text-fg transition-opacity duration-100",
-            selected
+            // --- slice: web app --- no hover on a touch screen: always there.
+            selected || coarse
               ? "opacity-100"
               : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
           )}
@@ -145,7 +148,7 @@ export function FriendRow({
           // emits them in, which is not the order they are written in.
           className={cn(
             "transition-opacity duration-100",
-            selected
+            selected || coarse
               ? "opacity-100"
               : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
           )}

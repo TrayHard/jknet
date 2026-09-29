@@ -853,7 +853,7 @@
     },
     "privacy": {
       "title": "Prywatność",
-      "text": "Przechowywane w JKNet Online, więc działają na każdym komputerze, na którym się zalogujesz.",
+      "text": "Przechowywane w JKNet Online, więc działają na każdym urządzeniu, na którym się zalogujesz.",
       "notConfigured": "Ta wersja JKNet nie ma usługi JKNet Online, na której przechowywane są czaty.",
       "signedOut": "Zaloguj się do JKNet Online, aby je zmienić.",
       "unavailable": "JKNet Online nie ma jeszcze czatów.",

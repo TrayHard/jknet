@@ -130,7 +130,7 @@ export function ConversationList({
               aria-selected={entry === filter}
               onClick={() => setFilter(entry)}
               className={cn(
-                "h-24 px-10 rounded-sm text-body-sm-medium select-none cursor-pointer transition-colors duration-150",
+                "h-24 pointer-coarse:h-44 px-10 pointer-coarse:px-14 rounded-sm text-body-sm-medium select-none cursor-pointer transition-colors duration-150",
                 entry === filter
                   ? "bg-selected-overlay text-fg"
                   : "text-fg-secondary hover:bg-hover-overlay hover:text-fg",

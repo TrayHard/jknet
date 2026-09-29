@@ -3,7 +3,7 @@
  * the composer and the thread, by the names the shared components give them.
  */
 
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { acceptFriend, BASE, expect, requestFriend, sharedCatalog, visit } from "./fixtures.ts";
 
@@ -126,4 +126,15 @@ export async function send(page: Page, text: string): Promise<void> {
 /** One message of the thread, by its text. */
 export function messageRow(page: Page, text: string) {
   return messages(page).locator("[data-seq]").filter({ hasText: text });
+}
+
+/**
+ * A tool of a message — React, Reply, Copy text — after a tap on the
+ * message, as a thumb does: a touch screen shows the tools only then. With
+ * a mouse the tap changes nothing and the tools show on hover.
+ */
+export async function messageTool(page: Page, text: string, label: string): Promise<Locator> {
+  const row = messageRow(page, text);
+  await row.click({ position: { x: 2, y: 2 } });
+  return row.getByRole("button", { name: label });
 }

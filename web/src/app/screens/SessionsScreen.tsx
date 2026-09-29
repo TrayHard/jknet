@@ -18,7 +18,8 @@ import { SessionsCard } from "../../../../src/components/account/SessionsCard.ts
 export function SessionsScreen() {
   return (
     <div className="flex max-w-[720px] flex-col px-16 pt-24 sm:px-40 sm:pt-32" data-testid="sessions-screen">
-      <SessionsCard />
+      {/* The top bar and the settings title name the screen already. */}
+      <SessionsCard heading={false} />
     </div>
   );
 }

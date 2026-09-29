@@ -194,7 +194,10 @@ export function JoinableServers() {
   const chat = useJoinChat();
   const facts = useFacts();
   const hostOf = useHostName();
-  const servers = joinable.data ?? [];
+  const friendsLoaded = useFriendsState().data !== undefined;
+  // Only friends' servers are listed, so a row waits for the friends list
+  // that names its host: never "Former member hosts a server".
+  const servers = friendsLoaded ? (joinable.data ?? []).filter((server) => hostOf(server.hostUserId).friend !== null) : [];
   useRefusalUntilListChanges(chat, joinable.data, joinable.dataUpdatedAt);
 
   if (servers.length === 0 && chat.error === null) return null;

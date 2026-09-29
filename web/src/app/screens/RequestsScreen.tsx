@@ -1,4 +1,5 @@
 import { AlertTriangle, Server, X } from "lucide-react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 
 import { RequestList } from "../../../../src/components/friends/RequestList.tsx";
@@ -13,6 +14,7 @@ import {
   useJoinableServers,
 } from "../../../../src/lib/queries.ts";
 import { openInvites } from "../../core/friends.ts";
+import { closeNotificationsWhere } from "../../core/index.ts";
 import { JoinChatButton, JoinRefusal, useJoinChat } from "../JoinableServers.tsx";
 
 /**
@@ -33,6 +35,13 @@ export function RequestsScreen() {
   const dismiss = useDismissInvite();
   const joinable = useJoinableServers().data ?? [];
   const chat = useJoinChat();
+
+  // What the notifications of requests and invites said is on screen now.
+  useEffect(() => {
+    void closeNotificationsWhere(
+      (tag) => tag === "friends:requests" || tag === "friends:accepted" || tag === "invites" || tag.startsWith("invite:"),
+    );
+  }, []);
 
   const view = friends.data;
   if (view === undefined) {

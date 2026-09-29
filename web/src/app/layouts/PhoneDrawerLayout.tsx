@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useLocation, useNavigationType } from "react-router";
 
 import { DialogPresentationContext, SheetHistoryContext } from "../../../../src/components/ui/index.ts";
 import { Drawer } from "./Drawer.tsx";
@@ -10,6 +11,39 @@ import type { LayoutProps } from "./types.ts";
 const EDGE_PX = 20;
 /** How far it has to travel to the right. */
 const SWIPE_OPEN_PX = 40;
+
+/**
+ * One scroll position per history entry for the phone's one scrolling pane:
+ * the list, its detail and the aside all show in the same `<main>`. A new
+ * place (a push, a replace such as the next page of a list) starts at the
+ * top; Back returns to the place with the offset it was left at. An overlay
+ * entry at the same address (the drawer, a sheet) keeps the offset.
+ */
+function useScrollMemory(pane: RefObject<HTMLElement | null>) {
+  const location = useLocation();
+  const kind = useNavigationType();
+  const positions = useRef(new Map<string, number>());
+  const place = location.pathname + location.search;
+  const shown = useRef({ key: location.key, place });
+
+  useLayoutEffect(() => {
+    const node = pane.current;
+    const before = shown.current;
+    shown.current = { key: location.key, place };
+    if (before.key === location.key) return;
+    if (before.place === place) {
+      positions.current.set(location.key, positions.current.get(before.key) ?? node?.scrollTop ?? 0);
+      return;
+    }
+    if (node === null) return;
+    node.scrollTop = kind === "POP" ? (positions.current.get(location.key) ?? 0) : 0;
+  }, [location.key, place, kind, pane]);
+
+  return useCallback(() => {
+    const node = pane.current;
+    if (node !== null) positions.current.set(shown.current.key, node.scrollTop);
+  }, [pane]);
+}
 
 /**
  * The phone: P3, the launcher's sidebar as a side menu.
@@ -24,6 +58,8 @@ export function PhoneDrawerLayout({ view, nav, me, attention, up, banners }: Lay
   const drawer = useDrawerHistory();
   const registerSheet = useSheetRegistrar();
   const menuButton = useRef<HTMLButtonElement>(null);
+  const pane = useRef<HTMLElement>(null);
+  const rememberScroll = useScrollMemory(pane);
   const wasOpen = useRef(drawer.open);
   const root = view.detail === undefined && view.aside === undefined;
 
@@ -94,6 +130,8 @@ export function PhoneDrawerLayout({ view, nav, me, attention, up, banners }: Lay
           )}
           {banners}
           <main
+            ref={pane}
+            onScroll={rememberScroll}
             data-pane={level}
             className={
               bare

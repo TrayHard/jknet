@@ -12,7 +12,9 @@
  * `src/main.tsx` the Tauri one when the page runs inside Tauri. With none
  * registered — `npm run dev` in a plain browser — `hasBackend()` is `false`,
  * every IPC wrapper rejects with `NO_RUNTIME_MESSAGE` as it always did, and
- * `usePlatform()` answers that nothing is available.
+ * `usePlatform()` answers the launcher's switches: only the launcher runs
+ * without a backend, in that browser stand, whose stand-ins (`devChat`,
+ * `devHost`, `devOnline`) draw the launcher's screens for review.
  *
  * `isTauri()` keeps its own meaning: "this is the native shell". A hook the
  * web app mounts asks `hasBackend()`; a window button, the tray or a local
@@ -72,14 +74,17 @@ export interface Backend {
   caps: PlatformCaps;
 }
 
-/** What a page without a backend can do: nothing. */
-const NO_CAPS: PlatformCaps = Object.freeze({
-  game: false,
-  localFiles: false,
-  nativeDialogs: false,
-  tray: false,
-  windows: false,
-  serverQuery: false,
+/**
+ * What the launcher can do. A page without a backend is the launcher's
+ * browser stand (`npm run dev`), so it draws the launcher's controls too.
+ */
+export const LAUNCHER_CAPS: PlatformCaps = Object.freeze({
+  game: true,
+  localFiles: true,
+  nativeDialogs: true,
+  tray: true,
+  windows: true,
+  serverQuery: true,
 });
 
 let current: Backend | null = null;
@@ -116,11 +121,11 @@ export const convertFileSrc: Backend["convertFileSrc"] = (path) => backend().con
 
 /**
  * What the platform can do, for a component that hides what it cannot.
- * Everything is off without a backend.
+ * Without a backend, the launcher's switches: see `LAUNCHER_CAPS`.
  *
  * Not React state: the entry point registers the backend before the first
  * render and never swaps it, so every render reads the same answer.
  */
 export function usePlatform(): PlatformCaps {
-  return current?.caps ?? NO_CAPS;
+  return current?.caps ?? LAUNCHER_CAPS;
 }

@@ -17,6 +17,7 @@
 
 import type { Catalogs } from "./catalogs.ts";
 import { buildCard, checkCard } from "./chat/cards.ts";
+import { scanCommandsCommand } from "./chat/scan.ts";
 import type { WebChatFiles } from "./chat/files.ts";
 import type { ChatCore } from "./chat/index.ts";
 import type { ServerChats } from "./chat/serverChats.ts";
@@ -215,6 +216,8 @@ export function createRouter(deps: RouterDeps): CommandRouter {
         return buildCard(args.card);
       case "chat_check_card":
         return checkCard(args.card);
+      case "chat_scan_commands":
+        return scanCommandsCommand(args.text);
 
       // -- The chats of friends' private servers -----------------------------
       case "chat_joinable_servers":

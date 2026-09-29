@@ -105,10 +105,11 @@ export class Drafts {
   async flush(): Promise<void> {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
-    const ids = [...this.dirty];
+    // What to write is taken now: the memory may be forgotten before the
+    // writes are done.
+    const batch = [...this.dirty].map((id) => [id, this.texts.get(id)] as const);
     this.dirty.clear();
-    for (const id of ids) {
-      const text = this.texts.get(id);
+    for (const [id, text] of batch) {
       try {
         if (text === undefined) await this.storage.delete("drafts", id);
         else await this.storage.put("drafts", id, { text, updatedAt: new Date().toISOString() } satisfies DraftRow);
@@ -116,6 +117,17 @@ export class Drafts {
         console.warn("Writing a chat draft failed", error);
       }
     }
+  }
+
+  /**
+   * Forgets the drafts in memory and keeps the database: another tab took
+   * over and writes it, and the next `load` reads it back as it is then.
+   */
+  forgetMemory(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    this.texts.clear();
+    this.dirty.clear();
   }
 
   /** Forgets every draft of the account; the database goes with the sign-out. */

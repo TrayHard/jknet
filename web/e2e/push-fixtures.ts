@@ -274,7 +274,7 @@ export async function pushLine(page: Page): Promise<PushLine> {
 /** A notification the e2e build's worker recorded instead of showing. */
 export interface Shown {
   title: string;
-  options: { body: string; tag: string; renotify: boolean; silent: boolean; icon: string; data: { url: string } };
+  options: { body: string; tag: string; renotify: boolean; silent: boolean; icon: string; badge: string; data: { url: string } };
 }
 
 interface WorkerExports {
@@ -290,7 +290,7 @@ export async function shownAfter(context: BrowserContext, count: number): Promis
     .poll(
       async () => {
         const worker = await workerOf(context);
-        const all = await worker.evaluate(() => (globalThis as unknown as { jknetServiceWorker: WorkerExports }).jknetServiceWorker.shownNotifications());
+        const all = await worker.evaluate(() => (globalThis as unknown as { jknetServiceWorker: { e2e: WorkerExports } }).jknetServiceWorker.e2e.shownNotifications());
         last = all[all.length - 1];
         return all.length;
       },
@@ -303,7 +303,7 @@ export async function shownAfter(context: BrowserContext, count: number): Promis
 /** Where a click on a notification would lead: the open window, or a new one. */
 export async function clickTarget(context: BrowserContext, url: string): Promise<{ action: "focus" | "open"; url: string }> {
   const worker = await workerOf(context);
-  return worker.evaluate((target) => (globalThis as unknown as { jknetServiceWorker: WorkerExports }).jknetServiceWorker.clickTarget(target), url);
+  return worker.evaluate((target) => (globalThis as unknown as { jknetServiceWorker: { e2e: WorkerExports } }).jknetServiceWorker.e2e.clickTarget(target), url);
 }
 
 /**
@@ -314,7 +314,7 @@ export async function clickTarget(context: BrowserContext, url: string): Promise
 export async function clickWithWindow(context: BrowserContext, url: string): Promise<void> {
   const worker = await workerOf(context);
   const done = await worker.evaluate(
-    (target) => (globalThis as unknown as { jknetServiceWorker: WorkerExports }).jknetServiceWorker.openFromNotification(target),
+    (target) => (globalThis as unknown as { jknetServiceWorker: { e2e: WorkerExports } }).jknetServiceWorker.e2e.openFromNotification(target),
     url,
   );
   expect(done).toBe("focused");

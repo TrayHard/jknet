@@ -799,7 +799,7 @@
     },
     "privacy": {
       "title": "Adatvédelem",
-      "text": "A JKNet Online tárolja őket, így minden gépen érvényesek, ahol bejelentkezik.",
+      "text": "A JKNet Online tárolja őket, így minden eszközön érvényesek, ahol bejelentkezik.",
       "notConfigured": "A JKNet e változatához nem tartozik JKNet Online szolgáltatás, amely a csevegéseket tárolná.",
       "signedOut": "A módosításhoz jelentkezzen be a JKNet Online-ba.",
       "unavailable": "A JKNet Online-ban még nincsenek csevegések.",

@@ -826,7 +826,7 @@
     },
     "privacy": {
       "title": "Confidentialité",
-      "text": "Conservés sur JKNet Online, ces réglages vous suivent sur chaque ordinateur où vous vous connectez.",
+      "text": "Conservés sur JKNet Online, ces réglages vous suivent sur chaque appareil où vous vous connectez.",
       "notConfigured": "Cette version de JKNet n’a pas de service JKNet Online où conserver les discussions.",
       "signedOut": "Connectez-vous à JKNet Online pour les modifier.",
       "unavailable": "JKNet Online n’a pas encore de discussions.",

@@ -60,9 +60,24 @@ function Deferred({ children }: { children: ReactNode }) {
 
 type Params = Record<string, string | undefined>;
 
-/** `ja` or `jo` of a route's param; anything else reads as Jedi Academy. */
-function gameParam(value: string | undefined): Game {
-  return value === "jo" ? "jo" : "ja";
+/** `ja` or `jo` of a route's param; anything else names no game, and the page is not found. */
+function gameParam(value: string | undefined): Game | null {
+  return value === "ja" || value === "jo" ? value : null;
+}
+
+/** The page of a server or a file under a game the app does not know. */
+function UnknownGame({ kind }: { kind: "server" | "jkhub" }) {
+  const { t } = useTranslation("web");
+  return (
+    <div className="flex flex-col gap-16 px-16 py-20 sm:px-32 sm:py-24" data-testid="unknown-game">
+      <div role="alert" className="flex flex-col gap-4">
+        <h1 className="text-heading-md text-fg">{t(kind === "server" ? "serverList.notListedTitle" : "jkhub.notFoundTitle")}</h1>
+        <p className="text-body-sm text-fg-secondary">
+          {t(kind === "server" ? "serverList.notListedText" : "jkhub.notFoundText")}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
@@ -101,32 +116,30 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
           <ServerListScreen selectedAddress={params.address} />
         </Deferred>
       );
-    case "serverDetails":
+    case "serverDetails": {
+      const game = gameParam(params.game);
+      if (game === null) return <UnknownGame kind="server" />;
       return (
         <Deferred>
-          <ServerDetailsScreen
-            key={`${params.game}/${params.address}`}
-            game={gameParam(params.game)}
-            address={params.address ?? ""}
-          />
+          <ServerDetailsScreen key={`${game}/${params.address}`} game={game} address={params.address ?? ""} />
         </Deferred>
       );
+    }
     case "jkhub":
       return (
         <Deferred>
           <JkhubScreen />
         </Deferred>
       );
-    case "jkhubDetails":
+    case "jkhubDetails": {
+      const game = gameParam(params.game);
+      if (game === null) return <UnknownGame kind="jkhub" />;
       return (
         <Deferred>
-          <JkhubDetailsScreen
-            key={`${params.game}/${params.fileId}`}
-            game={gameParam(params.game)}
-            fileId={Number(params.fileId ?? "")}
-          />
+          <JkhubDetailsScreen key={`${game}/${params.fileId}`} game={game} fileId={Number(params.fileId ?? "")} />
         </Deferred>
       );
+    }
     case "settings":
       return <SettingsScreen current={spec.path.split("/")[2]} />;
     case "account":

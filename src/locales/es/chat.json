@@ -826,7 +826,7 @@
     },
     "privacy": {
       "title": "Privacidad",
-      "text": "Se guardan en JKNet Online, así que le siguen a cada equipo donde inicie sesión.",
+      "text": "Se guardan en JKNet Online, así que le siguen a cada dispositivo donde inicie sesión.",
       "notConfigured": "Esta compilación de JKNet no tiene un servicio JKNet Online donde guardar los chats.",
       "signedOut": "Inicie sesión en JKNet Online para cambiarlos.",
       "unavailable": "JKNet Online aún no tiene chats.",

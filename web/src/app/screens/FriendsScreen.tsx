@@ -72,7 +72,8 @@ export function FriendsScreen({ selectedId, requestsOpen = false }: FriendsScree
         <div className="flex gap-8">
           <Input
             icon={<Search size={16} />}
-            placeholder={t("searchPlaceholder")}
+            // The pane is 320 px: the placeholder is the short form, the label the whole sentence.
+            placeholder={tWeb("friendsScreen.search")}
             aria-label={t("searchPlaceholder")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}

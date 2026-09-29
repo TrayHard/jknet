@@ -192,6 +192,8 @@ export interface FrameState {
   reads: ReadMarks;
   /** Drops the draft of a conversation the player is no longer in. */
   dropDraft(conversationId: string): void;
+  /** Lets go of the staged files of messages that will never be sent. */
+  dropFiles?(handles: string[]): void;
   /** On screen, in a visible and focused tab, at the bottom of the thread. */
   isViewed(conversationId: string): boolean;
 }
@@ -259,7 +261,11 @@ export function applyFrame(state: FrameState, me: string | null, frame: Frame, n
     case "removed": {
       const id = frame.removal.conversationId;
       const known = book.remove(id);
-      if (outbox.removeConversation(id).length > 0) effects.push({ kind: "outbox", conversationId: id });
+      const queued = outbox.removeConversation(id);
+      if (queued.length > 0) {
+        effects.push({ kind: "outbox", conversationId: id });
+        state.dropFiles?.(queued.flatMap((entry) => entry.attachments));
+      }
       state.dropDraft(id);
       state.reads.remove(id);
       // Told even when the book did not have it: a screen may hold the

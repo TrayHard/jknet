@@ -36,7 +36,7 @@ export function Input({
   return (
     <div
       className={cn(
-        "flex items-center gap-8 h-36 px-12 rounded-md",
+        "flex items-center gap-8 h-36 pointer-coarse:h-44 px-12 rounded-md",
         "bg-input border transition-colors duration-150",
         invalid ? "border-line-danger" : "border-line",
         "focus-within:border-line-focus",

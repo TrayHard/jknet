@@ -181,3 +181,24 @@ test("without Web Locks every tab runs", async () => {
   assert.equal(await gate.tryAcquire(), true);
   assert.equal(await other.tryAcquire(), true);
 });
+
+test("a browser that refuses Web Locks runs without the gate, and Open here does not hang", async () => {
+  const refusing = {
+    request: async () => {
+      throw new DOMException("The request is not allowed", "SecurityError");
+    },
+  };
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const gate = createTabGate({ locks: refusing, channel: null, release: async () => {} });
+    assert.equal(await gate.tryAcquire(), true, "not taken for another tab holding the lock");
+    assert.equal(gate.active(), true);
+
+    const late = createTabGate({ locks: refusing, channel: null, release: async () => {} });
+    await late.takeOver();
+    assert.equal(late.active(), true);
+  } finally {
+    console.warn = warn;
+  }
+});

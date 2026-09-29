@@ -49,6 +49,12 @@ test("an open window makes the notification silent: the page sounded already", (
   assert.equal(notificationOf({ ...message, silent: true }, stringsFor, false).options.silent, true, "the device's own silent switch");
 });
 
+test("every notification carries the monochrome badge of the status bar", () => {
+  const plan = notificationOf({ v: 1, kind: "test", lang: "en" }, stringsFor, false);
+  assert.equal(plan.options.badge, "/icons/badge-96.png");
+  assert.ok(readFileSync(new URL("../../public/icons/badge-96.png", import.meta.url)).length > 0, "the file is there");
+});
+
 test("a sender preview shows no text", () => {
   const { text: _, ...sender } = message;
   const plan = notificationOf(sender, stringsFor, false);

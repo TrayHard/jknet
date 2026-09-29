@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "../../../../src/lib/format.ts";
@@ -41,21 +41,51 @@ export function DetailsColumn({ title, onClose, children }: DetailsProps) {
   );
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 /**
  * The details column between 900 and 1199 px: a sheet over the right edge of
- * the content pane, with a scrim. Escape and the scrim close it.
+ * the content pane, with a scrim. Escape and the scrim close it. It is modal:
+ * Tab stays inside it, and closing it puts the focus back on what opened it.
  */
 export function DetailsSheet({ title, onClose, children }: DetailsProps) {
   const panel = useRef<HTMLElement>(null);
 
+  // The focus goes to the sheet, and back to its opener when it closes.
   useEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     panel.current?.focus();
+    return () => {
+      if (opener !== null && opener.isConnected) opener.focus({ preventScroll: true });
+    };
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const holdFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab" || panel.current === null) return;
+    const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+    if (items.length === 0) {
+      event.preventDefault();
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const at = document.activeElement;
+    if (event.shiftKey && (at === first || at === panel.current)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && at === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   return (
     <div className="absolute inset-0 z-30" data-testid="details-sheet">
@@ -70,7 +100,9 @@ export function DetailsSheet({ title, onClose, children }: DetailsProps) {
         ref={panel}
         tabIndex={-1}
         role="dialog"
+        aria-modal="true"
         aria-label={title}
+        onKeyDown={holdFocus}
         className={cn(
           "details-sheet-in absolute inset-y-0 right-0 flex w-288 flex-col border-l border-line-subtle bg-app shadow-popover outline-none",
         )}

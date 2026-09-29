@@ -225,6 +225,7 @@ export function HostSetup({
                 preferred={options.defaults.map}
                 className="w-full"
                 preserveSelection={!!settings.serverConfigId}
+                share
               />
             </div>
             <SelectField label={t("setup.gametype.label")}>

@@ -63,7 +63,11 @@ export function OneTabGate({ core, children }: { core: WebCore; children: ReactN
             void core.tabs
               .takeOver()
               .then(() => core.start())
-              .then(() => setPhase("active"));
+              .then(() => setPhase("active"))
+              .catch((error: unknown) => {
+                console.warn("Taking the account over in this tab failed", error);
+                setPhase("elsewhere");
+              });
           }}
         >
           {t("tabs.takeOver")}
