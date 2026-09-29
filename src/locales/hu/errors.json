@@ -69,7 +69,9 @@
     "confirmLink": "Erősítse meg, mielőtt megnyit egy hivatkozást ide: {{message}}.",
     "webJoinOff": "A házigazda a szerver csevegését a játékban lévő játékosoknak tartja fenn.",
     "catalogDisabled": "Ez a katalógus most ki van kapcsolva a JKNet Online-on.",
-    "catalogNotReady": "A JKNet Online még építi ezt a katalógust. Próbálja újra néhány perc múlva."
+    "catalogNotReady": "A JKNet Online még építi ezt a katalógust. Próbálja újra néhány perc múlva.",
+    "limit": "Az értesítések már 10 eszközön be vannak kapcsolva ebben a fiókban. Előbb távolítson el egyet.",
+    "pushDisabled": "A push-értesítések most ki vannak kapcsolva a JKNet Online-on."
   },
   "frontend": {
     "noRuntime": "A Tauri futtatókörnyezet nem érhető el",

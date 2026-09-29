@@ -22,6 +22,7 @@
  * | cards           | `chat/cards.ts` |
  * | friends' server chats | `chat/serverChats.ts` |
  * | catalogs        | `catalogs.ts`  |
+ * | push notifications | `push.ts`   |
  * | one active tab  | `tabs.ts`      |
  */
 
@@ -41,6 +42,7 @@ import { createFriends, type FriendsCore } from "./friends.ts";
 import { createHttp, type Http } from "./http.ts";
 import { attachLifecycle, visibleNow } from "./lifecycle.ts";
 import type { PrefsStore } from "./prefs.ts";
+import { createPush, webPushTransport, type PushCore, type PushTransport } from "./push.ts";
 import { createRouter, createStats, type CommandRouter, type CoreStats } from "./router.ts";
 import { createSession, type Session } from "./session.ts";
 import { createSettings, DEFAULT_CHAT_NOTIFICATIONS, type SettingsCore } from "./settings.ts";
@@ -73,6 +75,10 @@ export interface WebCoreOptions {
   origin: string;
   /** The words of the chat's notifications in the language on screen; English without it. */
   texts?: () => NotifyTexts;
+  /** The language on screen, which push notifications are written in; English without it. */
+  locale?: () => string;
+  /** The push channel; Web Push through the service worker without it. */
+  pushTransport?: PushTransport;
 }
 
 export type FrameHandler = (frame: Frame) => boolean;
@@ -88,6 +94,7 @@ export interface WebCore {
   readonly chat: ChatCore;
   readonly files: WebChatFiles;
   readonly serverChats: ServerChats;
+  readonly push: PushCore;
   readonly socket: LiveSocket;
   readonly prefs: PrefsStore;
   readonly storage: Storage;
@@ -128,6 +135,9 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     onUnauthorized: () => void sessionRef?.expire(),
   });
 
+  // What the last ticket told the service about the tab: a tab hidden or
+  // shown between the ticket and the open says so once the socket is up.
+  let ticketVisible = true;
   const socket = createSocket({
     apiBase: http.apiBase,
     requestTicket: async () => {
@@ -136,12 +146,24 @@ export function createWebCore(options: WebCoreOptions): WebCore {
         device: device.kind(),
         visible: visibleNow(),
       };
+      ticketVisible = body.visible === true;
       const pushSubscriptionId = prefs.get("pushSubscriptionId");
       if (typeof pushSubscriptionId === "string" && pushSubscriptionId !== "") {
         body.pushSubscriptionId = pushSubscriptionId;
       }
-      const answer = await http.request<{ ticket: string }>("POST", "/v1/ws/tickets", { body });
-      return answer.ticket;
+      try {
+        const answer = await http.request<{ ticket: string }>("POST", "/v1/ws/tickets", { body });
+        return answer.ticket;
+      } catch (error) {
+        // The service refuses a ticket naming a subscription it no longer
+        // keeps for this token (removed on another device, dropped by the
+        // push service). The page forgets the id and connects without it.
+        if (body.pushSubscriptionId === undefined || statusOf(error) !== 400) throw error;
+        await prefs.set("pushSubscriptionId", undefined);
+        delete body.pushSubscriptionId;
+        const answer = await http.request<{ ticket: string }>("POST", "/v1/ws/tickets", { body });
+        return answer.ticket;
+      }
     },
     isUnauthorized: (error) => statusOf(error) === 401,
     open: (url) => new WebSocket(url),
@@ -160,6 +182,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
       chat.handleFrame(frame);
     },
     onOpen: () => {
+      const visible = visibleNow();
+      if (visible !== ticketVisible) socket.send({ type: "presence.web", payload: { visible } });
       friends.connected();
       chat.connected();
       serverChats.connected();
@@ -264,6 +288,22 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     activeGame: () => settings.get().activeGame,
   });
 
+  const push = createPush({
+    http,
+    prefs,
+    transport: options.pushTransport ?? webPushTransport(),
+    signedIn: () => session.signedIn(),
+    locale: options.locale ?? (() => "en"),
+    deviceName: () => device.name(),
+    // A running socket reconnects, so its ticket names the subscription.
+    reconnect: () => {
+      if (socket.status() === "idle") return;
+      socket.stop();
+      socket.start();
+    },
+  });
+  let detachWorker: (() => void) | null = null;
+
   const invoke = createRouter({
     apiBase: http.apiBase,
     session,
@@ -305,6 +345,8 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     started = false;
     detachLifecycle?.();
     detachLifecycle = null;
+    detachWorker?.();
+    detachWorker = null;
     socket.stop();
     friends.stop();
     chat.stop();
@@ -323,6 +365,7 @@ export function createWebCore(options: WebCoreOptions): WebCore {
     chat,
     files,
     serverChats,
+    push,
     socket,
     prefs,
     storage,
@@ -344,9 +387,11 @@ export function createWebCore(options: WebCoreOptions): WebCore {
         },
       });
       await chat.start();
+      detachWorker = watchWorker(push);
       if (session.signedIn()) {
         socket.start();
         void session.refreshMe().catch(() => undefined);
+        void push.refresh().catch((error: unknown) => console.warn("Refreshing the push subscription failed", error));
       } else {
         await session.watchPending();
       }
@@ -396,6 +441,9 @@ function defaultNotifications() {
 async function showPageNotification(title: string, notification: { body: string; tag: string; url: string }): Promise<void> {
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    // A browser driven by automation shows none: a system notification may
+    // come with a sound, and a test run never makes one.
+    if (typeof navigator !== "undefined" && navigator.webdriver) return;
     const registration = await navigator.serviceWorker?.getRegistration?.();
     if (registration === undefined) return;
     await registration.showNotification(title, {
@@ -407,6 +455,22 @@ async function showPageNotification(title: string, notification: { body: string;
   } catch (error) {
     console.warn("Showing a chat notification failed", error);
   }
+}
+
+/**
+ * Hears the service worker: after `pushsubscriptionchange` it saved the
+ * browser's new subscription on the service and names its id here.
+ */
+function watchWorker(push: PushCore): () => void {
+  const workers = typeof navigator === "undefined" ? undefined : navigator.serviceWorker;
+  if (workers === undefined) return () => {};
+  const onMessage = (event: MessageEvent) => {
+    const data = event.data as { type?: unknown; id?: unknown } | null;
+    if (data?.type !== "push-subscription" || typeof data.id !== "string") return;
+    void push.adopt(data.id);
+  };
+  workers.addEventListener("message", onMessage);
+  return () => workers.removeEventListener("message", onMessage);
 }
 
 /**

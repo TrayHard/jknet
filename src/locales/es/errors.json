@@ -69,7 +69,9 @@
     "confirmLink": "Confirme antes de abrir un enlace a {{message}}.",
     "webJoinOff": "El anfitrión reserva el chat de este servidor a los jugadores en la partida.",
     "catalogDisabled": "Este catálogo está desactivado en JKNet Online ahora.",
-    "catalogNotReady": "JKNet Online aún está preparando este catálogo. Inténtelo de nuevo en unos minutos."
+    "catalogNotReady": "JKNet Online aún está preparando este catálogo. Inténtelo de nuevo en unos minutos.",
+    "limit": "Las notificaciones ya están activas en 10 dispositivos de esta cuenta. Quite uno de ellos primero.",
+    "pushDisabled": "Las notificaciones push están desactivadas en JKNet Online ahora."
   },
   "frontend": {
     "noRuntime": "El entorno de Tauri no está disponible",

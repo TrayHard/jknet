@@ -69,7 +69,9 @@
     "confirmLink": "Bestätigen Sie, bevor Sie einen Link zu {{message}} öffnen.",
     "webJoinOff": "Der Host behält den Chat dieses Servers den Spielern im Spiel vor.",
     "catalogDisabled": "Dieser Katalog ist auf JKNet Online gerade ausgeschaltet.",
-    "catalogNotReady": "JKNet Online baut diesen Katalog noch auf. Versuchen Sie es in ein paar Minuten erneut."
+    "catalogNotReady": "JKNet Online baut diesen Katalog noch auf. Versuchen Sie es in ein paar Minuten erneut.",
+    "limit": "Benachrichtigungen sind bereits auf 10 Geräten dieses Kontos aktiv. Entfernen Sie zuerst eines davon.",
+    "pushDisabled": "Push-Benachrichtigungen sind auf JKNet Online gerade ausgeschaltet."
   },
   "frontend": {
     "noRuntime": "Die Tauri-Laufzeitumgebung ist nicht verfügbar",

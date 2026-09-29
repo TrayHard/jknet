@@ -69,7 +69,9 @@
     "confirmLink": "Potwierdź, zanim otworzysz link do {{message}}.",
     "webJoinOff": "Gospodarz zostawił czat tego serwera tylko dla graczy w grze.",
     "catalogDisabled": "Ten katalog jest teraz wyłączony w JKNet Online.",
-    "catalogNotReady": "JKNet Online wciąż buduje ten katalog. Spróbuj za kilka minut."
+    "catalogNotReady": "JKNet Online wciąż buduje ten katalog. Spróbuj za kilka minut.",
+    "limit": "Powiadomienia są już włączone na 10 urządzeniach tego konta. Najpierw usuń jedno z nich.",
+    "pushDisabled": "Powiadomienia push są teraz wyłączone w JKNet Online."
   },
   "frontend": {
     "noRuntime": "Środowisko Tauri jest niedostępne",

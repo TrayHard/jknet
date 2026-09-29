@@ -2,9 +2,12 @@
 /**
  * Builds the service worker next to a finished web build.
  *
- * `web/src/sw/sw.ts` becomes one classic script, `<out>/sw.js`, with two
- * constants baked in: `__PRECACHE__`, the shell of this build, and
- * `__BUILD__`, the name of its cache. The shell is the page, the entry chunk
+ * `web/src/sw/sw.ts` becomes one classic script, `<out>/sw.js`, with four
+ * constants baked in: `__PRECACHE__`, the shell of this build;
+ * `__BUILD__`, the name of its cache; `__PUSH_STRINGS__`, the `push` section
+ * of every language's `web.json`, the words of notifications; and
+ * `__E2E__`, true in the build of the e2e run (mode `e2e`), whose worker
+ * records notifications instead of showing them. The shell is the page, the entry chunk
  * with its static imports and their styles, the WOFF2 fonts those styles
  * use, the manifest, the icons and the chat sounds: everything the app
  * needs to open offline. Chunks of later routes are cached on their first
@@ -57,6 +60,20 @@ function fontsOf(out, cssFiles) {
   return [...fonts];
 }
 
+/** `{ "<lang>": { <push section of web.json> } }` for every language folder. */
+export function pushStrings(localesDir = join(WEB, "src", "locales")) {
+  const all = {};
+  for (const entry of readdirSync(localesDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const file = join(localesDir, entry.name, "web.json");
+    if (!existsSync(file)) continue;
+    const push = JSON.parse(readFileSync(file, "utf8")).push;
+    if (push !== null && typeof push === "object") all[entry.name] = push;
+  }
+  if (all.en === undefined) throw new Error("web/src/locales/en/web.json has no push section");
+  return all;
+}
+
 function publicFiles(folder) {
   const dir = join(WEB, "public", folder);
   if (!existsSync(dir)) return [];
@@ -95,6 +112,8 @@ async function main() {
       // into one string by the bundler.
       __PRECACHE__: JSON.stringify(JSON.stringify(unique)),
       __BUILD__: JSON.stringify(buildId),
+      __PUSH_STRINGS__: JSON.stringify(JSON.stringify(pushStrings())),
+      __E2E__: JSON.stringify(info.mode === "e2e"),
     },
     build: {
       outDir: out,
@@ -110,7 +129,7 @@ async function main() {
       },
     },
   });
-  console.log(`sw.js: ${unique.length} files in the shell of build ${buildId}`);
+  console.log(`sw.js: ${unique.length} files in the shell of build ${buildId}${info.mode === "e2e" ? " (e2e: notifications recorded)" : ""}`);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

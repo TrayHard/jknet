@@ -61,11 +61,12 @@ function headers(api: string): Record<string, string> {
 }
 
 /**
- * Writes the build's commit and time next to the Vite manifest, where
+ * Writes the build's commit, time and mode next to the Vite manifest, where
  * `build-sw.mjs` and `write-version.mjs` read them: the three steps of one
- * build then agree on its identity.
+ * build then agree on its identity, and the worker of the e2e build knows
+ * it is one.
  */
-function buildInfo(info: { commit: string; builtAt: string }): Plugin {
+function buildInfo(info: { commit: string; builtAt: string; mode: string }): Plugin {
   return {
     name: "jknet-build-info",
     apply: "build",
@@ -164,7 +165,7 @@ function moduleMap(): Plugin {
 
 export default defineConfig(({ mode }) => {
   const api = MODE_APIS[mode] ?? DEFAULT_API;
-  const info = { commit: commit(), builtAt: new Date().toISOString() };
+  const info = { commit: commit(), builtAt: new Date().toISOString(), mode };
 
   return {
     root: webRoot,

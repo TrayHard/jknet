@@ -7,6 +7,7 @@ import { isLanguage, LANGUAGES } from "../../../../src/i18n/languages.ts";
 import { cn } from "../../../../src/lib/format.ts";
 import { useUpdateSettings } from "../../../../src/lib/queries.ts";
 import { changeWebLanguage } from "../../i18n.ts";
+import { useWebCore } from "../CoreContext.tsx";
 
 type Page = "account" | "notifications" | "privacy" | "sessions" | "install" | "about";
 
@@ -26,10 +27,15 @@ const PAGES: ReadonlyArray<{ page: Page; icon: LucideIcon }> = [
 export function SettingsScreen({ current }: { current?: string }) {
   const { t, i18n } = useTranslation("web");
   const update = useUpdateSettings();
+  const core = useWebCore();
 
+  // Push notifications of this device follow the language too.
   const pick = (value: string) => {
     if (!isLanguage(value)) return;
-    void changeWebLanguage(value).then(() => update.mutate({ language: value }));
+    void changeWebLanguage(value).then(() => {
+      update.mutate({ language: value });
+      void core.push.setLocale(value);
+    });
   };
 
   return (

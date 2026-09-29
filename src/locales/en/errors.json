@@ -69,7 +69,9 @@
     "confirmLink": "Confirm before you open a link to {{message}}.",
     "webJoinOff": "The host keeps this server's chat to players in the game.",
     "catalogDisabled": "This catalog is switched off on JKNet Online right now.",
-    "catalogNotReady": "JKNet Online is still building this catalog. Try again in a few minutes."
+    "catalogNotReady": "JKNet Online is still building this catalog. Try again in a few minutes.",
+    "limit": "Notifications are on for 10 devices of this account already. Remove one of them first.",
+    "pushDisabled": "Push notifications are switched off on JKNet Online right now."
   },
   "frontend": {
     "noRuntime": "Tauri runtime is not available",

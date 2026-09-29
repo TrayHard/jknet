@@ -21,6 +21,7 @@ import { CommunityScreen } from "./screens/CommunityScreen.tsx";
 import { FriendDetailsScreen, FriendTitle } from "./screens/FriendDetailsScreen.tsx";
 import { FriendsScreen } from "./screens/FriendsScreen.tsx";
 import { GroupInfoScreen } from "./screens/GroupInfoScreen.tsx";
+import { InstallScreen } from "./screens/InstallScreen.tsx";
 import { NotificationsScreen } from "./screens/NotificationsScreen.tsx";
 import { PendingScreen } from "./screens/PendingScreen.tsx";
 import { PrivacyScreen } from "./screens/PrivacyScreen.tsx";
@@ -62,6 +63,8 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
       return <SettingsScreen current={spec.path.split("/")[2]} />;
     case "account":
       return <AccountScreen />;
+    case "install":
+      return <InstallScreen />;
     case "about":
       return <AboutScreen />;
     default:

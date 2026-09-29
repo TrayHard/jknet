@@ -7,6 +7,7 @@ import { useAccountState, useChatConversation } from "../../../src/lib/queries.t
 import { safeNext } from "../core/session.ts";
 import { useWebCore } from "./CoreContext.tsx";
 import { deviceKind } from "./device.ts";
+import { InstallPrompt } from "./InstallPrompt.tsx";
 import { layouts } from "./layouts/index.ts";
 import { LayoutActionsContext, type LayoutActions } from "./layouts/LayoutActions.ts";
 import { overlayOf } from "./layouts/history.ts";
@@ -14,7 +15,7 @@ import { useHistoryModel, useUp } from "./layouts/overlays.ts";
 import type { LayoutMe } from "./layouts/types.ts";
 import { NAV_SECTIONS, type NavItem } from "./nav.ts";
 import { OfflineBar } from "./OfflineBar.tsx";
-import type { RouteSpec } from "./routeTable.ts";
+import { SECTION_ROOTS, type RouteSpec } from "./routeTable.ts";
 import { UpdateBar } from "./UpdateBar.tsx";
 import { useNavCounters, useUnreadTitle } from "./useNavCounters.ts";
 import { useMedia, WIDE_QUERY } from "./useMedia.ts";
@@ -150,6 +151,7 @@ export function LayoutHost() {
           <>
             <OfflineBar />
             <UpdateBar />
+            {spec?.path === SECTION_ROOTS.chats ? <InstallPrompt /> : null}
           </>
         }
       />

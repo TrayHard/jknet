@@ -12,9 +12,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 
+import { isLanguage } from "../../src/i18n/languages.ts";
 import { setBackend } from "../../src/lib/backend.ts";
 import { App } from "./app/App.tsx";
 import { deviceKind, deviceName } from "./app/device.ts";
+import { watchInstall } from "./app/install.ts";
 import { startPwa } from "./app/pwa.ts";
 import { createWebCore } from "./core/index.ts";
 import { loadPrefs } from "./core/prefs.ts";
@@ -36,6 +38,8 @@ declare global {
 const EXPOSE_STATS = import.meta.env.MODE !== "production";
 
 async function start(): Promise<void> {
+  // The browser offers the install once, early: catch it before anything waits.
+  watchInstall();
   const storage = await openStorage();
   const prefs = await loadPrefs(storage);
   const core = createWebCore({
@@ -49,6 +53,8 @@ async function start(): Promise<void> {
       newMessage: i18next.t("chat:tray.newMessage"),
       deletedAccount: i18next.t("chat:people.deleted"),
     }),
+    // Push notifications are written in the language on screen.
+    locale: () => (isLanguage(i18next.language) ? i18next.language : "en"),
   });
   if (EXPOSE_STATS) {
     window.__jknetStats = core.stats;
