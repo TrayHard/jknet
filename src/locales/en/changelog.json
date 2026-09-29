@@ -11,6 +11,11 @@
     "release": "Release"
   },
   "entries": {
+    "v0_10_0_webApp": "Chat with friends from your phone or any browser: sign in at online.jknet.app and add JKNet to your home screen.",
+    "v0_10_0_signIn": "Browser sign-in is now bound to the launcher that started it, so a sign-in link someone else sends you can no longer hand them your account.",
+    "v0_10_0_attachments": "The chat attachment menu is split into files, media, game data, settings and catalogs. Maps, configs and player profiles come from all your clients in one list that shows where each item comes from.",
+    "v0_10_0_featuredMods": "The server mod catalog now highlights JA+, LugorMod, MakerMod and JA++.",
+    "v0_10_0_fixes": "A message that arrives while a conversation is opening no longer goes missing, the Devices and sessions card no longer shows the previous account after you sign out, and JKHub links in bundles open only jkhub.org pages.",
     "clientImport": "Client import now shows category sizes and lets you choose demos, screenshots, configs and pk3 files individually. It can also install a managed engine while keeping a rollback snapshot.",
     "profileImport": "A player profile can be created from a game cfg file. JKNet recognizes the player name, model, sabers, blade colors and character tint before opening the usual form.",
     "changelog": "The launcher now includes this Changelog page with its complete release history in every interface language.",

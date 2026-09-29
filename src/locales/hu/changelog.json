@@ -11,6 +11,11 @@
     "release": "Kiadás"
   },
   "entries": {
+    "v0_10_0_webApp": "Csevegj a barátaiddal telefonról vagy bármelyik böngészőből: jelentkezz be az online.jknet.app oldalon, és tedd ki a JKNetet a kezdőképernyőre.",
+    "v0_10_0_signIn": "A böngészős bejelentkezés mostantól ahhoz a launcherhez kötődik, amelyik elindította: egy mástól kapott bejelentkezési hivatkozás már nem adja át a fiókodat a küldőnek.",
+    "v0_10_0_attachments": "A csevegés mellékletmenüje fájlokra, médiára, játékadatokra, beállításokra és katalógusokra oszlik. A pályák, konfigurációk és játékosprofilok az összes kliensedből egyetlen listába kerülnek, amely a forrásukat is mutatja.",
+    "v0_10_0_featuredMods": "A szervermodok katalógusa kiemeli a JA+, a LugorMod, a MakerMod és a JA++ modokat.",
+    "v0_10_0_fixes": "A beszélgetés megnyitása közben érkező üzenet már nem vész el, az „Eszközök és munkamenetek” kártya kijelentkezés után nem mutatja az előző fiókot, a csomagokban lévő JKHub-hivatkozások pedig csak jkhub.org oldalakat nyitnak meg.",
     "clientImport": "A kliensimport megjeleníti a kategóriák méretét, és külön választhatók a demók, képernyőképek, konfigurációk és pk3-fájlok. A JKNet felügyelt motort is telepíthet, miközben visszaállítási pillanatképet őriz meg.",
     "profileImport": "Játékosprofil hozható létre a játék cfg-fájljából. A JKNet felismeri a játékos nevét, a modellt, a kardokat, a penge színeit és a karakter árnyalatát, majd megnyitja a szokásos űrlapot.",
     "changelog": "Az indító mostantól tartalmazza ezt a változásnaplót a teljes kiadási előzménnyel, az összes felületi nyelven.",

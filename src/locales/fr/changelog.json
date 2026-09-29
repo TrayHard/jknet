@@ -11,6 +11,11 @@
     "release": "Version"
   },
   "entries": {
+    "v0_10_0_webApp": "Discutez avec vos amis depuis votre téléphone ou n’importe quel navigateur : connectez-vous sur online.jknet.app et ajoutez JKNet à l’écran d’accueil.",
+    "v0_10_0_signIn": "La connexion dans le navigateur est désormais liée au launcher qui l’a lancée : un lien de connexion envoyé par quelqu’un d’autre ne lui donne plus votre compte.",
+    "v0_10_0_attachments": "Le menu des pièces jointes du chat est divisé en fichiers, médias, données de jeu, paramètres et catalogues. Cartes, configurations et profils de joueur proviennent de tous vos clients dans une seule liste qui indique leur source.",
+    "v0_10_0_featuredMods": "Le catalogue des mods serveur met en avant JA+, LugorMod, MakerMod et JA++.",
+    "v0_10_0_fixes": "Un message reçu pendant l’ouverture d’une conversation ne se perd plus, la carte « Appareils et sessions » n’affiche plus le compte précédent après la déconnexion, et les liens JKHub des bundles n’ouvrent que des pages de jkhub.org.",
     "clientImport": "L’importation d’un client affiche la taille de chaque catégorie et permet de choisir séparément les démos, captures d’écran, configurations et fichiers pk3. JKNet peut aussi installer un moteur géré tout en conservant un instantané de restauration.",
     "profileImport": "Un profil de joueur peut être créé à partir d’un fichier cfg du jeu. JKNet reconnaît le nom du joueur, le modèle, les sabres, les couleurs de lame et la teinte du personnage avant d’ouvrir le formulaire habituel.",
     "changelog": "Le lanceur comprend désormais ce journal avec l’historique complet des versions dans chaque langue de l’interface.",

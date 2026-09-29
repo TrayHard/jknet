@@ -15,6 +15,18 @@ export const CHANGELOG_RELEASES = [
     items: [],
   },
   {
+    key: "v0_10_0",
+    version: "0.10.0",
+    date: "2026-09-30",
+    items: [
+      "entries.v0_10_0_webApp",
+      "entries.v0_10_0_signIn",
+      "entries.v0_10_0_attachments",
+      "entries.v0_10_0_featuredMods",
+      "entries.v0_10_0_fixes",
+    ],
+  },
+  {
     key: "v0_9_0",
     version: "0.9.0",
     date: "2026-09-29",

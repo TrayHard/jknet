@@ -11,6 +11,11 @@
     "release": "Versión"
   },
   "entries": {
+    "v0_10_0_webApp": "Chatea con tus amigos desde el teléfono o cualquier navegador: inicia sesión en online.jknet.app y añade JKNet a la pantalla de inicio.",
+    "v0_10_0_signIn": "El inicio de sesión en el navegador queda vinculado al launcher que lo inició: un enlace de inicio de sesión ajeno ya no entrega tu cuenta a quien lo envió.",
+    "v0_10_0_attachments": "El menú de adjuntos del chat se divide en archivos, multimedia, datos del juego, configuración y catálogos. Mapas, configuraciones y perfiles de jugador llegan de todos tus clientes en una sola lista que indica su origen.",
+    "v0_10_0_featuredMods": "El catálogo de mods de servidor destaca JA+, LugorMod, MakerMod y JA++.",
+    "v0_10_0_fixes": "Un mensaje que llega mientras se abre una conversación ya no se pierde, la tarjeta «Dispositivos y sesiones» ya no muestra la cuenta anterior tras cerrar sesión y los enlaces de JKHub en los paquetes solo abren páginas de jkhub.org.",
     "clientImport": "La importación de clientes muestra el tamaño de cada categoría y permite elegir por separado demos, capturas, configuraciones y archivos pk3. JKNet también puede instalar un motor gestionado y conservar una instantánea para revertirlo.",
     "profileImport": "Se puede crear un perfil de jugador a partir de un archivo cfg del juego. JKNet reconoce el nombre, el modelo, los sables, los colores de las hojas y el tono del personaje antes de abrir el formulario habitual.",
     "changelog": "El lanzador incluye este registro con el historial completo de versiones en todos los idiomas de la interfaz.",
