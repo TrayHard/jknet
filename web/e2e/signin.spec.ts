@@ -5,9 +5,13 @@ import {
   backFromService,
   BASE,
   expect,
+  ownAddress,
+  randomAddress,
   requestFriend,
+  SERVICE,
   sharedCatalog,
   signIn,
+  startDevSignIn,
   test,
   uniqueName,
   userIdOf,
@@ -16,6 +20,52 @@ import {
 } from "./fixtures.ts";
 
 const LANGUAGES = ["en", "ru", "uk", "de", "fr", "es", "pl", "hu"];
+
+/** The heading of the service's page for a browser without the sign-in's cookie. */
+const OTHER_BROWSER_HEADING = "Sign-in started in another browser";
+
+/** The web app's own sign-in strings in English. */
+function signinText(key: string): string {
+  return (webCatalog("en").signin as Record<string, string>)[key];
+}
+
+/**
+ * A web login session made outside any browser, the way somebody after
+ * another player's token would make one: the maker keeps the cookie of the
+ * answer, and `url` is the link they would pass on. `headers` give the
+ * maker's own requests a client address of their own.
+ */
+async function sessionMadeElsewhere(): Promise<{ id: string; url: string; cookie: string; headers: Record<string, string> }> {
+  const headers = { "content-type": "application/json", "x-forwarded-for": randomAddress() };
+  const response = await fetch(`${SERVICE}/v1/auth/login-sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      provider: "dev",
+      deviceName: "Somebody else",
+      device: "desktop",
+      client: "web",
+      returnTo: `${BASE}/signin/done`,
+    }),
+  });
+  expect(response.status).toBe(201);
+  const session = (await response.json()) as { id: string; url: string };
+  const cookie = response.headers
+    .getSetCookie()
+    .map((line) => line.split(";")[0].trim())
+    .find((pair) => pair.startsWith("jknet_signin="));
+  expect(cookie, "the service ties the session to its maker with a cookie").toBeDefined();
+  return { ...session, cookie: cookie ?? "", headers };
+}
+
+/** The maker's poll of `made`, with its cookie. */
+async function makersPoll(made: { id: string; cookie: string; headers: Record<string, string> }) {
+  const response = await fetch(`${SERVICE}/v1/auth/login-sessions/${made.id}`, {
+    headers: { ...made.headers, cookie: made.cookie },
+  });
+  expect(response.status).toBe(200);
+  return (await response.json()) as { status: string; token?: string; user?: unknown };
+}
 
 test("the developer sign-in opens the app on the chats", async ({ page }) => {
   const name = uniqueName("Kyle");
@@ -119,4 +169,69 @@ test("every language renders the sign-in", async ({ players }) => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText((catalog.signin as Record<string, string>).title);
     await expect(page.locator("html")).toHaveAttribute("lang", language);
   }
+});
+
+test("a sign-in link made outside this browser stops before the provider", async ({ page }) => {
+  const made = await sessionMadeElsewhere();
+  await ownAddress(page.context());
+  await page.goto(made.url);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(OTHER_BROWSER_HEADING);
+  // The provider's form never shows: the browser is not sent on.
+  await expect(page.locator("#name")).toHaveCount(0);
+
+  // The page leads back to the web app, which has no sign-in of its own to finish.
+  await page.getByRole("link", { name: "Return to JKNet" }).click();
+  await expect(page.getByTestId("signin-elsewhere")).toContainText(signinText("doneElsewhere"));
+
+  // Nobody signed in, so its maker still waits and gets nothing.
+  const poll = await makersPoll(made);
+  expect(poll.status).toBe("pending");
+  expect(poll.token).toBeUndefined();
+});
+
+test("a provider page passed on from another browser signs nobody in", async ({ page }) => {
+  const made = await sessionMadeElsewhere();
+  // The maker opens the provider's page with its own cookie and passes on
+  // the address it leads to.
+  const form = await (await fetch(made.url, { headers: { ...made.headers, cookie: made.cookie } })).text();
+  const state = /name="state" value="([^"]+)"/.exec(form)?.[1] ?? "";
+  expect(state, "the developer sign-in form carries its state").not.toBe("");
+
+  await ownAddress(page.context());
+  await page.goto(`${SERVICE}/v1/auth/dev/callback?state=${encodeURIComponent(state)}&name=${uniqueName("Victim")}`);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(OTHER_BROWSER_HEADING);
+
+  // The session ended without a token; its maker learns only that.
+  const poll = await makersPoll(made);
+  expect(poll.status).toBe("error");
+  expect(poll.token).toBeUndefined();
+  expect(poll.user).toBeUndefined();
+  // And a poll without the maker's cookie is refused outright.
+  const bare = await fetch(`${SERVICE}/v1/auth/login-sessions/${made.id}`, { headers: made.headers });
+  expect(bare.status).toBe(403);
+});
+
+test("a sign-in finished in another browser says so where it started", async ({ page, players }) => {
+  await startDevSignIn(page);
+  const state = await page.locator("input[name=state]").inputValue();
+
+  // The provider's page reaches another browser, the way the Discord app
+  // opens its answer in the default browser.
+  const other = await players.open();
+  await ownAddress(other.context());
+  await other.goto(`${SERVICE}/v1/auth/dev/callback?state=${encodeURIComponent(state)}&name=${uniqueName("Else")}`);
+  await expect(other.getByRole("heading", { level: 1 })).toHaveText(OTHER_BROWSER_HEADING);
+
+  await page.goto("/signin/done");
+  await expect(page.getByTestId("signin-failed")).toHaveText(signinText("otherBrowser"));
+  await page.getByRole("link", { name: signinText("retry") }).click();
+  await expect(page).toHaveURL(`${BASE}/signin`);
+  await expect(page.getByRole("button", { name: /Developer sign-in/ })).toBeVisible();
+});
+
+test("a browser that lost the sign-in cookie is told why", async ({ page }) => {
+  await startDevSignIn(page);
+  await page.context().clearCookies();
+  await page.goto("/signin/done");
+  await expect(page.getByTestId("signin-failed")).toHaveText(signinText("cookieRefused"));
 });

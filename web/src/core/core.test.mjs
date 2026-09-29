@@ -82,6 +82,15 @@ test("a 401 with the token reports it; the sign-in routes never do", async () =>
   assert.equal(reported, 1);
 });
 
+test("only a call that asks for them sends cookies", async () => {
+  const { calls, fetchImpl } = fetchAnswering(200, { ok: true });
+  const http = createHttp({ apiBase: "https://api.example.com", token: () => null, onUnauthorized: () => {}, fetchImpl });
+  await http.request("GET", "/v1/auth/login-sessions/S1", { auth: false, cookies: true });
+  await http.request("GET", "/v1/auth/login-sessions/S1", { auth: false });
+  assert.equal(calls[0].init.credentials, "include");
+  assert.equal(calls[1].init.credentials, "omit");
+});
+
 test("a call without a token never leaves the browser", async () => {
   const { calls, fetchImpl } = fetchAnswering(200, {});
   const http = createHttp({ apiBase: "https://api.example.com", token: () => null, onUnauthorized: () => {}, fetchImpl });

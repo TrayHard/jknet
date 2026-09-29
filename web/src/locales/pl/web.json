@@ -48,10 +48,12 @@
     "waiting": "Dokończ logowanie na stronie, która się otworzyła.",
     "expired": "Logowanie trwało za długo. Spróbuj ponownie.",
     "failed": "Logowanie się nie zakończyło.",
+    "otherBrowser": "Logowanie było kontynuowane w innej przeglądarce, więc się nie zakończyło. Spróbuj ponownie i dokończ je w tej przeglądarce.",
+    "cookieRefused": "Ta przeglądarka nie zachowała pliku cookie logowania, więc logowanie się nie zakończyło. Zezwól na pliki cookie dla JKNet i spróbuj ponownie.",
     "retry": "Spróbuj ponownie",
     "done": "Zalogowano. Otwieranie JKNet…",
     "installFirst": "Na iPhonie najpierw dodaj JKNet do ekranu początkowego i zaloguj się tam: zainstalowana aplikacja ma własne logowanie.",
-    "doneElsewhere": "W tej przeglądarce nie ma logowania do dokończenia. Jeśli logowanie zaczęło się w zainstalowanej aplikacji JKNet lub innej przeglądarce, wróć tam: tam logowanie jest zakończone.",
+    "doneElsewhere": "W tej przeglądarce nie ma logowania do dokończenia. Logowanie kończy się tylko w przeglądarce lub zainstalowanej aplikacji JKNet, w której się zaczęło: wróć tam albo zaloguj się w tej przeglądarce.",
     "signInHere": "Zaloguj się w tej przeglądarce"
   },
   "install": {

@@ -48,10 +48,12 @@
     "waiting": "Terminez la connexion sur la page qui s’est ouverte.",
     "expired": "La connexion a pris trop de temps. Réessayez.",
     "failed": "La connexion n’a pas abouti.",
+    "otherBrowser": "La connexion s’est poursuivie dans un autre navigateur, elle n’a donc pas pu aboutir. Réessayez et terminez-la dans ce navigateur.",
+    "cookieRefused": "Ce navigateur n’a pas conservé le cookie de connexion, la connexion n’a donc pas pu aboutir. Autorisez les cookies pour JKNet et réessayez.",
     "retry": "Réessayer",
     "done": "Connecté. Ouverture de JKNet…",
     "installFirst": "Sur iPhone, ajoutez d’abord JKNet à l’écran d’accueil et connectez-vous-y : l’application installée a sa propre connexion.",
-    "doneElsewhere": "Aucune connexion n’est à terminer dans ce navigateur. Si la connexion a commencé dans l’app JKNet installée ou dans un autre navigateur, revenez-y : elle y est terminée.",
+    "doneElsewhere": "Aucune connexion n’est à terminer dans ce navigateur. Une connexion se termine là où elle a commencé, dans le même navigateur ou dans l’app JKNet installée : revenez-y, ou connectez-vous dans ce navigateur.",
     "signInHere": "Se connecter dans ce navigateur"
   },
   "install": {

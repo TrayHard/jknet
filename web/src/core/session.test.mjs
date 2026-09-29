@@ -6,6 +6,7 @@ import { EventBus } from "./events.ts";
 import { createHttp } from "./http.ts";
 import {
   createSession,
+  failureOf,
   isFresh,
   isLocalService,
   PENDING_TTL_MS,
@@ -56,7 +57,13 @@ function fakeService(routes) {
   const calls = [];
   const fetchImpl = async (url, init) => {
     const path = url.replace("https://api.example.com", "");
-    calls.push({ method: init.method, path, headers: init.headers, body: init.body ? JSON.parse(init.body) : undefined });
+    calls.push({
+      method: init.method,
+      path,
+      headers: init.headers,
+      credentials: init.credentials,
+      body: init.body ? JSON.parse(init.body) : undefined,
+    });
     const answer = routes[`${init.method} ${path}`];
     if (answer === undefined) return new Response(JSON.stringify({ error: { code: "not_found", message: "No such endpoint" } }), { status: 404 });
     const { status = 200, body } = typeof answer === "function" ? answer() : answer;
@@ -125,10 +132,90 @@ test("a web sign-in names the client, the device and the way back", async () => 
     returnTo: "https://web.example.com/signin/done",
   });
   assert.equal(service.calls[0].headers.Authorization, undefined);
+  // The answer sets the cookie that ties the session to this browser.
+  assert.equal(service.calls[0].credentials, "include");
   const pending = await storage.get("pendingSignIn", "current");
   assert.equal(pending.sessionId, "S1");
   assert.equal(pending.next, "/c/01J9");
   assert.equal(session.status().phase, "waiting");
+});
+
+test("the pending sign-in dates from before the request, so it ends before the cookie", async () => {
+  let clock = Date.parse("2026-09-29T10:00:00Z");
+  const started = clock;
+  const { session, storage } = setup(
+    {
+      "POST /v1/auth/login-sessions": () => {
+        // The answer, and with it the cookie's ten minutes, arrives later.
+        clock += 1500;
+        return { status: 201, body: { id: "S1", provider: "dev", url: "u", status: "pending" } };
+      },
+    },
+    { now: () => clock },
+  );
+  await session.beginSignIn("dev", null);
+  assert.equal((await storage.get("pendingSignIn", "current")).createdAt, new Date(started).toISOString());
+});
+
+test("the poll carries the cookie of this browser", async () => {
+  const { session, service } = setup({
+    "GET /v1/auth/login-sessions/S1": { body: { id: "S1", provider: "dev", url: "u", status: "pending" } },
+  });
+  await session.poll("S1");
+  assert.equal(service.calls[0].credentials, "include");
+  assert.equal(service.calls[0].headers.Authorization, undefined);
+});
+
+test("a sign-in whose provider pages ran in another browser says so", async () => {
+  const { session, storage } = setup({
+    "GET /v1/auth/login-sessions/S1": {
+      body: {
+        id: "S1",
+        provider: "dev",
+        url: "u",
+        status: "error",
+        error: "This sign-in was started in another browser; start again from the JKNet web app",
+      },
+    },
+  });
+  await storage.put("pendingSignIn", "current", { sessionId: "S1", provider: "dev", next: "/c/9", createdAt: new Date().toISOString() });
+  const settled = new Promise((resolve) => session.subscribe(() => session.status().phase === "error" && resolve()));
+  await session.watchPending();
+  await settled;
+  assert.equal(session.status().failure, "otherBrowser");
+  assert.equal(session.status().next, "/c/9");
+  assert.equal(await storage.get("pendingSignIn", "current"), undefined);
+  session.stop();
+});
+
+test("a poll refused for want of the cookie ends the sign-in and says why", async () => {
+  let polls = 0;
+  const { session, storage } = setup({
+    "GET /v1/auth/login-sessions/S1": () => {
+      polls += 1;
+      return {
+        status: 403,
+        body: { error: { code: "forbidden", message: "This sign-in was started in another browser; start again from the JKNet web app" } },
+      };
+    },
+  });
+  await storage.put("pendingSignIn", "current", { sessionId: "S1", provider: "dev", next: null, createdAt: new Date().toISOString() });
+  const settled = new Promise((resolve) => session.subscribe(() => session.status().phase === "error" && resolve()));
+  await session.watchPending();
+  await settled;
+  assert.deepEqual(session.status(), { phase: "error", next: null, error: null, failure: "cookie" });
+  assert.equal(await storage.get("pendingSignIn", "current"), undefined);
+  // No second poll: nothing brings the cookie back.
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(polls, 1);
+  session.stop();
+});
+
+test("only the service's other-browser words make an other-browser failure", () => {
+  assert.equal(failureOf("This sign-in was started in another browser; start again from the JKNet web app"), "otherBrowser");
+  assert.equal(failureOf("The provider refused the sign-in"), null);
+  assert.equal(failureOf(null), null);
+  assert.equal(failureOf(undefined), null);
 });
 
 test("a next that leaves the app is dropped at the start", async () => {
@@ -168,7 +255,7 @@ test("watching a pending sign-in ends in done with its next", async () => {
   const settled = new Promise((resolve) => session.subscribe(() => session.status().phase === "done" && resolve()));
   await session.watchPending();
   await settled;
-  assert.deepEqual(session.status(), { phase: "done", next: "/c/9", error: null });
+  assert.deepEqual(session.status(), { phase: "done", next: "/c/9", error: null, failure: null });
   session.stop();
 });
 

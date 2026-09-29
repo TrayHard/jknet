@@ -1,27 +1,44 @@
 //! Signing in to the service and owning the account, as commands.
 //!
-//! The sign-in is a browser round trip with no deep link: the launcher asks
-//! the service for a session, opens the session's URL in the system browser, and
-//! then polls the session until the provider sends the player back. Nothing
-//! listens on a port and no custom URL scheme is registered, so nothing has to
-//! survive a firewall prompt or a second launcher installed next to this one.
+//! The sign-in is a browser round trip with no deep link. The launcher
+//! listens on an ephemeral port of `127.0.0.1`, asks the service for a
+//! session that names that address and the S256 challenge of a verifier it
+//! keeps, and opens the session's URL in the system browser. When the
+//! provider sends the player back, the service sends the browser on to the
+//! listener with a one-time code, and the core trades the code and the
+//! verifier for the token. The token never appears in a poll, so whoever
+//! else knows the session — somebody who created one and sent its link to
+//! the player, say — cannot collect it. No custom URL scheme is registered,
+//! and a listener on loopback needs no firewall rule.
 //!
 //! ```text
-//! frontend            core                    online                browser
-//!    | begin_sign_in    |                         |                    |
-//!    |----------------->| POST /v1/auth/login-sessions                  |
-//!    |                  |------------------------>|                    |
-//!    |                  |<-- id, url (pending) ---|                    |
-//!    |                  |------- open url -------------------------->  |
-//!    |<-- sessionId ----|                         |<-- authorize ------|
-//!    | poll_sign_in     |                         |                    |
-//!    |----------------->| GET /v1/auth/login-sessions/{id}             |
-//!    |                  |------------------------>|                    |
-//!    |<-- pending ------|<-- pending -------------|                    |
-//!    |   (every 2 s)    |                         |                    |
-//!    |----------------->|------------------------>|                    |
-//!    |<-- done, user ---|<-- done, token, user ---|                    |
+//! frontend          core + listener             online              browser
+//!    | begin_sign_in  |                            |                     |
+//!    |--------------->| bind 127.0.0.1:0           |                     |
+//!    |                | POST /v1/auth/login-sessions                     |
+//!    |                | {redirectUri, codeChallenge}                     |
+//!    |                |--------------------------->|                     |
+//!    |                |<-- id, url (pending) ------|                     |
+//!    |                |------- open url ---------------------------->    |
+//!    |<-- sessionId --|                            |<-- authorize -------|
+//!    | poll_sign_in   |                            |--- 302 redirectUri  |
+//!    |  (every 2 s)   |<-- GET /jknet/signin?session=..&code=.. ---------|
+//!    |                | POST .../{id}/token {code, codeVerifier}         |
+//!    |                |--------------------------->|                     |
+//!    |                |<-- token, user ------------|                     |
+//!    |                |--- "Signed in" page ----------------------------> |
+//!    |<-- done, user -|                            |                     |
 //! ```
+//!
+//! The listener and the exchange are [`LoopbackSignIn`]; the listener itself
+//! is `crate::online::loopback`. The exchange runs as soon as the browser
+//! arrives, whether or not a screen is polling, and [`SignInState`] keeps
+//! how it ended for the next `poll_sign_in`. That poll also asks the service,
+//! for the two things only the service knows: that the session failed or
+//! expired, and that the service is older than the loopback sign-in. Such a
+//! service ignores `redirectUri`, shows its own page and hands the token to
+//! the poll, the way launchers 0.4.0 to 0.9.0 sign in; a token in the poll of
+//! a loopback session is that sign and nothing else, and the core takes it.
 //!
 //! The token stops in the core. It is written into `settings.json` and put on
 //! the `Authorization` header of every later call; `get_settings` strips it
@@ -29,16 +46,20 @@
 //! frontend gets instead is [`AccountState`]: whether a token exists, and who
 //! it belongs to.
 
-use std::sync::Mutex;
+use std::future::Future;
+use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
+use tokio::sync::oneshot;
 
 use crate::error::{AppError, Result};
+use crate::online::loopback::{CodeVerifier, LoopbackListener, Reply, Served};
 use crate::online::{
-    is_http_url, is_local_online, normalize_display_name, DeviceSession, OnlineClient,
-    OnlineContext, OnlineUser, SignInPoll, PROVIDERS,
+    is_http_url, is_local_online, normalize_display_name, DeviceSession, LoginSession, Loopback,
+    OnlineClient, OnlineContext, OnlineUser, SignInPoll, PROVIDERS,
 };
 use crate::settings::Settings;
 use crate::state::AppState;
@@ -135,11 +156,18 @@ pub fn get_account_state(state: tauri::State<'_, AppState>) -> Result<AccountSta
 /// the answer of the service is the one string that decides where the player's
 /// browser goes, and it is checked for an `http` scheme in the core, one step
 /// away from anything a webview could be talked into.
+///
+/// --- slice: sign-in binding ---
+/// The session is a loopback one (see the module notes). Its listener runs
+/// on a task of its own from here until the browser comes back, the
+/// sign-in is cancelled or replaced by the next one, or the session's time
+/// is up.
 #[tauri::command]
 pub async fn begin_sign_in(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     online: tauri::State<'_, OnlineClient>,
+    signins: tauri::State<'_, SignInState>,
     provider: String,
 ) -> Result<SignInStart> {
     let settings = state.settings()?;
@@ -153,9 +181,12 @@ pub async fn begin_sign_in(
     }
     let provider = check_provider(&provider, &ctx)?;
 
-    let session = online
-        .create_login_session(&ctx, provider, device_name().as_deref())
-        .await?;
+    // A second press of a sign-in button starts over: the listener of the
+    // first one stops here.
+    signins.stop(None);
+
+    let signin = LoopbackSignIn::open(&online, &ctx, provider, device_name().as_deref()).await?;
+    let session = signin.session().clone();
 
     if !is_http_url(&session.url) {
         return Err(AppError::InvalidInput(format!(
@@ -164,13 +195,16 @@ pub async fn begin_sign_in(
         )));
     }
 
-    app.opener()
-        .open_url(session.url.clone(), None::<&str>)
-        .map_err(|e| {
-            AppError::Launch(format!(
-                "the system browser did not open the sign-in page: {e}"
-            ))
-        })?;
+    let (stop, stopped) = oneshot::channel();
+    signins.track(&session.id, stop);
+    spawn_listener(app.clone(), signin, ctx, stopped);
+
+    if let Err(e) = app.opener().open_url(session.url.clone(), None::<&str>) {
+        signins.stop(Some(&session.id));
+        return Err(AppError::Launch(format!(
+            "the system browser did not open the sign-in page: {e}"
+        )));
+    }
 
     log::info!("sign-in session {} opened for {provider}", session.id);
     Ok(SignInStart {
@@ -185,16 +219,60 @@ pub async fn begin_sign_in(
 /// On `done` the token and the account are written to `settings.json` before
 /// the command answers, so a launcher closed the instant the player sees their
 /// name is still signed in when it opens again.
+///
+/// --- slice: sign-in binding ---
+/// A loopback session answers from [`SignInState`] once its listener has
+/// ended, and asks the service until then; see the module notes for what
+/// the service's answer can change. A session this launcher is not waiting
+/// for is read the old way.
 #[tauri::command]
 pub async fn poll_sign_in(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
     online: tauri::State<'_, OnlineClient>,
+    signins: tauri::State<'_, SignInState>,
     session_id: String,
 ) -> Result<SignInPoll> {
     let settings = state.settings()?;
     let ctx = OnlineContext::from_settings(&settings);
+
+    let waiting = match signins.progress(&session_id) {
+        Progress::Ended(end) => return Ok(end.poll()),
+        Progress::Waiting => true,
+        Progress::NotOurs => false,
+    };
     let session = online.poll_login_session(&ctx, &session_id).await?;
+
+    if waiting {
+        match loopback_poll(&session) {
+            LoopbackPoll::Pending => {
+                // The listener may have finished while the service answered.
+                return Ok(match signins.progress(&session_id) {
+                    Progress::Ended(end) => end.poll(),
+                    _ => SignInPoll {
+                        status: "pending".into(),
+                        user: None,
+                        error: None,
+                    },
+                });
+            }
+            LoopbackPoll::Over => {
+                signins.stop(Some(&session_id));
+                return Ok(SignInPoll {
+                    status: session.status,
+                    user: None,
+                    error: session.error,
+                });
+            }
+            LoopbackPoll::OlderService => {
+                log::info!(
+                    "the service handed the token of sign-in {session_id} to the poll: it predates \
+                     the loopback sign-in, so the listener stops and the poll's token is taken"
+                );
+                signins.stop(Some(&session_id));
+            }
+        }
+    }
 
     if session.status != "done" {
         return Ok(SignInPoll {
@@ -205,26 +283,8 @@ pub async fn poll_sign_in(
     }
 
     match (session.token, session.user) {
-        (Some(token), Some(mut user)) => {
-            // --- slice: bundles ---
-            // The login session carries the user and not the `admin` flag of
-            // `GET /v1/me`. One more call with the fresh token reads it; a
-            // service that cannot answer leaves the flag off, which costs an
-            // administrator one sign-in and a player nothing.
-            let signed = OnlineContext {
-                base_url: ctx.base_url.clone(),
-                token: Some(token.clone()),
-            };
-            match online.get_me(&signed).await {
-                Ok(me) => {
-                    user.admin = me.admin;
-                    user.server_mod_admin = me.server_mod_admin;
-                }
-                Err(e) => log::warn!("cannot read the account after sign-in: {e}"),
-            }
-            store_account(&state, Some(token), Some(user.clone()))?;
-            announce(&app, true, AccountChangeReason::SignedIn);
-            log::info!("signed in as {} via {}", user.display_name, user.provider);
+        (Some(token), Some(user)) => {
+            let user = finish_sign_in(&app, &ctx.base_url, token, user).await?;
             Ok(SignInPoll {
                 status: "done".into(),
                 user: Some(user),
@@ -245,6 +305,374 @@ pub async fn poll_sign_in(
                 message: "this sign-in was already used. Start again.".into(),
             }),
         },
+    }
+}
+
+// --- slice: sign-in binding ---
+/// Stops the sign-in in progress: its listener closes, and the session on
+/// the service expires on its own. **Cancel** on the waiting screen.
+#[tauri::command]
+pub fn cancel_sign_in(signins: tauri::State<'_, SignInState>) -> Result<()> {
+    if signins.stop(None) {
+        log::info!("sign-in cancelled");
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// --- slice: sign-in binding ---
+// The loopback sign-in: the listener, the verifier and the exchange, and
+// what the commands remember about the one in progress.
+// ---------------------------------------------------------------------------
+
+/// How long the listener waits for the browser: the ten minutes a login
+/// session may stay pending on the service, and half a minute for the
+/// redirect of a sign-in finished in its last seconds. The clock starts
+/// after the service answered, so the session ends first.
+const LISTEN_FOR: Duration = Duration::from_secs(10 * 60 + 30);
+
+/// How often the exchange is tried when the service refuses it as one
+/// request too many from this address, and how long it waits in between.
+/// The code works for five minutes; this stays well inside them. The
+/// browser tab waits on its page meanwhile.
+const EXCHANGE_ATTEMPTS: u32 = 6;
+const EXCHANGE_RETRY: Duration = Duration::from_secs(10);
+
+/// A loopback sign-in opened on the service: the listener bound before the
+/// session so the session could name its port, the verifier behind the
+/// session's challenge, and the session.
+pub(crate) struct LoopbackSignIn {
+    listener: LoopbackListener,
+    verifier: CodeVerifier,
+    session: LoginSession,
+}
+
+impl LoopbackSignIn {
+    /// Binds the listener and opens the session.
+    pub(crate) async fn open(
+        online: &OnlineClient,
+        ctx: &OnlineContext,
+        provider: &str,
+        device_name: Option<&str>,
+    ) -> Result<LoopbackSignIn> {
+        let listener = LoopbackListener::bind().await?;
+        let verifier = CodeVerifier::new()?;
+        let redirect_uri = listener.redirect_uri();
+        let code_challenge = verifier.challenge();
+        let session = online
+            .open_login_session(
+                ctx,
+                provider,
+                device_name,
+                Some(&Loopback {
+                    redirect_uri: &redirect_uri,
+                    code_challenge: &code_challenge,
+                }),
+            )
+            .await?;
+        Ok(LoopbackSignIn {
+            listener,
+            verifier,
+            session,
+        })
+    }
+
+    /// The session as the service opened it.
+    pub(crate) fn session(&self) -> &LoginSession {
+        &self.session
+    }
+
+    /// Waits for the browser, trades its code and the verifier for the
+    /// token, and hands token and account to `keep` before the browser is
+    /// shown its page, so the page says what actually happened.
+    pub(crate) async fn wait<T, F, Fut>(
+        self,
+        online: &OnlineClient,
+        ctx: &OnlineContext,
+        ttl: Duration,
+        cancel: impl Future<Output = ()>,
+        keep: F,
+    ) -> Served<Result<T>>
+    where
+        F: FnOnce(String, OnlineUser) -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        let LoopbackSignIn {
+            listener,
+            verifier,
+            session,
+        } = self;
+        let id = session.id.as_str();
+        listener
+            .serve(id, ttl, cancel, move |code| async move {
+                let outcome = match exchange_code(online, ctx, id, &code, &verifier).await {
+                    Ok(LoginSession {
+                        token: Some(token),
+                        user: Some(user),
+                        ..
+                    }) => keep(token, user).await,
+                    Ok(_) => Err(AppError::Online {
+                        code: "internal".into(),
+                        message: "the service took the sign-in code but sent no token".into(),
+                    }),
+                    Err(e) => Err(e),
+                };
+                let reply = match &outcome {
+                    Ok(_) => Reply::SignedIn,
+                    Err(e) => Reply::Failed(failure_text(e)),
+                };
+                (reply, outcome)
+            })
+            .await
+    }
+}
+
+/// `POST /v1/auth/login-sessions/{id}/token`, tried again while the service
+/// refuses it as too many requests from this address: a room of players
+/// behind one router signing in at once. Any other answer is final.
+async fn exchange_code(
+    online: &OnlineClient,
+    ctx: &OnlineContext,
+    id: &str,
+    code: &str,
+    verifier: &CodeVerifier,
+) -> Result<LoginSession> {
+    let mut attempt = 1;
+    loop {
+        match online
+            .exchange_login_code(ctx, id, code, verifier.secret())
+            .await
+        {
+            Err(AppError::Online { code: refusal, .. })
+                if refusal == "rate_limited" && attempt < EXCHANGE_ATTEMPTS =>
+            {
+                attempt += 1;
+                log::warn!("the sign-in code exchange was refused as too many, retrying");
+                tokio::time::sleep(EXCHANGE_RETRY).await;
+            }
+            other => return other,
+        }
+    }
+}
+
+/// The sentence of a failed exchange, for the browser's page and the
+/// waiting screen: the service's own words when it gave some.
+fn failure_text(error: &AppError) -> String {
+    match error {
+        AppError::Online { message, .. } => message.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// Runs the listener of `signin` to its end and records the end in
+/// [`SignInState`]. A sign-in that was stopped records nothing: whoever
+/// stopped it has already forgotten it.
+fn spawn_listener(
+    app: tauri::AppHandle,
+    signin: LoopbackSignIn,
+    ctx: OnlineContext,
+    stopped: oneshot::Receiver<()>,
+) {
+    let session_id = signin.session().id.clone();
+    tauri::async_runtime::spawn(async move {
+        let online = app.state::<OnlineClient>();
+        let keep_app = app.clone();
+        let base_url = ctx.base_url.clone();
+        let served = signin
+            .wait(
+                &online,
+                &ctx,
+                LISTEN_FOR,
+                async move {
+                    // A sent stop and a dropped sender both end the wait.
+                    let _ = stopped.await;
+                },
+                move |token, user| async move {
+                    finish_sign_in(&keep_app, &base_url, token, user).await
+                },
+            )
+            .await;
+        let end = match served {
+            Served::Finished(Ok(user)) => SignInEnd::SignedIn(user),
+            Served::Finished(Err(e)) => {
+                log::warn!("sign-in {session_id} failed at the code exchange: {e}");
+                SignInEnd::Failed(failure_text(&e))
+            }
+            Served::TimedOut => {
+                log::info!("sign-in {session_id}: the browser did not come back in time");
+                SignInEnd::TimedOut
+            }
+            Served::Cancelled => return,
+        };
+        app.state::<SignInState>().end(&session_id, end);
+    });
+}
+
+/// Stores a token the service handed out, with the account it belongs to,
+/// and tells every screen. The end of every sign-in, the loopback one and the
+/// old one alike.
+async fn finish_sign_in(
+    app: &tauri::AppHandle,
+    base_url: &str,
+    token: String,
+    mut user: OnlineUser,
+) -> Result<OnlineUser> {
+    // --- slice: bundles ---
+    // The login session carries the user and not the `admin` flag of
+    // `GET /v1/me`. One more call with the fresh token reads it; a service
+    // that cannot answer leaves the flag off, which costs an administrator
+    // one sign-in and a player nothing.
+    let signed = OnlineContext {
+        base_url: base_url.to_string(),
+        token: Some(token.clone()),
+    };
+    match app.state::<OnlineClient>().get_me(&signed).await {
+        Ok(me) => {
+            user.admin = me.admin;
+            user.server_mod_admin = me.server_mod_admin;
+        }
+        Err(e) => log::warn!("cannot read the account after sign-in: {e}"),
+    }
+    store_account(&app.state::<AppState>(), Some(token), Some(user.clone()))?;
+    announce(app, true, AccountChangeReason::SignedIn);
+    log::info!("signed in as {} via {}", user.display_name, user.provider);
+    Ok(user)
+}
+
+/// The loopback sign-in in progress, at most one, and how it ended.
+///
+/// Kept in Tauri's managed state because the listener outlives the command
+/// that started it: the exchange runs whether or not a screen is polling,
+/// and the next poll reads how it went from here.
+#[derive(Default)]
+pub struct SignInState {
+    current: Mutex<Option<TrackedSignIn>>,
+}
+
+struct TrackedSignIn {
+    session_id: String,
+    /// Dropping it stops the listener. `None` once the listener has ended.
+    stop: Option<oneshot::Sender<()>>,
+    ended: Option<SignInEnd>,
+}
+
+/// How a loopback sign-in ended.
+#[derive(Debug, Clone, PartialEq)]
+enum SignInEnd {
+    /// The token is stored.
+    SignedIn(OnlineUser),
+    /// The exchange failed; the service's words.
+    Failed(String),
+    /// The browser never came back.
+    TimedOut,
+}
+
+impl SignInEnd {
+    /// What `poll_sign_in` answers for it.
+    fn poll(&self) -> SignInPoll {
+        match self {
+            SignInEnd::SignedIn(user) => SignInPoll {
+                status: "done".into(),
+                user: Some(user.clone()),
+                error: None,
+            },
+            SignInEnd::Failed(message) => SignInPoll {
+                status: "error".into(),
+                user: None,
+                error: Some(message.clone()),
+            },
+            SignInEnd::TimedOut => SignInPoll {
+                status: "expired".into(),
+                user: None,
+                error: None,
+            },
+        }
+    }
+}
+
+/// Where a session stands for this launcher.
+#[derive(Debug, Clone, PartialEq)]
+enum Progress {
+    /// Not the loopback sign-in in progress: read the old way.
+    NotOurs,
+    /// Its listener is still waiting.
+    Waiting,
+    /// Its listener has ended so.
+    Ended(SignInEnd),
+}
+
+impl SignInState {
+    fn lock(&self) -> MutexGuard<'_, Option<TrackedSignIn>> {
+        self.current.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Starts following `session_id`. Whatever was followed before is
+    /// forgotten, and its listener stops with its sender.
+    fn track(&self, session_id: &str, stop: oneshot::Sender<()>) {
+        *self.lock() = Some(TrackedSignIn {
+            session_id: session_id.to_string(),
+            stop: Some(stop),
+            ended: None,
+        });
+    }
+
+    fn progress(&self, session_id: &str) -> Progress {
+        match self.lock().as_ref() {
+            Some(tracked) if tracked.session_id == session_id => match &tracked.ended {
+                Some(end) => Progress::Ended(end.clone()),
+                None => Progress::Waiting,
+            },
+            _ => Progress::NotOurs,
+        }
+    }
+
+    /// Records how the listener of `session_id` ended, if that sign-in is
+    /// still the one followed. The end stays until the next sign-in, so a
+    /// poll that comes twice reads it twice.
+    fn end(&self, session_id: &str, end: SignInEnd) {
+        let mut current = self.lock();
+        if let Some(tracked) = current
+            .as_mut()
+            .filter(|tracked| tracked.session_id == session_id)
+        {
+            tracked.stop = None;
+            tracked.ended = Some(end);
+        }
+    }
+
+    /// Stops the listener of `session_id`, or of whichever sign-in is
+    /// followed with `None`, and forgets it. True when there was one.
+    fn stop(&self, session_id: Option<&str>) -> bool {
+        let mut current = self.lock();
+        let matches = current
+            .as_ref()
+            .is_some_and(|tracked| session_id.is_none_or(|id| id == tracked.session_id));
+        if matches {
+            *current = None;
+        }
+        matches
+    }
+}
+
+/// What the service's answer to the poll of a loopback session means.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LoopbackPoll {
+    /// Still going: pending, or done and on its way to the listener, which
+    /// does the exchange.
+    Pending,
+    /// Failed or expired on the service: the listener has nothing to wait for.
+    Over,
+    /// Done with the token in the poll: a service older than the loopback
+    /// sign-in, which ignored `redirectUri`. The poll's token is the token.
+    OlderService,
+}
+
+fn loopback_poll(session: &LoginSession) -> LoopbackPoll {
+    match session.status.as_str() {
+        "pending" => LoopbackPoll::Pending,
+        "done" if session.token.is_some() => LoopbackPoll::OlderService,
+        "done" => LoopbackPoll::Pending,
+        _ => LoopbackPoll::Over,
     }
 }
 
@@ -1040,6 +1468,509 @@ mod tests {
             Err(e) => println!("DELETE /v1/me failed: {e}"),
         }
         outcome.expect("the scenario");
+    }
+
+    // --- slice: sign-in binding ---
+
+    fn polled(status: &str, token: Option<&str>) -> LoginSession {
+        serde_json::from_value(serde_json::json!({
+            "id": "01JSIGNIN",
+            "status": status,
+            "token": token,
+        }))
+        .expect("a login session")
+    }
+
+    #[test]
+    fn only_a_token_in_the_poll_of_a_loopback_session_means_an_older_service() {
+        assert_eq!(
+            loopback_poll(&polled("pending", None)),
+            LoopbackPoll::Pending
+        );
+        // Done without a token: the browser is on its way to the listener,
+        // which exchanges the code.
+        assert_eq!(loopback_poll(&polled("done", None)), LoopbackPoll::Pending);
+        assert_eq!(
+            loopback_poll(&polled("done", Some("0123456789abcdef"))),
+            LoopbackPoll::OlderService
+        );
+        assert_eq!(loopback_poll(&polled("error", None)), LoopbackPoll::Over);
+        assert_eq!(loopback_poll(&polled("expired", None)), LoopbackPoll::Over);
+        // A token next to a status that is not `done` is not a sign-in.
+        assert_eq!(
+            loopback_poll(&polled("error", Some("0123456789abcdef"))),
+            LoopbackPoll::Over
+        );
+    }
+
+    #[test]
+    fn the_sign_in_in_progress_is_followed_until_it_ends_or_stops() {
+        let signins = SignInState::default();
+        assert_eq!(signins.progress("01JA"), Progress::NotOurs);
+
+        let (stop, mut stopped) = oneshot::channel::<()>();
+        signins.track("01JA", stop);
+        assert_eq!(signins.progress("01JA"), Progress::Waiting);
+        assert_eq!(signins.progress("01JB"), Progress::NotOurs);
+        assert!(!signins.stop(Some("01JB")), "another session stops nothing");
+        assert!(stopped
+            .try_recv()
+            .is_err_and(|e| e == oneshot::error::TryRecvError::Empty));
+
+        // The end stays readable, twice, and names what the poll answers.
+        let user = stored_user().expect("a user");
+        signins.end("01JA", SignInEnd::SignedIn(user.clone()));
+        for _ in 0..2 {
+            let Progress::Ended(end) = signins.progress("01JA") else {
+                panic!("the end is kept");
+            };
+            let poll = end.poll();
+            assert_eq!(poll.status, "done");
+            assert_eq!(poll.user, Some(user.clone()));
+        }
+
+        // A new sign-in replaces the old one and stops its listener.
+        let (stop, mut stopped) = oneshot::channel::<()>();
+        signins.track("01JB", stop);
+        assert_eq!(signins.progress("01JA"), Progress::NotOurs);
+        // The end of a sign-in that is no longer followed is dropped.
+        signins.end("01JA", SignInEnd::TimedOut);
+        assert_eq!(signins.progress("01JB"), Progress::Waiting);
+
+        // Cancel: the listener's sender goes, and the session is forgotten.
+        assert!(signins.stop(None));
+        assert!(stopped
+            .try_recv()
+            .is_err_and(|e| e == oneshot::error::TryRecvError::Closed));
+        assert_eq!(signins.progress("01JB"), Progress::NotOurs);
+        assert!(!signins.stop(None));
+    }
+
+    #[test]
+    fn how_a_sign_in_ended_reads_as_a_poll() {
+        let failed = SignInEnd::Failed("The sign-in code or its verifier is wrong".into()).poll();
+        assert_eq!(failed.status, "error");
+        assert_eq!(
+            failed.error.as_deref(),
+            Some("The sign-in code or its verifier is wrong")
+        );
+        let late = SignInEnd::TimedOut.poll();
+        assert_eq!((late.status.as_str(), late.error), ("expired", None));
+    }
+
+    /// Opens a loopback sign-in on `ctx` and waits for its code, which the
+    /// stand-in delivers by itself when no browser opened the form. The
+    /// token and the account, or how the listener ended.
+    async fn loopback_against_the_mock(
+        client: &OnlineClient,
+        ctx: &OnlineContext,
+    ) -> (LoginSession, Served<Result<(String, OnlineUser)>>) {
+        let signin = LoopbackSignIn::open(client, ctx, "dev", Some("TESTBOX"))
+            .await
+            .expect("the dev provider opens a loopback session");
+        let session = signin.session().clone();
+        let served = signin
+            .wait(
+                client,
+                ctx,
+                Duration::from_secs(10),
+                std::future::pending(),
+                |token, user| async move { Ok((token, user)) },
+            )
+            .await;
+        (session, served)
+    }
+
+    /// The loopback sign-in against `scripts/mock-online.mjs`, which plays
+    /// the browser of the dev provider. Ignored like `online::mock_tests`:
+    /// it needs Node and a free port.
+    #[tokio::test]
+    #[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+    async fn account_signs_in_on_loopback_against_the_mock() {
+        let mock = crate::online::mock_tests::MockOnline::start(8811);
+        let client = OnlineClient::new();
+        let ctx = OnlineContext {
+            base_url: mock.base_url(),
+            token: None,
+        };
+        let (session, served) = loopback_against_the_mock(&client, &ctx).await;
+        let (token, user) = match served {
+            Served::Finished(Ok(pair)) => pair,
+            Served::Finished(Err(e)) => panic!("the exchange failed: {e}"),
+            Served::Cancelled => panic!("cancelled"),
+            Served::TimedOut => panic!("the code never came"),
+        };
+        assert_eq!(user.provider, "dev");
+
+        // The poll says done and never carries the token.
+        let polled = client
+            .poll_login_session(&ctx, &session.id)
+            .await
+            .expect("the session reads");
+        assert_eq!(polled.status, "done");
+        assert!(polled.token.is_none(), "the poll handed out the token");
+        assert_eq!(loopback_poll(&polled), LoopbackPoll::Pending);
+
+        // The code works once.
+        match client
+            .exchange_login_code(&ctx, &session.id, "spent", "x".repeat(43).as_str())
+            .await
+        {
+            Err(AppError::Online { code, .. }) => assert_eq!(code, "invalid"),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+
+        let signed = OnlineContext {
+            base_url: mock.base_url(),
+            token: Some(token),
+        };
+        let me = client.get_me(&signed).await.expect("the token works");
+        assert_eq!(me.user.id, user.id);
+    }
+
+    #[tokio::test]
+    #[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+    async fn account_takes_the_poll_token_of_a_service_older_than_the_loopback_sign_in() {
+        let mock = crate::online::mock_tests::MockOnline::start_with(
+            8812,
+            &[("MOCK_ONLINE_IGNORE_LOOPBACK", "1")],
+        );
+        let client = OnlineClient::new();
+        let ctx = OnlineContext {
+            base_url: mock.base_url(),
+            token: None,
+        };
+        let signin = LoopbackSignIn::open(&client, &ctx, "dev", None)
+            .await
+            .expect("an older service opens the session all the same");
+        let id = signin.session().id.clone();
+
+        let mut seen = None;
+        for _ in 0..40 {
+            let polled = client
+                .poll_login_session(&ctx, &id)
+                .await
+                .expect("the session reads");
+            if polled.status != "pending" {
+                seen = Some(polled);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let polled = seen.expect("the dev session completes");
+        assert_eq!(loopback_poll(&polled), LoopbackPoll::OlderService);
+        assert!(polled.user.is_some());
+        drop(signin);
+    }
+
+    #[tokio::test]
+    #[ignore = "starts scripts/mock-online.mjs, so it needs Node and a free port"]
+    async fn account_legacy_sessions_are_refused_once_the_switch_is_off() {
+        let mock = crate::online::mock_tests::MockOnline::start_with(
+            8813,
+            &[("MOCK_ONLINE_LEGACY_SIGNIN", "0")],
+        );
+        let client = OnlineClient::new();
+        let ctx = OnlineContext {
+            base_url: mock.base_url(),
+            token: None,
+        };
+        match client.create_login_session(&ctx, "dev", None).await {
+            Err(AppError::Online { code, message }) => {
+                assert_eq!(code, "invalid");
+                assert!(message.contains("update JKNet"), "{message}");
+            }
+            other => panic!("expected the legacy refusal, got {other:?}"),
+        }
+        // The launcher's own sign-in does not depend on the switch.
+        let (_, served) = loopback_against_the_mock(&client, &ctx).await;
+        assert!(matches!(served, Served::Finished(Ok(_))));
+    }
+
+    /// Repeats a call the service refused as one too many from this address:
+    /// the online tests sign in more players a minute than it lets through.
+    async fn patiently<T, Fut>(what: &str, mut call: impl FnMut() -> Fut) -> Result<T>
+    where
+        Fut: Future<Output = Result<T>>,
+    {
+        for attempt in 1..=9 {
+            match call().await {
+                Err(AppError::Online { code, .. }) if code == "rate_limited" => {
+                    println!("{what} refused as too many, attempt {attempt}; waiting");
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                }
+                other => return other,
+            }
+        }
+        call().await
+    }
+
+    /// A browser page of the sign-in, asked again while the service refuses
+    /// it as too many. Redirects are not followed, so a callback answers
+    /// with the `302` itself.
+    async fn browser_page(url: &str) -> reqwest::Response {
+        let browser = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(10))
+            .build()
+            .expect("a client");
+        for attempt in 1..=9 {
+            let response = browser.get(url).send().await.expect("the page answers");
+            if response.status() != reqwest::StatusCode::TOO_MANY_REQUESTS {
+                return response;
+            }
+            println!("a sign-in page refused as too many, attempt {attempt}; waiting");
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        }
+        panic!("the service kept refusing a sign-in page as too many");
+    }
+
+    /// The dev provider's form of `session`, then its callback with `name`:
+    /// the callback's answer, not followed.
+    async fn dev_callback(session: &LoginSession, name: &str) -> reqwest::Response {
+        let form = browser_page(&session.url)
+            .await
+            .text()
+            .await
+            .expect("the dev form is text");
+        let state = crate::friends::online_tests::hidden_state(&form)
+            .expect("the dev form carries a state")
+            .to_string();
+        browser_page(&format!(
+            "{}/v1/auth/dev/callback?state={state}&name={}",
+            crate::online::DEV_ONLINE_URL,
+            name.replace(' ', "%20")
+        ))
+        .await
+    }
+
+    /// The session and the one-time code of a loopback session opened with a
+    /// listener nobody serves: the code is read off the redirect instead.
+    async fn loopback_code_by_hand(
+        client: &OnlineClient,
+        ctx: &OnlineContext,
+        name: &str,
+    ) -> (LoginSession, CodeVerifier, String) {
+        let listener = LoopbackListener::bind().await.expect("a loopback port");
+        let redirect_uri = listener.redirect_uri();
+        let verifier = CodeVerifier::new().expect("random bytes");
+        let challenge = verifier.challenge();
+        let loopback = Loopback {
+            redirect_uri: &redirect_uri,
+            code_challenge: &challenge,
+        };
+        let session = patiently("POST /v1/auth/login-sessions", || {
+            client.open_login_session(ctx, "dev", Some("cargo test"), Some(&loopback))
+        })
+        .await
+        .expect("the service opens a loopback session");
+        let callback = dev_callback(&session, name).await;
+        assert_eq!(
+            callback.status(),
+            reqwest::StatusCode::FOUND,
+            "the callback of a loopback session redirects"
+        );
+        let location = callback
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        let prefix = format!("{redirect_uri}?session={}&code=", session.id);
+        let code = location
+            .strip_prefix(&prefix)
+            .unwrap_or_else(|| {
+                panic!(
+                    "the redirect goes elsewhere: {}",
+                    location.split('?').next().unwrap_or_default()
+                )
+            })
+            .to_string();
+        assert_eq!(code.len(), 43, "32 bytes of base64url");
+        drop(listener);
+        (session, verifier, code)
+    }
+
+    /// The loopback sign-in against the real service: the session's poll says
+    /// `done` and never carries the token, a wrong code or verifier is
+    /// refused without saying which, and the right pair works once.
+    ///
+    /// Ignored like the devices test above; run it by hand:
+    ///
+    /// ```text
+    /// cargo test --lib -- --ignored --nocapture account::tests::account_loopback
+    /// ```
+    #[tokio::test]
+    #[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1"]
+    async fn account_loopback_code_is_exchanged_once_and_never_polled_against_the_real_service() {
+        let client = OnlineClient::new();
+        let ctx = OnlineContext {
+            base_url: crate::online::DEV_ONLINE_URL.into(),
+            token: None,
+        };
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970")
+            .as_secs()
+            % 100_000;
+        let (session, verifier, code) =
+            loopback_code_by_hand(&client, &ctx, &format!("Test Loopback {stamp}")).await;
+
+        // Whoever polls the session learns that it is done, and no more.
+        let polled = client
+            .poll_login_session(&ctx, &session.id)
+            .await
+            .expect("the session reads");
+        println!(
+            "GET /v1/auth/login-sessions/{} -> {}, token {}, user {}",
+            session.id,
+            polled.status,
+            polled.token.is_some(),
+            polled.user.is_some()
+        );
+        assert_eq!(polled.status, "done");
+        assert!(polled.token.is_none(), "the poll handed out the token");
+        assert!(polled.user.is_none(), "the poll named the account");
+
+        let refused = |outcome: Result<LoginSession>| match outcome {
+            Err(AppError::Online { code, message }) => {
+                assert_eq!(code, "invalid");
+                message
+            }
+            other => panic!("expected 400 invalid, got {other:?}"),
+        };
+        let other = CodeVerifier::new().expect("random bytes");
+        let wrong_verifier = refused(
+            patiently("the exchange", || {
+                client.exchange_login_code(&ctx, &session.id, &code, other.secret())
+            })
+            .await,
+        );
+        let not_the_code = "A".repeat(43);
+        let wrong_code = refused(
+            patiently("the exchange", || {
+                client.exchange_login_code(&ctx, &session.id, &not_the_code, verifier.secret())
+            })
+            .await,
+        );
+        assert_eq!(
+            wrong_verifier, wrong_code,
+            "the refusal says which one was wrong"
+        );
+
+        let done = patiently("the exchange", || {
+            client.exchange_login_code(&ctx, &session.id, &code, verifier.secret())
+        })
+        .await
+        .expect("the right code and verifier give the token");
+        let token = done.token.expect("the exchange carries the token");
+        let user = done.user.expect("and the account");
+        assert_eq!(done.status, "done");
+
+        // Once.
+        refused(
+            patiently("the exchange", || {
+                client.exchange_login_code(&ctx, &session.id, &code, verifier.secret())
+            })
+            .await,
+        );
+
+        let signed = OnlineContext {
+            base_url: ctx.base_url.clone(),
+            token: Some(token),
+        };
+        let me = client.get_me(&signed).await.expect("the token works");
+        assert_eq!(me.user.id, user.id);
+        client.delete_me(&signed).await.expect("the account goes");
+    }
+
+    #[tokio::test]
+    #[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1"]
+    async fn account_loopback_session_burns_after_five_wrong_exchanges_against_the_real_service() {
+        let client = OnlineClient::new();
+        let ctx = OnlineContext {
+            base_url: crate::online::DEV_ONLINE_URL.into(),
+            token: None,
+        };
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970")
+            .as_secs()
+            % 100_000;
+        let (session, verifier, code) =
+            loopback_code_by_hand(&client, &ctx, &format!("Test Burnt {stamp}")).await;
+
+        let wrong = CodeVerifier::new().expect("random bytes");
+        for attempt in 1..=5 {
+            match patiently("the exchange", || {
+                client.exchange_login_code(&ctx, &session.id, &code, wrong.secret())
+            })
+            .await
+            {
+                Err(AppError::Online { code, message }) => {
+                    assert_eq!(code, "invalid");
+                    println!("wrong exchange {attempt} -> {message}");
+                }
+                other => panic!("expected 400 invalid, got {other:?}"),
+            }
+        }
+        // The session is over: the right pair comes too late.
+        match patiently("the exchange", || {
+            client.exchange_login_code(&ctx, &session.id, &code, verifier.secret())
+        })
+        .await
+        {
+            Err(AppError::Online { code, .. }) => assert_eq!(code, "invalid"),
+            other => panic!("the burnt session still hands out a token: {other:?}"),
+        }
+        let polled = client
+            .poll_login_session(&ctx, &session.id)
+            .await
+            .expect("the session reads");
+        assert_eq!(polled.status, "error");
+        assert_eq!(loopback_poll(&polled), LoopbackPoll::Over);
+        assert!(polled.token.is_none());
+    }
+
+    /// Launchers 0.4.0 to 0.9.0 and the community site sign in the old way,
+    /// the token in the poll. The service keeps taking that while
+    /// `JKNET_ONLINE_LEGACY_SIGNIN` is on, which is its default.
+    #[tokio::test]
+    #[ignore = "needs the real service on 127.0.0.1:8787 with JKNET_ONLINE_DEV_PROVIDER=1"]
+    async fn account_legacy_sign_in_still_works_against_the_real_service() {
+        let client = OnlineClient::new();
+        let ctx = OnlineContext {
+            base_url: crate::online::DEV_ONLINE_URL.into(),
+            token: None,
+        };
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is after 1970")
+            .as_secs()
+            % 100_000;
+        let session = patiently("POST /v1/auth/login-sessions", || {
+            client.create_login_session(&ctx, "dev", Some("cargo test"))
+        })
+        .await
+        .expect("a legacy session opens while the switch is on");
+        let page = dev_callback(&session, &format!("Test Legacy {stamp}")).await;
+        assert!(page.status().is_success(), "{}", page.status());
+        let page = page.text().await.expect("text");
+        assert!(page.contains("You can return to JKNet"), "{page}");
+
+        let polled = client
+            .poll_login_session(&ctx, &session.id)
+            .await
+            .expect("the session reads");
+        assert_eq!(polled.status, "done");
+        let token = polled
+            .token
+            .expect("the old sign-in gets its token in the poll");
+        let signed = OnlineContext {
+            base_url: ctx.base_url.clone(),
+            token: Some(token),
+        };
+        client.delete_me(&signed).await.expect("the account goes");
     }
 
     #[test]

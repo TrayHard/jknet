@@ -1,14 +1,21 @@
 /**
  * The account of this browser: signing in, the token, signing out.
  *
- * Signing in is the launcher's login session with three differences. The
- * session names the web client, its device kind and `returnTo`, the address
- * of `/signin/done` the service's success page leads back to. The tab itself
- * goes to the provider (`location.assign`), so what to do after the sign-in —
- * the path the player was opening, `next` — waits in IndexedDB. And polling
- * runs from any start of the app that finds a fresh pending sign-in, so a
- * provider that finished in another tab or in the Discord app still hands
- * over the token.
+ * Signing in is a login session of the service, as in the launcher, with four
+ * differences. The session names the web client, its device kind and
+ * `returnTo`, the address of `/signin/done` the service's success page leads
+ * back to. The session belongs to this browser: the answer that creates it
+ * sets the service's `jknet_signin` cookie, and the provider's pages and the
+ * poll refuse a browser without that cookie, so a sign-in link somebody else
+ * started cannot hand them this player's token. Creating and polling the
+ * session therefore send cookies, and nothing else does. The tab itself goes
+ * to the provider (`location.assign`), so what to do after the sign-in — the
+ * path the player was opening, `next` — waits in IndexedDB. And polling runs
+ * from any start of the app that finds a fresh pending sign-in, so a
+ * provider that finished in another tab of this browser still hands over the
+ * token. A provider that finished in another browser, such as the one the
+ * Discord app opens, ends the sign-in instead: the screens say so
+ * (`SignInFailure`).
  *
  * The token is kept in IndexedDB and in memory and leaves only in the
  * `Authorization` header. Signing out, a `401` on any call and the socket's
@@ -96,6 +103,17 @@ export function isLocalService(apiBase: string): boolean {
 
 export type SignInPhase = "idle" | "waiting" | "done" | "expired" | "error";
 
+/**
+ * Why a sign-in failed, when the screens explain it in their own words:
+ *
+ * - `otherBrowser`: the provider's pages ran in a browser without the
+ *   session's cookie, such as the one the Discord app opens, and the service
+ *   ended the session there;
+ * - `cookie`: the service does not see the session's cookie in this browser,
+ *   which blocked or cleared it, so it refuses the poll.
+ */
+export type SignInFailure = "otherBrowser" | "cookie";
+
 /** Where the sign-in of this tab stands, for `/signin` and `/signin/done`. */
 export interface SignInStatus {
   phase: SignInPhase;
@@ -103,6 +121,23 @@ export interface SignInStatus {
   next: string | null;
   /** The service's own words on `error`. */
   error: string | null;
+  /** Set on `error` when the screens have words of their own for it. */
+  failure: SignInFailure | null;
+}
+
+/** The status of no sign-in. */
+const IDLE: SignInStatus = { phase: "idle", next: null, error: null, failure: null };
+
+/**
+ * The service's words for a web session whose provider pages ran in another
+ * browser (`OTHER_BROWSER` in the service's `auth/session.rs`). The poll
+ * carries only the words, so they are recognised by this phrase.
+ */
+const OTHER_BROWSER = /started in another browser/i;
+
+/** The failure a session that ended in `error` with `words` stands for. */
+export function failureOf(words: string | null | undefined): SignInFailure | null {
+  return typeof words === "string" && OTHER_BROWSER.test(words) ? "otherBrowser" : null;
 }
 
 interface LoginSessionWire {
@@ -171,7 +206,7 @@ export function createSession(deps: SessionDeps): Session {
   const { http, storage, events, apiBase } = deps;
   const now = deps.now ?? (() => Date.now());
   let record: SessionRecord | null = null;
-  let status: SignInStatus = { phase: "idle", next: null, error: null };
+  let status: SignInStatus = IDLE;
   const listeners = new Set<() => void>();
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let polling = false;
@@ -227,8 +262,13 @@ export function createSession(deps: SessionDeps): Session {
     void refreshMe().catch(() => undefined);
   };
 
+  // With the cookie of this browser: the service answers a web session only
+  // to the browser that created it, and clears the cookie once it has ended.
   const readSession = (sessionId: string) =>
-    http.request<LoginSessionWire>("GET", `/v1/auth/login-sessions/${segment(sessionId)}`, { auth: false });
+    http.request<LoginSessionWire>("GET", `/v1/auth/login-sessions/${segment(sessionId)}`, {
+      auth: false,
+      cookies: true,
+    });
 
   const poll = async (sessionId: string): Promise<SignInPoll> => {
     const answer = await readSession(sessionId);
@@ -251,7 +291,7 @@ export function createSession(deps: SessionDeps): Session {
     if (!isFresh(pending, now())) {
       stopPolling();
       await storage.delete("pendingSignIn", "current");
-      if (status.phase === "waiting") setStatus({ phase: "expired", next: status.next, error: null });
+      if (status.phase === "waiting") setStatus({ ...IDLE, phase: "expired", next: status.next });
       return;
     }
     polling = true;
@@ -263,21 +303,25 @@ export function createSession(deps: SessionDeps): Session {
       }
       stopPolling();
       if (answer.status === "done") {
-        setStatus({ phase: "done", next: pending.next, error: null });
+        setStatus({ ...IDLE, phase: "done", next: pending.next });
         return;
       }
       await storage.delete("pendingSignIn", "current");
+      const expired = answer.status === "expired";
       setStatus({
-        phase: answer.status === "expired" ? "expired" : "error",
+        phase: expired ? "expired" : "error",
         next: pending.next,
         error: answer.error,
+        failure: expired ? null : failureOf(answer.error),
       });
     } catch (error) {
       const code = statusOf(error);
-      if (code === 404 || code === 400) {
+      // `403`: the service does not see this browser's cookie of the session.
+      // Nothing brings it back, so the sign-in ends here as well.
+      if (code === 404 || code === 400 || code === 403) {
         stopPolling();
         await storage.delete("pendingSignIn", "current");
-        setStatus({ phase: "error", next: pending.next, error: null });
+        setStatus({ ...IDLE, phase: "error", next: pending.next, failure: code === 403 ? "cookie" : null });
         return;
       }
       // Offline or the service restarting: the session waits on the service
@@ -303,7 +347,7 @@ export function createSession(deps: SessionDeps): Session {
       if (pending !== undefined) await storage.delete("pendingSignIn", "current");
       return;
     }
-    setStatus({ phase: "waiting", next: pending.next, error: null });
+    setStatus({ ...IDLE, phase: "waiting", next: pending.next });
     if (detachWake === null && typeof window !== "undefined") {
       // Coming back from the provider's tab or app is the moment the answer
       // is most likely there.
@@ -321,8 +365,15 @@ export function createSession(deps: SessionDeps): Session {
   };
 
   const beginSignIn = async (provider: OnlineProvider, next: string | null): Promise<SignInStart> => {
+    // Taken before the request: the pending sign-in then runs out no later
+    // than the cookie the answer sets, whose ten minutes start on arrival,
+    // so no poll goes out after the cookie is gone and reads as refused.
+    const startedAt = now();
+    // With cookies, so this browser keeps the cookie that ties the session
+    // to it; the provider's pages and every poll need it.
     const session = await http.request<LoginSessionWire>("POST", "/v1/auth/login-sessions", {
       auth: false,
+      cookies: true,
       body: {
         provider,
         deviceName: deps.device.name(),
@@ -335,10 +386,10 @@ export function createSession(deps: SessionDeps): Session {
       sessionId: session.id,
       provider,
       next: safeNext(next),
-      createdAt: new Date(now()).toISOString(),
+      createdAt: new Date(startedAt).toISOString(),
     };
     await storage.put("pendingSignIn", "current", pending);
-    setStatus({ phase: "waiting", next: pending.next, error: null });
+    setStatus({ ...IDLE, phase: "waiting", next: pending.next });
     return { sessionId: session.id, url: session.url };
   };
 
@@ -411,12 +462,12 @@ export function createSession(deps: SessionDeps): Session {
       return () => listeners.delete(listener);
     },
     settle: () => {
-      if (status.phase !== "waiting") setStatus({ phase: "idle", next: null, error: null });
+      if (status.phase !== "waiting") setStatus(IDLE);
     },
     cancel: async () => {
       stopPolling();
       await storage.delete("pendingSignIn", "current");
-      setStatus({ phase: "idle", next: null, error: null });
+      setStatus(IDLE);
     },
     signOut: async () => {
       // The service closes the sockets of the token while it answers, so the

@@ -1958,7 +1958,8 @@ export interface SignInFlow {
   /** The address opened in the browser, for a browser that stayed shut. */
   url: string | null;
   start: (provider: OnlineProvider) => void;
-  /** Stops polling. The session on the service expires on its own. */
+  /** Stops polling and the core's loopback listener. The session on the
+   *  service expires on its own. */
   cancel: () => void;
 }
 
@@ -1970,10 +1971,13 @@ const POLL_BUDGET_MS = 10 * 60_000;
 /**
  * Runs one browser sign-in from the launcher's side.
  *
- * The core opens the browser and stores the token; this hook does the waiting.
- * It polls rather than listens because there is nothing to listen to: the
- * player's browser talks to the service, not to the launcher, and a launcher that
- * opened a port to hear about it would need a firewall prompt to sign in.
+ * The core opens the browser, listens on loopback for the browser to come
+ * back with a one-time code, trades it for the token and stores the token;
+ * this hook does the waiting. It polls because the core's answer arrives on
+ * its own schedule: the listener finishes the sign-in even while no screen
+ * is polling, and the poll reads how it ended. Leaving the screen stops the
+ * polling and nothing else, so a sign-in finished in the browser meanwhile
+ * still signs the launcher in; **Cancel** stops the listener too.
  */
 export function useSignIn(): SignInFlow {
   // --- slice: i18n --- the four sentences this flow produces itself. Every
@@ -2002,6 +2006,9 @@ export function useSignIn(): SignInFlow {
 
   const cancel = useCallback(() => {
     stopPolling();
+    // --- slice: sign-in binding --- the listener in the core stops too. A
+    // core that cannot be reached has nothing listening either.
+    accountIpc.cancelSignIn().catch(() => undefined);
     setPhase("idle");
     setProvider(null);
     setError(null);

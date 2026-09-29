@@ -2568,13 +2568,18 @@ fn drop_nulls(value: &mut Value) {
 }
 
 /// `OnlineUser` is also the answer of `GET /v1/me`, the one place the
-/// service says `admin`; a user of a chat document goes without it and reads
-/// as `admin: false`, which is what the launcher then forwards.
+/// service says `admin` and `serverModAdmin`; a user of a chat document goes
+/// without them and reads as `false`, which is what the launcher then
+/// forwards.
 fn drop_admin_false(value: &mut Value) {
     match value {
         Value::Object(map) => {
-            if map.contains_key("displayName") && map.get("admin") == Some(&Value::Bool(false)) {
-                map.remove("admin");
+            if map.contains_key("displayName") {
+                for flag in ["admin", "serverModAdmin"] {
+                    if map.get(flag) == Some(&Value::Bool(false)) {
+                        map.remove(flag);
+                    }
+                }
             }
             map.values_mut().for_each(drop_admin_false);
         }

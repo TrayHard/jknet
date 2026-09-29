@@ -48,10 +48,12 @@
     "waiting": "Termine de iniciar sesión en la página que se abrió.",
     "expired": "El inicio de sesión tardó demasiado. Inténtelo de nuevo.",
     "failed": "El inicio de sesión no terminó.",
+    "otherBrowser": "El inicio de sesión continuó en otro navegador, así que no pudo terminar. Inténtelo de nuevo y termínelo en este navegador.",
+    "cookieRefused": "Este navegador no guardó la cookie de inicio de sesión, así que no pudo terminar. Permita las cookies para JKNet e inténtelo de nuevo.",
     "retry": "Intentar de nuevo",
     "done": "Sesión iniciada. Abriendo JKNet…",
     "installFirst": "En iPhone, añada primero JKNet a la pantalla de inicio e inicie sesión allí: la aplicación instalada tiene su propia sesión.",
-    "doneElsewhere": "En este navegador no hay ningún inicio de sesión por terminar. Si inició sesión desde la app JKNet instalada u otro navegador, vuelva allí: la sesión está abierta allí.",
+    "doneElsewhere": "En este navegador no hay ningún inicio de sesión por terminar. Un inicio de sesión termina solo en el navegador o en la app JKNet instalada donde empezó: vuelva allí o inicie sesión en este navegador.",
     "signInHere": "Iniciar sesión en este navegador"
   },
   "install": {

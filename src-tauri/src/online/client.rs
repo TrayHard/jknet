@@ -335,6 +335,17 @@ pub fn path_segment(value: &str) -> Result<&str> {
 // Client
 // ---------------------------------------------------------------------------
 
+// --- slice: sign-in binding ---
+/// What a launcher listening on loopback adds to a new login session: the
+/// address of its listener and the S256 challenge of its code verifier.
+#[derive(Debug, Clone, Copy)]
+pub struct Loopback<'a> {
+    /// `http://127.0.0.1:<port>/jknet/signin`.
+    pub redirect_uri: &'a str,
+    /// `base64url(SHA-256(verifier))` without padding.
+    pub code_challenge: &'a str,
+}
+
 /// The path prefix of the sign-in endpoints.
 ///
 /// A `401` from one of these is not an expired session to act on.
@@ -483,17 +494,46 @@ impl OnlineClient {
 
     // -- Auth ---------------------------------------------------------------
 
-    /// Opens a sign-in session. The answer carries the URL for the browser.
+    /// Opens a sign-in session the old way, the token in the poll: what
+    /// launchers 0.4.0 to 0.9.0 send, and what the tests of other modules
+    /// sign in with. The service takes it while `JKNET_ONLINE_LEGACY_SIGNIN`
+    /// is on. The launcher itself opens [`Loopback`] sessions, so only the
+    /// tests call this.
+    #[cfg(test)]
     pub async fn create_login_session(
         &self,
         ctx: &OnlineContext,
         provider: &str,
         device_name: Option<&str>,
     ) -> Result<LoginSession> {
-        let body = serde_json::json!({
+        self.open_login_session(ctx, provider, device_name, None)
+            .await
+    }
+
+    // --- slice: sign-in binding ---
+    /// Opens a sign-in session. The answer carries the URL for the browser.
+    ///
+    /// With `loopback` the session belongs to this launcher: the browser
+    /// ends on its loopback address with a one-time code, and the token goes
+    /// only to [`exchange_login_code`](Self::exchange_login_code). A service
+    /// older than that ignores both fields and hands the token to the poll,
+    /// which `crate::account` takes as the sign of such a service.
+    pub async fn open_login_session(
+        &self,
+        ctx: &OnlineContext,
+        provider: &str,
+        device_name: Option<&str>,
+        loopback: Option<&Loopback<'_>>,
+    ) -> Result<LoginSession> {
+        let mut body = serde_json::json!({
             "provider": provider,
             "deviceName": device_name,
         });
+        if let Some(loopback) = loopback {
+            body["client"] = Value::String("launcher".into());
+            body["redirectUri"] = Value::String(loopback.redirect_uri.to_string());
+            body["codeChallenge"] = Value::String(loopback.code_challenge.to_string());
+        }
         self.call(
             ctx,
             Method::POST,
@@ -506,10 +546,34 @@ impl OnlineClient {
     }
 
     /// Reads a sign-in session. `token` and `user` arrive once, on the first
-    /// read that finds it `done`.
+    /// read that finds it `done` — except for a [`Loopback`] session, whose
+    /// poll never carries them.
     pub async fn poll_login_session(&self, ctx: &OnlineContext, id: &str) -> Result<LoginSession> {
         let path = format!("/v1/auth/login-sessions/{}", path_segment(id)?);
         self.call(ctx, Method::GET, &path, None, Auth::None)
+            .await?
+            .json()
+    }
+
+    // --- slice: sign-in binding ---
+    /// `POST /v1/auth/login-sessions/{id}/token`: trades the one-time code
+    /// the browser brought to the loopback listener, and the verifier behind
+    /// the session's `codeChallenge`, for the token. The answer is the body
+    /// a poll of an old session gives when it hands its token out.
+    ///
+    /// A wrong code or verifier is `400 invalid`, without saying which; the
+    /// fifth ends the session. Neither secret goes into a log line: the
+    /// path carries the session id only.
+    pub async fn exchange_login_code(
+        &self,
+        ctx: &OnlineContext,
+        id: &str,
+        code: &str,
+        verifier: &str,
+    ) -> Result<LoginSession> {
+        let path = format!("/v1/auth/login-sessions/{}/token", path_segment(id)?);
+        let body = serde_json::json!({ "code": code, "codeVerifier": verifier });
+        self.call(ctx, Method::POST, &path, Some(body), Auth::None)
             .await?
             .json()
     }

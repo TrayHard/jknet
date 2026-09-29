@@ -17,10 +17,23 @@
  *
  * What it implements:
  *
- *     POST   /v1/auth/login-sessions      dev works, jkhub and discord refuse
- *     GET    /v1/auth/login-sessions/:id  pending, then done with the token
+ *     POST   /v1/auth/login-sessions      dev works, jkhub and discord refuse;
+ *                                         the sign-in binding of the service:
+ *                                         a launcher on loopback sends
+ *                                         redirectUri and codeChallenge, the
+ *                                         web app gets the jknet_signin cookie,
+ *                                         a session with neither is legacy
+ *     GET    /v1/auth/login-sessions/:id  pending, then done; the token only
+ *                                         for a legacy or a web session, the
+ *                                         web one with its cookie
+ *     POST   /v1/auth/login-sessions/:id/token
+ *                                         a launcher's one-time code and its
+ *                                         verifier for the token; five wrong
+ *                                         ones end the session
  *     GET    /v1/auth/dev/start?session=  the form the browser opens
- *     GET    /v1/auth/dev/callback        ?state=&name=, what the form submits
+ *     GET    /v1/auth/dev/callback        ?state=&name=, what the form submits;
+ *                                         302 to the launcher's loopback
+ *                                         address with the code
  *     POST   /v1/auth/logout
  *     GET    /v1/me      PATCH /v1/me      DELETE /v1/me
  *     GET    /v1/friends                  three friends, two open requests
@@ -118,7 +131,20 @@
  *     PORT                  8787       where to listen
  *     MOCK_ONLINE_PROVIDERS    dev        providers that may open a session
  *     MOCK_ONLINE_DEV_DELAY_MS 3000       how long a dev session stays pending
- *                                      when no browser opens its form
+ *                                      when no browser opens its form; a
+ *                                      launcher's session then gets its code
+ *                                      delivered to its loopback address by
+ *                                      the mock itself
+ *     MOCK_ONLINE_LEGACY_SIGNIN 1         whether a session with neither
+ *                                      loopback nor cookie is taken, as
+ *                                      JKNET_ONLINE_LEGACY_SIGNIN of the service
+ *     MOCK_ONLINE_IGNORE_LOOPBACK 0       1 plays a service older than the
+ *                                      loopback sign-in: redirectUri and
+ *                                      codeChallenge are ignored
+ *     MOCK_ONLINE_WEB_ORIGINS  http://127.0.0.1:5174,http://127.0.0.1:5175
+ *                                      origins of the web app that may call
+ *                                      with credentials; every other origin
+ *                                      gets `*` without them
  *     MOCK_ONLINE_TAKEN_NAME   Taken      display name that answers 409
  *     MOCK_ONLINE_ADMIN        1          whether the account reviews bundles
  *     MOCK_ONLINE_CHAT_REPLY_MS 2500      how long the cast takes to answer in
@@ -146,6 +172,26 @@ const PROVIDERS = (process.env.MOCK_ONLINE_PROVIDERS ?? "dev")
 const DEV_DELAY_MS = Number(process.env.MOCK_ONLINE_DEV_DELAY_MS ?? "3000");
 const TAKEN_NAME = process.env.MOCK_ONLINE_TAKEN_NAME ?? "Taken";
 const ADMIN = (process.env.MOCK_ONLINE_ADMIN ?? "1") !== "0";
+// --- slice: sign-in binding ---
+const LEGACY_SIGNIN = flagOr(process.env.MOCK_ONLINE_LEGACY_SIGNIN, true);
+const IGNORE_LOOPBACK = flagOr(process.env.MOCK_ONLINE_IGNORE_LOOPBACK, false);
+const WEB_ORIGINS = (process.env.MOCK_ONLINE_WEB_ORIGINS ?? "http://127.0.0.1:5174,http://127.0.0.1:5175")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+/** The cookie that binds a web session to the browser that created it. */
+const SIGNIN_COOKIE = "jknet_signin";
+/** How long a launcher's one-time code works, and how many wrong exchanges end its session. */
+const CODE_TTL_MS = 5 * 60_000;
+const MAX_CODE_FAILURES = 5;
+/** The service's refusals, word for word where a screen may print them. */
+const OTHER_BROWSER = "This sign-in was started in another browser; start again from the JKNet web app";
+const LEGACY_OFF =
+  "This version of JKNet signs in a way the service no longer accepts; update JKNet and sign in again";
+const CODE_WRONG = "The sign-in code or its verifier is wrong";
+const CODE_GONE = "This sign-in code is no longer valid; sign in again from JKNet";
+const CODE_BURNT = "Too many wrong sign-in codes; sign in again from JKNet";
+const NO_CODE = "This sign-in does not exchange a code for its token";
 
 /** Every provider of the contract, so an unknown one is a 400 and not a 503. */
 const KNOWN_PROVIDERS = ["jkhub", "discord", "dev"];
@@ -247,6 +293,9 @@ function seedWorld() {
 
 const server = createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
+  // --- slice: sign-in binding --- every answer carries the CORS headers
+  // of the origin that asked.
+  response.jknetCors = corsFor(request);
   // A file upload is bytes, not JSON: a bundle file, or a chat file.
   const raw =
     request.method === "PUT" &&
@@ -277,21 +326,27 @@ function route(request, response, url, body) {
   const path = url.pathname.replace(/\/+$/, "") || "/";
 
   if (method === "OPTIONS") {
-    response.writeHead(204, CORS);
+    response.writeHead(204, corsOf(response));
     return response.end();
   }
 
   if (path === "/v1/auth/login-sessions" && method === "POST") {
     return createLoginSession(response, body);
   }
+  // --- slice: sign-in binding ---
+  const exchange = /^\/v1\/auth\/login-sessions\/([^/]+)\/token$/.exec(path);
+  if (exchange && method === "POST") {
+    return exchangeCode(response, exchange[1], body);
+  }
   if (path.startsWith("/v1/auth/login-sessions/") && method === "GET") {
-    return readLoginSession(response, path.slice("/v1/auth/login-sessions/".length));
+    return readLoginSession(request, response, path.slice("/v1/auth/login-sessions/".length));
   }
   if (path === "/v1/auth/dev/start" && method === "GET") {
-    return devStart(response, url.searchParams.get("session"));
+    return devStart(request, response, url.searchParams.get("session"));
   }
   if (path === "/v1/auth/dev/callback" && method === "GET") {
     return devCallback(
+      request,
       response,
       url.searchParams.get("state"),
       url.searchParams.get("name"),
@@ -516,22 +571,174 @@ function createLoginSession(response, body) {
       },
     });
   }
+  // --- slice: sign-in binding ---
+  const target = sessionTarget(body);
+  if (target.refusal) return fail(response, 400, "invalid", target.refusal);
 
-  const session = newSession(provider, body?.deviceName ?? null);
-  console.log(`mock-online: session ${session.id} opened for ${provider}`);
+  const session = newSession(provider, body?.deviceName ?? null, target);
+  console.log(
+    `mock-online: session ${session.id} opened for ${provider} (${
+      session.redirectUri ? "loopback" : session.client === "web" ? "web" : "legacy"
+    })`,
+  );
 
   // The dev provider needs no browser: a launcher under test must not depend
   // on someone clicking a button. A browser that does open the form cancels
-  // the timer, so the name typed there is the name that wins.
+  // the timer, so the name typed there is the name that wins. A launcher on
+  // loopback then gets its code from the mock, which plays the browser.
   if (provider === "dev") {
-    session.timer = setTimeout(() => complete(session, "Dev Player"), DEV_DELAY_MS);
+    session.timer = setTimeout(() => {
+      const code = complete(session, "Dev Player");
+      if (code) deliverCode(session, code);
+    }, DEV_DELAY_MS);
     session.timer.unref?.();
   }
 
+  if (session.client === "web") {
+    // The web app's session belongs to the browser that asked for it; only
+    // the cookie's hash stays here.
+    const cookie = randomBytes(32).toString("base64url");
+    session.browserHash = sha256Hex(cookie);
+    response.setHeader("set-cookie", signinCookie(cookie, 10 * 60));
+  }
   return send(response, 201, publicSession(session));
 }
 
-function newSession(provider, deviceName = null) {
+// --- slice: sign-in binding ---
+/** The client fields of a new session, checked as the service checks them:
+ *  `{ client, device, returnTo, redirectUri, codeChallenge }`, or `{ refusal }`. */
+function sessionTarget(body) {
+  const client = body?.client ?? "launcher";
+  if (client !== "launcher" && client !== "web") {
+    return { refusal: "client must be 'launcher' or 'web'" };
+  }
+  const redirectUri = IGNORE_LOOPBACK ? null : body?.redirectUri ?? null;
+  const codeChallenge = IGNORE_LOOPBACK ? null : body?.codeChallenge ?? null;
+  if (client === "web") {
+    if (redirectUri !== null || codeChallenge !== null) {
+      return { refusal: "Only a launcher sign-in takes redirectUri and codeChallenge" };
+    }
+    if (body?.device !== "phone" && body?.device !== "desktop") {
+      return { refusal: "A web sign-in names its device: 'phone' or 'desktop'" };
+    }
+    return { client, device: body.device, returnTo: body?.returnTo ?? null, redirectUri: null, codeChallenge: null };
+  }
+  if (body?.device != null) return { refusal: "Only a web sign-in names a device" };
+  if (body?.returnTo != null) return { refusal: "Only a web sign-in takes returnTo" };
+  if ((redirectUri === null) !== (codeChallenge === null)) {
+    return { refusal: "A launcher sign-in sends redirectUri and codeChallenge together" };
+  }
+  if (redirectUri !== null) {
+    if (!isRedirectUri(redirectUri)) {
+      return {
+        refusal: "redirectUri must be http://127.0.0.1:<port>/jknet/signin with a port from 1024 to 65535",
+      };
+    }
+    if (!isCodeChallenge(codeChallenge)) {
+      return { refusal: "codeChallenge must be the unpadded base64url SHA-256 of the code verifier" };
+    }
+  } else if (!LEGACY_SIGNIN) {
+    return { refusal: LEGACY_OFF };
+  }
+  return { client, device: null, returnTo: null, redirectUri, codeChallenge };
+}
+
+/** `http://127.0.0.1:<port>/jknet/signin`, the port 1024 to 65535 without
+ *  leading zeros, and nothing else. */
+function isRedirectUri(raw) {
+  const match = /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})\/jknet\/signin$/.exec(String(raw));
+  return match !== null && Number(match[1]) >= 1024 && Number(match[1]) <= 65535;
+}
+
+/** The unpadded base64url of 32 bytes, in its canonical 43 characters. */
+function isCodeChallenge(raw) {
+  if (typeof raw !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(raw)) return false;
+  const bytes = Buffer.from(raw, "base64url");
+  return bytes.length === 32 && bytes.toString("base64url") === raw;
+}
+
+/** An RFC 7636 verifier whose S256 challenge is `challenge`. */
+function verifierMatches(verifier, challenge) {
+  if (typeof verifier !== "string" || !/^[A-Za-z0-9._~-]{43,128}$/.test(verifier)) return false;
+  return createHash("sha256").update(verifier).digest("base64url") === challenge;
+}
+
+function sha256Hex(text) {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+/** The `Set-Cookie` of a web session. No `Secure`: the mock is plain http on loopback. */
+function signinCookie(value, maxAgeSecs) {
+  return `${SIGNIN_COOKIE}=${value}; Max-Age=${maxAgeSecs}; Path=/v1/auth; HttpOnly; SameSite=Lax`;
+}
+
+/** Whether the request carries the cookie of the web session `session`. */
+function browserMatches(request, session) {
+  if (!session.browserHash) return false;
+  return String(request.headers.cookie ?? "")
+    .split(";")
+    .map((pair) => pair.trim().split("="))
+    .some(([name, ...rest]) => name === SIGNIN_COOKIE && sha256Hex(rest.join("=")) === session.browserHash);
+}
+
+/** The refusal of a browser page of `session`, or null: a web session in a
+ *  browser without its cookie, or a legacy session while those are off. */
+function browserRefusal(request, session) {
+  if (session.client === "web" && !browserMatches(request, session)) {
+    return { status: 403, heading: "Sign-in started in another browser", message: OTHER_BROWSER };
+  }
+  if (isLegacy(session) && !LEGACY_SIGNIN) {
+    return { status: 400, heading: "Sign-in failed", message: LEGACY_OFF };
+  }
+  return null;
+}
+
+function isLegacy(session) {
+  return session.client === "launcher" && !session.redirectUri;
+}
+
+/** The browser leg of a launcher on loopback, played by the mock when no
+ *  browser opened the form: the request a browser makes after the `302`. */
+function deliverCode(session, code) {
+  fetch(loopbackTarget(session, code)).catch((e) =>
+    console.log(`mock-online: the launcher did not take the code of ${session.id}: ${e}`),
+  );
+}
+
+function loopbackTarget(session, code) {
+  return `${session.redirectUri}?session=${session.id}&code=${code}`;
+}
+
+/** `POST /v1/auth/login-sessions/:id/token`: the one-time code and its
+ *  verifier for the token, once. */
+function exchangeCode(response, rawId, body) {
+  const session = sessions.get(rawId);
+  if (!session) return fail(response, 404, "not_found", "Login session not found");
+  if (!session.codeChallenge) return fail(response, 400, "invalid", NO_CODE);
+  const live = session.status === "done" && session.codeHash && Date.now() < session.codeExpiresAt;
+  if (!live) return fail(response, 400, "invalid", CODE_GONE);
+
+  const codeOk = typeof body?.code === "string" && sha256Hex(body.code) === session.codeHash;
+  const verifierOk = verifierMatches(body?.codeVerifier, session.codeChallenge);
+  if (!(codeOk && verifierOk)) {
+    session.codeFailures += 1;
+    if (session.codeFailures >= MAX_CODE_FAILURES) {
+      session.status = "error";
+      session.error = CODE_BURNT;
+      session.codeHash = null;
+      return fail(response, 400, "invalid", CODE_BURNT);
+    }
+    return fail(response, 400, "invalid", CODE_WRONG);
+  }
+
+  session.codeHash = null;
+  token = randomBytes(32).toString("hex");
+  presence = { ...offline(), status: "online", since: nowIso() };
+  console.log(`mock-online: session ${session.id} exchanged its code`);
+  return send(response, 200, { ...publicSession(session), token, user: account });
+}
+
+function newSession(provider, deviceName = null, target = sessionTarget({})) {
   const session = {
     id: id(),
     provider,
@@ -542,15 +749,29 @@ function newSession(provider, deviceName = null) {
     expiresAt: Date.now() + 10 * 60 * 1000,
     deviceName,
     tokenRead: false,
+    // --- slice: sign-in binding ---
+    client: target.client ?? "launcher",
+    device: target.device ?? null,
+    returnTo: target.returnTo ?? null,
+    browserHash: null,
+    redirectUri: target.redirectUri ?? null,
+    codeChallenge: target.codeChallenge ?? null,
+    codeHash: null,
+    codeExpiresAt: 0,
+    codeFailures: 0,
   };
   session.url = `http://${HOST}:${PORT}/v1/auth/${provider}/start?session=${session.id}`;
   sessions.set(session.id, session);
   return session;
 }
 
-function readLoginSession(response, rawId) {
+function readLoginSession(request, response, rawId) {
   const session = sessions.get(rawId);
   if (!session) return notFound(response);
+  // --- slice: sign-in binding --- a web session answers only its browser.
+  if (session.client === "web" && !browserMatches(request, session)) {
+    return fail(response, 403, "forbidden", OTHER_BROWSER);
+  }
   if (session.status === "pending" && Date.now() > session.expiresAt) {
     session.status = "expired";
   }
@@ -558,10 +779,14 @@ function readLoginSession(response, rawId) {
   const answer = publicSession(session);
   // The contract hands out the token exactly once, so a second reader — a
   // launcher that polled twice at the same moment — gets the status alone.
-  if (session.status === "done" && !session.tokenRead) {
+  // A launcher on loopback never finds it here: its token goes to its code.
+  if (session.status === "done" && !session.tokenRead && !session.redirectUri) {
     session.tokenRead = true;
     answer.token = session.token;
     answer.user = session.user;
+  }
+  if (session.client === "web" && session.status !== "pending") {
+    response.setHeader("set-cookie", signinCookie("", 0));
   }
   return send(response, 200, answer);
 }
@@ -574,9 +799,13 @@ function readLoginSession(response, rawId) {
  *  the launcher never sees either, it only opens the URL and polls.
  *
  *  A session already completed by the timer shows the closing page instead. */
-function devStart(response, rawId) {
+function devStart(request, response, rawId) {
   const session = sessions.get(rawId);
   if (!session) return notFound(response);
+  // --- slice: sign-in binding --- before anything else, so a browser
+  // without the cookie learns nothing about the session.
+  const refusal = browserRefusal(request, session);
+  if (refusal) return failedPage(response, refusal);
   if (session.status !== "pending") return devDone(response, session);
 
   // A browser is here, so the form decides, not the timer.
@@ -598,14 +827,29 @@ function devStart(response, rawId) {
 }
 
 /** What the form submits to. A real provider would send `code` here. */
-function devCallback(response, rawState, rawName) {
+function devCallback(request, response, rawState, rawName) {
   const sessionId = states.get(rawState ?? "");
   const session = sessionId ? sessions.get(sessionId) : undefined;
   if (!session) return notFound(response);
+  // --- slice: sign-in binding --- somebody else's link: the session fails,
+  // so its creator's poll learns that and nothing more.
+  const refusal = browserRefusal(request, session);
+  if (refusal) {
+    if (session.status === "pending") {
+      session.status = "error";
+      session.error = refusal.message;
+    }
+    return failedPage(response, refusal);
+  }
 
   const name = (rawName ?? "").trim() || "Dev Player";
-  if (session.status === "pending") complete(session, name);
+  const code = session.status === "pending" ? complete(session, name) : null;
   states.delete(rawState);
+  if (code) {
+    // A launcher on loopback: the browser takes the code there.
+    response.writeHead(302, { location: loopbackTarget(session, code), "cache-control": "no-store" });
+    return response.end();
+  }
   return devDone(response, session);
 }
 
@@ -619,8 +863,17 @@ function devDone(response, session) {
   );
 }
 
-function page(response, inner) {
-  response.writeHead(200, {
+/** A refused browser page. */
+function failedPage(response, refusal) {
+  return page(
+    response,
+    `<h1>${escapeHtml(refusal.heading)}</h1><p>${escapeHtml(refusal.message)}</p>`,
+    refusal.status,
+  );
+}
+
+function page(response, inner, status = 200) {
+  response.writeHead(status, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
   });
@@ -632,8 +885,11 @@ function page(response, inner) {
   );
 }
 
+/** Finishes a pending session as the account of `displayName`. A launcher on
+ *  loopback gets no token yet: the answer is its one-time code, which the
+ *  browser carries to the launcher. Every other session gets its token. */
 function complete(session, displayName) {
-  if (session.status !== "pending") return;
+  if (session.status !== "pending") return null;
   const first = account === null;
   account = {
     id: account?.id ?? id(),
@@ -643,14 +899,22 @@ function complete(session, displayName) {
     providerName: displayName.toLowerCase().replace(/\s+/g, "_"),
     createdAt: account?.createdAt ?? nowIso(),
   };
-  token = randomBytes(32).toString("hex");
-  presence = { ...offline(), status: "online", since: nowIso() };
   if (first) seedWorld();
-
   session.status = "done";
-  session.token = token;
   session.user = account;
   console.log(`mock-online: session ${session.id} completed as ${account.displayName}`);
+
+  if (session.redirectUri) {
+    const code = randomBytes(32).toString("base64url");
+    session.codeHash = sha256Hex(code);
+    session.codeExpiresAt = Date.now() + CODE_TTL_MS;
+    session.codeFailures = 0;
+    return code;
+  }
+  token = randomBytes(32).toString("hex");
+  presence = { ...offline(), status: "online", since: nowIso() };
+  session.token = token;
+  return null;
 }
 
 /** A session without its secret, which is what a poll gets by default. */
@@ -1647,7 +1911,7 @@ function downloadBlob(request, response, sha256, headOnly) {
     "accept-ranges": "bytes",
     etag: `"${sha256}"`,
     "cache-control": "no-store",
-    ...CORS,
+    ...corsOf(response),
   };
   if (type) headers["content-disposition"] = "inline";
   let start = 0;
@@ -3229,7 +3493,7 @@ function chatDownloadFile(request, response, fileId, headOnly) {
     "accept-ranges": "bytes",
     etag: `"${file.sha256}"`,
     "cache-control": "no-store",
-    ...CORS,
+    ...corsOf(response),
   };
   let start = 0;
   let end = bytes.length - 1;
@@ -3368,6 +3632,30 @@ const CORS = {
   "access-control-max-age": "86400",
 };
 
+// --- slice: sign-in binding ---
+/**
+ * The CORS headers of one request. The web app's sign-in calls with
+ * credentials, which a browser allows only when the answer names its origin
+ * and allows credentials; that happens for the origins of
+ * MOCK_ONLINE_WEB_ORIGINS and for no other, as on the service. Every other
+ * origin keeps the wildcard above, without credentials.
+ */
+function corsFor(request) {
+  const origin = request.headers.origin;
+  if (typeof origin !== "string" || !WEB_ORIGINS.includes(origin)) return CORS;
+  return {
+    ...CORS,
+    "access-control-allow-origin": origin,
+    "access-control-allow-credentials": "true",
+    vary: "Origin",
+  };
+}
+
+/** The CORS headers the server callback chose for this response. */
+function corsOf(response) {
+  return response.jknetCors ?? CORS;
+}
+
 function withAuth(request, response, handler) {
   const header = request.headers.authorization ?? "";
   const sent = header.startsWith("Bearer ") ? header.slice(7) : "";
@@ -3391,7 +3679,7 @@ function fail(response, status, code, message) {
 }
 
 function send(response, status, payload) {
-  const headers = { "cache-control": "no-store", ...CORS };
+  const headers = { "cache-control": "no-store", ...corsOf(response) };
   if (payload === null) {
     response.writeHead(status, headers);
     return response.end();
@@ -3421,6 +3709,15 @@ function readBody(request, raw = false) {
       }
     });
   });
+}
+
+// --- slice: sign-in binding ---
+/** A switch as the service reads one: 1, true, yes or on turn it on, any
+ *  other value turns it off, unset or blank keeps the fallback. */
+function flagOr(value, fallback) {
+  const text = (value ?? "").trim().toLowerCase();
+  if (text === "") return fallback;
+  return ["1", "true", "yes", "on"].includes(text);
 }
 
 function argOrEnv(flag, variable, fallback) {

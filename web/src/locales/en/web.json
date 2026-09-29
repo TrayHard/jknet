@@ -48,10 +48,12 @@
     "waiting": "Finish signing in on the page that opened.",
     "expired": "The sign-in took too long. Try again.",
     "failed": "The sign-in did not finish.",
+    "otherBrowser": "The sign-in continued in another browser, so it could not finish. Try again and finish it in this browser.",
+    "cookieRefused": "This browser did not keep the sign-in cookie, so the sign-in could not finish. Allow cookies for JKNet and try again.",
     "retry": "Try again",
     "done": "Signed in. Opening JKNet…",
     "installFirst": "On iPhone, add JKNet to the Home Screen first and sign in there: the installed app keeps its own sign-in.",
-    "doneElsewhere": "This browser has no sign-in to finish. If you signed in from the installed JKNet app or another browser, go back there: you are signed in there.",
+    "doneElsewhere": "This browser has no sign-in to finish. A sign-in finishes only in the browser or installed JKNet app that started it: go back there, or sign in in this browser.",
     "signInHere": "Sign in in this browser"
   },
   "install": {

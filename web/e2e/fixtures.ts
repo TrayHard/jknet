@@ -201,24 +201,38 @@ async function openContext(browser: Browser, options: BrowserContextOptions): Pr
  * service reads the first entry of `X-Forwarded-For`, which a proxy sets in
  * production.
  */
-async function ownAddress(context: BrowserContext): Promise<void> {
-  const address = `203.0.113.${1 + Math.floor(Math.random() * 254)}`;
+export async function ownAddress(context: BrowserContext): Promise<void> {
+  const address = randomAddress();
   await context.route(`${SERVICE}/v1/auth/**`, (route) =>
     route.continue({ headers: { ...route.request().headers(), "x-forwarded-for": address } }),
   );
 }
 
+/** A client address of the documentation range for requests the test makes itself. */
+export function randomAddress(): string {
+  return `203.0.113.${1 + Math.floor(Math.random() * 254)}`;
+}
+
 /**
- * Signs a player in with the developer provider, from `start` (a path the app
- * sends to `/signin?next=`) or from `/signin`, and waits until the app is
- * back on its own pages.
+ * Starts a sign-in with the developer provider, from `start` (a path the app
+ * sends to `/signin?next=`) or from `/signin`, and waits on the provider's
+ * form. The browser holds the session's cookie from here on.
  */
-export async function signIn(page: Page, name: string, start = "/signin"): Promise<void> {
+export async function startDevSignIn(page: Page, start = "/signin"): Promise<void> {
   await ownAddress(page.context());
   await page.goto(start);
   await expect(page).toHaveURL(/\/signin(\?|$)/);
   await page.getByRole("button", { name: /Developer sign-in/ }).click();
   await page.waitForURL(`${SERVICE}/v1/auth/dev/start**`);
+}
+
+/**
+ * Signs a player in with the developer provider, from `start` or from
+ * `/signin` (see `startDevSignIn`), and waits until the app is back on its
+ * own pages.
+ */
+export async function signIn(page: Page, name: string, start = "/signin"): Promise<void> {
+  await startDevSignIn(page, start);
   await page.locator("#name").fill(name);
   await page.locator("button[type=submit]").click();
   await backFromService(page);
@@ -227,15 +241,18 @@ export async function signIn(page: Page, name: string, start = "/signin"): Promi
 
 /**
  * The service's success page leads back to the app by itself after a
- * second (a meta refresh). A headless Firefox sometimes sits on it; a player
- * would press **Return to JKNet**, and so does this.
+ * second (a meta refresh). A headless Firefox sometimes sits on it, at
+ * times without ever reporting it loaded, and then a click on **Return to
+ * JKNet** waits for that load forever. So this opens the link's address,
+ * the app's `/signin/done`, the way a player's press would; a refresh that
+ * fires meanwhile only cuts the navigation short.
  */
 export async function backFromService(page: Page): Promise<void> {
   try {
     await page.waitForURL((url) => url.origin === BASE, { timeout: 5_000 });
   } catch {
-    const back = page.getByRole("link", { name: "Return to JKNet" });
-    if (await back.isVisible()) await back.click();
+    if (new URL(page.url()).origin === BASE) return;
+    await page.goto(`${BASE}/signin/done`).catch(() => undefined);
   }
 }
 
@@ -300,9 +317,12 @@ export interface LauncherClient {
 }
 
 /**
- * Signs a launcher in with the developer provider, the way JKNet on a PC
- * does: a login session of client `launcher`, the provider's form, the
- * poll. The same name is the same account as the web app's sign-in.
+ * Signs a launcher in with the developer provider, the way JKNet 0.4.0 to
+ * 0.9.0 on a PC does: a login session of client `launcher` without a
+ * loopback address, the provider's form, the poll that carries the token.
+ * The service takes this old sign-in while `JKNET_ONLINE_LEGACY_SIGNIN` is
+ * on, its default. The same name is the same account as the web app's
+ * sign-in.
  */
 export async function launcherSignIn(name: string): Promise<LauncherClient> {
   const headers = { "content-type": "application/json", "x-forwarded-for": `203.0.113.${1 + Math.floor(Math.random() * 254)}` };

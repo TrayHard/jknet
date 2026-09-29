@@ -74,18 +74,24 @@ async function answer(response, what) {
 /**
  * Signs a player in with the developer provider, as the web app does, and
  * answers the token and the account. A client address of its own spares the
- * service's per-address sign-in limit.
+ * service's per-address sign-in limit. Node keeps no cookies, so the cookie
+ * that ties the session to its browser is carried by hand, as a browser
+ * would.
  */
 async function devSignIn(name) {
   const headers = { "content-type": "application/json", "x-forwarded-for": `203.0.113.${1 + Math.floor(Math.random() * 254)}` };
-  const session = await answer(
-    await fetch(`${API}/v1/auth/login-sessions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ provider: "dev", deviceName: "JKNet web · online test", device: "desktop", client: "web" }),
-    }),
-    "a login session",
-  );
+  const created = await fetch(`${API}/v1/auth/login-sessions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ provider: "dev", deviceName: "JKNet web · online test", device: "desktop", client: "web" }),
+  });
+  const cookie = created.headers
+    .getSetCookie()
+    .map((line) => line.split(";")[0].trim())
+    .find((pair) => pair.startsWith("jknet_signin="));
+  assert.ok(cookie, "a web login session sets the cookie that ties it to its browser");
+  headers.cookie = cookie;
+  const session = await answer(created, "a login session");
   const form = await (await fetch(session.url, { headers })).text();
   const state = /name="state" value="([^"]+)"/.exec(form)?.[1];
   assert.ok(state, "the developer sign-in form carries its state");

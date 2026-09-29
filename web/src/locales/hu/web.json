@@ -48,10 +48,12 @@
     "waiting": "Fejezze be a bejelentkezést a megnyílt oldalon.",
     "expired": "A bejelentkezés túl sokáig tartott. Próbálja újra.",
     "failed": "A bejelentkezés nem fejeződött be.",
+    "otherBrowser": "A bejelentkezés egy másik böngészőben folytatódott, ezért nem fejeződött be. Próbálja újra, és fejezze be ebben a böngészőben.",
+    "cookieRefused": "Ez a böngésző nem tartotta meg a bejelentkezési sütit, ezért a bejelentkezés nem fejeződött be. Engedélyezze a sütiket a JKNet számára, és próbálja újra.",
     "retry": "Újra",
     "done": "Bejelentkezve. A JKNet megnyílik…",
     "installFirst": "iPhone-on előbb adja hozzá a JKNetet a Főképernyőhöz, és ott jelentkezzen be: a telepített alkalmazásnak saját bejelentkezése van.",
-    "doneElsewhere": "Ebben a böngészőben nincs befejezendő bejelentkezés. Ha a telepített JKNet alkalmazásból vagy egy másik böngészőből jelentkezett be, térjen vissza oda: ott be van jelentkezve.",
+    "doneElsewhere": "Ebben a böngészőben nincs befejezendő bejelentkezés. A bejelentkezés csak abban a böngészőben vagy telepített JKNet alkalmazásban fejeződhet be, ahol elkezdődött: térjen vissza oda, vagy jelentkezzen be ebben a böngészőben.",
     "signInHere": "Bejelentkezés ebben a böngészőben"
   },
   "install": {

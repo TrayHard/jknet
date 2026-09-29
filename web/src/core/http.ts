@@ -3,8 +3,12 @@
  * them.
  *
  * The token goes in the `Authorization` header of every call that needs it,
- * never in a cookie or a query string. A refusal of the service becomes a
- * `CoreError` with its contract code (`errors.ts`), and a `401` on a call that
+ * never in a cookie or a query string. The only cookie the service sets is
+ * the one that ties a sign-in to this browser (`session.ts`), and only the
+ * two sign-in calls that need it send cookies.
+ *
+ * A refusal of the service becomes a `CoreError` with its contract code
+ * (`errors.ts`), and a `401` on a call that
  * carried the token — outside the sign-in routes, which answer `401` to a
  * token they already forgot — tells the session the token is gone, which is
  * how an expired or revoked sign-in reaches the screens.
@@ -33,6 +37,12 @@ export interface RequestOptions {
   body?: unknown;
   /** Send the token. On by default; the sign-in routes turn it off. */
   auth?: boolean;
+  /**
+   * Send and keep the service's cookies. Off by default: only creating and
+   * polling the web app's login session turn it on, for the cookie that ties
+   * the session to this browser.
+   */
+  cookies?: boolean;
 }
 
 export interface Answer<T> {
@@ -95,8 +105,9 @@ export function createHttp(options: HttpOptions): Http {
           headers,
           body,
           signal: controller.signal,
-          // The API is on its own origin and carries no cookie of ours.
-          credentials: "omit",
+          // The API is on its own origin. Its one cookie, the sign-in's, goes
+          // only to the calls that ask for it.
+          credentials: request.cookies === true ? "include" : "omit",
           cache: "no-store",
           referrerPolicy: "no-referrer",
         }),

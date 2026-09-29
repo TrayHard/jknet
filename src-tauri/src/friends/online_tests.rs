@@ -25,6 +25,8 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use tokio_tungstenite::tungstenite::Message;
 
+use crate::account::LoopbackSignIn;
+use crate::online::loopback::Served;
 use crate::online::{
     LiveFrame, OnlineClient, OnlineContext, OnlineUser, Presence, PresenceUpdate, PresenceUpdated,
     DEV_ONLINE_URL,
@@ -237,9 +239,13 @@ const SIGN_IN_ATTEMPTS: u32 = 9;
 
 /// Signs in through the `dev` provider, browser step and all.
 ///
-/// The launcher opens `session.url` in the system browser and lets the player
-/// type a name; this does the same two requests with `reqwest`, because that
-/// form is the whole of the `dev` provider.
+/// --- slice: sign-in binding ---
+/// The way the launcher does it: `crate::account::LoopbackSignIn` listens on
+/// loopback and opens the session, and the browser's part is done with
+/// `reqwest`, because that form is the whole of the `dev` provider. The
+/// callback's redirect takes the one-time code to the listener, which trades
+/// it for the token. Every online test that signs players in walks the
+/// launcher's own sign-in this way.
 ///
 /// The service lets ten sign-ins a minute through from one address, and the
 /// chat scenarios sign in more players than that, so a sign-in the service
@@ -249,8 +255,10 @@ pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player
         base_url: DEV_ONLINE_URL.into(),
         token: None,
     };
+    // Longer than a request of the launcher: the last page is the listener's,
+    // written after the exchange, which waits out a refusal as too many.
     let browser = reqwest::Client::builder()
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(90))
         .build()
         .expect("a client");
     for attempt in 1..=SIGN_IN_ATTEMPTS {
@@ -263,6 +271,9 @@ pub(crate) async fn sign_in(client: &OnlineClient, display_name: &str) -> Player
     panic!("the service kept refusing the sign-in of {display_name} as too many");
 }
 
+/// How long the listener of a test sign-in waits for the browser.
+const LISTEN_FOR: Duration = Duration::from_secs(120);
+
 /// One sign-in; `None` when the service refused a step as too many.
 async fn try_sign_in(
     client: &OnlineClient,
@@ -270,18 +281,88 @@ async fn try_sign_in(
     anonymous: &OnlineContext,
     display_name: &str,
 ) -> Option<Player> {
-    let session = match client
-        .create_login_session(anonymous, "dev", Some("cargo test"))
-        .await
-    {
+    let signin = match LoopbackSignIn::open(client, anonymous, "dev", Some("cargo test")).await {
         Err(crate::error::AppError::Online { code, .. }) if code == "rate_limited" => return None,
         other => other.expect("the service is running with JKNET_ONLINE_DEV_PROVIDER=1"),
     };
+    let session = signin.session().clone();
     println!(
         "POST /v1/auth/login-sessions -> {} {}",
         session.id, session.status
     );
 
+    // The listener and the browser run side by side; a browser leg that ends
+    // early stops the listener through `stop`.
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let mut stop = Some(stop);
+    let listening = signin.wait(
+        client,
+        anonymous,
+        LISTEN_FOR,
+        async move {
+            let _ = stopped.await;
+        },
+        |token, user| async move { Ok((token, user)) },
+    );
+    let browsing = async {
+        let landed = browse(browser, &session, display_name).await;
+        if !matches!(landed, Some(true)) {
+            drop(stop.take());
+        }
+        landed
+    };
+    let (served, landed) = tokio::join!(listening, browsing);
+    if !landed? {
+        panic!("the browser did not end on the launcher's sign-in page");
+    }
+    let (token, user) = match served {
+        Served::Finished(Ok(pair)) => pair,
+        Served::Finished(Err(e)) => panic!("the code exchange failed: {e}"),
+        Served::Cancelled => panic!("the listener was stopped"),
+        Served::TimedOut => panic!("the code never reached the listener"),
+    };
+    println!(
+        "POST /v1/auth/login-sessions/{}/token -> signed in as {}",
+        session.id, user.display_name
+    );
+
+    // Whoever polls the session learns it is done, and never gets the token.
+    let polled = client
+        .poll_login_session(anonymous, &session.id)
+        .await
+        .expect("the session reads back");
+    assert_eq!(polled.status, "done");
+    assert!(polled.token.is_none(), "the poll handed out the token");
+    println!(
+        "GET /v1/auth/login-sessions/{} -> {}, token absent, user {}",
+        session.id,
+        polled.status,
+        if polled.user.is_some() {
+            "present"
+        } else {
+            "absent"
+        },
+    );
+
+    Some(Player {
+        name: user.display_name.clone(),
+        user,
+        ctx: OnlineContext {
+            base_url: DEV_ONLINE_URL.into(),
+            token: Some(token),
+        },
+    })
+}
+
+/// The browser's part: the form, then the callback, whose redirect the
+/// client follows to the listener. `Some(true)` when it ended on the
+/// listener's "Signed in" page, `None` when the service refused a step as
+/// too many.
+async fn browse(
+    browser: &reqwest::Client,
+    session: &crate::online::LoginSession,
+    display_name: &str,
+) -> Option<bool> {
     let form = browser
         .get(&session.url)
         .send()
@@ -303,62 +384,28 @@ async fn try_sign_in(
         .send()
         .await
         .expect("the callback answers");
-    println!("GET /v1/auth/dev/callback -> {}", done.status().as_u16());
+    // Where the redirect landed, without the code.
+    let landed = format!(
+        "{}:{}{}",
+        done.url().host_str().unwrap_or_default(),
+        done.url().port().unwrap_or_default(),
+        done.url().path()
+    );
+    println!(
+        "GET /v1/auth/dev/callback -> {} at {landed}",
+        done.status().as_u16()
+    );
     if done.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return None;
     }
-
-    let polled = client
-        .poll_login_session(anonymous, &session.id)
-        .await
-        .expect("the session reads back");
-    let token = polled
-        .token
-        .expect("the first read after done carries a token");
-    let user = polled.user.expect("and the account it belongs to");
-    println!(
-        "GET /v1/auth/login-sessions/{} -> {} as {}",
-        session.id, polled.status, user.display_name
-    );
-
-    // The token is handed out exactly once. The account is not: a `done`
-    // session keeps answering with it, which is narrower than the deviation
-    // list says and is what `poll_sign_in` reads on its second call anyway.
-    // Both fields are absent rather than null while the session is pending,
-    // which is the shape `LoginSession` is written for.
-    let again = client
-        .poll_login_session(anonymous, &session.id)
-        .await
-        .expect("a second read works");
-    assert!(again.token.is_none(), "the token was handed out twice");
-    println!(
-        "GET /v1/auth/login-sessions/{} again -> {}, token {}, user {}",
-        session.id,
-        again.status,
-        if again.token.is_some() {
-            "present"
-        } else {
-            "absent"
-        },
-        if again.user.is_some() {
-            "present"
-        } else {
-            "absent"
-        },
-    );
-
-    Some(Player {
-        name: user.display_name.clone(),
-        user,
-        ctx: OnlineContext {
-            base_url: DEV_ONLINE_URL.into(),
-            token: Some(token),
-        },
-    })
+    let on_loopback = done.url().host_str() == Some("127.0.0.1")
+        && done.url().path() == crate::online::loopback::SIGN_IN_PATH;
+    let page = done.text().await.unwrap_or_default();
+    Some(on_loopback && page.contains("You can close this tab and return to JKNet"))
 }
 
 /// Pulls `value` out of `<input type="hidden" name="state" value="…">`.
-fn hidden_state(form: &str) -> Option<&str> {
+pub(crate) fn hidden_state(form: &str) -> Option<&str> {
     let after = form.split_once("name=\"state\"")?.1;
     let value = after.split_once("value=\"")?.1;
     value.split_once('"').map(|(state, _)| state)

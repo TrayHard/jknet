@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next";
 import { AlertTriangle, LogOut, Share } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -8,7 +9,7 @@ import { Logo } from "../../../../src/components/Logo.tsx";
 import { Button } from "../../../../src/components/ui/index.ts";
 import { onlineErrorCode, onlineErrorMessage, type OnlineProvider, type SignInStart } from "../../../../src/lib/ipc.ts";
 import { useAccountState } from "../../../../src/lib/queries.ts";
-import { DEFAULT_NEXT, safeNext } from "../../core/session.ts";
+import { DEFAULT_NEXT, safeNext, type SignInStatus } from "../../core/session.ts";
 import { useEndedElsewhere, useSignInStatus, useWebCore } from "../CoreContext.tsx";
 
 /** Safari on an iPhone, outside the installed app: sign-in belongs in the app. */
@@ -18,6 +19,17 @@ function iphoneInBrowser(): boolean {
     matchMedia("(display-mode: standalone)").matches ||
     (navigator as Navigator & { standalone?: boolean }).standalone === true;
   return iOS && !standalone;
+}
+
+/**
+ * What a failed or expired sign-in says on both sign-in pages. A sign-in
+ * that belongs to another browser gets the app's own words, which tell the
+ * player what to do; any other failure the service's, or a general line.
+ */
+export function signInFailureText(status: SignInStatus, t: TFunction<"web">): string {
+  if (status.failure === "otherBrowser") return t("signin.otherBrowser");
+  if (status.failure === "cookie") return t("signin.cookieRefused");
+  return status.error ?? (status.phase === "expired" ? t("signin.expired") : t("signin.failed"));
 }
 
 /** The frame of both sign-in pages: the mark, a card, nothing else. */
@@ -110,11 +122,13 @@ export function SignInScreen() {
       ) : null}
 
       {error !== null || failed ? (
-        <div role="alert" className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12">
+        <div
+          role="alert"
+          data-testid="signin-failed"
+          className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12"
+        >
           <AlertTriangle size={16} className="mt-2 shrink-0 text-fg-warm" />
-          <span className="text-body-sm text-fg break-words">
-            {error ?? status.error ?? (status.phase === "expired" ? t("signin.expired") : t("signin.failed"))}
-          </span>
+          <span className="text-body-sm text-fg break-words">{error ?? signInFailureText(status, t)}</span>
         </div>
       ) : null}
 

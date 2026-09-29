@@ -10,6 +10,7 @@
 //! | ---------- | ------------------------------------------------------ |
 //! | `types.rs` | the wire structures, unchanged on the way to the frontend |
 //! | `client.rs`| the HTTP client, the error mapping and the pure checks |
+//! | `loopback.rs` | the sign-in's one-shot listener on 127.0.0.1 and its code verifier |
 //!
 //! Two modules call it and neither owns it: `crate::account` signs in and
 //! keeps the account, `crate::friends` does everything else. One connection
@@ -23,6 +24,8 @@
 //! supported: calls return `AppError::OnlineNotConfigured` without networking.
 
 mod client;
+// --- slice: sign-in binding ---
+pub mod loopback;
 /// `pub(crate)` for its `MockOnline` helper: the live-socket test of
 /// `crate::friends` starts the same stand-in.
 #[cfg(test)]
@@ -43,11 +46,16 @@ pub use client::{
     default_online_url, is_http_url, is_local_online, normalize_display_name, normalize_online_url,
     online_configured, path_segment, Auth, OnlineClient, OnlineContext, PROVIDERS,
 };
+// --- slice: sign-in binding ---
+// The login session `crate::account` opens on loopback and keeps while
+// the listener waits, and the fields that make it a loopback one.
+pub use client::Loopback;
+pub use types::LoginSession;
 /// The answer of `GET /v1/me`, for the test of `account` that pins how the
 /// `admin` flag reads out of an older service and a newer one.
 #[cfg(test)]
 pub use types::Me;
-// Only what another module names. `LoginSession`, `Me` and `FriendsList` are
+// Only what another module names. `Me` and `FriendsList` are
 // answers of `client.rs` that the callers destructure rather than name, so
 // re-exporting them would be a public surface nothing asks for.
 // `Auth` and `path_segment` are the two the bundles module names.

@@ -2068,6 +2068,10 @@ export const accountIpc = {
   /** Reads a session once. On `done` the core has already stored the token. */
   pollSignIn: (sessionId: string) =>
     call<SignInPoll>("poll_sign_in", { sessionId }),
+  // --- slice: sign-in binding ---
+  /** Stops the sign-in in progress: the core closes the loopback listener
+   *  that waits for the browser. */
+  cancelSignIn: () => call<void>("cancel_sign_in"),
   signOut: () => call<void>("sign_out"),
   updateDisplayName: (displayName: string) =>
     call<OnlineUser>("update_display_name", { displayName }),

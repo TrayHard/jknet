@@ -48,10 +48,12 @@
     "waiting": "Schließen Sie die Anmeldung auf der geöffneten Seite ab.",
     "expired": "Die Anmeldung hat zu lange gedauert. Versuchen Sie es erneut.",
     "failed": "Die Anmeldung wurde nicht abgeschlossen.",
+    "otherBrowser": "Die Anmeldung wurde in einem anderen Browser fortgesetzt und konnte daher nicht abgeschlossen werden. Versuchen Sie es erneut und schließen Sie die Anmeldung in diesem Browser ab.",
+    "cookieRefused": "Dieser Browser hat das Anmelde-Cookie nicht behalten, daher konnte die Anmeldung nicht abgeschlossen werden. Erlauben Sie Cookies für JKNet und versuchen Sie es erneut.",
     "retry": "Erneut versuchen",
     "done": "Angemeldet. JKNet wird geöffnet…",
     "installFirst": "Fügen Sie JKNet auf dem iPhone zuerst zum Home-Bildschirm hinzu und melden Sie sich dort an: Die installierte App hat eine eigene Anmeldung.",
-    "doneElsewhere": "In diesem Browser ist keine Anmeldung abzuschließen. Wenn Sie sich in der installierten JKNet-App oder einem anderen Browser angemeldet haben, kehren Sie dorthin zurück: Dort sind Sie angemeldet.",
+    "doneElsewhere": "In diesem Browser ist keine Anmeldung abzuschließen. Eine Anmeldung wird dort abgeschlossen, wo sie begonnen wurde, im selben Browser oder in der installierten JKNet-App: Kehren Sie dorthin zurück oder melden Sie sich in diesem Browser an.",
     "signInHere": "In diesem Browser anmelden"
   },
   "install": {

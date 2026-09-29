@@ -6,7 +6,7 @@ import { Link, Navigate } from "react-router";
 import { useAccountState } from "../../../../src/lib/queries.ts";
 import { DEFAULT_NEXT } from "../../core/session.ts";
 import { useSignInStatus, useWebCore } from "../CoreContext.tsx";
-import { SignInFrame } from "./SignInScreen.tsx";
+import { SignInFrame, signInFailureText } from "./SignInScreen.tsx";
 
 /**
  * `/signin/done`: where the service's success page sends the tab back.
@@ -22,8 +22,8 @@ export function SignInDoneScreen() {
   const status = useSignInStatus();
 
   // A tab opened here without a pending sign-in in this browser — the link
-  // was followed on another device, or the pending one ran out — has nothing
-  // to wait for.
+  // was followed in another browser or on another device, or the pending one
+  // ran out — has nothing to wait for.
   useEffect(() => {
     if (status.phase === "idle" && account?.onlineSignedIn === false) void core.session.watchPending();
   }, [account?.onlineSignedIn, core, status.phase]);
@@ -33,9 +33,10 @@ export function SignInDoneScreen() {
   }
 
   const failed = status.phase === "expired" || status.phase === "error";
-  // No sign-in of this browser to wait for. The sign-in may well have
-  // finished: in the installed app, which keeps storage of its own, or in
-  // the browser that started it. So it says so, and offers a new one.
+  // No sign-in of this browser to wait for. A sign-in finishes only in the
+  // browser that started it: the service's page for a browser without the
+  // sign-in's cookie links here, and the installed app keeps storage and
+  // cookies of its own. So it says so, and offers a new one.
   const idle = status.phase === "idle" && account !== undefined;
   const again = status.next === null ? "/signin" : `/signin?next=${encodeURIComponent(status.next)}`;
 
@@ -62,11 +63,13 @@ export function SignInDoneScreen() {
     <SignInFrame>
       {failed ? (
         <div className="flex flex-col gap-16">
-          <div role="alert" className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12">
+          <div
+            role="alert"
+            data-testid="signin-failed"
+            className="flex items-start gap-8 rounded-md border border-line-warm bg-warm-subtle p-12"
+          >
             <AlertTriangle size={16} className="mt-2 shrink-0 text-fg-warm" />
-            <span className="text-body-sm text-fg break-words">
-              {status.error ?? (status.phase === "expired" ? t("signin.expired") : t("signin.failed"))}
-            </span>
+            <span className="text-body-sm text-fg break-words">{signInFailureText(status, t)}</span>
           </div>
           <Link
             to={again}

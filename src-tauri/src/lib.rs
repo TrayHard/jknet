@@ -494,6 +494,9 @@ pub fn run() {
         // Which of the account's sessions is this launcher's, as the last
         // listing of the devices card said.
         .manage(account::SessionsState::default())
+        // --- slice: sign-in binding ---
+        // The loopback sign-in in progress and how it ended.
+        .manage(account::SignInState::default())
         // --- slice: friends ---
         // The presence the launcher reports and whether the live socket is
         // up. Kept apart from `AppState` for the same reason as the two above:
@@ -663,6 +666,8 @@ pub fn run() {
             community::community_request,
             account::begin_sign_in,
             account::poll_sign_in,
+            // --- slice: sign-in binding ---
+            account::cancel_sign_in,
             account::sign_out,
             account::update_display_name,
             account::delete_account,
