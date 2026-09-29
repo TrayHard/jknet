@@ -382,11 +382,20 @@
   "attach": {
     "open": "Attach",
     "limits": "Up to 25 MiB per file. Files are kept for 90 days.",
+    "groups": {
+      "files": "Files",
+      "media": "Media",
+      "game": "Game",
+      "settings": "Settings",
+      "catalogs": "Catalogs"
+    },
     "kinds": {
       "file": "Any file",
       "clipboard": "Image from the clipboard",
       "photo": "Photo",
-      "media": "Video or screenshot from Media",
+      "screenshot": "Screenshot",
+      "demo": "Demo",
+      "video": "Video",
       "server": "Server",
       "map": "Map",
       "profile": "Player profile",
@@ -606,13 +615,17 @@
     "narrow_one": "{{count}} more. Type to narrow the list.",
     "narrow_other": "{{count}} more. Type to narrow the list.",
     "noClient": "Add a client of this game on the Clients screen first.",
+    "localBank": "One local bank collected from all clients of the selected game.",
     "media": {
-      "title": "Attach from Media",
-      "empty": "No demos, screenshots or videos of this game on the Media screen yet.",
-      "kinds": {
-        "demos": "Demo",
-        "screenshots": "Screenshot",
-        "videos": "Video"
+      "titles": {
+        "demos": "Share a demo",
+        "screenshots": "Share a screenshot",
+        "videos": "Share a video"
+      },
+      "empty": {
+        "demos": "No demos of this game are in Media yet.",
+        "screenshots": "No screenshots of this game are in Media yet.",
+        "videos": "No videos of this game are in Media yet."
       }
     },
     "server": {
@@ -622,8 +635,11 @@
     },
     "map": {
       "title": "Share a map",
-      "body": "Maps of {{client}}.",
-      "empty": "This client has no maps."
+      "empty": "No local client has maps.",
+      "groups": {
+        "game": "Game maps",
+        "client": "Client and mod maps"
+      }
     },
     "profile": {
       "title": "Share a player profile",
@@ -639,8 +655,20 @@
     },
     "config": {
       "title": "Share a config",
+      "body": "Client and server configs are listed separately.",
       "empty": "No saved configs of this game yet. Make one on the Configs screen.",
-      "tooLarge": "Larger than 32 KiB: send the .cfg as a file instead."
+      "tooLarge": "Larger than 32 KiB: send the .cfg as a file instead.",
+      "local": "Local config",
+      "groups": {
+        "client": "Client configs",
+        "server": "Server configs"
+      },
+      "sensitive": {
+        "title": "Remove secrets before sharing?",
+        "body": "JKNet found possible secrets: {{keys}}. Remove the commands that contain them, or share the config unchanged.",
+        "shareUnchanged": "Share unchanged",
+        "removeAndShare": "Remove and share"
+      }
     },
     "bundle": {
       "title": "Share a bundle",

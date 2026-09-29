@@ -13,6 +13,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_opener::OpenerExt;
@@ -26,6 +27,7 @@ use crate::jkhub::source::{HtmlSource, JkhubSource};
 use crate::jkhub::types::JkhubDownload;
 use crate::jkhub::JkhubState;
 use crate::launch::{self, LaunchPlan};
+use crate::online::{Auth, OnlineClient, OnlineContext};
 use crate::paths::{self, DataPaths};
 use crate::state::AppState;
 use crate::timestamp;
@@ -92,6 +94,59 @@ pub struct ServerMod {
 pub enum ServerModSource {
     Disk { path: String },
     Jkhub { file_id: u32, url: String },
+}
+
+/// One server mod curated by the JKNet account administrator.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturedServerMod {
+    pub id: String,
+    pub game: Game,
+    pub name: String,
+    pub folder: String,
+    pub source_kind: String,
+    pub source_ref: String,
+}
+
+/// A JKHub file or website the administrator adds to the curated list.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FeaturedServerModInput {
+    pub game: Game,
+    pub name: String,
+    pub folder: String,
+    pub source_kind: String,
+    pub source_ref: String,
+}
+
+fn default_featured_server_mods(game: Game) -> Vec<FeaturedServerMod> {
+    if game != Game::JediAcademy {
+        return Vec::new();
+    }
+    [
+        ("featured-ja-japlus", "JA+", "japlus", "jkhub", "953"),
+        ("featured-ja-lugor", "LugorMod", "lugormod", "jkhub", "2672"),
+        ("featured-ja-maker", "MakerMod", "makermod", "jkhub", "2146"),
+        (
+            "featured-ja-japlusplus",
+            "JA++",
+            "japlus",
+            "website",
+            "https://japplus.github.io/site/download.html",
+        ),
+    ]
+    .into_iter()
+    .map(
+        |(id, name, folder, source_kind, source_ref)| FeaturedServerMod {
+            id: id.to_string(),
+            game,
+            name: name.to_string(),
+            folder: folder.to_string(),
+            source_kind: source_kind.to_string(),
+            source_ref: source_ref.to_string(),
+        },
+    )
+    .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -350,6 +405,87 @@ pub fn list_server_mods(state: tauri::State<'_, AppState>) -> Result<Vec<ServerM
     let mut mods = read_records::<ServerMod>(&paths.server_mods, MOD_RECORD)?;
     mods.sort_by_key(|item| item.name.to_lowercase());
     Ok(mods)
+}
+
+/// Reads the account-managed list. The four built-ins remain available when
+/// an older or offline service cannot answer.
+#[tauri::command]
+pub async fn list_featured_server_mods(
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    game: Game,
+) -> Result<Vec<FeaturedServerMod>> {
+    let settings = state.settings()?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let path = format!("/v1/server-mods/featured?game={}", game.id());
+    match online
+        .request(&ctx, Method::GET, &path, None, Auth::None)
+        .await
+    {
+        Ok(items) => Ok(items),
+        Err(error) => {
+            log::warn!("cannot read featured server mods, using built-ins: {error}");
+            Ok(default_featured_server_mods(game))
+        }
+    }
+}
+
+fn require_featured_mod_admin(state: &AppState) -> Result<crate::settings::Settings> {
+    let settings = state.settings()?;
+    if settings
+        .online_user
+        .as_ref()
+        .is_some_and(|user| user.server_mod_admin)
+    {
+        Ok(settings)
+    } else {
+        Err(AppError::Online {
+            code: "forbidden".into(),
+            message: "server mod catalogue administrator access required".into(),
+        })
+    }
+}
+
+#[tauri::command]
+pub async fn save_featured_server_mod(
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    input: FeaturedServerModInput,
+) -> Result<FeaturedServerMod> {
+    let settings = require_featured_mod_admin(&state)?;
+    let ctx = OnlineContext::from_settings(&settings);
+    online
+        .request(
+            &ctx,
+            Method::POST,
+            "/v1/server-mods/featured",
+            Some(serde_json::to_value(input).map_err(|error| AppError::Json {
+                context: "cannot encode featured server mod".into(),
+                source: error,
+            })?),
+            Auth::Required,
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn delete_featured_server_mod(
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    id: String,
+) -> Result<FeaturedServerMod> {
+    let settings = require_featured_mod_admin(&state)?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let id = crate::online::path_segment(id.trim())?;
+    online
+        .request(
+            &ctx,
+            Method::DELETE,
+            &format!("/v1/server-mods/featured/{id}"),
+            None,
+            Auth::Required,
+        )
+        .await
 }
 
 #[tauri::command]
@@ -1806,6 +1942,20 @@ mod tests {
     fn server_mod_categories_match_the_two_jkhub_server_side_shelves() {
         assert_eq!(server_mod_category(Game::JediAcademy), 25);
         assert_eq!(server_mod_category(Game::JediOutcast), 43);
+    }
+
+    #[test]
+    fn featured_server_mods_have_the_requested_offline_defaults() {
+        let mods = default_featured_server_mods(Game::JediAcademy);
+        assert_eq!(
+            mods.iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            ["JA+", "LugorMod", "MakerMod", "JA++"]
+        );
+        assert_eq!(mods[0].source_ref, "953");
+        assert_eq!(mods[3].source_kind, "website");
+        assert!(default_featured_server_mods(Game::JediOutcast).is_empty());
     }
 
     #[test]

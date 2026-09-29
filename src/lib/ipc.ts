@@ -218,6 +218,18 @@ export interface ServerMod {
   createdAt: string;
 }
 
+export interface FeaturedServerMod {
+  id: string;
+  game: Game;
+  name: string;
+  folder: string;
+  sourceKind: "jkhub" | "website";
+  /** A decimal JKHub file id or an HTTPS page opened in the browser. */
+  sourceRef: string;
+}
+
+export type FeaturedServerModInput = Omit<FeaturedServerMod, "id">;
+
 export interface ServerTemplateFile {
   path: string;
   source: string;
@@ -290,6 +302,12 @@ export const serverInstancesIpc = {
   installEngine: (engineId: string, tag: string | null = null) =>
     call<ServerEngineInstall>("install_server_engine", { engineId, tag }),
   mods: () => call<ServerMod[]>("list_server_mods"),
+  featuredMods: (game: Game) =>
+    call<FeaturedServerMod[]>("list_featured_server_mods", { game }),
+  saveFeaturedMod: (input: FeaturedServerModInput) =>
+    call<FeaturedServerMod>("save_featured_server_mod", { input }),
+  deleteFeaturedMod: (id: string) =>
+    call<FeaturedServerMod>("delete_featured_server_mod", { id }),
   addModFromDisk: (input: { name: string; game: Game; folder: string; sourcePath: string }) =>
     call<ServerMod>("add_server_mod_from_disk", input),
   addModFromJkhub: (input: { fileId: number; name: string; game: Game; folder: string }) =>
@@ -1997,6 +2015,8 @@ export interface AccountState {
    * the only thing behind it, and the service checks the right again.
    */
   isAdmin?: boolean;
+  /** Whether the signed-in account may manage the featured server mod list. */
+  isServerModAdmin?: boolean;
 }
 
 /** `src-tauri/src/account.rs`: the session `begin_sign_in` opened. */

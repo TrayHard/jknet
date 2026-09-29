@@ -202,6 +202,17 @@ export function serverConfigSensitiveKeys(text: string): string[] {
   return [...keys];
 }
 
+/** Remove every command that contains a detected credential, retaining comments. */
+export function removeServerConfigSensitive(text: string): string {
+  const masked = maskComments(text);
+  return commandSpans(text).filter(span => serverConfigSensitiveKeys(span.text).length > 0).reverse()
+    .reduce((result, span) => {
+      const comments = [...text.slice(span.start, span.end).matchAll(/\/\*[\s\S]*?(?:\*\/|$)/g)]
+        .filter(match => masked[span.start + match.index] === " ").map(match => match[0]).join(" ");
+      return result.slice(0, span.start) + comments + result.slice(span.end);
+    }, text);
+}
+
 export function serverConfigFilename(name: string): string {
   const base = name.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/[. ]+$/, "").slice(0, 100);
   return `${base || "server"}${/\.cfg$/i.test(base) ? "" : ".cfg"}`;

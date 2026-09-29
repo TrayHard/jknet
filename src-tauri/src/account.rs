@@ -105,6 +105,8 @@ pub struct AccountState {
     /// the last sign-in. False while signed out. The **Review queue** button
     /// of the Bundles tab hangs off it.
     pub is_admin: bool,
+    /// Whether the account may manage the featured server mod list.
+    pub is_server_mod_admin: bool,
 }
 
 /// What `begin_sign_in` hands back: the session to poll and the URL that was
@@ -214,7 +216,10 @@ pub async fn poll_sign_in(
                 token: Some(token.clone()),
             };
             match online.get_me(&signed).await {
-                Ok(me) => user.admin = me.admin,
+                Ok(me) => {
+                    user.admin = me.admin;
+                    user.server_mod_admin = me.server_mod_admin;
+                }
                 Err(e) => log::warn!("cannot read the account after sign-in: {e}"),
             }
             store_account(&state, Some(token), Some(user.clone()))?;
@@ -308,6 +313,10 @@ pub async fn update_display_name(
         .online_user
         .as_ref()
         .is_some_and(|known| known.admin);
+    user.server_mod_admin = settings
+        .online_user
+        .as_ref()
+        .is_some_and(|known| known.server_mod_admin);
     store_account(&state, ctx.token.clone(), Some(user.clone()))?;
     // Signed in either way; the payload exists so a listener knows to reread
     // the account rather than to work out what changed.
@@ -504,6 +513,9 @@ fn account_state_of(ctx: OnlineContext, user: Option<OnlineUser>) -> AccountStat
         // open a sign-in that cannot start.
         online_signed_in: ctx.signed_in(),
         is_admin: configured && ctx.signed_in() && user.as_ref().is_some_and(|user| user.admin),
+        is_server_mod_admin: configured
+            && ctx.signed_in()
+            && user.as_ref().is_some_and(|user| user.server_mod_admin),
         online_user: if configured { user } else { None },
         local_online: configured && is_local_online(&ctx.base_url),
         online_url: ctx.base_url,
@@ -647,6 +659,7 @@ mod tests {
                 provider_name: "kyle_k".into(),
                 created_at: "2026-09-10T10:00:00Z".into(),
                 admin: false,
+                server_mod_admin: false,
             }),
             ..Settings::default()
         }
@@ -658,6 +671,7 @@ mod tests {
         assert!(state.online_configured);
         assert!(state.online_signed_in);
         assert!(!state.is_admin);
+        assert!(!state.is_server_mod_admin);
         assert_eq!(
             state.online_user.expect("a user").display_name,
             "Kyle Katarn"
@@ -674,13 +688,16 @@ mod tests {
         let mut settings = signed_in_settings();
         if let Some(user) = settings.online_user.as_mut() {
             user.admin = true;
+            user.server_mod_admin = true;
         }
         assert!(account_state(&settings).is_admin);
+        assert!(account_state(&settings).is_server_mod_admin);
 
         // The flag is a property of a session, so a token that is gone takes
         // it with it, whatever the cached copy of the user still says.
         settings.online_token = None;
         assert!(!account_state(&settings).is_admin);
+        assert!(!account_state(&settings).is_server_mod_admin);
 
         // A `GET /v1/me` of a service older than bundles carries no flag, and
         // so does a `User` inside a friend: both read as a plain account.
@@ -688,10 +705,12 @@ mod tests {
             serde_json::from_str(r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"}}"#)
                 .expect("an older answer parses");
         assert!(!me.admin);
+        assert!(!me.server_mod_admin);
         let me: crate::online::Me =
-            serde_json::from_str(r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"},"presence":{"status":"online"},"admin":true}"#)
+            serde_json::from_str(r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"},"presence":{"status":"online"},"admin":true,"serverModAdmin":true}"#)
                 .expect("the answer parses");
         assert!(me.admin);
+        assert!(me.server_mod_admin);
         assert!(
             !me.user.admin,
             "the flag lives on the answer, not on the user"

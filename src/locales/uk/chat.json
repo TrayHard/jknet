@@ -420,11 +420,20 @@
   "attach": {
     "open": "Прикріпити",
     "limits": "До 25 МіБ на файл. Файли зберігаються 90 днів.",
+    "groups": {
+      "files": "Files",
+      "media": "Media",
+      "game": "Game",
+      "settings": "Settings",
+      "catalogs": "Catalogs"
+    },
     "kinds": {
       "file": "Будь-який файл",
       "clipboard": "Зображення з буфера обміну",
       "photo": "Фото",
-      "media": "Відео або скриншот із «Media»",
+      "screenshot": "Screenshot",
+      "demo": "Demo",
+      "video": "Video",
       "server": "Сервер",
       "map": "Мапа",
       "profile": "Профіль гравця",
@@ -654,13 +663,17 @@
     "loading": "Завантажуємо…",
     "noMatch": "Нічого не знайдено за запитом «{{query}}»",
     "noClient": "Спершу додайте клієнт цієї гри на екрані «Клієнти».",
+    "localBank": "One local bank collected from all clients of the selected game.",
     "media": {
-      "title": "Прикріпити з «Media»",
-      "empty": "На екрані «Media» поки немає демок, скриншотів і відео цієї гри.",
-      "kinds": {
-        "demos": "Демка",
-        "screenshots": "Скриншот",
-        "videos": "Відео"
+      "titles": {
+        "demos": "Share a demo",
+        "screenshots": "Share a screenshot",
+        "videos": "Share a video"
+      },
+      "empty": {
+        "demos": "No demos of this game are in Media yet.",
+        "screenshots": "No screenshots of this game are in Media yet.",
+        "videos": "No videos of this game are in Media yet."
       }
     },
     "server": {
@@ -670,8 +683,11 @@
     },
     "map": {
       "title": "Поділитися мапою",
-      "body": "Мапи клієнта {{client}}.",
-      "empty": "У цього клієнта немає мап."
+      "empty": "У цього клієнта немає мап.",
+      "groups": {
+        "game": "Game maps",
+        "client": "Client and mod maps"
+      }
     },
     "profile": {
       "title": "Поділитися профілем гравця",
@@ -689,8 +705,20 @@
     },
     "config": {
       "title": "Поділитися конфігом",
+      "body": "Client and server configs are listed separately.",
       "empty": "Збережених конфігів цієї гри поки немає. Створіть конфіг на екрані «Configs».",
-      "tooLarge": "Більше 32 КіБ: надішліть .cfg файлом."
+      "tooLarge": "Більше 32 КіБ: надішліть .cfg файлом.",
+      "local": "Local config",
+      "groups": {
+        "client": "Client configs",
+        "server": "Server configs"
+      },
+      "sensitive": {
+        "title": "Remove secrets before sharing?",
+        "body": "JKNet found possible secrets: {{keys}}. Remove the commands that contain them, or share the config unchanged.",
+        "shareUnchanged": "Share unchanged",
+        "removeAndShare": "Remove and share"
+      }
     },
     "bundle": {
       "title": "Поділитися bundle",

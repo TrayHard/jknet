@@ -37,6 +37,10 @@ pub struct OnlineUser {
     /// `User` that arrives inside a friend or a request reads as `false`.
     #[serde(default)]
     pub admin: bool,
+    /// Whether this account may manage the featured server mod list. This is
+    /// copied from [`Me::server_mod_admin`] and stays false for older services.
+    #[serde(default)]
+    pub server_mod_admin: bool,
 }
 
 /// Where a player is right now.
@@ -294,6 +298,9 @@ pub struct Me {
     /// A service older than the bundles feature leaves it out.
     #[serde(default)]
     pub admin: bool,
+    /// Whether this account may manage the featured server mod list.
+    #[serde(default)]
+    pub server_mod_admin: bool,
 }
 
 /// Someone on the friends list, with where they are.

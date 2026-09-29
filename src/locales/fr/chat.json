@@ -401,11 +401,20 @@
   "attach": {
     "open": "Joindre",
     "limits": "Jusqu’à 25 Mio par fichier. Les fichiers sont conservés 90 jours.",
+    "groups": {
+      "files": "Files",
+      "media": "Media",
+      "game": "Game",
+      "settings": "Settings",
+      "catalogs": "Catalogs"
+    },
     "kinds": {
       "file": "N’importe quel fichier",
       "clipboard": "Image du presse-papiers",
       "photo": "Photo",
-      "media": "Vidéo ou capture de « Media »",
+      "screenshot": "Screenshot",
+      "demo": "Demo",
+      "video": "Video",
       "server": "Serveur",
       "map": "Carte",
       "profile": "Profil de joueur",
@@ -629,13 +638,17 @@
     "loading": "Chargement…",
     "noMatch": "Rien ne correspond à « {{query}} »",
     "noClient": "Ajoutez d’abord un client de ce jeu sur l’écran « Clients ».",
+    "localBank": "One local bank collected from all clients of the selected game.",
     "media": {
-      "title": "Joindre depuis « Media »",
-      "empty": "Aucune démo, capture ou vidéo de ce jeu sur l’écran « Media » pour l’instant.",
-      "kinds": {
-        "demos": "Démo",
-        "screenshots": "Capture d’écran",
-        "videos": "Vidéo"
+      "titles": {
+        "demos": "Share a demo",
+        "screenshots": "Share a screenshot",
+        "videos": "Share a video"
+      },
+      "empty": {
+        "demos": "No demos of this game are in Media yet.",
+        "screenshots": "No screenshots of this game are in Media yet.",
+        "videos": "No videos of this game are in Media yet."
       }
     },
     "server": {
@@ -645,8 +658,11 @@
     },
     "map": {
       "title": "Partager une carte",
-      "body": "Cartes de {{client}}.",
-      "empty": "Ce client n’a aucune carte."
+      "empty": "Ce client n’a aucune carte.",
+      "groups": {
+        "game": "Game maps",
+        "client": "Client and mod maps"
+      }
     },
     "profile": {
       "title": "Partager un profil de joueur",
@@ -663,8 +679,20 @@
     },
     "config": {
       "title": "Partager une config",
+      "body": "Client and server configs are listed separately.",
       "empty": "Aucune config enregistrée pour ce jeu. Créez-en une sur l’écran « Configs ».",
-      "tooLarge": "Plus de 32 Kio : envoyez plutôt le .cfg en fichier."
+      "tooLarge": "Plus de 32 Kio : envoyez plutôt le .cfg en fichier.",
+      "local": "Local config",
+      "groups": {
+        "client": "Client configs",
+        "server": "Server configs"
+      },
+      "sensitive": {
+        "title": "Remove secrets before sharing?",
+        "body": "JKNet found possible secrets: {{keys}}. Remove the commands that contain them, or share the config unchanged.",
+        "shareUnchanged": "Share unchanged",
+        "removeAndShare": "Remove and share"
+      }
     },
     "bundle": {
       "title": "Partager un bundle",

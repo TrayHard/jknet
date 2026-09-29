@@ -12,6 +12,7 @@ import {
   useMutationState,
   useQuery,
   useQueryClient,
+  useQueries,
   type InfiniteData,
   type UseQueryResult,
 } from "@tanstack/react-query";
@@ -161,6 +162,7 @@ const serverInstanceKeys = {
   all: ["server-instances"] as const,
   engines: ["server-instances", "engines"] as const,
   mods: ["server-instances", "mods"] as const,
+  featuredMods: (game: Game) => ["server-instances", "featured-mods", game] as const,
   files: (serverId: string) => ["server-instances", "files", serverId] as const,
 };
 
@@ -203,6 +205,15 @@ export function useServerMods() {
   });
 }
 
+export function useFeaturedServerMods(game: Game) {
+  return useQuery({
+    queryKey: serverInstanceKeys.featuredMods(game),
+    queryFn: () => serverInstancesIpc.featuredMods(game),
+    enabled: isTauri(),
+    staleTime: 60_000,
+  });
+}
+
 export function useServerInstanceFiles(serverId: string | null) {
   return useQuery({
     queryKey: serverInstanceKeys.files(serverId ?? ""),
@@ -217,6 +228,8 @@ export function useServerInstanceActions() {
   const refreshAll = () => void cache.invalidateQueries({ queryKey: serverInstanceKeys.all });
   const refreshEngines = () => void cache.invalidateQueries({ queryKey: serverInstanceKeys.engines });
   const refreshMods = () => void cache.invalidateQueries({ queryKey: serverInstanceKeys.mods });
+  const refreshFeaturedMods = (game: Game) =>
+    void cache.invalidateQueries({ queryKey: serverInstanceKeys.featuredMods(game) });
   const refreshFiles = (serverId: string) =>
     void cache.invalidateQueries({ queryKey: serverInstanceKeys.files(serverId) });
 
@@ -244,6 +257,14 @@ export function useServerInstanceActions() {
     addModFromDisk: useMutation({ mutationFn: serverInstancesIpc.addModFromDisk, onSuccess: refreshMods }),
     addModFromJkhub: useMutation({ mutationFn: serverInstancesIpc.addModFromJkhub, onSuccess: refreshMods }),
     deleteMod: useMutation({ mutationFn: serverInstancesIpc.deleteMod, onSuccess: refreshMods }),
+    saveFeaturedMod: useMutation({
+      mutationFn: serverInstancesIpc.saveFeaturedMod,
+      onSuccess: (mod) => refreshFeaturedMods(mod.game),
+    }),
+    deleteFeaturedMod: useMutation({
+      mutationFn: (mod: import("./ipc").FeaturedServerMod) => serverInstancesIpc.deleteFeaturedMod(mod.id),
+      onSuccess: (mod) => refreshFeaturedMods(mod.game),
+    }),
     saveText: useMutation({
       mutationFn: ({ serverId, path, text, template }: { serverId: string; path: string; text: string; template: boolean }) =>
         serverInstancesIpc.saveText(serverId, path, text, template),
@@ -853,6 +874,32 @@ export function useProfiles(
     enabled,
     staleTime: Infinity,
   });
+}
+
+export interface LocalProfileBankItem {
+  client: Pick<Client, "id" | "name">;
+  profile: PlayerProfile;
+}
+
+/** Every profile of the selected game's clients, with its owning client. */
+export function useLocalProfileBank(clients: readonly Client[]) {
+  const queries = useQueries({
+    queries: clients.map((client) => ({
+      queryKey: profileKeys.book(client.id),
+      queryFn: () => profilesIpc.listProfiles(client.id),
+      staleTime: Infinity,
+    })),
+  });
+  return {
+    data: queries.flatMap((query, index) =>
+      (query.data?.profiles ?? []).map((profile) => ({
+        client: { id: clients[index].id, name: clients[index].name },
+        profile,
+      })),
+    ) as LocalProfileBankItem[],
+    isPending: queries.some((query) => query.isPending),
+    error: queries.find((query) => query.error)?.error ?? null,
+  };
 }
 
 /** Reads one selected config into a draft; saving remains a separate action. */
@@ -2382,6 +2429,46 @@ export function useHostMaps(
     enabled: clientId !== null && clientId !== "",
     staleTime: 60_000,
   });
+}
+
+export interface LocalMapBankItem {
+  map: HostMap;
+  clients: Array<Pick<Client, "id" | "name">>;
+}
+
+/** Every distinct map found across the selected game's local clients. */
+export function useLocalMapBank(clients: readonly Client[]) {
+  const queries = useQueries({
+    queries: clients.map((client) => ({
+      queryKey: hostKeys.maps(client.id),
+      queryFn: () => hostIpc.listMaps(client.id),
+      staleTime: 60_000,
+    })),
+  });
+  const byName = new Map<string, LocalMapBankItem>();
+  queries.forEach((query, index) => {
+    for (const map of query.data ?? []) {
+      const key = map.name.toLocaleLowerCase();
+      const found = byName.get(key);
+      const client = { id: clients[index].id, name: clients[index].name };
+      if (found === undefined) {
+        byName.set(key, { map: { ...map }, clients: [client] });
+      } else {
+        found.clients.push(client);
+        found.map.gametypes = [...new Set([...found.map.gametypes, ...map.gametypes])];
+        found.map.title ??= map.title;
+        found.map.levelshot ??= map.levelshot;
+        if (map.source === "client") found.map.source = "client";
+      }
+    }
+  });
+  return {
+    data: [...byName.values()].sort((left, right) =>
+      (left.map.title ?? left.map.name).localeCompare(right.map.title ?? right.map.name),
+    ),
+    isPending: queries.some((query) => query.isPending),
+    error: queries.find((query) => query.error)?.error ?? null,
+  };
 }
 
 /** Drops a session the core answered with straight into the cache. */
