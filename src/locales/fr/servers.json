@@ -235,9 +235,18 @@
     "browse": "Communautés",
     "signOut": "Se déconnecter",
     "signInHint": "Terminez la connexion dans l’onglet ouvert, puis revenez ici.",
-    "loginFailed": "La connexion a expiré. Réessayez.",
+    "loginFailed": "La connexion n’a pas pu aboutir. Réessayez.",
     "download": "Télécharger JKNet",
     "brand": "JKNET COMMUNITY",
-    "installHint": "Les fichiers sont installés dans l’ordre. Les fichiers identiques sont conservés. La connexion attend la réussite de toute la liste."
+    "installHint": "Les fichiers sont installés dans l’ordre. Les fichiers identiques sont conservés. La connexion attend la réussite de toute la liste.",
+    "loginChoose": "Choisissez comment vous connecter. Une fenêtre séparée va s’ouvrir.",
+    "signInJkhub": "Continuer avec JKHub",
+    "signInDiscord": "Continuer avec Discord",
+    "loginWaiting": "En attente de connexion…",
+    "loginCancelled": "La fenêtre de connexion a été fermée. Choisissez un fournisseur pour réessayer.",
+    "loginBlocked": "Votre navigateur a bloqué la fenêtre de connexion. Ouvrez-la avec le lien ou annulez et réessayez.",
+    "loginOpen": "Ouvrir la fenêtre de connexion",
+    "loginWindowHint": "Si vous avez fermé la fenêtre de connexion, réessayez ou annulez.",
+    "loginRetry": "Réessayer"
   }
 }

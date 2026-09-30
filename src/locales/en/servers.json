@@ -229,9 +229,18 @@
     "browse": "Community",
     "signOut": "Sign out",
     "signInHint": "Complete sign-in in the opened tab, then return here.",
-    "loginFailed": "Sign-in expired. Try again.",
+    "loginFailed": "Sign-in could not be completed. Try again.",
     "download": "Download JKNet",
     "brand": "JKNET COMMUNITY",
-    "installHint": "Files are installed in order. Existing identical files are kept. Joining waits until every file succeeds."
+    "installHint": "Files are installed in order. Existing identical files are kept. Joining waits until every file succeeds.",
+    "loginChoose": "Choose how to sign in. A separate window will open.",
+    "signInJkhub": "Continue with JKHub",
+    "signInDiscord": "Continue with Discord",
+    "loginWaiting": "Waiting for sign-in…",
+    "loginCancelled": "The sign-in window was closed. Choose a provider to try again.",
+    "loginBlocked": "Your browser blocked the sign-in window. Open it using the link below, or cancel and try again.",
+    "loginOpen": "Open sign-in window",
+    "loginWindowHint": "If you closed the sign-in window, try again or cancel.",
+    "loginRetry": "Try again"
   }
 }

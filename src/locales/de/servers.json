@@ -229,9 +229,18 @@
     "browse": "Communitys",
     "signOut": "Abmelden",
     "signInHint": "Schließe die Anmeldung im geöffneten Tab ab und kehre zurück.",
-    "loginFailed": "Die Anmeldung ist abgelaufen. Versuche es erneut.",
+    "loginFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Versuche es erneut.",
     "download": "JKNet herunterladen",
     "brand": "JKNET COMMUNITY",
-    "installHint": "Dateien werden der Reihe nach installiert. Identische Dateien bleiben erhalten. Der Beitritt erfolgt erst, wenn alle Dateien erfolgreich installiert sind."
+    "installHint": "Dateien werden der Reihe nach installiert. Identische Dateien bleiben erhalten. Der Beitritt erfolgt erst, wenn alle Dateien erfolgreich installiert sind.",
+    "loginChoose": "Wähle eine Anmeldemethode. Ein separates Fenster wird geöffnet.",
+    "signInJkhub": "Mit JKHub fortfahren",
+    "signInDiscord": "Mit Discord fortfahren",
+    "loginWaiting": "Warten auf die Anmeldung…",
+    "loginCancelled": "Das Anmeldefenster wurde geschlossen. Wähle einen Anbieter, um es erneut zu versuchen.",
+    "loginBlocked": "Dein Browser hat das Anmeldefenster blockiert. Öffne es über den Link oder brich ab und versuche es erneut.",
+    "loginOpen": "Anmeldefenster öffnen",
+    "loginWindowHint": "Falls du das Anmeldefenster geschlossen hast, versuche es erneut oder brich ab.",
+    "loginRetry": "Erneut versuchen"
   }
 }

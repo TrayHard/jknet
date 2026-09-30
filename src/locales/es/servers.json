@@ -235,9 +235,18 @@
     "browse": "Comunidades",
     "signOut": "Cerrar sesión",
     "signInHint": "Completa el inicio de sesión en la pestaña abierta y vuelve aquí.",
-    "loginFailed": "El inicio de sesión ha caducado. Inténtalo de nuevo.",
+    "loginFailed": "No se pudo completar el inicio de sesión. Inténtalo de nuevo.",
     "download": "Descargar JKNet",
     "brand": "JKNET COMMUNITY",
-    "installHint": "Los archivos se instalan por orden. Los archivos idénticos se conservan. La conexión espera a que toda la lista se instale correctamente."
+    "installHint": "Los archivos se instalan por orden. Los archivos idénticos se conservan. La conexión espera a que toda la lista se instale correctamente.",
+    "loginChoose": "Elige cómo iniciar sesión. Se abrirá una ventana aparte.",
+    "signInJkhub": "Continuar con JKHub",
+    "signInDiscord": "Continuar con Discord",
+    "loginWaiting": "Esperando el inicio de sesión…",
+    "loginCancelled": "Se cerró la ventana de inicio de sesión. Elige un proveedor para intentarlo de nuevo.",
+    "loginBlocked": "El navegador bloqueó la ventana de inicio de sesión. Ábrela con el enlace o cancela y vuelve a intentarlo.",
+    "loginOpen": "Abrir ventana de inicio de sesión",
+    "loginWindowHint": "Si cerraste la ventana de inicio de sesión, inténtalo de nuevo o cancela.",
+    "loginRetry": "Intentar de nuevo"
   }
 }

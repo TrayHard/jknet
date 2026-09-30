@@ -229,9 +229,18 @@
     "browse": "Közösségek",
     "signOut": "Kijelentkezés",
     "signInHint": "Fejezd be a bejelentkezést a megnyitott lapon, majd térj vissza.",
-    "loginFailed": "A bejelentkezés lejárt. Próbáld újra.",
+    "loginFailed": "Nem sikerült befejezni a bejelentkezést. Próbáld újra.",
     "download": "JKNet letöltése",
     "brand": "JKNET COMMUNITY",
-    "installHint": "A fájlok sorban települnek. Az azonos fájlok megmaradnak. A csatlakozás az egész lista sikeres telepítése után indul."
+    "installHint": "A fájlok sorban települnek. Az azonos fájlok megmaradnak. A csatlakozás az egész lista sikeres telepítése után indul.",
+    "loginChoose": "Válassz bejelentkezési módot. Külön ablak nyílik meg.",
+    "signInJkhub": "Folytatás JKHubbal",
+    "signInDiscord": "Folytatás Discorddal",
+    "loginWaiting": "Várakozás a bejelentkezésre…",
+    "loginCancelled": "A bejelentkezési ablak bezárult. Az újrapróbálkozáshoz válassz szolgáltatót.",
+    "loginBlocked": "A böngésző blokkolta a bejelentkezési ablakot. Nyisd meg a hivatkozással, vagy szakítsd meg a belépést, és próbáld újra.",
+    "loginOpen": "Bejelentkezési ablak megnyitása",
+    "loginWindowHint": "Ha bezártad a bejelentkezési ablakot, próbáld újra, vagy szakítsd meg a belépést.",
+    "loginRetry": "Újrapróbálkozás"
   }
 }

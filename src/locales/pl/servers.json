@@ -241,9 +241,18 @@
     "browse": "Społeczności",
     "signOut": "Wyloguj się",
     "signInHint": "Dokończ logowanie w otwartej karcie i wróć tutaj.",
-    "loginFailed": "Czas logowania upłynął. Spróbuj ponownie.",
+    "loginFailed": "Nie udało się ukończyć logowania. Spróbuj ponownie.",
     "download": "Pobierz JKNet",
     "brand": "JKNET COMMUNITY",
-    "installHint": "Pliki są instalowane po kolei. Identyczne pliki pozostają bez zmian. Dołączenie nastąpi po pomyślnej instalacji całej listy."
+    "installHint": "Pliki są instalowane po kolei. Identyczne pliki pozostają bez zmian. Dołączenie nastąpi po pomyślnej instalacji całej listy.",
+    "loginChoose": "Wybierz sposób logowania. Otworzy się osobne okno.",
+    "signInJkhub": "Kontynuuj przez JKHub",
+    "signInDiscord": "Kontynuuj przez Discord",
+    "loginWaiting": "Oczekiwanie na zalogowanie…",
+    "loginCancelled": "Okno logowania zostało zamknięte. Wybierz dostawcę, aby spróbować ponownie.",
+    "loginBlocked": "Przeglądarka zablokowała okno logowania. Otwórz je za pomocą odnośnika lub anuluj i spróbuj ponownie.",
+    "loginOpen": "Otwórz okno logowania",
+    "loginWindowHint": "Jeśli zamkniesz okno logowania, spróbuj ponownie lub anuluj.",
+    "loginRetry": "Spróbuj ponownie"
   }
 }
