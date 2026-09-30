@@ -13,12 +13,12 @@
  * friends, requests, settings, the catalogs, the emoji sheet, the picture
  * viewer and five dialogs — at 320, 360 and 390 px (the phone layout, the
  * drawer open too) and at 1280 px (the wide layout), and the chats and the
- * threads once more on a touch screen. On each it runs
- * `text-fit-detector.ts`: text pressed against the edges of its button,
- * card, row, chip or banner; text cut off or squeezed to a word a line; a
- * box sticking out of its card; a pane or the page scrolling sideways; text
- * drawn over text or an icon. The app is loaded once after seeding and then
- * navigates itself, as a link would.
+ * threads once more on a touch screen, a tapped message with its tools too.
+ * On each it runs `text-fit-detector.ts`: text pressed against the edges of
+ * its button, card, row, chip or banner; text cut off or squeezed to a word a
+ * line; a box sticking out of its card; a pane or the page scrolling
+ * sideways; text drawn over text or an icon. The app is loaded once after
+ * seeding and then navigates itself, as a link would.
  *
  * Every hit is written as JSON, with a marked crop of each distinct one, to
  * `JKNET_TEXT_FIT_OUT` (default `web/e2e/dist/text-fit`): `hits/<lang>.json`
@@ -27,15 +27,29 @@
  * screenshot of every screen at every width.
  *
  * The test fails on what a layout audit fixed. Anywhere, on every screen:
- * text drawn past the border of its box, a box or text sticking out of its
- * card or the screen, a pane scrolling sideways, text over text or an icon,
- * and a sentence squeezed to a word a line. Text cut off (`truncate`, a
- * clamp) is often the design, a name in a dense row, so it fails only inside
- * the elements a screen's `gates` name, the ones that once cut a sentence, a
- * label or a name with room to wrap; there an empty field's placeholder has
- * to fit as well. On the sign-in the provider buttons, where a fixed height
- * once pressed a wrapped note against the border (dc73949), keep their text
- * off the border, and the detector still catches the buttons as they were.
+ * text drawn past the border of its box or touching an edge of it a reader
+ * sees (less than 1 px between them), a box or text sticking out of its card
+ * or the screen, a pane scrolling sideways, text over text or an icon, a
+ * sentence squeezed to a word a line, and on the wide screen a rail tile
+ * wider than the others or a rail label within 4 px of its tile's sides
+ * (`railTilesEven`). Text cut off (`truncate`, a clamp) is often the design,
+ * a name in a dense row, so it fails only inside the elements a screen's
+ * `gates` name, the ones that once cut a sentence, a label or a name with
+ * room to wrap; there an empty field's placeholder has to fit as well. On
+ * the sign-in the provider buttons, where a fixed height once pressed a
+ * wrapped note against the border (dc73949), keep their text off the border,
+ * and the gate still fails the buttons as they were.
+ *
+ * Two runs write the same hits; only the service's ids in `route` and the
+ * clock times in `control` differ. What is drawn does not depend on the run:
+ * a language's accounts, bundle and server page carry letters of its own,
+ * the same letters in every language in another order (see `letters`); the
+ * accounts are made one after another and the group a second after the
+ * direct chat, so members and chats keep their order; and a catalog shows
+ * the language's own entry only, whichever test published first. The dates
+ * and times come from the service's clock and cannot move a hit (see
+ * `test.use` below), nor can the ports the system hands the fake game
+ * servers of `catalog-fakes.ts`: five digits in the mono face.
  *
  * The run is the edge project's alone (`playwright.config.ts` leaves this
  * file out of the others): the widths and languages are the matrix here.
@@ -82,6 +96,7 @@ const LOCALES = {
   hu: "hu-HU",
 } as const;
 type Language = keyof typeof LOCALES;
+const LANGUAGES = Object.keys(LOCALES) as Language[];
 
 const PHONE_WIDTHS = [320, 360, 390];
 const WIDE_WIDTH = 1280;
@@ -135,7 +150,10 @@ async function api<T>(token: string, method: string, path: string, body?: unknow
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-/** A client id as the apps make one: a ULID. */
+/**
+ * A client id as the apps make one: a ULID. It keys a sent message against
+ * a resend and never shows, so it may differ between runs.
+ */
 function ulid(): string {
   let time = Date.now();
   let head = "";
@@ -148,18 +166,51 @@ function ulid(): string {
   return head + tail;
 }
 
-/** Random lowercase letters, to keep the long names unique in the run. */
-function letters(count: number): string {
+/** The `index`-th order of `items` (0 keeps them as they are), for up to `items.length`! orders. */
+function arrangement(items: string, index: number): string {
+  const pool = [...items];
+  const factorial = (count: number): number => (count <= 1 ? 1 : count * factorial(count - 1));
+  expect(index, `an order of "${items}"`).toBeLessThan(factorial(pool.length));
+  let rest = index;
   let text = "";
-  for (let index = 0; index < count; index += 1) text += String.fromCharCode(97 + Math.floor(Math.random() * 26));
+  for (let left = pool.length; left > 0; left -= 1) {
+    const block = factorial(left - 1);
+    text += pool.splice(Math.floor(rest / block), 1)[0];
+    rest %= block;
+  }
   return text;
 }
 
-/** A `jknet_session` of a private server: 16 hex characters. */
-function sessionId(): string {
-  let id = "";
-  for (let index = 0; index < 16; index += 1) id += Math.floor(Math.random() * 16).toString(16);
-  return id;
+/**
+ * Letters that no face of the app (Inter, Chakra Petch, Exo 2, JetBrains
+ * Mono) kerns against each other, a space or an ellipsis: any order of them
+ * is drawn equally wide.
+ */
+const EVEN_LETTERS = "adhilm";
+
+/**
+ * `count` letters, 4 to 6, that tell this language's long names from the
+ * other languages' in the service the tests share: the same letters in an
+ * order of the language's own. A name is then as wide, and cut at the same
+ * place, in every run and every language.
+ */
+function letters(language: Language, count: number): string {
+  expect(count, "enough letters for eight orders").toBeGreaterThanOrEqual(4);
+  return arrangement(EVEN_LETTERS.slice(0, count), LANGUAGES.indexOf(language));
+}
+
+/**
+ * The port of the language's community server: the digits 1 to 4 in its own
+ * order after a 6, from 61234 up, so no two languages share an address and
+ * none meets the random ports of `catalog.spec.ts` (20000 to 59999).
+ */
+function communityPort(language: Language): number {
+  return Number(`6${arrangement("1234", LANGUAGES.indexOf(language))}`);
+}
+
+/** The language's `jknet_session` of a private server: 16 hex characters. */
+function sessionId(language: Language): string {
+  return createHash("sha256").update(`text-fit hosting ${language}`).digest("hex").slice(0, 16);
 }
 
 /** The database file of the e2e service, from the environment `global-setup.ts` hands the workers. */
@@ -172,6 +223,11 @@ function serviceDatabase(): string {
 
 async function sendMessage(token: string, conversationId: string, body: string, cards: unknown[] = []): Promise<void> {
   await api(token, "POST", `/v1/chat/conversations/${encodeURIComponent(conversationId)}/messages`, { clientId: ulid(), body, cards });
+}
+
+/** Waits until the clock of the service, which counts whole seconds, has passed the second of now. */
+async function nextSecond(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 1_050 - (Date.now() % 1_000)));
 }
 
 /** Asks `name` to be friends; answers the request's id. */
@@ -268,16 +324,22 @@ interface Seeded {
  * direct chat with messages, cards and pictures, a group, an invitation to
  * another group, a bundle and a community server page.
  */
-async function seed(page: Page, myName: string): Promise<Seeded> {
+async function seed(page: Page, language: Language, myName: string): Promise<Seeded> {
   const token = await tokenOf(page);
   const myId = await userIdOf(page);
-  const hostName = `Maximilian Wolfgang ${letters(4)}`;
-  const gamerName = `Wilhelmina Wojciechow ${letters(2)}`;
-  const askerName = `Konstantinos Papad ${letters(5)}`;
-  const askedName = `Szczepan Brzeczyszcz ${letters(3)}`;
-  const [host, gamer, asker] = await Promise.all([launcherSignIn(hostName), launcherSignIn(gamerName), launcherSignIn(askerName)]);
+  // 24 characters each, the most the sign-in takes.
+  const hostName = `Maximilian Wolfgang ${letters(language, 4)}`;
+  const gamerName = `Wilhelmina Wojciech ${letters(language, 4)}`;
+  const askerName = `Konstantinos Papad ${letters(language, 5)}`;
+  const askedName = `Szczepan Brzeczysz ${letters(language, 5)}`;
+  // One after the other: an account's id grows with the time it is made, and
+  // members who join a group in the same second are listed by it.
+  const host = await launcherSignIn(hostName);
+  const gamer = await launcherSignIn(gamerName);
+  const asker = await launcherSignIn(askerName);
   // The asked player, and a launcher of the player: a second device to sign out.
-  await Promise.all([launcherSignIn(askedName), launcherSignIn(myName)]);
+  await launcherSignIn(askedName);
+  await launcherSignIn(myName);
 
   // Two friends, one request to the player, one from the player.
   for (const [friend, name] of [[host, hostName], [gamer, gamerName]] as const) {
@@ -290,7 +352,7 @@ async function seed(page: Page, myName: string): Promise<Seeded> {
   // The host's private server, with a chat open to the web and an invite.
   const lan = "192.168.1.20:29070";
   const hosting = {
-    sessionId: sessionId(),
+    sessionId: sessionId(language),
     game: "ja",
     mod: "japlus",
     map: "mp/ffa3",
@@ -326,10 +388,10 @@ async function seed(page: Page, myName: string): Promise<Seeded> {
   });
 
   // A bundle and a community server page, for the catalogs and the cards.
-  const bundleName = `Kyber Duel Pack Extended Tournament Edition ${letters(4)}`;
+  const bundleName = `Kyber Duel Pack Extended Tournament Edition ${letters(language, 4)}`;
   const bundle = await publishBundle(token, bundleName);
-  const communityName = `Kyber Duel Hall Community Tournament Server ${letters(4)}`;
-  const communityId = await publishCommunityServer(token, myId, communityName);
+  const communityName = `Kyber Duel Hall Community Tournament Server ${letters(language, 4)}`;
+  const communityId = await publishCommunityServer(token, myId, communityName, `1.1.1.1:${communityPort(language)}`);
 
   // The direct chat with the host: short, long, cards, an invite card.
   const direct = (await api<{ id: string }>(host.token, "PUT", `/v1/chat/direct/${encodeURIComponent(myId)}`)).id;
@@ -377,7 +439,10 @@ async function seed(page: Page, myName: string): Promise<Seeded> {
   await sendPicture(host.token, direct, PICTURE, png(480, 270), 480, 270);
   await sendPicture(host.token, direct, BIG_PICTURE, png(64, 36, Math.round(10.5 * 1024 * 1024)), 1600, 900);
 
-  // The group of the three, with a long title.
+  // The group of the three, with a long title, newer than the direct chat:
+  // the service stamps whole seconds, and chats of the same second are listed
+  // by their ids, which differ from run to run.
+  await nextSecond();
   const created = await api<{ conversation: { id: string } }>(token, "POST", "/v1/chat/groups", {
     clientId: ulid(),
     title: LONG_GROUP_TITLE,
@@ -467,8 +532,7 @@ async function publishBundle(token: string, name: string): Promise<{ id: string;
  * file. The owner is set in the test database, as an administrator's
  * approval would; the address is never contacted.
  */
-async function publishCommunityServer(token: string, ownerId: string, name: string): Promise<string> {
-  const address = `1.1.1.1:${20_000 + Math.floor(Math.random() * 40_000)}`;
+async function publishCommunityServer(token: string, ownerId: string, name: string, address: string): Promise<string> {
   const created = await api<{ id: string; revision: number }>(token, "POST", "/v1/community/servers", { name, address, game: "ja" });
   const database = new DatabaseSync(serviceDatabase());
   try {
@@ -575,9 +639,19 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
   const openMenu = web.nav.openMenu;
   const account = sharedCatalog(language, "account") as Record<string, Record<string, string>>;
   const chat = sharedCatalog(language, "chat") as Record<string, Record<string, string>>;
+  const servers = sharedCatalog(language, "servers") as Record<string, Record<string, string>>;
   const direct = `/c/${encodeURIComponent(seeded.direct)}`;
   const info = `/c/${encodeURIComponent(seeded.group)}/info`;
-  const bundle = `/bundles/${encodeURIComponent(seeded.bundleId)}`;
+  // The catalogs list what every language's test has published so far, a
+  // count that depends on which test ran first: searched for this language's
+  // own entry, they draw the same cards in every run. The bundles keep the
+  // search in the address, the list beside a bundle's page too.
+  const bundleSearch = `?q=${encodeURIComponent(seeded.bundleName)}`;
+  const bundle = `/bundles/${encodeURIComponent(seeded.bundleId)}${bundleSearch}`;
+  const communitySearch = async (page: Page) => {
+    const box = page.getByPlaceholder(servers.community.search, { exact: true });
+    if (await box.isVisible()) await box.fill(seeded.communityName);
+  };
   const cards = ["[data-testid=card-actions]", "[data-testid=card-facts]"];
   return [
     {
@@ -653,9 +727,8 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
       name: "requests",
       path: "/friends/requests",
       ready: byTest("server-invite"),
-      // A request to the player: who asks has to be readable. The row of a
-      // sent request may end the name in an ellipsis, as a dense row does.
-      gates: ["[data-testid=request-row][data-side=from]", "[data-testid=server-invite]"],
+      // Who asks and who was asked stay readable, the longest name whole.
+      gates: ["[data-testid=request-row]", "[data-testid=server-invite]"],
     },
     { name: "settings", path: "/settings", widths: PHONE_WIDTHS, ready: (page) => page.locator('a[href="/settings/about"]') },
     {
@@ -692,18 +765,20 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
     },
     { name: "jkhub", path: "/jkhub?game=ja", ready: byText("Kyber Crystal Hilts") },
     { name: "jkhub-details", path: "/jkhub/ja/5001", ready: byTest("jkhub-facts") },
-    { name: "bundles", path: "/bundles", ready: byText(seeded.bundleName) },
+    { name: "bundles", path: `/bundles${bundleSearch}`, ready: byText(seeded.bundleName) },
     {
       name: "bundle-details",
       path: bundle,
       ready: byTest("bundle-details"),
       gates: ["[data-testid=bundle-header]", "[data-testid=manifest-file]", "[data-testid=version-row]"],
     },
-    { name: "community", path: "/community", ready: byText(seeded.communityName) },
+    { name: "community", path: "/community", ready: byText(seeded.communityName), prepare: communitySearch },
     {
       name: "community-details",
       path: `/community/${encodeURIComponent(seeded.communityId)}`,
       ready: byTest("community-details"),
+      // The list beside the page on the wide screen.
+      prepare: communitySearch,
       gates: [".community-files li"],
     },
     // The emoji picker: a sheet on the phone.
@@ -779,10 +854,188 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
   ];
 }
 
+/** A tap of one finger at a point of the page, as a touch screen sends it. */
+async function tapAt(page: Page, x: number, y: number): Promise<void> {
+  const touch = await page.context().newCDPSession(page);
+  try {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  } finally {
+    await touch.detach();
+  }
+}
+
+/** The tools of the tapped message, floating over the thread. */
+function floatingTools(page: Page): Locator {
+  return page.locator("[data-floating-tools]");
+}
+
+/**
+ * Taps the message that starts with `start` and waits for its tools. First
+ * it scrolls the message to the middle of the thread, or, given `at`, its
+ * top that many px below the top of the thread (above it when negative).
+ * The finger lands where a reader's would: on the first of its words or
+ * cards on screen, off every link and button.
+ */
+async function tapMessage(page: Page, start: string, at: number | null = null): Promise<void> {
+  const text = page.locator("[data-seq]").getByText(start, { exact: false }).first();
+  await text.evaluate(async (node, at) => {
+    const row = node.closest("[data-seq]");
+    const pane = node.closest("[role=log]");
+    if (row === null || pane === null) return;
+    if (at === null) row.scrollIntoView({ block: "center" });
+    else pane.scrollTop += row.getBoundingClientRect().top - pane.getBoundingClientRect().top - at;
+    // The thread may still load or stick to its end: wait until it stays put.
+    let last = -1;
+    for (let same = 0, frame = 0; same < 8 && frame < 180; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      same = pane.scrollTop === last ? same + 1 : 0;
+      last = pane.scrollTop;
+    }
+  }, at);
+  await settle(page);
+  const point = await text.evaluate((node) => {
+    const row = node.closest("[data-seq]");
+    const pane = node.closest("[role=log]");
+    if (row === null || pane === null) return null;
+    const frame = pane.getBoundingClientRect();
+    const range = document.createRange();
+    const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+    for (let word = walker.nextNode(); word !== null; word = walker.nextNode()) {
+      const first = (word.textContent ?? "").search(/\S/);
+      if (first < 0) continue;
+      range.setStart(word, first);
+      range.setEnd(word, first + 1);
+      const letter = range.getClientRects()[0];
+      if (letter === undefined || letter.width < 1 || letter.top < frame.top + 1 || letter.bottom > frame.bottom - 8) continue;
+      const x = letter.left + letter.width / 2;
+      const y = letter.top + letter.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (hit === null || !row.contains(hit)) continue;
+      if (hit.closest("a, button, [role=link], [role=button]") !== null || getComputedStyle(hit).cursor === "pointer") continue;
+      return { x, y };
+    }
+    return null;
+  });
+  if (point === null) throw new Error(`the message "${start}" shows nothing to tap`);
+  await tapAt(page, point.x, point.y);
+  await expect(floatingTools(page)).toBeVisible({ timeout: 5_000 });
+}
+
+/**
+ * Puts the tools away as a player would, with a tap on the composer, and
+ * takes the focus back off it; `null`, or what stayed on screen.
+ */
+async function dismissTools(page: Page): Promise<string | null> {
+  const box = await page.locator("textarea").last().boundingBox();
+  if (box !== null) await tapAt(page, box.x + box.width / 2, box.y + box.height / 2);
+  const gone = await expect(floatingTools(page))
+    .toHaveCount(0, { timeout: 5_000 })
+    .then(
+      () => null,
+      () => "the message tools stay after a tap elsewhere",
+    );
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await expect(floatingTools(page)).toHaveCount(0);
+  return gone;
+}
+
+/**
+ * The tools of the tapped message lie inside the thread, draw over none of
+ * its text nor over the sender's name above it, and each of them takes a
+ * tap: no box around them cuts them off or covers them. A message `tall`er
+ * than the thread leaves no room around it: there the tools float over its
+ * part on screen, still off its text.
+ */
+async function toolsClear(page: Page, tall = false): Promise<string | null> {
+  return floatingTools(page).evaluate((tools, tall) => {
+    const row = tools.closest("[data-seq]");
+    const pane = tools.closest("[role=log]");
+    if (row === null || pane === null) return "the message tools are outside their message";
+    const strip = tools.getBoundingClientRect();
+    const frame = pane.getBoundingClientRect();
+    if (tall && row.getBoundingClientRect().height <= frame.height) return "the tall message fits the thread: nothing measured";
+    const off = (edge: number, limit: number) => edge - limit > 0.5;
+    if (off(frame.top, strip.top) || off(strip.bottom, frame.bottom) || off(frame.left, strip.left) || off(strip.right, frame.right)) {
+      return `the message tools lie outside the thread: ${Math.round(strip.top)}..${Math.round(strip.bottom)} of ${Math.round(frame.top)}..${Math.round(frame.bottom)}`;
+    }
+    // The sender's name over the first message of a run in a group.
+    const head = row.previousElementSibling;
+    const own = [row, head?.hasAttribute("data-seq") === false ? head : null];
+    const range = document.createRange();
+    const covered: string[] = [];
+    for (const part of own) {
+      if (part === null) continue;
+      const walker = document.createTreeWalker(part, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (tools.contains(node) || (node.textContent ?? "").trim() === "") continue;
+        // Only the part of a line its clipping ancestors leave visible counts:
+        // the lines a clamp hides are not text the tools can cover.
+        const clips: DOMRect[] = [];
+        for (let element = node.parentElement; element !== null && element !== pane; element = element.parentElement) {
+          const style = getComputedStyle(element);
+          if (style.overflowX !== "visible" || style.overflowY !== "visible") clips.push(element.getBoundingClientRect());
+        }
+        range.selectNodeContents(node);
+        const under = Array.from(range.getClientRects()).some((line) => {
+          let { left, right, top, bottom } = line;
+          for (const clip of clips) {
+            left = Math.max(left, clip.left);
+            right = Math.min(right, clip.right);
+            top = Math.max(top, clip.top);
+            bottom = Math.min(bottom, clip.bottom);
+          }
+          return (
+            right - left > 0.5 &&
+            bottom - top > 0.5 &&
+            Math.min(right, strip.right) - Math.max(left, strip.left) > 0 &&
+            Math.min(bottom, strip.bottom) - Math.max(top, strip.top) > 0
+          );
+        });
+        if (under) covered.push((node.textContent ?? "").trim().slice(0, 40));
+      }
+    }
+    if (covered.length > 0) return `the message tools cover the text of their message: ${covered.join(" | ")}`;
+    const buttons = Array.from(tools.querySelectorAll("button"));
+    const unreachable = buttons.filter((button) => {
+      const box = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return hit === null || !button.contains(hit);
+    });
+    if (buttons.length === 0 || unreachable.length > 0) {
+      return `${unreachable.length} of ${buttons.length} message tools cannot be tapped: ${unreachable.map((button) => button.getAttribute("aria-label")).join(", ")}`;
+    }
+    return null;
+  }, tall);
+}
+
+/** The start of the long message of the host, of the player's reply to it and of the host's card message. */
+const LONG_MESSAGE_START = "Tonight we run the clan tournament";
+const REPLY_START = "Yes. I am bringing the new hilts";
+const CARDS_START = "Everything for tonight:";
+/** How far the card message, taller than the thread on a phone, is scrolled past the top of the thread. */
+const CARDS_CUT = 150;
+/** How much further a reader scrolls through the card message with its tools shown. */
+const CARDS_READ_ON = 300;
+/**
+ * Where the top of the host's long message in the group sits under the top
+ * of the thread: with room above it for the tools and the name over it, then
+ * with room for the tools alone, where the name would be under them. A short
+ * thread may not scroll that far: then the message sits lower.
+ */
+const NAMED_AT = [120, 60] as const;
+
 /**
  * The chats and the threads on a touch screen, where a tab is 44 px tall
  * and the tools of a message show on a tap: hidden, they take no room from
- * the bubbles and the cards.
+ * the bubbles and the cards; shown, they cover none of the tapped message's
+ * text — above the host's long message, below it at the top of the thread,
+ * above the player's own reply, clear of the host's name in the group — lie
+ * inside the thread, take a tap, and go on a tap elsewhere. The card
+ * message is taller than the thread: tapped with its top at the top of the
+ * thread and with its top scrolled away, its tools float over its part on
+ * screen, off its text, and follow it there when it is tapped again further
+ * on.
  */
 function touchScreensOf(seeded: Seeded): Screen[] {
   const toolsTakeNoRoom = async (page: Page) => {
@@ -790,6 +1043,44 @@ function touchScreensOf(seeded: Seeded): Screen[] {
       .getByTestId("message-tools")
       .evaluateAll((tools) => tools.filter((tool) => tool.getBoundingClientRect().width > 0).length);
     return laidOut === 0 ? null : `${laidOut} message tool strips take room before a tap`;
+  };
+  const noting = () => {
+    const wrong: string[] = [];
+    const note = (what: string, found: string | null) => {
+      if (found !== null) wrong.push(`${what}: ${found}`);
+    };
+    return { note, found: () => (wrong.length === 0 ? null : wrong.join("; ")) };
+  };
+  const tappedTools = async (page: Page) => {
+    const { note, found } = noting();
+    note("above the long message", await toolsClear(page));
+    note("a tap away from the long message", await dismissTools(page));
+    await tapMessage(page, LONG_MESSAGE_START, 0);
+    note("below the long message at the top of the thread", await toolsClear(page));
+    note("a tap away from the long message at the top", await dismissTools(page));
+    await tapMessage(page, REPLY_START);
+    note("above the player's reply", await toolsClear(page));
+    note("a tap away from the player's reply", await dismissTools(page));
+    await tapMessage(page, CARDS_START, 0);
+    note("over the card message at the top of the thread", await toolsClear(page, true));
+    note("a tap away from the card message at the top", await dismissTools(page));
+    await tapMessage(page, CARDS_START, -CARDS_CUT);
+    note(`over the card message ${CARDS_CUT} px past the top of the thread`, await toolsClear(page, true));
+    // Read on with the tools shown, then tapped again: they come along.
+    await tapMessage(page, CARDS_START, -CARDS_CUT - CARDS_READ_ON);
+    note(`over the card message tapped again ${CARDS_READ_ON} px further on`, await toolsClear(page, true));
+    return found();
+  };
+  const tappedNamed = async (page: Page) => {
+    const { note, found } = noting();
+    note(`the host's long message ${NAMED_AT[0]} px under the top of the thread`, await toolsClear(page));
+    note("a tap away from the host's long message", await dismissTools(page));
+    await tapMessage(page, LONG_MESSAGE_START, NAMED_AT[1]);
+    note(`the host's long message ${NAMED_AT[1]} px under the top of the thread`, await toolsClear(page));
+    return found();
+  };
+  const dismissed = async (page: Page) => {
+    await dismissTools(page);
   };
   return [
     {
@@ -807,11 +1098,32 @@ function touchScreensOf(seeded: Seeded): Screen[] {
       check: toolsTakeNoRoom,
     },
     {
+      // The host's long message tapped: measured with its tools over the thread.
+      name: "thread-direct-tapped",
+      path: `/c/${encodeURIComponent(seeded.direct)}`,
+      widths: PHONE_WIDTHS,
+      ready: (page) => page.getByText("everyone, see you in the next round"),
+      prepare: (page) => tapMessage(page, LONG_MESSAGE_START),
+      check: tappedTools,
+      undo: dismissed,
+      gates: ["[data-testid=card-actions]", "[data-testid=card-facts]"],
+    },
+    {
       name: "thread-group-touch",
       path: `/c/${encodeURIComponent(seeded.group)}`,
       widths: PHONE_WIDTHS,
       ready: (page) => page.getByText("the ferry is at nine"),
       check: toolsTakeNoRoom,
+    },
+    {
+      // The host's long message in the group tapped, the first under the host's name.
+      name: "thread-group-tapped",
+      path: `/c/${encodeURIComponent(seeded.group)}`,
+      widths: PHONE_WIDTHS,
+      ready: (page) => page.getByText("the ferry is at nine"),
+      prepare: (page) => tapMessage(page, LONG_MESSAGE_START, NAMED_AT[0]),
+      check: tappedNamed,
+      undo: dismissed,
     },
   ];
 }
@@ -820,14 +1132,24 @@ function touchScreensOf(seeded: Seeded): Screen[] {
 // The gate.
 // ---------------------------------------------------------------------------
 
+/** Text closer than this to an edge of its box a reader sees touches it: the sign-in buttons before dc73949 had 0 px. */
+const TOUCHING = 1;
+
 /**
- * A hit that fails wherever it is: text past the border of its box or a box
- * too short for it, anything out of its card or the screen, an overlap, a
- * word a line. Cut text is left to `cutInGates`.
+ * A hit that fails wherever it is: text past the border of its box, against
+ * an edge of it a reader sees, or in a box too short for it, anything out of
+ * its card or the screen, an overlap, a word a line. Cut text is left to
+ * `cutInGates`.
  */
 function failsAnywhere(hit: TextFitHit): boolean {
   if (hit.kind === "clipped") return false;
-  if (hit.kind === "cramped") return hit.detail.escapes === true || hit.detail.contentOverflows === true;
+  if (hit.kind === "cramped") {
+    // `sides` names the visible edges the text comes closer to than the room asks.
+    const touching = String(hit.detail.sides)
+      .split(",")
+      .some((side) => side in hit.detail && Number(hit.detail[side]) < TOUCHING);
+    return touching || hit.detail.escapes === true || hit.detail.contentOverflows === true;
+  }
   return true;
 }
 
@@ -1145,8 +1467,45 @@ async function measureScreen(page: Page, report: Report, screen: Screen): Promis
     await report.measure(page, screen.name, screen.path, width, ready, screen.scope, screen.gates);
     const wrong = screen.check === undefined ? null : await screen.check(page);
     if (wrong !== null) report.fail(width, screen.name, wrong);
+    const rail = wide ? await railTilesEven(page) : null;
+    if (rail !== null) report.fail(width, screen.name, rail);
     if (screen.undo !== undefined) await screen.undo(page);
   }
+}
+
+/** The least room between a rail label and the sides of its tile. */
+const RAIL_LABEL_ROOM = 4;
+
+/**
+ * The wide screen's rail: every tile as wide as the others and inside the
+ * rail, every label at least `RAIL_LABEL_ROOM` px off the sides of its tile.
+ * A long label wraps rather than widening its tile. `null` without a rail.
+ */
+async function railTilesEven(page: Page): Promise<string | null> {
+  return page.evaluate((room) => {
+    const rail = document.querySelector("[data-testid=rail]");
+    if (rail === null) return null;
+    const edge = rail.getBoundingClientRect();
+    const tiles = Array.from(rail.querySelectorAll("a[data-section]"));
+    const widths = tiles.map((tile) => Math.round(tile.getBoundingClientRect().width * 10) / 10);
+    const wrong: string[] = [];
+    if (Math.max(...widths) - Math.min(...widths) > 0.5) wrong.push(`rail tiles of different widths: ${widths.join(", ")}`);
+    const range = document.createRange();
+    for (const tile of tiles) {
+      const box = tile.getBoundingClientRect();
+      const label = tile.querySelector("[data-testid=rail-label]");
+      if (box.left < edge.left - 0.5 || box.right > edge.right + 0.5) wrong.push(`rail tile out of the rail: ${label?.textContent ?? ""}`);
+      if (label === null) continue;
+      range.selectNodeContents(label);
+      const lines = Array.from(range.getClientRects()).filter((line) => line.width > 0.5);
+      const left = Math.min(...lines.map((line) => line.left)) - box.left;
+      const right = box.right - Math.max(...lines.map((line) => line.right));
+      if (Math.min(left, right) < room - 0.05) {
+        wrong.push(`rail label ${Math.round(Math.min(left, right) * 10) / 10} px off its tile: ${label.textContent ?? ""}`);
+      }
+    }
+    return wrong.length === 0 ? null : wrong.join("; ");
+  }, RAIL_LABEL_ROOM);
 }
 
 /** Opens a dialog with a button of the screen, by its name. */
@@ -1170,9 +1529,16 @@ async function closeDialog(page: Page): Promise<void> {
   }
 }
 
-for (const language of Object.keys(LOCALES) as Language[]) {
+for (const language of LANGUAGES) {
   test.describe(`text fit, ${language}`, () => {
-    test.use({ locale: LOCALES[language], viewport: sizeFor(PHONE_WIDTHS[0]) });
+    // The times on screen are the service's, stamped as the seed goes, and
+    // change from run to run; the zone they show in is pinned, so another
+    // machine draws the same hours. They move no hit: the time of a message
+    // and of a chat's last message is set in the mono face and two-digit
+    // hours, as wide at any hour, and every other date, time and age — a
+    // picture's or an invitation's time, a bundle's day, "Last active 2
+    // minutes ago" — sits in a line that wraps rather than one that cuts it.
+    test.use({ locale: LOCALES[language], timezoneId: "UTC", viewport: sizeFor(PHONE_WIDTHS[0]) });
 
     test(`every screen in ${language} at ${WIDTHS.join(", ")} px`, async ({ page, guard }) => {
       test.setTimeout(240_000);
@@ -1207,7 +1573,8 @@ for (const language of Object.keys(LOCALES) as Language[]) {
 
         // The gate is not empty: drawn as they were before dc73949 — 56 px
         // fixed, no vertical padding, the note clamped to two lines — the
-        // buttons fail it wherever the note wraps at 320 px.
+        // buttons fail it wherever the note wraps at 320 px, their text
+        // against the border or past it.
         await page.setViewportSize(sizeFor(PHONE_WIDTHS[0]));
         const wrapped = await page.evaluate((names) => {
           let wraps = false;
@@ -1223,7 +1590,7 @@ for (const language of Object.keys(LOCALES) as Language[]) {
         }, labels);
         await settle(page);
         const before = (await page.evaluate(detectTextFit, ROOM)).filter((hit) => labels.some((label) => hit.control.includes(label)));
-        if (wrapped) expect(before.length, "the detector catches the pre-dc73949 buttons").toBeGreaterThan(0);
+        if (wrapped) expect(before.filter(failsAnywhere).length, "the gate fails the pre-dc73949 buttons").toBeGreaterThan(0);
         await page.evaluate((names) => {
           for (const button of Array.from(document.querySelectorAll("button"))) {
             if (!names.some((name) => (button.textContent ?? "").includes(name))) continue;
@@ -1250,9 +1617,9 @@ for (const language of Object.keys(LOCALES) as Language[]) {
 
         // -- Signed in, with everything the screens draw ---------------------
         await page.setViewportSize(sizeFor(PHONE_WIDTHS[0]));
-        const myName = `Bartholomew Wolf ${letters(6)}`;
+        const myName = `Bartholomew Wolf ${letters(language, 6)}`;
         await signInAs(page, myName, providers.developer);
-        seeded = await seed(page, myName);
+        seeded = await seed(page, language, myName);
         // The server list scans the fakes on its first read: ask now.
         void fetch(`${SERVICE}/v1/servers?game=ja`, { headers: { authorization: `Bearer ${seeded.me.token}` } }).catch(() => undefined);
         // One load with everything seeded; from here on the app navigates itself.

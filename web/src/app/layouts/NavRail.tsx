@@ -8,11 +8,23 @@ import type { NavItem } from "../nav.ts";
 import { NavCount } from "./NavCount.tsx";
 import type { LayoutMe } from "./types.ts";
 
+/** U+00AD, where a label may break onto a second line with a hyphen. */
+const SOFT_HYPHEN = String.fromCharCode(0xad);
+
+/** How many letters a rail label shows: its soft hyphens do not count. */
+function letters(label: string): number {
+  return [...label.split(SOFT_HYPHEN).join("")].length;
+}
+
 /**
- * The wide screen's rail, 76 px: the logo, the seven sections as links of at
- * least 64 × 58 px with a 12 px label and a badge, and the account at the
- * foot. A label wider than the 64 px tile widens its tile, so the selected
- * one never runs past its highlight.
+ * The wide screen's rail, 76 px: the logo, the seven sections as 68 × 58 px
+ * tiles with an icon, a label and a badge, and the account at the foot.
+ *
+ * Every tile is as wide, and its label keeps 4 px off the tile's edges. A
+ * label of nine letters or more takes 11 px instead of 12; one still wider
+ * than the tile, such as the German for Settings, breaks at the soft hyphen
+ * its translation carries and makes its tile taller, 62 px, never wider. Two
+ * such tiles, as French has, still fit the wide layout's least height, 560 px.
  *
  * Before it, the first stop of Tab on every page: **Skip to content**, which
  * leads past the seven sections to the content pane.
@@ -50,19 +62,19 @@ export function NavRail({ nav, me }: { nav: NavItem[]; me: LayoutMe }) {
               title={item.label}
               draggable={false}
               className={cn(
-                "relative flex h-58 min-w-64 max-w-full flex-col items-center justify-center gap-4 rounded-lg px-2 select-none",
+                "relative flex min-h-58 w-68 shrink-0 flex-col items-center justify-center gap-4 rounded-lg px-4 py-5 select-none",
                 "transition-colors duration-150",
                 item.active ? "bg-selected-overlay text-fg" : "text-fg-secondary hover:bg-hover-overlay hover:text-fg",
               )}
             >
-              <Icon size={22} className={item.active ? "text-fg-accent" : undefined} />
+              <Icon size={22} className={cn("shrink-0", item.active && "text-fg-accent")} />
               <span
                 data-testid="rail-label"
                 className={cn(
-                  "max-w-[72px] truncate font-display leading-[16px] font-medium",
-                  // A long word of some languages takes a size smaller to stay
-                  // inside the rail; the title names it whole anyway.
-                  [...item.railLabel].length >= 10 ? "text-[11px] tracking-normal" : "text-[12px] tracking-[0.02em]",
+                  "max-w-full text-center font-display font-medium break-words",
+                  letters(item.railLabel) >= 9
+                    ? "text-[11px] leading-[13px] tracking-normal"
+                    : "text-[12px] leading-[16px] tracking-[0.02em]",
                 )}
               >
                 {item.railLabel}

@@ -442,11 +442,14 @@ export function Thread({
                     case "group":
                       // Off screen, a group is not rendered at all: the thread
                       // keeps hundreds of them without paying for their layout.
+                      // That also clips its paint to its box, so while the
+                      // tools of a tapped message float past it (`MessageItem`),
+                      // the group is drawn as it is.
                       return (
                         <div
                           key={item.key}
                           data-block=""
-                          className="[content-visibility:auto] [contain-intrinsic-size:auto_64px]"
+                          className="[content-visibility:auto] [contain-intrinsic-size:auto_64px] has-[[data-floating-tools]]:[content-visibility:visible]"
                         >
                           <MessageGroup senderId={item.senderId} mine={item.mine} messages={item.messages} />
                         </div>

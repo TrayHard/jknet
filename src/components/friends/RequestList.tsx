@@ -46,7 +46,9 @@ export function RequestList({
         const busy = busyId === request.id;
         return (
           // The buttons go under the name where the row is narrow, as on a
-          // phone: beside it they left no room to see who asks.
+          // phone: beside it they left no room to see who asks. The name
+          // keeps 200 px, what the widest long name of 24 characters takes, so
+          // a button does not cut it to stand beside it.
           <div
             key={request.id}
             data-testid="request-row"
@@ -54,7 +56,7 @@ export function RequestList({
             className="flex flex-wrap items-center gap-x-12 gap-y-8 min-h-48 px-12 py-2 rounded-md hover:bg-hover-overlay"
           >
             <Avatar name={person.displayName} src={person.avatarUrl} />
-            <span className="flex-1 basis-140 min-w-0 flex flex-col">
+            <span className="flex-1 basis-200 min-w-0 flex flex-col">
               <span className="text-body-md-medium text-fg truncate">
                 {person.displayName}
               </span>

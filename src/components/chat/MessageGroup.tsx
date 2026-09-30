@@ -49,8 +49,8 @@ export function MessageGroup({ senderId, mine, messages }: MessageGroupProps) {
             {names.personName(senderId)}
           </span>
         ) : null}
-        {messages.map((message) => (
-          <MessageItem key={message.seq} message={message} mine={mine} />
+        {messages.map((message, index) => (
+          <MessageItem key={message.seq} message={message} mine={mine} named={showWho && index === 0} />
         ))}
       </div>
     </div>
