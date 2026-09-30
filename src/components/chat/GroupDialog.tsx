@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
@@ -35,6 +35,7 @@ export function GroupDialog({ onClose, onCreated }: GroupDialogProps) {
   const create = useCreateChatGroup();
   const report = useGroupReport();
   const [title, setTitle] = useState("");
+  const nameHintId = useId();
   const [picked, setPicked] = useState<string[]>([]);
   const exclude = useMemo(() => new Set(meId === null ? [] : [meId]), [meId]);
   const room = groupRoom(null);
@@ -82,17 +83,26 @@ export function GroupDialog({ onClose, onCreated }: GroupDialogProps) {
             submit();
           }}
         >
-          <label className="flex flex-col gap-6">
-            <span className="text-label-xs text-fg-muted">{t("group.name")}</span>
-            <Input
-              autoFocus
-              value={title}
-              maxLength={GROUP_TITLE_MAX}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder={t("group.namePlaceholder")}
-              disabled={create.isPending}
-            />
-          </label>
+          {/* What a group without a name shows is a sentence under the field:
+              a placeholder cannot wrap, and a phone cut it mid-word. It stays
+              outside the label, which names the field alone. */}
+          <div data-testid="group-name-field" className="flex flex-col gap-6">
+            <label className="flex flex-col gap-6">
+              <span className="text-label-xs text-fg-muted">{t("group.name")}</span>
+              <Input
+                autoFocus
+                value={title}
+                maxLength={GROUP_TITLE_MAX}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder={t("group.namePlaceholder")}
+                aria-describedby={nameHintId}
+                disabled={create.isPending}
+              />
+            </label>
+            <p id={nameHintId} className="text-body-sm text-fg-muted">
+              {t("group.nameHint")}
+            </p>
+          </div>
           <FriendPicker
             friends={friends}
             exclude={exclude}

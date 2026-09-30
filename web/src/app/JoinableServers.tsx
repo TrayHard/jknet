@@ -222,12 +222,17 @@ export function JoinableServers() {
             >
               <Server size={18} />
             </span>
+            {/* Sentences and facts wrap: the row is a card with room to grow,
+                and a long name cut the verb off. */}
             <span className="flex min-w-0 flex-1 basis-[180px] flex-col gap-2">
-              <span className="truncate text-body-md-medium text-fg [unicode-bidi:isolate]" title={friend?.user.displayName}>
+              <span
+                className="text-body-md-medium text-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]"
+                title={friend?.user.displayName}
+              >
                 {t("serverChats.hosts", { name })}
               </span>
               <span className="flex min-w-0 flex-wrap items-center gap-6 text-body-sm text-fg-muted">
-                <span className="min-w-0 truncate">{facts(server)}</span>
+                <span className="min-w-0 [overflow-wrap:anywhere]">{facts(server)}</span>
                 {server.invited ? <Badge tone="accent">{t("serverChats.invited")}</Badge> : null}
               </span>
             </span>
@@ -275,7 +280,7 @@ export function HostedServer({ friend }: { friend: Friend }) {
           <Server size={18} />
         </span>
         <span className="flex min-w-0 flex-1 flex-col gap-2">
-          <span className="truncate text-body-md-medium text-fg [unicode-bidi:isolate]">
+          <span className="text-body-md-medium text-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]">
             {t("serverChats.hosts", { name: friend.user.displayName })}
           </span>
           <span className="text-body-sm text-fg-muted [overflow-wrap:anywhere]">{facts.join(" · ")}</span>

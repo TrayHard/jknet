@@ -125,10 +125,11 @@ function ComponentBlock({
       heading={single ? t("details.component") : t("details.componentNamed", { label: component.label })}
     >
       <div className="flex flex-col gap-12 rounded-lg border border-line-subtle p-12">
-        {/* Engine, tag and modes on one row. */}
-        <div className="flex items-center gap-12">
+        {/* Engine, tag and modes on one row; the modes go under a line of
+            the engine they would squeeze, as on a phone. */}
+        <div className="flex flex-wrap items-center gap-x-12 gap-y-8">
           <EngineLogo engineId={component.engine.engineId} name={name} size={32} />
-          <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 basis-160 min-w-0 flex flex-col">
             <span className="text-body-md-medium text-fg truncate">{name}</span>
             <span className="text-body-sm text-fg-muted">
               {component.engine.releaseTag
@@ -136,7 +137,7 @@ function ComponentBlock({
                 : t("details.engineLatest")}
             </span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="ml-auto flex flex-wrap items-center gap-6">
             <ModeBadges modes={component.modes} />
           </div>
         </div>
@@ -231,18 +232,20 @@ function OverlayBlock({
         <ul className="flex flex-col divide-y divide-line-subtle rounded-md border border-line-subtle">
           {files.map((file) => (
             <li key={file.path} className="flex flex-col gap-4 px-12 py-8">
-              <div className="flex items-center gap-8 min-w-0">
-                <span className="text-mono-sm text-fg truncate flex-1 min-w-0" title={file.path}>
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-4 min-w-0">
+                <span className="text-mono-sm text-fg flex-1 basis-140 min-w-0 [overflow-wrap:anywhere]" title={file.path}>
                   {file.path}
                 </span>
-                <Badge tone={file.replaces ? "accent" : "success"} className="shrink-0">
-                  {file.replaces ? t("details.overlay.replacedOne") : t("details.overlay.addedOne")}
-                </Badge>
-                <FileKindBadge file={file} />
-                <span className="text-mono-xs text-fg-muted shrink-0 w-72 text-right">
-                  {format.bytes(file.size)}
+                <span className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-8">
+                  <Badge tone={file.replaces ? "accent" : "success"} className="shrink-0">
+                    {file.replaces ? t("details.overlay.replacedOne") : t("details.overlay.addedOne")}
+                  </Badge>
+                  <FileKindBadge file={file} />
+                  <span className="text-mono-xs text-fg-muted shrink-0 w-72 text-right">
+                    {format.bytes(file.size)}
+                  </span>
+                  {origin ? <FileActions file={file} origin={origin} /> : null}
                 </span>
-                {origin ? <FileActions file={file} origin={origin} /> : null}
               </div>
               <HashLine sha256={file.sha256} executable={isExecutable(file.kind)} />
               {file.replaces ? (
@@ -254,8 +257,8 @@ function OverlayBlock({
             </li>
           ))}
           {remove.map((path) => (
-            <li key={`remove:${path}`} className="flex items-center gap-8 px-12 py-8 min-w-0">
-              <span className="text-mono-sm text-fg-muted line-through truncate flex-1 min-w-0" title={path}>
+            <li key={`remove:${path}`} className="flex flex-wrap items-center gap-x-8 gap-y-4 px-12 py-8 min-w-0">
+              <span className="text-mono-sm text-fg-muted line-through flex-1 basis-140 min-w-0 [overflow-wrap:anywhere]" title={path}>
                 {path}
               </span>
               <Badge tone="danger" className="shrink-0">
@@ -330,8 +333,10 @@ function FileRow({ file, origin }: { file: BundleFile; origin: FileActionsOrigin
   const executable = isExecutable(file.kind);
 
   return (
-    <li className="flex flex-col gap-6 px-12 py-8">
-      <div className="flex items-center gap-8 min-w-0">
+    <li data-testid="manifest-file" className="flex flex-col gap-6 px-12 py-8">
+      {/* The name keeps at least 140 px and wraps rather than being cut: on a
+          phone the badges and the size go on a line of their own under it. */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-4 min-w-0">
         {expandable ? (
           <button
             type="button"
@@ -345,7 +350,7 @@ function FileRow({ file, origin }: { file: BundleFile; origin: FileActionsOrigin
         ) : (
           <span className="size-20 shrink-0" aria-hidden="true" />
         )}
-        <span className="text-mono-sm text-fg truncate flex-1 min-w-0" title={file.path}>
+        <span className="text-mono-sm text-fg flex-1 basis-140 min-w-0 [overflow-wrap:anywhere]" title={file.path}>
           {file.library?.displayName && file.library.displayName !== name ? (
             <>
               {file.library.displayName}
@@ -355,19 +360,21 @@ function FileRow({ file, origin }: { file: BundleFile; origin: FileActionsOrigin
             name
           )}
         </span>
-        <FileKindBadge file={file} />
-        <FileSourceBadge source={file.source} />
-        {file.origin?.modified ? (
-          <Badge
-            tone="warm"
-            className="shrink-0"
-            title={t("details.modifiedOrigin", { id: file.origin.fileId })}
-          >
-            {t("details.modified")}
-          </Badge>
-        ) : null}
-        <span className="text-mono-xs text-fg-muted shrink-0 w-72 text-right">{format.bytes(file.size)}</span>
-        {origin ? <FileActions file={file} origin={origin} /> : null}
+        <span className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-8">
+          <FileKindBadge file={file} />
+          <FileSourceBadge source={file.source} />
+          {file.origin?.modified ? (
+            <Badge
+              tone="warm"
+              className="shrink-0"
+              title={t("details.modifiedOrigin", { id: file.origin.fileId })}
+            >
+              {t("details.modified")}
+            </Badge>
+          ) : null}
+          <span className="text-mono-xs text-fg-muted shrink-0 w-72 text-right">{format.bytes(file.size)}</span>
+          {origin ? <FileActions file={file} origin={origin} /> : null}
+        </span>
       </div>
       {/* --- slice: pk3 contents --- what the pk3 holds beside its category, on a line of its own: the row above has no room. */}
       {file.library?.features?.length ? <FeatureBadges features={file.library.features} className="pl-28" /> : null}

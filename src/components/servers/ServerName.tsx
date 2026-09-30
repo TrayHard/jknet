@@ -124,13 +124,18 @@ interface ServerNameProps {
   /** The same name stripped, used when `raw` is empty or all codes. */
   clean: string;
   className?: string;
+  /**
+   * Wraps a long name instead of cutting it: for the one place that shows
+   * the name whole, the server's own page. Rows and tables leave it off.
+   */
+  wrap?: boolean;
 }
 
 /** Draws a server or player name with the game's colours. */
-export function ServerName({ raw, clean, className }: ServerNameProps) {
+export function ServerName({ raw, clean, className, wrap = false }: ServerNameProps) {
   const spans = colorSpans(raw);
   return (
-    <span className={cn("truncate", className)} title={clean}>
+    <span className={cn(wrap ? "[overflow-wrap:anywhere]" : "truncate", className)} title={clean}>
       {spans.length === 0
         ? clean
         : spans.map((item, index) => (

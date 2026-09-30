@@ -210,7 +210,12 @@ export function Dialog({
       </div>
       {body ? <p className="text-body-sm text-fg-secondary pt-4">{body}</p> : null}
       {children}
-      <div className="flex items-center justify-end gap-8 pt-24">{actions}</div>
+      {/* Two buttons that do not fit side by side, as on a phone's sheet in a
+          long language, go on two rows instead of pushing the first one out
+          of the card. */}
+      <div data-testid="dialog-actions" className="flex flex-wrap items-center justify-end gap-8 pt-24">
+        {actions}
+      </div>
     </>
   );
 

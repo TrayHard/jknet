@@ -1,5 +1,5 @@
 import { Crown, LogOut, MessageCircle, Pencil, UserMinus, UserPlus, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useErrorText } from "../../i18n/errors";
@@ -97,6 +97,7 @@ export function GroupInfoPanel({
   const remove = useRemoveChatMember();
 
   const [draft, setDraft] = useState<string | null>(startRenaming && canRename(conversation, meId) ? (conversation.title ?? "") : null);
+  const renameHintId = useId();
   const [addOpen, setAddOpen] = useState(startAdding && canAddMembers(conversation));
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [removing, setRemoving] = useState<ChatMember | null>(null);
@@ -168,13 +169,17 @@ export function GroupInfoPanel({
       ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {/* Who: the picture, the name, who made it. */}
-        <div className={cn("flex items-center gap-12 border-b border-line-subtle", dense ? "p-8" : "px-16 py-12")}>
+        {/* Who: the picture, the name, who made it. The details of the chat
+            are where its whole name is read, so the lines wrap. */}
+        <div
+          data-testid="group-info-header"
+          className={cn("flex items-center gap-12 border-b border-line-subtle", dense ? "p-8" : "px-16 py-12")}
+        >
           <ConversationAvatar conversation={conversation} meId={meId} size="md" />
           {draft === null ? (
             <div className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-body-md-medium text-fg [unicode-bidi:isolate]">{title}</span>
-              <span className="truncate text-body-sm text-fg-muted">{subtitle}</span>
+              <span className="text-body-md-medium text-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]">{title}</span>
+              <span className="text-body-sm text-fg-muted [overflow-wrap:anywhere]">{subtitle}</span>
             </div>
           ) : (
             <form
@@ -198,10 +203,18 @@ export function GroupInfoPanel({
                   }
                 }}
                 aria-label={t("info.renameLabel")}
-                placeholder={t("info.renamePlaceholder")}
+                // A sentence cannot wrap in a field: the short name is the
+                // placeholder, and what an empty name does is said under it.
+                placeholder={t("info.renameLabel")}
+                aria-describedby={draft.trim() === "" ? renameHintId : undefined}
                 className="h-32"
                 disabled={rename.isPending}
               />
+              {draft.trim() === "" ? (
+                <span id={renameHintId} className="text-body-sm text-fg-muted">
+                  {t("info.renameHint")}
+                </span>
+              ) : null}
               <span className="flex items-center gap-6">
                 <Button size="sm" variant="primary" type="submit" disabled={rename.isPending}>
                   {tCommon("actions.save")}
@@ -436,8 +449,10 @@ function InfoSection({
 }) {
   return (
     <div className={cn("flex flex-col gap-8 border-b border-line-subtle", dense ? "p-8" : "px-12 py-12")}>
-      <div className="flex min-h-28 items-center gap-8 px-4">
-        <h4 className="min-w-0 flex-1 truncate text-label-xs text-fg-muted">{title}</h4>
+      {/* The whole heading, count included: an action that does not fit
+          beside it goes under it. */}
+      <div data-testid="info-section-head" className="flex min-h-28 flex-wrap items-center gap-x-8 gap-y-4 px-4">
+        <h4 className="min-w-0 flex-auto text-label-xs text-fg-muted">{title}</h4>
         {action}
       </div>
       {children}

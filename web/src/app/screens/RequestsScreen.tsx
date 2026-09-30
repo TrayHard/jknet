@@ -109,7 +109,7 @@ export function RequestsScreen() {
                     {tWeb("friendsScreen.inviteNote")}
                   </span>
                 </span>
-                <span className="ml-auto flex items-center gap-8">
+                <span className="ml-auto flex flex-wrap items-center gap-8">
                   {server !== null ? <JoinChatButton server={server} chat={chat} /> : null}
                   <Button
                     size="sm"

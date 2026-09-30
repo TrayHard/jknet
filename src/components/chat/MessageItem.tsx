@@ -112,14 +112,18 @@ export function MessageItem({ message, mine }: MessageItemProps) {
         {mine && readMarkSeq === message.seq ? <ReadMarks seq={message.seq} /> : null}
       </div>
 
+      {/* On a touch screen the tools take no room: 44 px each, kept beside
+          the message they took a third of a phone's width from every bubble
+          and card. Hidden until a tap, then floating at the end of the row
+          away from the sender's side, over the edge of a wide bubble. */}
       <div
         className={cn(
-          "flex shrink-0 items-center gap-2 transition-opacity duration-100",
-          reacting || tapped
-            ? "opacity-100"
-            : coarse
-              ? "invisible opacity-0"
-              : "opacity-0 group-hover/msg:opacity-100 group-focus-within/msg:opacity-100",
+          "flex items-center gap-2 transition-opacity duration-100",
+          coarse
+            ? reacting || tapped
+              ? cn("absolute top-1/2 z-10 -translate-y-1/2 rounded-md bg-elevated shadow-popover", mine ? "left-0" : "right-0")
+              : "hidden"
+            : cn("shrink-0", reacting ? "opacity-100" : "opacity-0 group-hover/msg:opacity-100 group-focus-within/msg:opacity-100"),
         )}
         data-testid="message-tools"
       >

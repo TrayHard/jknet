@@ -9,8 +9,10 @@ import { NavCount } from "./NavCount.tsx";
 import type { LayoutMe } from "./types.ts";
 
 /**
- * The wide screen's rail, 76 px: the logo, the seven sections as 64 × 58 px
- * links with a 12 px label and a badge, and the account at the foot.
+ * The wide screen's rail, 76 px: the logo, the seven sections as links of at
+ * least 64 × 58 px with a 12 px label and a badge, and the account at the
+ * foot. A label wider than the 64 px tile widens its tile, so the selected
+ * one never runs past its highlight.
  *
  * Before it, the first stop of Tab on every page: **Skip to content**, which
  * leads past the seven sections to the content pane.
@@ -48,7 +50,7 @@ export function NavRail({ nav, me }: { nav: NavItem[]; me: LayoutMe }) {
               title={item.label}
               draggable={false}
               className={cn(
-                "relative flex h-58 w-64 flex-col items-center justify-center gap-4 rounded-lg select-none",
+                "relative flex h-58 min-w-64 max-w-full flex-col items-center justify-center gap-4 rounded-lg px-2 select-none",
                 "transition-colors duration-150",
                 item.active ? "bg-selected-overlay text-fg" : "text-fg-secondary hover:bg-hover-overlay hover:text-fg",
               )}

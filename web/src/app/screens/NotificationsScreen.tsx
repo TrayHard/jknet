@@ -209,7 +209,7 @@ function EnableRow() {
   return (
     <div className="flex flex-col gap-12">
       <p className="text-body-sm text-fg-secondary">{t("notifications.enableText")}</p>
-      <Button variant="primary" icon={<Bell size={16} />} className="self-start" disabled={busy} onClick={enable}>
+      <Button wrap variant="primary" icon={<Bell size={16} />} className="self-start" disabled={busy} onClick={enable}>
         {t("notifications.enable")}
       </Button>
       {error === null ? null : <Alert>{error}</Alert>}
@@ -279,7 +279,7 @@ function DeviceSettings({ device }: { device: PushDevice }) {
               disabled={off}
               options={levelOptions}
               onChange={(value) => save({ groups: value as PushLevel })}
-              className="w-176"
+              className="min-w-176 max-w-full"
             />
           }
         />
@@ -294,7 +294,7 @@ function DeviceSettings({ device }: { device: PushDevice }) {
               disabled={off}
               options={levelOptions}
               onChange={(value) => save({ serverChats: value as PushLevel })}
-              className="w-176"
+              className="min-w-176 max-w-full"
             />
           }
         />
@@ -448,7 +448,7 @@ function TestRow({ device }: { device: PushDevice }) {
       hint={device.lastOkAt === null ? t("notifications.noDelivery") : t("notifications.lastDelivery", { date: when(device.lastOkAt) })}
     >
       <div className="flex flex-wrap items-center gap-12">
-        <Button size="sm" variant="secondary" icon={<Send size={14} />} disabled={test.isPending} onClick={() => test.mutate()}>
+        <Button wrap size="sm" variant="secondary" icon={<Send size={14} />} disabled={test.isPending} onClick={() => test.mutate()}>
           {t("notifications.test")}
         </Button>
         {status === null ? null : (

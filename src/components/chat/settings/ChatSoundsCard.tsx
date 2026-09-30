@@ -76,7 +76,7 @@ export function ChatSoundsCard({ onChange, text }: ChatSoundsCardProps) {
             onChange={(value) => {
               if (isChatSound(value) && value !== soundName) onChange({ soundName: value });
             }}
-            className="w-176"
+            className="min-w-176 max-w-full"
           />
         }
       />

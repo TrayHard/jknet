@@ -36,14 +36,16 @@ function Identity({ user }: { user: OnlineUser }) {
   const { t: tFriends } = useTranslation("friends");
   const providers = useProviderNames();
   const device = deviceKind();
+  // The badge goes under the name where the row is narrow: beside it on a
+  // phone, it left the name and the sentence a few letters.
   return (
-    <div className="flex items-center gap-16">
+    <div data-testid="account-identity" className="flex flex-wrap items-center gap-x-16 gap-y-8">
       <Avatar name={user.displayName} src={user.avatarUrl} size="lg" status="online" device={device} />
-      <span className="flex min-w-0 flex-1 flex-col gap-2">
-        <span data-testid="account-name" className="truncate text-display-md text-fg">
+      <span className="flex min-w-0 flex-1 basis-192 flex-col gap-2">
+        <span data-testid="account-name" className="text-display-md text-fg [overflow-wrap:anywhere]">
           {user.displayName}
         </span>
-        <span className="truncate text-body-sm text-fg-muted">{providers.line(user.provider, user.providerName)}</span>
+        <span className="text-body-sm text-fg-muted [overflow-wrap:anywhere]">{providers.line(user.provider, user.providerName)}</span>
         <span className="text-body-sm text-fg-success">
           {tFriends(device === "phone" ? "status.onlineFromPhone" : "status.onlineInBrowser")}
         </span>
@@ -120,7 +122,7 @@ function DangerZone() {
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="rounded-md border border-line-danger bg-danger-subtle p-12">
+    <div data-testid="danger-zone" className="rounded-md border border-line-danger bg-danger-subtle p-12">
       <h3 className="flex items-center gap-8 text-body-md-medium text-fg">
         <AlertTriangle size={16} className="text-fg-danger" />
         {t("danger.title")}
@@ -132,11 +134,12 @@ function DangerZone() {
       ) : null}
 
       <div className="flex flex-wrap items-start justify-between gap-12 pt-12">
-        <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 flex-1 basis-192 flex-col">
           <span className="text-body-sm-medium text-fg">{t("danger.signOut")}</span>
           <span className="text-body-sm text-fg-muted">{tWeb("account.signOutText")}</span>
         </span>
         <Button
+          wrap
           icon={<LogOut size={16} />}
           disabled={signOut.isPending}
           onClick={() => {
@@ -149,11 +152,12 @@ function DangerZone() {
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-12 pt-12">
-        <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 flex-1 basis-192 flex-col">
           <span className="text-body-sm-medium text-fg">{t("danger.delete")}</span>
           <span className="text-body-sm text-fg-muted">{tWeb("account.deleteText")}</span>
         </span>
         <Button
+          wrap
           variant="danger"
           icon={<Trash2 size={16} />}
           disabled={deleteAccount.isPending}

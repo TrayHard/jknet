@@ -50,7 +50,9 @@ export function SignInDoneScreen() {
           <Link
             to={again}
             replace
-            className="inline-flex h-36 items-center justify-center rounded-md border border-line px-16 text-body-md-medium text-fg hover:bg-hover-overlay"
+            // The height follows the label: two lines on a narrow phone in a
+            // long language, still 36 px with the border when one fits.
+            className="inline-flex min-h-36 items-center justify-center rounded-md border border-line px-16 py-7 text-center text-body-md-medium text-fg hover:bg-hover-overlay"
           >
             {t("signin.signInHere")}
           </Link>
@@ -74,7 +76,7 @@ export function SignInDoneScreen() {
           <Link
             to={again}
             replace
-            className="inline-flex h-36 items-center justify-center rounded-md bg-accent px-16 text-body-md-medium text-fg-on-accent hover:bg-accent-hover"
+            className="inline-flex min-h-36 items-center justify-center rounded-md bg-accent px-16 py-8 text-center text-body-md-medium text-fg-on-accent hover:bg-accent-hover"
           >
             {t("signin.retry")}
           </Link>

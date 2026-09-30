@@ -12,7 +12,7 @@ import { ColoredNickname } from "../../client/ColoredNickname";
 import { ProfileForm } from "../../client/ProfileForm";
 import { Button, Dialog, Select } from "../../ui";
 import { Layer } from "../Layer";
-import { CardFact, CardShell, CardStatus } from "./CardShell";
+import { CardFact, CardFacts, CardShell, CardStatus } from "./CardShell";
 import type { CardViewProps } from "./withFields";
 
 /**
@@ -84,7 +84,7 @@ export function ProfileCardView({ card, fields }: CardViewProps<"profile">) {
           ) : null
         }
       >
-        <dl className="flex flex-col gap-2">
+        <CardFacts>
           <CardFact label={t("cards.profile.model")}>
             <span className="text-mono-xs">{fields.model}</span>
           </CardFact>
@@ -109,7 +109,7 @@ export function ProfileCardView({ card, fields }: CardViewProps<"profile">) {
               </span>
             </CardFact>
           ) : null}
-        </dl>
+        </CardFacts>
       </CardShell>
       {draft !== null ? (
         <Layer>

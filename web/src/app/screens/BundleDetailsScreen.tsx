@@ -28,8 +28,10 @@ export function BundleDetailsScreen({ bundleId }: { bundleId: string }) {
 
   return (
     <div className="flex flex-col gap-16 px-16 py-20 sm:px-32 sm:py-24" data-testid="bundle-details">
-      <div className="flex flex-wrap items-start gap-12">
-        <div className="flex min-w-0 flex-1 flex-col gap-4">
+      {/* The button goes under the words when they would get less than 240 px
+          beside it: a wide translation of it squeezed them to a letter a line. */}
+      <div data-testid="bundle-header" className="flex flex-wrap items-start gap-12">
+        <div className="flex min-w-0 flex-1 basis-240 flex-col gap-4">
           <h1 className="text-display-md text-fg [overflow-wrap:anywhere]">{view.title}</h1>
           {summary !== "" && view.text?.description.trim() !== "" ? (
             <p className="text-body-md text-fg-secondary [overflow-wrap:anywhere]">{summary}</p>

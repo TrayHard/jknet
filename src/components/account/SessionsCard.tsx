@@ -136,7 +136,10 @@ export function SessionsCard({ className, heading = true }: SessionsCardProps) {
 
       {rows.length > 0 ? (
         <div className="border-t border-line-subtle pt-12 mt-4">
+          {/* A sentence in most languages: on a phone it wraps inside the card. */}
           <Button
+            wrap
+            data-testid="sign-out-others"
             icon={<LogOut size={16} />}
             disabled={!hasOthers(rows) || revoke.isPending}
             onClick={() => {
@@ -169,6 +172,7 @@ export function SessionsCard({ className, heading = true }: SessionsCardProps) {
                 {tCommon("actions.cancel")}
               </Button>
               <Button
+                wrap
                 variant="danger"
                 icon={<LogOut size={16} />}
                 disabled={revoke.isPending}
@@ -211,7 +215,10 @@ function SessionRow({
       : new Intl.RelativeTimeFormat(format.locale, { numeric: "auto" }).format(-age.value, age.unit);
 
   return (
-    <li className="flex flex-wrap items-center gap-12 py-12 border-t border-line-subtle first:border-t-0 first:pt-0">
+    <li
+      data-testid="session-row"
+      className="flex flex-wrap items-center gap-12 py-12 border-t border-line-subtle first:border-t-0 first:pt-0"
+    >
       <span
         aria-hidden="true"
         data-icon={icon}
@@ -219,7 +226,9 @@ function SessionRow({
       >
         <Icon size={18} />
       </span>
-      <span className="flex-1 min-w-0 flex flex-col gap-2">
+      {/* The words keep 160 px, the widest tag: a button that does not fit
+          beside them goes on a line of its own instead of squeezing them. */}
+      <span className="flex-1 basis-160 min-w-0 flex flex-col gap-2">
         <span className="flex flex-wrap items-center gap-8 min-w-0">
           <span className="text-body-md-medium text-fg break-words min-w-0">{name}</span>
           {sessionTags(session).map((tag) => (

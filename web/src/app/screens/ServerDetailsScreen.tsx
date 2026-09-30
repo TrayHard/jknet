@@ -54,7 +54,10 @@ function Fact({ label, children, mono = false }: { label: string; children: Reac
   return (
     <div className="flex min-w-0 flex-col gap-2 rounded-md border border-line-subtle bg-input px-12 py-10">
       <dt className="text-body-sm text-fg-secondary">{label}</dt>
-      <dd className={mono ? "truncate text-mono-sm text-fg" : "truncate text-body-md-medium text-fg"}>{children}</dd>
+      {/* The page is where the whole value is read: a long map or mode wraps. */}
+      <dd className={mono ? "text-mono-sm text-fg [overflow-wrap:anywhere]" : "text-body-md-medium text-fg [overflow-wrap:anywhere]"}>
+        {children}
+      </dd>
     </div>
   );
 }
@@ -111,7 +114,7 @@ function ServerFacts({ server, friends }: { server: ServerInfo; friends: Friend[
     <>
       <div className="flex flex-col gap-4">
         <h1 className="flex min-w-0 items-center gap-8 text-display-md text-fg">
-          <ServerName raw={server.hostnameRaw} clean={server.hostnameClean} className="min-w-0" />
+          <ServerName wrap raw={server.hostnameRaw} clean={server.hostnameClean} className="min-w-0" />
         </h1>
         <p className="text-mono-sm text-fg-secondary [overflow-wrap:anywhere]" data-testid="server-address">
           {server.address}

@@ -43,7 +43,8 @@
 .community-count { color:var(--cm-accent); }
 .community-files { padding:0; margin:20px 0 0; list-style:none; }
 .community-files li { display:flex; gap:14px; align-items:center; border-top:1px solid var(--cm-border); padding:18px 0; }
-.community-files li>div { flex:1; min-width:0; overflow-wrap:anywhere; }
+/* The title keeps 190 px: in a narrow list the link goes under it instead of squeezing it to a word a line. */
+.community-files li>div { flex:1 1 190px; min-width:0; overflow-wrap:anywhere; }
 .community-files small,.community-claim small { display:block; color:var(--cm-muted); font-size:11px; }
 .community-file-number { color:var(--cm-accent); font-size:12px; }
 .community-claim { border-top:1px solid var(--cm-border); margin-top:20px; padding-top:12px; }

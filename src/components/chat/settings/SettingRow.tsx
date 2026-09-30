@@ -75,7 +75,13 @@ interface SettingRowProps {
   className?: string;
 }
 
-/** One setting: the words on the left, the control on the right. */
+/**
+ * One setting: the words on the left, the control on the right.
+ *
+ * A control wider than the room beside 120 px of words — a list, a pair of
+ * buttons on a phone — goes under the words instead of squeezing them to a
+ * word a line; a switch always fits beside them.
+ */
 export function SettingRow({ title, hint, control, disabled = false, children, className }: SettingRowProps) {
   return (
     <div
@@ -84,12 +90,12 @@ export function SettingRow({ title, hint, control, disabled = false, children, c
         className,
       )}
     >
-      <div className="flex items-start gap-16">
-        <span className={cn("flex-1 min-w-0 flex flex-col gap-2", disabled && "opacity-60")}>
+      <div className="flex flex-wrap items-start gap-x-16 gap-y-8">
+        <span className={cn("flex-1 basis-120 min-w-0 flex flex-col gap-2", disabled && "opacity-60")}>
           <span className="text-body-md-medium text-fg">{title}</span>
           {hint ? <span className="text-body-sm text-fg-muted">{hint}</span> : null}
         </span>
-        {control ? <span className="shrink-0 flex items-center gap-8 pt-2">{control}</span> : null}
+        {control ? <span className="shrink-0 max-w-full flex flex-wrap items-center gap-8 pt-2">{control}</span> : null}
       </div>
       {children}
     </div>

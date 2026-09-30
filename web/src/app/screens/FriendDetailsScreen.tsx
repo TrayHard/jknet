@@ -59,7 +59,10 @@ export function FriendDetailsScreen({ userId }: { userId: string }) {
       <div className="flex items-center gap-16">
         <Avatar name={name} src={friend.user.avatarUrl} size="lg" status={status} device={webDevice(friend.presence)} />
         <div className="flex min-w-0 flex-col gap-4">
-          <span className="truncate text-display-md text-fg">{name}</span>
+          {/* The friend's own page shows the whole name: a long one wraps. */}
+          <span data-testid="friend-name" className="text-display-md text-fg [overflow-wrap:anywhere]">
+            {name}
+          </span>
           <span className="truncate text-mono-xs text-fg-muted">{providerHandle(friend)}</span>
         </div>
       </div>

@@ -12,6 +12,8 @@ const repo = fileURLToPath(new URL("../..", import.meta.url));
 const WIDE = { width: 1440, height: 900 };
 const MUTE_EDGE = ["--mute-audio"];
 const MUTE_FIREFOX = { "media.volume_scale": "0.0" };
+/** Specs that carry their own matrix of widths and languages: the edge project runs them once. */
+const EDGE_ONLY = /text-fit\.spec\.ts$/;
 
 /**
  * The web app's end-to-end run: the e2e build under the production
@@ -51,9 +53,9 @@ export default defineConfig({
   // `fixtures.ts`, and the app itself plays no audio.
   projects: [
     { name: "edge", use: { ...devices["Desktop Edge"], channel: "msedge", viewport: WIDE, launchOptions: { args: MUTE_EDGE } } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"], viewport: WIDE, launchOptions: { firefoxUserPrefs: MUTE_FIREFOX } } },
-    { name: "webkit", use: { ...devices["Desktop Safari"], viewport: WIDE } },
-    { name: "pixel7", use: { ...devices["Pixel 7"], channel: "msedge", launchOptions: { args: MUTE_EDGE } } },
-    { name: "iphone14", use: { ...devices["iPhone 14"] } },
+    { name: "firefox", testIgnore: EDGE_ONLY, use: { ...devices["Desktop Firefox"], viewport: WIDE, launchOptions: { firefoxUserPrefs: MUTE_FIREFOX } } },
+    { name: "webkit", testIgnore: EDGE_ONLY, use: { ...devices["Desktop Safari"], viewport: WIDE } },
+    { name: "pixel7", testIgnore: EDGE_ONLY, use: { ...devices["Pixel 7"], channel: "msedge", launchOptions: { args: MUTE_EDGE } } },
+    { name: "iphone14", testIgnore: EDGE_ONLY, use: { ...devices["iPhone 14"] } },
   ],
 });

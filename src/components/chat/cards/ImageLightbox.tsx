@@ -78,31 +78,38 @@ export function ImageLightbox({ file, message, url, state, onClose }: ImageLight
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-8 rounded-lg border border-line bg-surface px-12 py-8">
-        <span className="flex min-w-0 flex-1 flex-col">
+      {/* The words keep 160 px, and who sent the picture, when and how big
+          wraps: on a phone the buttons go on a line of their own under it. */}
+      <div
+        data-testid="lightbox-header"
+        className="flex shrink-0 flex-wrap items-center gap-8 rounded-lg border border-line bg-surface px-12 py-8"
+      >
+        <span className="flex min-w-0 flex-1 basis-160 flex-col">
           <span className="truncate text-body-sm-medium text-fg [unicode-bidi:isolate]" title={file.name}>
             {file.name}
           </span>
-          <span className="truncate text-body-sm text-fg-muted">{facts.join(" · ")}</span>
+          <span className="text-body-sm text-fg-muted [overflow-wrap:anywhere]">{facts.join(" · ")}</span>
         </span>
-        {isScreenshotName(file.name) && client !== undefined ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<FolderInput size={14} />}
-            disabled={importFile.isPending || importFile.isSuccess}
-            title={t("files.image.addToMediaHint", { client: client.name })}
-            onClick={() => importFile.mutate({ fileId: file.id, target: { kind: "screenshot", clientId: client.id } })}
-          >
-            {importFile.isSuccess ? t("files.addedToMedia") : t("files.addToMedia")}
+        <span className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-8">
+          {isScreenshotName(file.name) && client !== undefined ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<FolderInput size={14} />}
+              disabled={importFile.isPending || importFile.isSuccess}
+              title={t("files.image.addToMediaHint", { client: client.name })}
+              onClick={() => importFile.mutate({ fileId: file.id, target: { kind: "screenshot", clientId: client.id } })}
+            >
+              {importFile.isSuccess ? t("files.addedToMedia") : t("files.addToMedia")}
+            </Button>
+          ) : null}
+          <Button size="sm" variant="secondary" icon={<Save size={14} />} disabled={state.saving} onClick={state.save}>
+            {t("files.save")}
           </Button>
-        ) : null}
-        <Button size="sm" variant="secondary" icon={<Save size={14} />} disabled={state.saving} onClick={state.save}>
-          {t("files.save")}
-        </Button>
-        <Button data-lightbox-close="" size="sm" variant="ghost" icon={<X size={14} />} onClick={onClose}>
-          {t("files.image.close")}
-        </Button>
+          <Button data-lightbox-close="" size="sm" variant="ghost" icon={<X size={14} />} onClick={onClose}>
+            {t("files.image.close")}
+          </Button>
+        </span>
       </div>
       {importFile.error || state.error !== null || state.savedTo !== null ? (
         <p

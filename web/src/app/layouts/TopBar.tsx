@@ -57,8 +57,9 @@ export function BarButton({
 export function TopBar({ kind, title, header, actions, attention, drawerOpen, onMenu, onBack, menuRef }: TopBarProps) {
   const { t } = useTranslation("web");
   return (
-    <header className="safe-top shrink-0 border-b border-line-subtle bg-sidebar">
-      <div className="flex h-56 items-center gap-2 px-6">
+    <header data-testid="top-bar" className="safe-top shrink-0 border-b border-line-subtle bg-sidebar">
+      {/* 56 px, or two lines of a title that one does not hold. */}
+      <div className="flex min-h-56 items-center gap-2 px-6 py-6">
         {kind === "root" ? (
           <BarButton label={t("nav.openMenu")} onClick={onMenu} buttonRef={menuRef} expanded={drawerOpen}>
             <Menu size={22} />
@@ -78,7 +79,7 @@ export function TopBar({ kind, title, header, actions, attention, drawerOpen, on
         {header !== undefined && kind === "detail" ? (
           <div className="flex min-w-0 flex-1 items-center">{header}</div>
         ) : (
-          <h1 className="min-w-0 flex-1 truncate pl-6 font-display text-[20px] leading-[28px] font-semibold text-fg">
+          <h1 className="min-w-0 flex-1 line-clamp-2 pl-6 font-display text-[20px] leading-[28px] font-semibold text-fg">
             {title}
           </h1>
         )}

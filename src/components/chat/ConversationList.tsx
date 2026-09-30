@@ -92,6 +92,7 @@ export function ConversationList({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("list.search")}
             aria-label={t("list.search")}
+            data-testid="chat-search"
             className={cn("min-w-0 flex-1", dense && "h-32")}
             trailing={
               query !== "" ? (
@@ -121,7 +122,9 @@ export function ConversationList({
             <UserPlus size={16} />
           </button>
         </div>
-        <div role="tablist" aria-label={t("list.filter")} className="flex items-center gap-4">
+        {/* A finger's tabs, 44 px tall and wider, wrap in a narrow list
+            rather than pushing the last one out of it. */}
+        <div role="tablist" aria-label={t("list.filter")} className="flex items-center gap-4 pointer-coarse:flex-wrap">
           {FILTERS.map((entry) => (
             <button
               key={entry}

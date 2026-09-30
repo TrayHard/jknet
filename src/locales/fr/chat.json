@@ -63,7 +63,7 @@
     }
   },
   "list": {
-    "search": "Rechercher dans les discussions",
+    "search": "Rechercher une discussion",
     "clearSearch": "Effacer la recherche",
     "filter": "Afficher",
     "filters": {
@@ -98,7 +98,8 @@
     "new": "Nouveau groupe",
     "newBody": "Jusqu’à {{max}} membres, vous compris. Les messages et fichiers sont conservés 90 jours.",
     "name": "Nom",
-    "namePlaceholder": "Facultatif. Sans nom, le groupe affiche ses membres",
+    "namePlaceholder": "Facultatif",
+    "nameHint": "Sans nom, le groupe affiche ses membres.",
     "members": "Membres",
     "count": "{{used}} sur {{max}}",
     "find": "Rechercher des amis",
@@ -145,7 +146,7 @@
     "serverByYou": "Discussion du serveur privé · vous êtes l’hôte",
     "rename": "Renommer le groupe",
     "renameLabel": "Nom du groupe",
-    "renamePlaceholder": "Sans nom, le groupe affiche ses membres",
+    "renameHint": "Sans nom, le groupe affiche ses membres",
     "members": "Membres · {{used}} sur {{max}}",
     "membersServer": "Membres · {{used}}",
     "add": "Ajouter des amis",

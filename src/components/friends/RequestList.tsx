@@ -45,12 +45,16 @@ export function RequestList({
         const person: OnlineUser = side === "from" ? request.from : request.to;
         const busy = busyId === request.id;
         return (
+          // The buttons go under the name where the row is narrow, as on a
+          // phone: beside it they left no room to see who asks.
           <div
             key={request.id}
-            className="flex items-center gap-12 h-48 px-12 rounded-md hover:bg-hover-overlay"
+            data-testid="request-row"
+            data-side={side}
+            className="flex flex-wrap items-center gap-x-12 gap-y-8 min-h-48 px-12 py-2 rounded-md hover:bg-hover-overlay"
           >
             <Avatar name={person.displayName} src={person.avatarUrl} />
-            <span className="flex-1 min-w-0 flex flex-col">
+            <span className="flex-1 basis-140 min-w-0 flex flex-col">
               <span className="text-body-md-medium text-fg truncate">
                 {person.displayName}
               </span>
@@ -62,26 +66,28 @@ export function RequestList({
                 })}
               </span>
             </span>
-            {onAccept ? (
+            <span className="ml-auto flex items-center gap-12">
+              {onAccept ? (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={<Check size={14} />}
+                  disabled={busy}
+                  onClick={() => onAccept(request.id)}
+                >
+                  {t("requests.accept")}
+                </Button>
+              ) : null}
               <Button
                 size="sm"
-                variant="primary"
-                icon={<Check size={14} />}
+                variant="ghost"
+                icon={<X size={14} />}
                 disabled={busy}
-                onClick={() => onAccept(request.id)}
+                onClick={() => onDismiss(request.id)}
               >
-                {t("requests.accept")}
+                {dismissLabel}
               </Button>
-            ) : null}
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<X size={14} />}
-              disabled={busy}
-              onClick={() => onDismiss(request.id)}
-            >
-              {dismissLabel}
-            </Button>
+            </span>
           </div>
         );
       })}

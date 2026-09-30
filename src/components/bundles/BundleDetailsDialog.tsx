@@ -447,15 +447,17 @@ function VersionRow({
   const format = useFormat();
   const basedOn = useBasedOnLine();
   return (
-    <li className={cn("flex flex-col gap-4 px-12 py-8", selected && "bg-selected-overlay")}>
-      <div className="flex items-center gap-8 min-w-0">
+    <li data-testid="version-row" className={cn("flex flex-col gap-4 px-12 py-8", selected && "bg-selected-overlay")}>
+      {/* The date and the size give way to the label, the name of the
+          version: on a phone they go on a line of their own under it. */}
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-2 min-w-0">
         <button
           type="button"
           onClick={onSelect}
           aria-pressed={selected}
           title={t("details.showVersion", { label: version.label })}
           className={cn(
-            "text-body-sm-medium truncate cursor-pointer hover:text-fg-accent hover:underline",
+            "min-w-0 text-left text-body-sm-medium [overflow-wrap:anywhere] cursor-pointer hover:text-fg-accent hover:underline",
             selected ? "text-fg-accent" : "text-fg",
           )}
         >
@@ -466,11 +468,9 @@ function VersionRow({
             {t(`details.status.${version.status}`)}
           </Badge>
         ) : null}
-        <span className="text-mono-xs text-fg-muted shrink-0 ml-auto">
-          {format.date(version.publishedAt ?? version.createdAt)}
-        </span>
-        <span className="text-mono-xs text-fg-muted shrink-0">
-          {t("details.versionSize", { size: format.bytes(version.blobBytes), count: version.fileCount })}
+        <span className="ml-auto flex flex-wrap justify-end gap-x-8 text-mono-xs text-fg-muted">
+          <span>{format.date(version.publishedAt ?? version.createdAt)}</span>
+          <span>{t("details.versionSize", { size: format.bytes(version.blobBytes), count: version.fileCount })}</span>
         </span>
       </div>
       {version.components.length > 0 ? (

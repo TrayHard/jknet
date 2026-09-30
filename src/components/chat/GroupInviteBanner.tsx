@@ -71,7 +71,10 @@ export function GroupInviteBanner({
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto p-24">
-        <div className="flex w-full max-w-[400px] flex-col gap-16 rounded-lg border border-line-accent bg-surface p-16 shadow-card">
+        <div
+          data-testid="group-invite"
+          className="flex w-full max-w-[400px] flex-col gap-16 rounded-lg border border-line-accent bg-surface p-16 shadow-card"
+        >
           <div className="flex items-start gap-12">
             <span className="flex size-40 shrink-0 items-center justify-center rounded-full bg-purple-subtle text-fg-purple">
               <Users size={18} />
@@ -87,7 +90,7 @@ export function GroupInviteBanner({
           <ul className="flex flex-col gap-8 text-body-sm text-fg-secondary">
             <li className="flex items-center gap-8">
               <Avatar name={by.displayName} src={by.avatarUrl} size="sm" />
-              <span className="min-w-0 truncate">
+              <span className="min-w-0 [overflow-wrap:anywhere]">
                 {t("invites.invitedBy", { name: by.displayName, time: times.full(invite.createdAt) })}
               </span>
             </li>

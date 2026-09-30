@@ -97,7 +97,8 @@ export default function EmojiPicker({ onPick, recent = [] }: EmojiPickerProps) {
   }, [data]);
 
   return (
-    <div className="flex w-[320px] flex-col gap-8 rounded-lg border border-line-strong bg-elevated p-8 shadow-popover">
+    // 320 px, and no wider than the sheet of a 320 px phone with its gutter.
+    <div className="flex w-[320px] max-w-full flex-col gap-8 rounded-lg border border-line-strong bg-elevated p-8 shadow-popover">
       <Input
         ref={field}
         icon={<Search size={14} />}

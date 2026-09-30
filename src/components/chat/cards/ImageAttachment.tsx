@@ -83,7 +83,8 @@ export function ImageAttachment({ file, message }: AttachmentProps) {
                 <DownloadBar state={state} />
               </div>
             ) : (
-              <Button size="sm" icon={<ImageDown size={14} />} onClick={state.fetch}>
+              // A sentence with the size: it wraps in a narrow picture box.
+              <Button wrap size="sm" icon={<ImageDown size={14} />} onClick={state.fetch}>
                 {t("files.image.show", { size: format.bytes(file.size) })}
               </Button>
             )}

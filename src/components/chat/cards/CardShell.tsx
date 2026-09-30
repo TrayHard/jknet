@@ -84,7 +84,21 @@ export function CardShell({
           </span>
         </div>
         {children ?? null}
-        {actions ? <div className="flex flex-wrap items-center gap-6">{actions}</div> : null}
+        {/* The small buttons of a card wrap their label inside a narrow card,
+            as `Button`'s `wrap` does, instead of running past its border; a
+            label that fits keeps the 28 px of the design, 44 px for a finger. */}
+        {actions ? (
+          <div
+            data-testid="card-actions"
+            className={cn(
+              "flex flex-wrap items-center gap-6",
+              "[&>button]:h-auto [&>button]:min-h-28 [&>button]:max-w-full [&>button]:py-4 [&>button]:whitespace-normal",
+              "[&>button]:text-center [&>button>svg]:shrink-0 pointer-coarse:[&>button]:min-h-44",
+            )}
+          >
+            {actions}
+          </div>
+        ) : null}
         {status ?? null}
       </div>
     </div>
@@ -112,12 +126,28 @@ export function CardStatus({ tone = "muted", children }: { tone?: "muted" | "suc
   );
 }
 
-/** A small fact of a card: a label and its value on one line. */
+/**
+ * The facts of a card, a label and its value a line: the labels share one
+ * column at least 64 px wide that grows to the longest, so a long word of a
+ * language (`Empuñaduras`) is never drawn over its value.
+ */
+export function CardFacts({ children }: { children: ReactNode }) {
+  return (
+    <dl
+      data-testid="card-facts"
+      className="grid grid-cols-[minmax(64px,max-content)_minmax(0,1fr)] items-baseline gap-x-8 gap-y-2 text-body-sm"
+    >
+      {children}
+    </dl>
+  );
+}
+
+/** A small fact of a card, inside `CardFacts`: a label and its value on one line. */
 export function CardFact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-baseline gap-8 text-body-sm">
-      <dt className="w-64 shrink-0 text-fg-muted">{label}</dt>
-      <dd className="min-w-0 flex-1 text-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]">{children}</dd>
+    <div className="contents">
+      <dt className="text-fg-muted">{label}</dt>
+      <dd className="min-w-0 text-fg [overflow-wrap:anywhere] [unicode-bidi:isolate]">{children}</dd>
     </div>
   );
 }

@@ -112,14 +112,15 @@ export function FriendsScreen({ selectedId, requestsOpen = false }: FriendsScree
           data-testid="requests-row"
           aria-current={requestsOpen ? "page" : undefined}
           className={cn(
-            "flex min-h-56 items-center gap-12 rounded-[10px] px-12 transition-colors duration-100",
+            "flex min-h-56 items-center gap-12 rounded-[10px] px-12 py-8 transition-colors duration-100",
             requestsOpen ? "bg-selected-overlay" : "hover:bg-hover-overlay",
           )}
         >
           <span className="flex size-40 shrink-0 items-center justify-center rounded-[10px] bg-elevated text-fg-secondary">
             <Inbox size={18} />
           </span>
-          <span className="min-w-0 flex-1 truncate text-body-md-medium text-fg">{tWeb("friendsScreen.requests")}</span>
+          {/* Two lines where a language needs them: still the 56 px of the row. */}
+          <span className="min-w-0 flex-1 text-body-md-medium text-fg">{tWeb("friendsScreen.requests")}</span>
           <NavCount badge={asks > 0 ? asks : undefined} />
           <ChevronRight size={16} className="text-fg-secondary" />
         </Link>

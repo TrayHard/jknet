@@ -12,6 +12,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: ReactNode;
   /** Stretches the button to the width of its container. */
   block?: boolean;
+  /**
+   * Lets a long label wrap: the button grows in height instead of in width,
+   * and never past its container. For a label that is a sentence in some
+   * languages, where a phone is narrower than the one line. A label that
+   * fits keeps the size of the design.
+   */
+  wrap?: boolean;
 }
 
 const VARIANTS: Record<ButtonVariant, string> = {
@@ -37,6 +44,15 @@ const SIZES: Record<ButtonSize, string> = {
   lg: "h-44 px-20 gap-8 rounded-md pointer-coarse:min-w-44",
 };
 
+// The same sizes for a label that may wrap: a floor instead of a height, and
+// the padding that makes one line exactly that tall, with or without the
+// 1 px border of `secondary`.
+const WRAP_SIZES: Record<ButtonSize, string> = {
+  sm: "min-h-28 py-4 px-12 gap-6 rounded-sm pointer-coarse:min-h-44 pointer-coarse:min-w-44",
+  md: "min-h-36 py-7 px-16 gap-8 rounded-md pointer-coarse:min-h-44 pointer-coarse:min-w-44",
+  lg: "min-h-44 py-10 px-20 gap-8 rounded-md pointer-coarse:min-w-44",
+};
+
 const TEXT: Record<ButtonSize, string> = {
   sm: "text-body-sm-medium",
   md: "text-body-md-medium",
@@ -48,6 +64,7 @@ export function Button({
   size = "md",
   icon,
   block = false,
+  wrap = false,
   className,
   children,
   type = "button",
@@ -61,11 +78,13 @@ export function Button({
         // `select-none`, because a label is something to press and never
         // something to copy: the page itself is selectable now, and a drag
         // that starts on a button would otherwise paint it blue.
-        "inline-flex items-center justify-center whitespace-nowrap select-none",
+        "inline-flex items-center justify-center select-none",
+        // A wrapped label keeps its icon whole beside the lines.
+        wrap ? "max-w-full whitespace-normal text-center [&>svg]:shrink-0" : "whitespace-nowrap",
         "transition-colors duration-150 cursor-pointer",
         "disabled:cursor-not-allowed",
         VARIANTS[variant],
-        SIZES[size],
+        (wrap ? WRAP_SIZES : SIZES)[size],
         TEXT[size],
         block && "w-full",
         className,

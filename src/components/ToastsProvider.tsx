@@ -83,10 +83,12 @@ export function ToastsProvider({ children }: { children: ReactNode }) {
         {children}
         {/* --- slice: chat --- `--chat-drawer-inset` is the width of the
             chat drawer while it is open: the column moves left of it rather
-            than covering its composer. `AppShell` sets it. */}
+            than covering its composer. `AppShell` sets it. The column is
+            never wider than the screen less its margins: a 380 px toast on
+            a phone ran off the left edge. */}
         <div
           ref={setHost}
-          className="fixed bottom-24 right-[calc(24px+var(--chat-drawer-inset,0px))] z-50 flex flex-col gap-12"
+          className="fixed bottom-24 right-[calc(24px+var(--chat-drawer-inset,0px))] z-50 flex max-w-[calc(100vw-48px)] flex-col gap-12"
         >
           {toasts.map(({ id, content }) => (
             <Toast

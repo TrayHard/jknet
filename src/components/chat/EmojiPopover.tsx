@@ -54,7 +54,7 @@ export function EmojiPopover({ anchor, onClose, onPick, placement = "top-end" }:
     <Floating anchor={anchor} onClose={onClose} placement={placement} label={t("emoji.title")}>
       <Suspense
         fallback={
-          <div className="flex h-[300px] w-[320px] items-center justify-center rounded-lg border border-line-strong bg-elevated text-body-sm text-fg-muted shadow-popover">
+          <div className="flex h-[300px] w-[320px] max-w-full items-center justify-center rounded-lg border border-line-strong bg-elevated text-body-sm text-fg-muted shadow-popover">
             {t("emoji.loading")}
           </div>
         }

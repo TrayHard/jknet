@@ -125,7 +125,12 @@ export function Drawer({ nav, me, onChoose, onClose, onAccount }: DrawerProps) {
           "border-r border-line-subtle bg-sidebar shadow-popover safe-top safe-left",
         )}
       >
-        <div className="flex h-56 shrink-0 items-center gap-8 border-b border-line-subtle pr-6 pl-16">
+        {/* A 272 px drawer, on a 320 px phone, keeps the whole address with
+            a few px less around it. */}
+        <div
+          data-testid="drawer-header"
+          className="flex h-56 shrink-0 items-center gap-6 border-b border-line-subtle pr-6 pl-14 min-[340px]:gap-8 min-[340px]:pl-16"
+        >
           <Logo size={24} />
           <span className="font-display text-[16px] leading-[20px] font-medium tracking-[0.12em] text-fg">JKNET</span>
           <span className="min-w-0 flex-1 truncate text-mono-xs text-fg-secondary">{t("nav.where")}</span>
@@ -155,7 +160,8 @@ export function Drawer({ nav, me, onChoose, onClose, onAccount }: DrawerProps) {
                         onChoose(item.path);
                       }}
                       className={cn(
-                        "group flex h-48 w-full items-center gap-14 rounded-[10px] px-12 text-left select-none",
+                        // Two lines of a long section name fit the 48 px.
+                        "group flex min-h-48 w-full items-center gap-14 rounded-[10px] px-12 py-4 text-left select-none",
                         "font-display text-[16px] leading-[20px] font-medium tracking-[0.02em] transition-colors duration-150",
                         item.active
                           ? "bg-selected-overlay text-fg"
@@ -163,7 +169,7 @@ export function Drawer({ nav, me, onChoose, onClose, onAccount }: DrawerProps) {
                       )}
                     >
                       <Icon size={22} className={item.active ? "text-fg-accent" : undefined} />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{item.label}</span>
                       <NavCount badge={item.badge} count={item.count} />
                     </a>
                   );
