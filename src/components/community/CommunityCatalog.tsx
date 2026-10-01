@@ -18,7 +18,7 @@ import { CatalogCard } from "./CatalogCard";
 import { catalogRemedy, catalogVisibility, inCatalog } from "./catalogVisibility";
 import { CreateDialog } from "./CreateDialog";
 import { useFailureText } from "./errors";
-import { formatCount, formatHours, GAME_NAMES, LANGUAGE_NAMES, roundHours } from "./format";
+import { formatCount, GAME_NAMES, LANGUAGE_NAMES } from "./format";
 import { useCommunityApi, useCommunityPlatform, type CatalogTab } from "./platform";
 import type { CommunityCard, CommunityRankingEntry, FollowedCommunity, MyCommunity } from "./types";
 import { useAction, useRemote } from "./useRemote";
@@ -45,9 +45,9 @@ function useDebounced<T>(value: T, delay: number): T {
 
 /**
  * The catalogue of communities, as the design's A1 draws it: the tabs
- * **Catalog**, **My communities** and **Following**; the week's top while the
- * service ranks; the search, the language, the region and the order; the
- * tags; the cards.
+ * **Catalog**, **My communities** and **Following**; the top communities by
+ * followers while the service ranks them; the search, the language, the
+ * region and the order; the tags; the cards.
  *
  * The game is the host's: the launcher's switch in the sidebar. A host
  * without one — the website, the web app — offers both games in a list of
@@ -246,7 +246,7 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
       {tab === "catalog" ? (
         <div className="flex flex-col gap-24 pt-24">
           {topEntries.length > 0 ? (
-            <WeekTop entries={topEntries} open={rankOpen} onToggle={() => setRankOpen((value) => !value)} />
+            <TopCommunities entries={topEntries} open={rankOpen} onToggle={() => setRankOpen((value) => !value)} />
           ) : null}
 
           <section aria-label={t("catalog.filters")} className="flex flex-col gap-12">
@@ -486,10 +486,15 @@ function Chip({
   );
 }
 
-/** The top of the week, as the design's A1 draws it: three places on a podium, the rest on request. */
-function WeekTop({ entries, open, onToggle }: { entries: CommunityRankingEntry[]; open: boolean; onToggle: () => void }) {
+/**
+ * The top communities by followers, as the design's A1 draws its top: three
+ * places on a podium, the rest on request. A bar measures a place's
+ * followers against the first place shown, the most followed.
+ */
+function TopCommunities({ entries, open, onToggle }: { entries: CommunityRankingEntry[]; open: boolean; onToggle: () => void }) {
   const { t, i18n } = useTranslation("community");
-  const most = Math.max(1, ...entries.map((entry) => entry.playerHoursWeek));
+  const most = Math.max(1, ...entries.map((entry) => entry.followers));
+  const share = (entry: CommunityRankingEntry) => `${Math.round((entry.followers / most) * 100)}%`;
   const podium = entries.slice(0, 3);
   const rest = entries.slice(3, 10);
   return (
@@ -522,13 +527,13 @@ function WeekTop({ entries, open, onToggle }: { entries: CommunityRankingEntry[]
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-body-md-medium text-fg">{entry.community.name}</span>
                 <span className="text-body-sm text-fg-secondary">
-                  <b className="font-semibold text-fg tabular-nums">{formatHours(entry.playerHoursWeek, i18n.language)}</b>{" "}
-                  {t("top.hours", { count: roundHours(entry.playerHoursWeek) })}
+                  <b className="font-semibold text-fg tabular-nums">{formatCount(entry.followers, i18n.language)}</b>{" "}
+                  {t("stats.followers", { count: entry.followers })}
                 </span>
               </span>
             </span>
             <span className="h-4 overflow-hidden rounded-full bg-elevated" aria-hidden="true" style={hueStyle(entry.community.id)}>
-              <span className="jkc-hue-bar block h-full rounded-full" style={{ width: `${Math.round((entry.playerHoursWeek / most) * 100)}%` }} />
+              <span className="jkc-hue-bar block h-full rounded-full" style={{ width: share(entry) }} />
             </span>
           </RouteLink>
         ))}
@@ -545,10 +550,11 @@ function WeekTop({ entries, open, onToggle }: { entries: CommunityRankingEntry[]
               <CommunityLogo card={entry.community} size="sm" />
               <span className="truncate text-body-sm-medium text-fg">{entry.community.name}</span>
               <span className="h-4 overflow-hidden rounded-full bg-elevated" aria-hidden="true" style={hueStyle(entry.community.id)}>
-                <span className="jkc-hue-bar block h-full rounded-full" style={{ width: `${Math.round((entry.playerHoursWeek / most) * 100)}%` }} />
+                <span className="jkc-hue-bar block h-full rounded-full" style={{ width: share(entry) }} />
               </span>
               <span className="text-right text-body-sm tabular-nums text-fg-secondary">
-                {formatHours(entry.playerHoursWeek, i18n.language)}
+                {formatCount(entry.followers, i18n.language)}
+                <span className="sr-only"> {t("stats.followers", { count: entry.followers })}</span>
               </span>
             </RouteLink>
           ))}

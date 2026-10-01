@@ -8,7 +8,7 @@ import { useEventFormat } from "../events/format";
 import { offsetMinutes } from "../events/logic";
 import { busiestHours, busiestValue, fewDays, levelOf, LEVELS, rotateHeatmap, type HourRun } from "./heatmap";
 import { Panel, PanelHead } from "./bits";
-import { formatCount, formatHours, roundHours } from "./format";
+import { formatCount } from "./format";
 import type { CommunityActivity } from "./types";
 import type { Remote } from "./useRemote";
 
@@ -61,11 +61,11 @@ function runText(locale: string, run: HourRun, join: (from: string, to: string) 
 }
 
 /**
- * **When people play here** of the overview, as the design's B3 draws it:
- * the busiest hours, the peak of the last four weeks and the player-hours
- * of the week above a map of the week — seven rows from Monday, 24 hours
- * each, in the reader's own time — shaded by the average people on the
- * community's servers, with the legend under it.
+ * **When people play here** of the overview, as the design's B3 draws it
+ * less the player-hours of the week: the busiest hours and the peak of the
+ * last four weeks above a map of the week — seven rows from Monday, 24
+ * hours each, in the reader's own time — shaded by the average people on
+ * the community's servers, with the legend under it.
  *
  * The service counts in UTC; the map is turned into the reader's zone
  * (`rotateHeatmap`). While the service has sampled fewer than seven days
@@ -88,7 +88,6 @@ export function ActivityPanel({ remote }: { remote: Remote<CommunityActivity | n
   const run = busiestHours(rows);
   const days = activity.days;
   const empty = days <= 0 || most <= 0;
-  const hours = activity.playerHoursWeek;
   const peakAt = activity.peak ? Date.parse(activity.peak.at) : Number.NaN;
   const peakWhen = Number.isFinite(peakAt)
     ? clock(locale, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(peakAt + offsetMinutes(peakAt, format.zone) * 60_000))
@@ -115,13 +114,14 @@ export function ActivityPanel({ remote }: { remote: Remote<CommunityActivity | n
         title={t("activity.title")}
         end={<span className="text-body-sm text-fg-secondary">{t("activity.note", { offset: format.offset(now) })}</span>}
       />
-      <dl className="flex flex-wrap items-baseline gap-x-24 gap-y-4">
-        {run ? <Figure value={runText(locale, run, join)} label={t("activity.busiest")} /> : null}
-        {activity.peak && peakWhen ? (
-          <Figure value={formatCount(activity.peak.humans, locale)} label={t("activity.peak", { when: peakWhen })} />
-        ) : null}
-        <Figure value={formatHours(hours, locale)} label={t("activity.hours", { count: roundHours(hours) })} />
-      </dl>
+      {run || (activity.peak && peakWhen) ? (
+        <dl className="flex flex-wrap items-baseline gap-x-24 gap-y-4">
+          {run ? <Figure value={runText(locale, run, join)} label={t("activity.busiest")} /> : null}
+          {activity.peak && peakWhen ? (
+            <Figure value={formatCount(activity.peak.humans, locale)} label={t("activity.peak", { when: peakWhen })} />
+          ) : null}
+        </dl>
+      ) : null}
 
       {fewDays(days) ? (
         <p className="flex items-start gap-8 text-body-sm text-fg-secondary">

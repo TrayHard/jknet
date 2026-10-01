@@ -61,21 +61,18 @@
   "sort": {
     "featured": "Empfohlen",
     "followers": "Follower",
-    "players": "Spielerstunden diese Woche",
     "regulars": "Stammspieler",
     "online": "Jetzt online",
     "new": "Neueste",
     "name": "Name"
   },
   "top": {
-    "title": "Top der Woche",
-    "note": "Spielerstunden auf Community-Servern in den letzten 7 Tagen",
+    "title": "Top-Communitys",
+    "note": "Nach Anzahl der Follower",
     "rank": "#{{rank}}",
     "full": "Vollständige Rangliste",
     "collapse": "Einklappen",
-    "place": "Platz {{rank}}: {{name}}",
-    "hours_one": "Spielerstunde diese Woche",
-    "hours_other": "Spielerstunden diese Woche"
+    "place": "Platz {{rank}}: {{name}}"
   },
   "card": {
     "cover": "Titelbild von {{name}}",
@@ -93,15 +90,13 @@
   },
   "stats": {
     "online": "jetzt online",
-    "rank": "in der Wochenrangliste",
+    "rank": "in den Top-Communitys",
     "rankValue": "#{{rank}}",
     "numbers": "Community in Zahlen",
     "followers_one": "Follower",
     "followers_other": "Follower",
     "regulars_one": "Stammspieler",
     "regulars_other": "Stammspieler",
-    "playerHours_one": "Spielerstunde diese Woche",
-    "playerHours_other": "Spielerstunden diese Woche",
     "servers_one": "Server",
     "servers_other": "Server",
     "followersCount_one": "{{count}} Follower",
@@ -410,8 +405,6 @@
     "nobody": "fast niemand",
     "aria": "Wann hier gespielt wird. {{summary}}",
     "ariaBusiest": "Stoßzeit: {{hours}}.",
-    "hours_one": "Spielerstunde diese Woche",
-    "hours_other": "Spielerstunden diese Woche",
     "fewDays_one": "Noch wenig Daten: JKNet beobachtet die Server erst seit {{count}} Tag. Nach einer Woche ist die Karte genau.",
     "fewDays_other": "Noch wenig Daten: JKNet beobachtet die Server erst seit {{count}} Tagen. Nach einer Woche ist die Karte genau.",
     "people_one": "durchschnittlich {{value}} Spieler",

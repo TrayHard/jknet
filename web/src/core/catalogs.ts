@@ -5,7 +5,7 @@
  * Communities go through `community_request`, the bridge the shared
  * community screens talk to (`src-tauri/src/community.rs` in the launcher).
  * The web app reads every page of the contract — the catalogue, a
- * community, its players and its Discord, the week's top, the player's own
+ * community, its players and its Discord, the top communities, the player's own
  * lists, the news and the activity — and follows a community with the web
  * session; creating a community, claiming a server, editing a page and
  * writing the news stay with the launcher and the website. The three
@@ -188,7 +188,7 @@ export interface CommunityRoute {
 /**
  * The calls of the community bridge the web app makes: every read of the
  * contract — the catalogue, a page, its players, its Discord, its activity
- * and its news, the week's top, the calendar and its events, the player's
+ * and its news, the top communities, the calendar and its events, the player's
  * own lists — following a
  * community and answering an event, with the web session's token. `null`
  * for anything else: a write the launcher and the website make, a path of

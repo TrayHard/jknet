@@ -1,7 +1,7 @@
 /**
  * Tests for src/components/community/api.ts and format.ts: the paths the
  * client builds for the bridges of the three hosts, how it reads a refusal
- * of any transport, the week's top and the activity, and the small computations
+ * of any transport, the top communities and the activity, and the small computations
  * the community screens share.
  *
  * Node strips the TypeScript types itself (Node 22.18 and later), so the
@@ -15,6 +15,8 @@ import { describe, test } from "node:test";
 
 import {
   blobUrl,
+  CATALOG_SORT_KEYS,
+  CATALOG_SORTS,
   catalogPath,
   communityApi,
   eventsPath,
@@ -117,6 +119,15 @@ describe("catalogPath", () => {
     );
   });
 
+  test("offers no order by the player-hours of the week, which the service still takes", () => {
+    assert.deepEqual([...CATALOG_SORTS], ["featured", "followers", "regulars", "online", "new", "name"]);
+    assert.deepEqual(
+      CATALOG_SORTS.filter((key) => !CATALOG_SORT_KEYS.includes(key)),
+      [],
+    );
+    assert.equal(catalogPath({ sort: "players" }), "communities?sort=players");
+  });
+
   test("keeps limit and offset inside the bridges' bounds", () => {
     assert.equal(catalogPath({ limit: 0 }), "communities?limit=1");
     assert.equal(catalogPath({ limit: 9000 }), "communities?limit=500");
@@ -159,33 +170,47 @@ describe("eventsPath", () => {
 });
 
 describe("readRanking", () => {
+  const counts = (followers) => ({ followers, regulars: 0, upcomingEvents: 0, online: 0, playerHoursWeek: 540 });
+
   test("is null when the answer holds no place", () => {
-    for (const answer of [null, undefined, 3, "top", {}, { communities: [] }, { communities: [{ rank: 1 }] }, { period: "week" }]) {
+    for (const answer of [
+      null,
+      undefined,
+      3,
+      "top",
+      {},
+      { by: "followers" },
+      { by: "followers", communities: [] },
+      { by: "followers", communities: [{ rank: 1 }] },
+    ]) {
       assert.equal(readRanking(answer), null, JSON.stringify(answer));
     }
   });
 
-  test("reads the places of the service: a card with its rank and player-hours", () => {
+  test("reads the places of the service: a card with its rank and followers", () => {
     const answer = {
-      period: "week",
+      by: "followers",
       communities: [
-        { ...card({ counts: { followers: 0, regulars: 0, upcomingEvents: 0, online: 0, playerHoursWeek: 540 } }), rank: 1, playerHoursWeek: 540 },
-        { ...card({ id: OTHER }), rank: 2, playerHoursWeek: 312.5 },
+        { ...card({ counts: counts(412) }), rank: 1, followers: 412, playerHoursWeek: 2.3 },
+        { ...card({ id: OTHER, counts: counts(128) }), rank: 2, followers: 128, playerHoursWeek: 0.5 },
       ],
     };
+    const top = readRanking(answer);
     assert.deepEqual(
-      readRanking(answer).map((entry) => [entry.rank, entry.community.id, entry.playerHoursWeek]),
+      top.map((entry) => [entry.rank, entry.community.id, entry.followers]),
       [
-        [1, ID, 540],
-        [2, OTHER, 312.5],
+        [1, ID, 412],
+        [2, OTHER, 128],
       ],
     );
+    // The player-hours of the week stay on the card as the service sent it; no place carries them.
+    assert.equal(top.some((entry) => "playerHoursWeek" in entry), false);
   });
 
-  test("falls back on the counts of the card and on the order given", () => {
-    const answer = { communities: [card({ counts: { followers: 0, regulars: 0, upcomingEvents: 0, playerHoursWeek: 90 } }), card({ id: OTHER })] };
+  test("falls back on the followers of the card and on the order given", () => {
+    const answer = { by: "followers", communities: [card({ counts: counts(90) }), { ...card({ id: OTHER }), followers: -3 }] };
     assert.deepEqual(
-      readRanking(answer).map((entry) => [entry.rank, entry.community.id, entry.playerHoursWeek]),
+      readRanking(answer).map((entry) => [entry.rank, entry.community.id, entry.followers]),
       [
         [1, ID, 90],
         [2, OTHER, 0],
@@ -193,8 +218,16 @@ describe("readRanking", () => {
     );
   });
 
+  test("draws no top out of an answer ranked by anything but followers", () => {
+    const places = [{ ...card({ counts: counts(412) }), rank: 1, playerHoursWeek: 540 }];
+    // The service before ranked by the player-hours of the week and said no `by`.
+    assert.equal(readRanking({ period: "week", communities: places }), null);
+    assert.equal(readRanking({ by: "players", communities: places }), null);
+    assert.equal(readRanking({ communities: places }), null);
+  });
+
   test("skips a place without a valid card", () => {
-    const answer = { communities: [{ id: "bad", name: "Bad", rank: 1 }, { ...card(), rank: 2, playerHoursWeek: 4 }] };
+    const answer = { by: "followers", communities: [{ id: "bad", name: "Bad", rank: 1 }, { ...card(), rank: 2, followers: 4 }] };
     assert.deepEqual(
       readRanking(answer).map((entry) => [entry.rank, entry.community.id]),
       [[2, ID]],
@@ -245,14 +278,14 @@ describe("postsPath", () => {
 describe("readActivity", () => {
   const heatmap = Array.from({ length: 168 }, (_, index) => (index === 19 ? 12.5 : 0));
 
-  test("reads the activity of the service", () => {
+  test("reads the activity of the service and leaves the player-hours of the week out", () => {
     const activity = readActivity({ heatmap, peak: { humans: 26, at: "2026-09-25T18:00:00Z" }, playerHoursWeek: 312.5, onlineNow: 14, days: 28 });
     assert.equal(activity.heatmap.length, 168);
     assert.equal(activity.heatmap[19], 12.5);
     assert.deepEqual(activity.peak, { humans: 26, at: "2026-09-25T18:00:00Z" });
-    assert.equal(activity.playerHoursWeek, 312.5);
     assert.equal(activity.onlineNow, 14);
     assert.equal(activity.days, 28);
+    assert.equal("playerHoursWeek" in activity, false);
   });
 
   test("reads an empty community as no peak and zeros", () => {
@@ -265,10 +298,10 @@ describe("readActivity", () => {
     for (const answer of [null, {}, { heatmap: [] }, { heatmap: Array(167).fill(1) }, "x"]) {
       assert.equal(readActivity(answer), null, JSON.stringify(answer));
     }
-    const odd = readActivity({ heatmap: [...Array(167).fill(1), "x"], peak: { humans: "a", at: "t" }, playerHoursWeek: Number.NaN });
+    const odd = readActivity({ heatmap: [...Array(167).fill(1), "x"], peak: { humans: "a", at: "t" }, onlineNow: Number.NaN });
     assert.equal(odd.heatmap[167], 0);
     assert.equal(odd.peak, null);
-    assert.equal(odd.playerHoursWeek, 0);
+    assert.equal(odd.onlineNow, 0);
   });
 });
 
@@ -376,10 +409,13 @@ describe("communityApi", () => {
     assert.equal(await missing.api.ranking(), null);
     const broken = recorder(() => Promise.reject({ code: "online", details: { code: "internal" } }));
     await assert.rejects(broken.api.ranking(), (error) => failureOf(error).code === "internal");
-    const ranked = recorder(() => Promise.resolve({ period: "week", communities: [{ ...card(), rank: 1, playerHoursWeek: 7 }] }));
-    assert.equal((await ranked.api.ranking())[0].playerHoursWeek, 7);
-    const empty = recorder(() => Promise.resolve({ period: "week", communities: [] }));
+    const ranked = recorder(() => Promise.resolve({ by: "followers", communities: [{ ...card(), rank: 1, followers: 7, playerHoursWeek: 2.3 }] }));
+    assert.equal((await ranked.api.ranking())[0].followers, 7);
+    assert.deepEqual(ranked.calls.map((call) => `${call.method} ${call.path}`), ["GET ranking"]);
+    const empty = recorder(() => Promise.resolve({ by: "followers", communities: [] }));
     assert.equal(await empty.api.ranking(), null);
+    const before = recorder(() => Promise.resolve({ period: "week", communities: [{ ...card(), rank: 1, playerHoursWeek: 7 }] }));
+    assert.equal(await before.api.ranking(), null);
   });
 
   test("reads a missing activity as none", async () => {

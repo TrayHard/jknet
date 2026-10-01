@@ -112,26 +112,6 @@ export function formatCount(value: number, language: string): string {
   }
 }
 
-/**
- * Player-hours as the screens print them: a tenth under ten hours, whole
- * hours from ten on. The service counts to a tenth; «0.5» says more than
- * «1» for a quiet week, and «312» more than «312.4» for a busy one.
- */
-export function roundHours(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) return 0;
-  return value < 10 ? Math.round(value * 10) / 10 : Math.round(value);
-}
-
-/** {@link roundHours} in the reader's language: `6.5`, `6,5`, `1 204`. */
-export function formatHours(value: number, language: string): string {
-  const rounded = roundHours(value);
-  try {
-    return new Intl.NumberFormat(language, { maximumFractionDigits: 1 }).format(rounded);
-  } catch {
-    return String(rounded);
-  }
-}
-
 /** A moment in the reader's language, with the time. */
 export function formatMoment(iso: string, language: string): string {
   const date = new Date(iso);

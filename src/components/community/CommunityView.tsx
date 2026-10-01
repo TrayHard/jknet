@@ -109,7 +109,6 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
   const go = (next: PageTab) => platform.navigate({ view: "community", id, tab: next });
 
   const rank = typeof community?.rank === "number" ? community.rank : null;
-  const playerHours = typeof community?.counts.playerHoursWeek === "number" ? community.counts.playerHoursWeek : null;
   // The launcher's own answers are fresher than the service's poll; the website and the web app have the poll alone.
   const online = onlineCount(live) ?? (typeof community?.counts.online === "number" ? community.counts.online : null);
 
@@ -224,7 +223,6 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
         community={community}
         online={online}
         rank={rank}
-        playerHours={playerHours}
         organizer={organizer}
         discordBroken={discord.data?.inviteStatus === "invalid"}
         followBusy={follow.busy}

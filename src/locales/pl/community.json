@@ -63,23 +63,18 @@
   "sort": {
     "featured": "Polecane",
     "followers": "Obserwujący",
-    "players": "Godziny gry w tym tygodniu",
     "regulars": "Stali gracze",
     "online": "Teraz w grze",
     "new": "Najnowsze",
     "name": "Nazwa"
   },
   "top": {
-    "title": "Top tygodnia",
-    "note": "Godziny gry wszystkich graczy na serwerach społeczności w ciągu ostatnich 7 dni",
+    "title": "Top społeczności",
+    "note": "Według liczby obserwujących",
     "rank": "#{{rank}}",
     "full": "Pełny ranking",
     "collapse": "Zwiń",
-    "place": "Miejsce {{rank}}: {{name}}",
-    "hours_one": "godzina gry w tym tygodniu",
-    "hours_few": "godziny gry w tym tygodniu",
-    "hours_many": "godzin gry w tym tygodniu",
-    "hours_other": "godziny gry w tym tygodniu"
+    "place": "Miejsce {{rank}}: {{name}}"
   },
   "card": {
     "cover": "Okładka: {{name}}",
@@ -101,7 +96,7 @@
   },
   "stats": {
     "online": "teraz w grze",
-    "rank": "w rankingu tygodnia",
+    "rank": "w rankingu społeczności",
     "rankValue": "#{{rank}}",
     "numbers": "Społeczność w liczbach",
     "followers_one": "obserwujący",
@@ -112,10 +107,6 @@
     "regulars_few": "stałych graczy",
     "regulars_many": "stałych graczy",
     "regulars_other": "stałego gracza",
-    "playerHours_one": "godzina gry w tym tygodniu",
-    "playerHours_few": "godziny gry w tym tygodniu",
-    "playerHours_many": "godzin gry w tym tygodniu",
-    "playerHours_other": "godziny gry w tym tygodniu",
     "servers_one": "serwer",
     "servers_few": "serwery",
     "servers_many": "serwerów",
@@ -448,10 +439,6 @@
     "nobody": "prawie nikogo",
     "aria": "Kiedy tu grają. {{summary}}",
     "ariaBusiest": "Godziny największego ruchu: {{hours}}.",
-    "hours_one": "godzina gry w tym tygodniu",
-    "hours_few": "godziny gry w tym tygodniu",
-    "hours_many": "godzin gry w tym tygodniu",
-    "hours_other": "godziny gry w tym tygodniu",
     "fewDays_one": "Na razie mało danych: JKNet śledzi serwery dopiero od {{count}} dnia. Mapa będzie dokładna po tygodniu.",
     "fewDays_few": "Na razie mało danych: JKNet śledzi serwery dopiero od {{count}} dni. Mapa będzie dokładna po tygodniu.",
     "fewDays_many": "Na razie mało danych: JKNet śledzi serwery dopiero od {{count}} dni. Mapa będzie dokładna po tygodniu.",

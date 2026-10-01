@@ -52,7 +52,7 @@
       );
   }
 
-  /* The bar of a place in the week's top, in the community's hue. */
+  /* The bar of a place in the top communities, in the community's hue. */
   .jkc-hue-bar {
     background: hsl(var(--jkc-hue, 195) 70% 58%);
   }

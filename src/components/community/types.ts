@@ -7,8 +7,8 @@
  * launcher through the `community_request` bridge of the core, the other two
  * over HTTP. Field names are camelCase on the wire.
  *
- * The fields of the news, the live status, the activity, the week's top and
- * the JKNet bot came with later slices of the service: a service from
+ * The fields of the news, the live status, the activity, the top communities
+ * and the JKNet bot came with later slices of the service: a service from
  * before them leaves them out, so they are optional here and the screens
  * draw nothing of a part the service does not answer. Events have their own
  * types in `components/events/types.ts`.
@@ -139,7 +139,11 @@ export interface CommunityCounts {
   upcomingEvents: number;
   /** Humans on the established servers at the service's last poll. */
   online?: number | null;
-  /** Player-hours on the established servers in the last 7 days, to a tenth. */
+  /**
+   * Player-hours on the established servers in the last 7 days, to a tenth.
+   * The service still sends them; the screens do not show them, and the top
+   * communities are ranked by followers.
+   */
   playerHoursWeek?: number | null;
 }
 
@@ -199,7 +203,7 @@ export interface Community extends CommunityCard {
   recommendations: CommunityRecommendation[];
   editors: CommunityPerson[];
   viewer: CommunityViewer | null;
-  /** The place in the top of the week, from 1; `null` outside it. */
+  /** The place in the top communities by followers, from 1; `null` outside it. */
   rank?: number | null;
 }
 
@@ -428,15 +432,21 @@ export interface DiscordBotLink {
   expiresAt: string;
 }
 
-/** A place of the top of the week, as the screens read `GET ranking`. */
+/** A place of the top communities, as the screens read `GET ranking`. */
 export interface CommunityRankingEntry {
   /** From 1. */
   rank: number;
   community: CommunityCard;
-  playerHoursWeek: number;
+  /** The followers the place is ranked by. */
+  followers: number;
 }
 
-/** `GET communities/{id}/activity`: how busy the established servers are. */
+/**
+ * `GET communities/{id}/activity`: how busy the established servers are,
+ * as the screens read it. The answer may also carry `playerHoursWeek`, the
+ * player-hours of the week: the screens do not show them, and the reader
+ * leaves them out.
+ */
 export interface CommunityActivity {
   /**
    * 168 numbers: the average humans in each UTC hour of the week, Monday
@@ -445,7 +455,6 @@ export interface CommunityActivity {
   heatmap: number[];
   /** The most humans in one hour of the last 28 days and the start of that hour; `null` while nobody played. */
   peak: { humans: number; at: string } | null;
-  playerHoursWeek: number;
   onlineNow: number;
   /** UTC days of the last 28 with samples: how much the heat map knows. */
   days: number;

@@ -61,21 +61,18 @@
   "sort": {
     "featured": "Ajánlott",
     "followers": "Követők",
-    "players": "Játékosórák ezen a héten",
     "regulars": "Törzsjátékosok",
     "online": "Most online",
     "new": "Legújabb",
     "name": "Név"
   },
   "top": {
-    "title": "Heti toplista",
-    "note": "Játékosórák a közösségi szervereken az elmúlt 7 napban",
+    "title": "Közösségek toplistája",
+    "note": "Követők száma szerint",
     "rank": "#{{rank}}",
     "full": "Teljes rangsor",
     "collapse": "Összecsukás",
-    "place": "{{rank}}. hely: {{name}}",
-    "hours_one": "játékosóra ezen a héten",
-    "hours_other": "játékosóra ezen a héten"
+    "place": "{{rank}}. hely: {{name}}"
   },
   "card": {
     "cover": "Borítókép: {{name}}",
@@ -93,15 +90,13 @@
   },
   "stats": {
     "online": "most online",
-    "rank": "a heti toplistán",
+    "rank": "a közösségek toplistáján",
     "rankValue": "#{{rank}}",
     "numbers": "A közösség számokban",
     "followers_one": "követő",
     "followers_other": "követő",
     "regulars_one": "törzsjátékos",
     "regulars_other": "törzsjátékos",
-    "playerHours_one": "játékosóra ezen a héten",
-    "playerHours_other": "játékosóra ezen a héten",
     "servers_one": "szerver",
     "servers_other": "szerver",
     "followersCount_one": "{{count}} követő",
@@ -410,8 +405,6 @@
     "nobody": "szinte senki",
     "aria": "Mikor játszanak itt? {{summary}}",
     "ariaBusiest": "Csúcsidő: {{hours}}.",
-    "hours_one": "játékosóra ezen a héten",
-    "hours_other": "játékosóra ezen a héten",
     "fewDays_one": "Még kevés az adat: a JKNet {{count}} napja figyeli a szervereket. Egy héten belül pontossá válik a térkép.",
     "fewDays_other": "Még kevés az adat: a JKNet {{count}} napja figyeli a szervereket. Egy héten belül pontossá válik a térkép.",
     "people_one": "átlagosan {{value}} játékos",

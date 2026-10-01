@@ -62,22 +62,18 @@
   "sort": {
     "featured": "Recommandées",
     "followers": "Abonnés",
-    "players": "Heures de jeu cette semaine",
     "regulars": "Joueurs réguliers",
     "online": "En ligne",
     "new": "Récentes",
     "name": "Nom"
   },
   "top": {
-    "title": "Top de la semaine",
-    "note": "Heures de jeu sur les serveurs des communautés au cours des 7 derniers jours",
+    "title": "Top des communautés",
+    "note": "Par nombre d’abonnés",
     "rank": "#{{rank}}",
     "full": "Classement complet",
     "collapse": "Réduire",
-    "place": "Rang {{rank}} : {{name}}",
-    "hours_one": "heure de jeu cette semaine",
-    "hours_many": "heures de jeu cette semaine",
-    "hours_other": "heures de jeu cette semaine"
+    "place": "Rang {{rank}} : {{name}}"
   },
   "card": {
     "cover": "Couverture de {{name}}",
@@ -97,7 +93,7 @@
   },
   "stats": {
     "online": "en ligne",
-    "rank": "du top de la semaine",
+    "rank": "du top des communautés",
     "rankValue": "#{{rank}}",
     "numbers": "Chiffres de la communauté",
     "followers_one": "abonné",
@@ -106,9 +102,6 @@
     "regulars_one": "joueur régulier",
     "regulars_many": "joueurs réguliers",
     "regulars_other": "joueurs réguliers",
-    "playerHours_one": "heure de jeu cette semaine",
-    "playerHours_many": "heures de jeu cette semaine",
-    "playerHours_other": "heures de jeu cette semaine",
     "servers_one": "serveur",
     "servers_many": "serveurs",
     "servers_other": "serveurs",
@@ -429,9 +422,6 @@
     "nobody": "presque personne",
     "aria": "Quand on joue ici. {{summary}}",
     "ariaBusiest": "Heures de pointe : {{hours}}.",
-    "hours_one": "heure de jeu cette semaine",
-    "hours_many": "heures de jeu cette semaine",
-    "hours_other": "heures de jeu cette semaine",
     "fewDays_one": "Encore peu de données : JKNet suit les serveurs depuis {{count}} jour. La carte sera précise au bout d’une semaine.",
     "fewDays_many": "Encore peu de données : JKNet suit les serveurs depuis {{count}} jours. La carte sera précise au bout d’une semaine.",
     "fewDays_other": "Encore peu de données : JKNet suit les serveurs depuis {{count}} jours. La carte sera précise au bout d’une semaine.",

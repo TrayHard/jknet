@@ -1,4 +1,4 @@
-import { Clock, Crown, ExternalLink, Gamepad2, Globe, Languages, MapPin, MessageCircle, Pencil, Share2, Sparkles, Trophy, UserCheck, Bell } from "lucide-react";
+import { Crown, ExternalLink, Gamepad2, Globe, Languages, MapPin, MessageCircle, Pencil, Share2, Sparkles, Trophy, UserCheck, Bell } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -6,7 +6,7 @@ import { cn } from "../../lib/format";
 import { Badge, Button } from "../ui";
 import { CommunityCover, CommunityLogo, LiveDot, Notice, TagChip, useCopy } from "./bits";
 import { FollowControl } from "./FollowControl";
-import { formatCount, formatHours, GAME_NAMES, isHttps, LANGUAGE_NAMES, roundHours } from "./format";
+import { formatCount, GAME_NAMES, isHttps, LANGUAGE_NAMES } from "./format";
 import { useCommunityPlatform } from "./platform";
 import type { Community } from "./types";
 
@@ -14,10 +14,8 @@ export interface HeroProps {
   community: Community;
   /** People on the servers now, when the host or the service knows. */
   online: number | null;
-  /** The place in the top of the week, while the community is in it. */
+  /** The place in the top communities by followers, while the community is in it. */
   rank: number | null;
-  /** Player-hours of the last 7 days, when the service counts them. */
-  playerHours: number | null;
   organizer: boolean;
   /** Discord said the invite is not valid: a player gets no button that leads nowhere. */
   discordBroken: boolean;
@@ -41,7 +39,6 @@ export function CommunityHero({
   community,
   online,
   rank,
-  playerHours,
   organizer,
   discordBroken,
   followBusy,
@@ -104,18 +101,6 @@ export function CommunityHero({
         <>
           <Trophy size={14} className="shrink-0 text-fg-warm" aria-hidden="true" />
           {t("stats.rank")}
-        </>
-      ),
-    });
-  }
-  if (playerHours !== null) {
-    stats.push({
-      key: "hours",
-      value: formatHours(playerHours, language),
-      label: (
-        <>
-          <Clock size={14} className="shrink-0 text-fg-muted" aria-hidden="true" />
-          {t("stats.playerHours", { count: roundHours(playerHours) })}
         </>
       ),
     });

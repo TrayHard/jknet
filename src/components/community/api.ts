@@ -8,8 +8,8 @@
  * languages and regions are the service's (`community/pages.rs`), and a value
  * outside them is dropped before it reaches a query.
  *
- * A service from before the news, the activity, the week's top and the bot
- * answers `404` to their routes: the readers of the week's top and of the
+ * A service from before the news, the activity, the top communities and the
+ * bot answers `404` to their routes: the readers of the top and of the
  * activity take that as "nothing to show". Events have their own client,
  * `components/events/api.ts`, over the path {@link eventsPath} builds here.
  */
@@ -89,20 +89,22 @@ export const COMMUNITY_REGIONS = ["eu", "na", "sa", "cis", "asia", "oce", "afric
 export type CommunityRegion = (typeof COMMUNITY_REGIONS)[number];
 
 /**
- * The orders of the catalogue, as the design's A1 offers them: recommended,
- * followers, player-hours of the week (`players`), regular players, humans
- * online now (`online`), the newest, and the name.
+ * The orders the catalogue offers: recommended, followers, regular players,
+ * humans online now (`online`), the newest, and the name. The design's A1
+ * also offered the player-hours of the week, which the screens no longer
+ * show.
  */
-export const CATALOG_SORTS = ["featured", "followers", "players", "regulars", "online", "new", "name"] as const;
+export const CATALOG_SORTS = ["featured", "followers", "regulars", "online", "new", "name"] as const;
 
 export type CatalogSort = (typeof CATALOG_SORTS)[number];
 
 /**
- * Every order a catalogue query may carry. The service sorts a key it does
- * not know as `featured`; the bridges of the launcher and the web app let
- * exactly these through.
+ * Every order a catalogue query may carry: the ones the catalogue offers,
+ * and `players`, the player-hours of the week, which the service still
+ * sorts by. The service sorts a key it does not know as `featured`; the
+ * bridges of the launcher and the web app let exactly these through.
  */
-export const CATALOG_SORT_KEYS = CATALOG_SORTS;
+export const CATALOG_SORT_KEYS = ["featured", "followers", "players", "regulars", "online", "new", "name"] as const;
 
 /**
  * A cursor of a list that pages in time order, as the service writes it:
@@ -263,27 +265,33 @@ function isCard(value: unknown): value is CommunityCard {
   return isCommunityId(card.id) && typeof card.name === "string";
 }
 
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 /**
- * The week's top out of what `GET ranking` answered — `{ period,
- * communities }`, each a card with its `rank` and `playerHoursWeek` — or
- * `null` when the answer holds no place. A place of another shape is
- * skipped; one without its number takes the next place in the order given.
+ * The top communities out of what `GET ranking` answered — `{ by:
+ * "followers", communities }`, each a card with its `rank` and its
+ * `followers` — or `null` when the answer holds no place or ranks by
+ * anything but followers. A service from before ranked by the player-hours
+ * of the week and said no `by`: the screens draw no top from it rather
+ * than a top by followers in another order. A place of another shape is
+ * skipped; one without its number takes the next place in the order given,
+ * and one without its followers takes those of its card.
  */
 export function readRanking(answer: unknown): CommunityRankingEntry[] | null {
   if (answer === null || typeof answer !== "object") return null;
   const body = answer as Record<string, unknown>;
-  const list = records(body.communities);
+  if (body.by !== "followers") return null;
   const entries: CommunityRankingEntry[] = [];
-  for (const item of list) {
+  for (const item of records(body.communities)) {
     if (!isCard(item)) continue;
     const community = item as unknown as CommunityCard;
-    const hours = [item.playerHoursWeek, community.counts?.playerHoursWeek].find(
-      (value): value is number => typeof value === "number" && Number.isFinite(value),
-    );
+    const followers = [item.followers, community.counts?.followers].find(finite);
     entries.push({
-      rank: typeof item.rank === "number" && Number.isFinite(item.rank) ? item.rank : entries.length + 1,
+      rank: finite(item.rank) ? item.rank : entries.length + 1,
       community,
-      playerHoursWeek: hours ?? 0,
+      followers: Math.max(0, followers ?? 0),
     });
   }
   return entries.length > 0 ? entries : null;
@@ -336,7 +344,7 @@ export function communityApi(request: CommunityRequest) {
   return {
     // --- the catalogue and the player's lists
     catalog: (query?: CatalogQuery) => request<CommunityCatalog>("GET", catalogPath(query)),
-    /** The top of the week; `null` when it is empty or the service has no ranking yet. */
+    /** The top communities by followers; `null` when it is empty, the service has no ranking yet, or it ranks by something else. */
     ranking: async (): Promise<CommunityRankingEntry[] | null> => {
       try {
         return readRanking(await request<unknown>("GET", "ranking"));
@@ -394,7 +402,7 @@ export function communityApi(request: CommunityRequest) {
       request<CommunityDiscord>("PUT", `${community(id)}/discord/bot`, body),
     unlinkDiscordBot: (id: string) => request<null>("DELETE", `${community(id)}/discord/bot`),
     // --- activity and news
-    /** The heat map, the peak and the player-hours; `null` when the service has no activity yet. */
+    /** The heat map and the peak; `null` when the service has no activity yet. */
     activity: async (id: string): Promise<CommunityActivity | null> => {
       try {
         return readActivity(await request<unknown>("GET", `${community(id)}/activity`));
@@ -421,11 +429,12 @@ export function communityApi(request: CommunityRequest) {
 /**
  * The activity out of what `GET communities/{id}/activity` answered, or
  * `null` when it is not one: a heat map of 168 finite numbers at least.
+ * The player-hours of the week the answer may carry are left out.
  */
 export function readActivity(answer: unknown): CommunityActivity | null {
   if (answer === null || typeof answer !== "object") return null;
   const body = answer as Record<string, unknown>;
-  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  const number = (value: unknown) => (finite(value) ? value : 0);
   if (!Array.isArray(body.heatmap) || body.heatmap.length !== 168) return null;
   const heatmap = body.heatmap.map((value) => Math.max(0, number(value)));
   const peak =
@@ -435,7 +444,6 @@ export function readActivity(answer: unknown): CommunityActivity | null {
   return {
     heatmap,
     peak: peak !== null && peak.humans > 0 ? peak : null,
-    playerHoursWeek: number(body.playerHoursWeek),
     onlineNow: number(body.onlineNow),
     days: number(body.days),
   };
