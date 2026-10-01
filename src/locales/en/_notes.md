@@ -193,6 +193,8 @@ Everything else wraps.
 | `host:starting.stepState.*` | Never shown: a screen reader reads it after the label of a starting step. One word each. |
 | `host:friends.hosting` | The status line of a friend who hosts a private server, on the Friends screen: `{{map}}` is a map name and stays as it is. |
 | `host:policy.*` | **Who can join without an invite**: `friends`, `selected` and `invite` are three radio labels, and **Join game** in `policy.hint` names the button `friends:panel.join` — use the words you gave it. |
+| `community:catalog.emptyAdmin` | A line under the empty catalog that only a JKNet administrator sees. `<0>` wraps the name of the tab `community:tabs.mine` and becomes a link to it — use the words you gave the tab. |
+| `community:mine.why.*`, `mine.fix.*` | The line at the foot of a row of **My communities** that the catalog leaves out: one `why` sentence, then for some readers one `fix` sentence after a space. Each is a whole sentence with its full stop. `mine.notInCatalog` is the badge beside the name; the button beside the line reuses `community:manage.strip.publish`. |
 
 ## How to check your work
 

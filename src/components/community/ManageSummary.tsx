@@ -4,15 +4,10 @@ import { useTranslation } from "react-i18next";
 
 import { Avatar, Badge, Button } from "../ui";
 import { Panel, PanelHead } from "./bits";
+import { inCatalog } from "./catalogVisibility";
 import { hostOf } from "./format";
 import { useCommunityPlatform, type ManageSection } from "./platform";
 import type { Community, CommunityDiscord } from "./types";
-
-/** Whether the catalogue lists a community: an owner or an administrator's word, and a server everyone sees. */
-export function inCatalog(community: Community): boolean {
-  const shown = community.servers.some((server) => server.verified || (community.ownerId === null && server.id === community.id));
-  return (community.ownerId !== null || community.listed) && shown;
-}
 
 /** A line of a card: a check that passed, or one that wants attention. */
 function Line({ ok, children }: { ok: boolean | null; children: ReactNode }) {

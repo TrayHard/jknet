@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../ui";
 import { Notice } from "./bits";
+import { inCatalog } from "./catalogVisibility";
 import { useFailureText } from "./errors";
-import { inCatalog } from "./ManageSummary";
 import { useCommunityApi } from "./platform";
 import type { Community } from "./types";
 import { useAction } from "./useRemote";
