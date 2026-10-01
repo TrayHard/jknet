@@ -45,9 +45,9 @@ function useDebounced<T>(value: T, delay: number): T {
 
 /**
  * The catalogue of communities, as the design's A1 draws it: the tabs
- * **Catalog**, **My communities** and **Following**; the top communities
- * while the service ranks them; the search, the language, the region and
- * the order; the tags; the cards.
+ * **Catalog**, **My communities** and **Following**; the top communities by
+ * followers while the service ranks them; the search, the language, the
+ * region and the order; the tags; the cards.
  *
  * The game is the host's: the launcher's switch in the sidebar. A host
  * without one — the website, the web app — offers both games in a list of

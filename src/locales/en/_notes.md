@@ -195,6 +195,7 @@ Everything else wraps.
 | `host:policy.*` | **Who can join without an invite**: `friends`, `selected` and `invite` are three radio labels, and **Join game** in `policy.hint` names the button `friends:panel.join` — use the words you gave it. |
 | `community:catalog.emptyAdmin` | A line under the empty catalog that only a JKNet administrator sees. `<0>` wraps the name of the tab `community:tabs.mine` and becomes a link to it — use the words you gave the tab. |
 | `community:mine.why.*`, `mine.fix.*` | The line at the foot of a row of **My communities** that the catalog leaves out: one `why` sentence, then for some readers one `fix` sentence after a space. Each is a whole sentence with its full stop. `mine.notInCatalog` is the badge beside the name; the button beside the line reuses `community:manage.strip.publish`. |
+| `community:top.title`, `stats.rank` | The strip over the catalog: the top communities. `title` names it. `stats.rank` is the label under a community's place in its page header, `#2` or `№2`: name the same top as `title` does. A place counts its followers with `stats.followers`, so the strip has no plural of its own. Do not say how the top is ordered. |
 
 ## How to check your work
 

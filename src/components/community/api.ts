@@ -264,28 +264,32 @@ function isCard(value: unknown): value is CommunityCard {
   return isCommunityId(card.id) && typeof card.name === "string";
 }
 
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 /**
- * The top communities out of what `GET ranking` answered — `{ communities }`,
- * each a card with its `rank` and its `followers` — or `null` when the
- * answer holds no place. A place of another shape is skipped; one without
- * its number takes the next place in the order given, and one without its
- * followers takes those of its card.
+ * The top communities out of what `GET ranking` answered — `{ by:
+ * "followers", communities }`, each a card with its `rank` and its
+ * `followers` — or `null` when the answer holds no place or names another
+ * `by`. A service from before said no `by`, and the screens draw no top
+ * from it. A place of another shape is skipped; one without its number
+ * takes the next place in the order given, and one without its followers
+ * takes those of its card.
  */
 export function readRanking(answer: unknown): CommunityRankingEntry[] | null {
   if (answer === null || typeof answer !== "object") return null;
   const body = answer as Record<string, unknown>;
-  const list = records(body.communities);
+  if (body.by !== "followers") return null;
   const entries: CommunityRankingEntry[] = [];
-  for (const item of list) {
+  for (const item of records(body.communities)) {
     if (!isCard(item)) continue;
     const community = item as unknown as CommunityCard;
-    const followers = [item.followers, community.counts?.followers].find(
-      (value): value is number => typeof value === "number" && Number.isFinite(value),
-    );
+    const followers = [item.followers, community.counts?.followers].find(finite);
     entries.push({
-      rank: typeof item.rank === "number" && Number.isFinite(item.rank) ? item.rank : entries.length + 1,
+      rank: finite(item.rank) ? item.rank : entries.length + 1,
       community,
-      followers: followers ?? 0,
+      followers: Math.max(0, followers ?? 0),
     });
   }
   return entries.length > 0 ? entries : null;
@@ -338,7 +342,7 @@ export function communityApi(request: CommunityRequest) {
   return {
     // --- the catalogue and the player's lists
     catalog: (query?: CatalogQuery) => request<CommunityCatalog>("GET", catalogPath(query)),
-    /** The top communities; `null` when it is empty or the service has no ranking yet. */
+    /** The top communities; `null` when it is empty, the service has no ranking yet, or it names another `by`. */
     ranking: async (): Promise<CommunityRankingEntry[] | null> => {
       try {
         return readRanking(await request<unknown>("GET", "ranking"));
@@ -423,11 +427,12 @@ export function communityApi(request: CommunityRequest) {
 /**
  * The activity out of what `GET communities/{id}/activity` answered, or
  * `null` when it is not one: a heat map of 168 finite numbers at least.
+ * Any other field of the answer is left out.
  */
 export function readActivity(answer: unknown): CommunityActivity | null {
   if (answer === null || typeof answer !== "object") return null;
   const body = answer as Record<string, unknown>;
-  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  const number = (value: unknown) => (finite(value) ? value : 0);
   if (!Array.isArray(body.heatmap) || body.heatmap.length !== 168) return null;
   const heatmap = body.heatmap.map((value) => Math.max(0, number(value)));
   const peak =

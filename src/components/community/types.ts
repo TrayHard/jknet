@@ -422,7 +422,11 @@ export interface CommunityRankingEntry {
   followers: number;
 }
 
-/** `GET communities/{id}/activity`: how busy the established servers are. */
+/**
+ * `GET communities/{id}/activity`: how busy the established servers are,
+ * as the screens read it; `readActivity` keeps these fields and drops the
+ * rest of the answer.
+ */
 export interface CommunityActivity {
   /**
    * 168 numbers: the average humans in each UTC hour of the week, Monday
