@@ -53,6 +53,7 @@
     "reset": "Limpiar filtros",
     "empty": "Aún no hay comunidades",
     "emptyHint": "Una comunidad aparece aquí cuando su propietario confirma un servidor.",
+    "emptyAdmin": "Publique las páginas sin propietario que creó desde <0>Mis comunidades</0>.",
     "filters": "Búsqueda y filtros",
     "found_one": "{{count}} comunidad",
     "found_many": "{{count}} comunidades",
@@ -134,7 +135,19 @@
     "open": "Abrir página",
     "manage": "Gestionar",
     "note": "Comunidades en las que es propietario o editor, y las que creó antes de confirmar un servidor.",
-    "noteAdmin": "Un administrador de JKNet puede editar cualquier comunidad. Aquí están las que creó o gestiona."
+    "noteAdmin": "Un administrador de JKNet puede editar cualquier comunidad. Aquí están las que creó o gestiona.",
+    "notInCatalog": "Fuera del catálogo",
+    "why": {
+      "unlisted": "No tiene propietario y la página no está publicada en el catálogo.",
+      "noServer": "No hay ningún servidor visible para todos.",
+      "both": "No tiene propietario, la página no está publicada y no hay ningún servidor visible para todos."
+    },
+    "fix": {
+      "claim": "Confirme el servidor para ser su propietario y la comunidad aparecerá en el catálogo.",
+      "verify": "Confirme un servidor y la comunidad aparecerá en el catálogo."
+    },
+    "published": "La comunidad {{name}} ya está en el catálogo.",
+    "publishedHidden": "La comunidad {{name}} está publicada. Aparecerá en el catálogo en cuanto se confirme un servidor."
   },
   "following": {
     "signInTitle": "Inicie sesión para seguir comunidades",

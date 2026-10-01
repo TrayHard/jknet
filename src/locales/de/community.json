@@ -53,6 +53,7 @@
     "reset": "Filter zurücksetzen",
     "empty": "Noch keine Communitys",
     "emptyHint": "Eine Community erscheint hier, sobald ihr Besitzer einen Server bestätigt.",
+    "emptyAdmin": "Seiten ohne Besitzer, die Sie erstellt haben, veröffentlichen Sie unter <0>Meine Communitys</0>.",
     "filters": "Suche und Filter",
     "found_one": "{{count}} Community",
     "found_other": "{{count}} Communitys"
@@ -127,7 +128,19 @@
     "open": "Seite öffnen",
     "manage": "Verwalten",
     "note": "Communitys, deren Besitzer oder Redakteur Sie sind, sowie solche, die Sie erstellt haben, bevor Sie einen Server bestätigt haben.",
-    "noteAdmin": "Ein JKNet-Administrator kann jede Community bearbeiten. Hier stehen die, die Sie erstellt haben oder leiten."
+    "noteAdmin": "Ein JKNet-Administrator kann jede Community bearbeiten. Hier stehen die, die Sie erstellt haben oder leiten.",
+    "notInCatalog": "Nicht im Katalog",
+    "why": {
+      "unlisted": "Kein Besitzer, und die Seite ist nicht im Katalog veröffentlicht.",
+      "noServer": "Kein Server, den alle sehen.",
+      "both": "Kein Besitzer, die Seite ist nicht veröffentlicht, und kein Server ist für alle sichtbar."
+    },
+    "fix": {
+      "claim": "Bestätigen Sie den Server, um Besitzer zu werden, dann erscheint die Community im Katalog.",
+      "verify": "Bestätigen Sie einen Server, dann erscheint die Community im Katalog."
+    },
+    "published": "{{name}} steht jetzt im Katalog.",
+    "publishedHidden": "{{name}} ist veröffentlicht. Die Community erscheint im Katalog, sobald ein Server bestätigt ist."
   },
   "following": {
     "signInTitle": "Melden Sie sich an, um Communitys zu folgen",

@@ -53,6 +53,7 @@
     "reset": "Szűrők törlése",
     "empty": "Még nincsenek közösségek",
     "emptyHint": "Egy közösség akkor jelenik meg itt, amikor a tulajdonosa igazol egy szervert.",
+    "emptyAdmin": "Az Ön által létrehozott, tulajdonos nélküli oldalakat a <0>Közösségeim</0> lapon tegye közzé.",
     "filters": "Keresés és szűrők",
     "found_one": "{{count}} közösség",
     "found_other": "{{count}} közösség"
@@ -127,7 +128,19 @@
     "open": "Oldal megnyitása",
     "manage": "Kezelés",
     "note": "Azok a közösségek, amelyeknek Ön a tulajdonosa vagy a szerkesztője, valamint azok, amelyeket még egy szerver igazolása előtt hozott létre.",
-    "noteAdmin": "A JKNet-adminisztrátor bármelyik közösséget szerkesztheti. Itt azok láthatók, amelyeket Ön hozott létre vagy kezel."
+    "noteAdmin": "A JKNet-adminisztrátor bármelyik közösséget szerkesztheti. Itt azok láthatók, amelyeket Ön hozott létre vagy kezel.",
+    "notInCatalog": "Nincs a katalógusban",
+    "why": {
+      "unlisted": "Nincs tulajdonosa, és az oldal nincs közzétéve a katalógusban.",
+      "noServer": "Nincs olyan szerver, amelyet mindenki lát.",
+      "both": "Nincs tulajdonosa, az oldal nincs közzétéve, és nincs olyan szerver, amelyet mindenki lát."
+    },
+    "fix": {
+      "claim": "Igazolja a szervert, hogy Ön legyen a tulajdonos, és a közösség megjelenik a katalógusban.",
+      "verify": "Igazoljon egy szervert, és a közösség megjelenik a katalógusban."
+    },
+    "published": "Mostantól a katalógusban szerepel: {{name}}.",
+    "publishedHidden": "Közzétéve: {{name}}. A közösség akkor jelenik meg a katalógusban, amikor legalább egy szervert igazolnak."
   },
   "following": {
     "signInTitle": "Jelentkezzen be, hogy közösségeket követhessen",

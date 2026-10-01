@@ -53,6 +53,7 @@
     "reset": "Wyczyść filtry",
     "empty": "Nie ma jeszcze społeczności",
     "emptyHint": "Społeczność pojawia się tutaj, gdy jej właściciel potwierdzi swój serwer.",
+    "emptyAdmin": "Strony bez właściciela utworzone przez ciebie publikuj w zakładce <0>Moje społeczności</0>.",
     "filters": "Wyszukiwanie i filtry",
     "found_one": "{{count}} społeczność",
     "found_few": "{{count}} społeczności",
@@ -141,7 +142,19 @@
     "open": "Otwórz stronę",
     "manage": "Zarządzaj",
     "note": "Społeczności, w których jesteś właścicielem lub redaktorem, oraz te utworzone przez ciebie przed potwierdzeniem serwera.",
-    "noteAdmin": "Administrator JKNet może edytować każdą społeczność. Tutaj są te utworzone przez ciebie i te, które prowadzisz."
+    "noteAdmin": "Administrator JKNet może edytować każdą społeczność. Tutaj są te utworzone przez ciebie i te, które prowadzisz.",
+    "notInCatalog": "Poza katalogiem",
+    "why": {
+      "unlisted": "Brak właściciela, a strona nie jest opublikowana w katalogu.",
+      "noServer": "Brak serwera widocznego dla wszystkich.",
+      "both": "Brak właściciela, strona nie jest opublikowana i brak serwera widocznego dla wszystkich."
+    },
+    "fix": {
+      "claim": "Potwierdź serwer, aby zostać właścicielem, a społeczność pojawi się w katalogu.",
+      "verify": "Potwierdź serwer, a społeczność pojawi się w katalogu."
+    },
+    "published": "Społeczność {{name}} jest teraz w katalogu.",
+    "publishedHidden": "Społeczność {{name}} jest opublikowana. Pojawi się w katalogu, gdy zostanie potwierdzony choć jeden serwer."
   },
   "following": {
     "signInTitle": "Zaloguj się, aby obserwować społeczności",

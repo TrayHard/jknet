@@ -55,6 +55,7 @@
     "reset": "Reset filters",
     "empty": "No communities yet",
     "emptyHint": "A community appears here once its owner confirms a server.",
+    "emptyAdmin": "Publish the pages without an owner that you created from <0>My communities</0>.",
     "filters": "Search and filters"
   },
   "sort": {
@@ -127,7 +128,19 @@
     "open": "Open page",
     "manage": "Manage",
     "note": "Communities where you are the owner or an editor, and the ones you created before confirming a server.",
-    "noteAdmin": "A JKNet administrator can edit any community. Here are the ones you created or run."
+    "noteAdmin": "A JKNet administrator can edit any community. Here are the ones you created or run.",
+    "notInCatalog": "Not in the catalog",
+    "why": {
+      "unlisted": "No owner, and the page is not published in the catalog.",
+      "noServer": "No server that everyone can see.",
+      "both": "No owner, the page is not published, and no server is visible to everyone."
+    },
+    "fix": {
+      "claim": "Confirm the server to become its owner, and the community joins the catalog.",
+      "verify": "Confirm a server, and the community joins the catalog."
+    },
+    "published": "{{name}} is in the catalog now.",
+    "publishedHidden": "{{name}} is published. It joins the catalog once a server is confirmed."
   },
   "following": {
     "signInTitle": "Sign in to follow communities",

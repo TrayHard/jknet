@@ -1,6 +1,6 @@
-import { Bell, BellOff, ChevronDown, ChevronUp, Globe2, LogIn, Plus, Search, Settings2, SearchX, Users } from "lucide-react";
+import { Bell, BellOff, ChevronDown, ChevronUp, Eye, Globe2, LogIn, Plus, Search, Settings2, SearchX, Users } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import { Tabs } from "../servers/Tabs";
@@ -15,6 +15,7 @@ import {
 } from "./api";
 import { CommunityLogo, Failure, hueStyle, LinkButton, Notice, RouteLink } from "./bits";
 import { CatalogCard } from "./CatalogCard";
+import { catalogRemedy, catalogVisibility, inCatalog } from "./catalogVisibility";
 import { CreateDialog } from "./CreateDialog";
 import { useFailureText } from "./errors";
 import { formatCount, GAME_NAMES, LANGUAGE_NAMES } from "./format";
@@ -26,6 +27,12 @@ import { useAction, useRemote } from "./useRemote";
 const PAGE = 60;
 /** Tags shown before **More**. */
 const FIRST_TAGS = 8;
+
+/** What **Publish in the catalog** of a row of My communities came to. */
+interface MineNotice {
+  tone: "success" | "info";
+  text: string;
+}
 
 function useDebounced<T>(value: T, delay: number): T {
   const [settled, setSettled] = useState(value);
@@ -67,6 +74,8 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
   const [createOpen, setCreateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState<string | null>(null);
+  const [mineNotice, setMineNotice] = useState<MineNotice | null>(null);
   const action = useAction();
 
   const query: CatalogQuery = {
@@ -79,16 +88,24 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
     limit,
   };
   const queryKey = JSON.stringify(query);
+  const filtersActive = tag !== null || language !== "" || region !== "" || q !== "" || game !== "";
   const catalog = useRemote(tab === "catalog" ? `catalog:${account}:${queryKey}` : null, () => api.catalog(query));
+  // An empty catalogue with no filter on tells an administrator where the
+  // pages without an owner are published, so it asks who the reader is too:
+  // on a host that manages, the only one with **Publish in the catalog**.
+  const emptyCatalog =
+    platform.canManage && tab === "catalog" && catalog.data !== undefined && catalog.data.communities.length === 0 && !filtersActive;
   const ranking = useRemote(tab === "catalog" ? `ranking:${platform.game ?? ""}` : null, () => api.ranking());
   const following = useRemote(platform.signedIn ? `following:${account}` : null, () => api.following());
-  const me = useRemote(platform.signedIn && tab === "mine" ? `me:${account}` : null, () => api.me());
+  const me = useRemote(platform.signedIn && (tab === "mine" || emptyCatalog) ? `me:${account}` : null, () => api.me());
   const reviews = useRemote(platform.canManage && me.data?.isAdmin && tab === "mine" ? `reviews:${account}` : null, () =>
     api.reviews(),
   );
 
   // A new filter starts from the first page.
   useEffect(() => setLimit(PAGE), [q, tag, language, region, sort, game, platform.game]);
+  // What a publication came to belongs to the moment: another tab or account starts without it.
+  useEffect(() => setMineNotice(null), [tab, account]);
 
   // --- slice: communities --- the launcher's server panel asks for the page
   // of a server: the community that has it opens, or the dialog to create one.
@@ -138,7 +155,40 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
       .finally(() => setToggling(null));
   };
 
-  const filtersActive = tag !== null || language !== "" || region !== "" || q !== "" || game !== "";
+  /**
+   * **Publish in the catalog** of a row of My communities: an administrator
+   * lists a page without an owner, as the switch of the administration does.
+   * The row changes at once; then both lists read the service again — the
+   * catalogue reads itself anew whenever its tab opens.
+   */
+  const publish = (card: MyCommunity) => {
+    setPublishing(card.id);
+    void action
+      .run(
+        async () => {
+          setError(null);
+          setMineNotice(null);
+          const page = await api.admin(card.id, { listed: true });
+          me.set(
+            (current) =>
+              current && {
+                ...current,
+                communities: current.communities.map((item) => (item.id === card.id ? { ...item, listed: page.listed } : item)),
+              },
+          );
+          setMineNotice(
+            inCatalog(page)
+              ? { tone: "success", text: t("mine.published", { name: page.name }) }
+              : { tone: "info", text: t("mine.publishedHidden", { name: page.name }) },
+          );
+          me.reload();
+          catalog.reload();
+        },
+        (reason) => setError(failure(reason)),
+      )
+      .finally(() => setPublishing(null));
+  };
+
   const reset = () => {
     setTag(null);
     setLanguage("");
@@ -301,16 +351,36 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
                 title={t("catalog.empty")}
                 text={t("catalog.emptyHint")}
                 action={
-                  platform.canManage ? (
-                    <Button
-                      variant="primary"
-                      wrap
-                      icon={<Plus size={16} />}
-                      onClick={() => (platform.signedIn ? setCreateOpen(true) : platform.signIn())}
-                    >
-                      {t("catalog.create")}
-                    </Button>
-                  ) : undefined
+                  <>
+                    {/* An administrator's pages without an owner stay out until they are listed:
+                        the line leads to the rows that list them. */}
+                    {platform.canManage && me.data?.isAdmin ? (
+                      <p className="max-w-[420px] text-body-sm text-fg-muted">
+                        <Trans
+                          t={t}
+                          i18nKey="catalog.emptyAdmin"
+                          components={[
+                            <RouteLink
+                              route={{ view: "catalog", tab: "mine" }}
+                              className="text-fg-accent hover:underline hover:underline-offset-2"
+                            >
+                              {null}
+                            </RouteLink>,
+                          ]}
+                        />
+                      </p>
+                    ) : null}
+                    {platform.canManage ? (
+                      <Button
+                        variant="primary"
+                        wrap
+                        icon={<Plus size={16} />}
+                        onClick={() => (platform.signedIn ? setCreateOpen(true) : platform.signIn())}
+                      >
+                        {t("catalog.create")}
+                      </Button>
+                    ) : null}
+                  </>
                 }
               />
             )
@@ -348,6 +418,9 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
           isAdmin={me.data?.isAdmin ?? false}
           onCreate={() => setCreateOpen(true)}
           reviews={platform.canManage && me.data?.isAdmin ? <AdminReviews remote={reviews} /> : null}
+          notice={mineNotice}
+          publishing={publishing}
+          onPublish={publish}
         />
       ) : (
         <FollowingTab
@@ -490,8 +563,24 @@ function TopCommunities({ entries, open, onToggle }: { entries: CommunityRanking
   );
 }
 
-/** A row of **My communities** and **Following**: the logo, the name, a line under it, the actions. */
-function Row({ card, badge, sub, actions }: { card: CommunityCard; badge?: React.ReactNode; sub: string; actions: React.ReactNode }) {
+/**
+ * A row of **My communities** and **Following**: the logo, the name, a line
+ * under it, the actions, and a `note` across the foot of the row when it has
+ * more to say: why the catalogue leaves the community out, and the way in.
+ */
+function Row({
+  card,
+  badge,
+  sub,
+  note,
+  actions,
+}: {
+  card: CommunityCard;
+  badge?: React.ReactNode;
+  sub: string;
+  note?: React.ReactNode;
+  actions: React.ReactNode;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-16 rounded-lg border border-line bg-surface p-16">
       <CommunityLogo card={card} size="xl" />
@@ -508,6 +597,13 @@ function Row({ card, badge, sub, actions }: { card: CommunityCard; badge?: React
         <span className="text-body-sm text-fg-secondary [overflow-wrap:anywhere]">{sub}</span>
       </div>
       <div className="flex flex-wrap items-center gap-8">{actions}</div>
+      {/* The whole width under the logo's column: the reason keeps to one line, and the actions above stay
+          where the other rows have theirs. */}
+      {note ? (
+        <div className="flex min-w-0 basis-full flex-wrap items-center gap-x-16 gap-y-8 border-t border-line-subtle pt-12 pl-64 @max-[560px]/community:pl-0">
+          {note}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -521,6 +617,9 @@ function MineTab({
   isAdmin,
   onCreate,
   reviews,
+  notice,
+  publishing,
+  onPublish,
 }: {
   signedIn: boolean;
   loading: boolean;
@@ -530,9 +629,25 @@ function MineTab({
   isAdmin: boolean;
   onCreate: () => void;
   reviews: React.ReactNode;
+  /** What the last **Publish in the catalog** came to. */
+  notice: MineNotice | null;
+  /** The community being published, while it is. */
+  publishing: string | null;
+  onPublish: (card: MyCommunity) => void;
 }) {
   const { t, i18n } = useTranslation("community");
   const platform = useCommunityPlatform();
+
+  /** Why the catalogue leaves `card` out and what brings it in, or nothing while it lists it. */
+  const catalogNote = (card: MyCommunity) => {
+    const visibility = catalogVisibility(card);
+    const remedy = catalogRemedy(visibility, { admin: isAdmin, canManage: platform.canManage });
+    if (visibility.inCatalog) return { remedy, note: undefined };
+    const why =
+      visibility.gaps.length > 1 ? t("mine.why.both") : visibility.gaps[0] === "unlisted" ? t("mine.why.unlisted") : t("mine.why.noServer");
+    const fix = remedy === "claim" ? t("mine.fix.claim") : remedy === "verify" ? t("mine.fix.verify") : null;
+    return { remedy, note: fix ? `${why} ${fix}` : why };
+  };
   if (!signedIn) {
     return (
       <EmptyState
@@ -559,6 +674,7 @@ function MineTab({
   return (
     <div className="flex flex-col gap-16 pt-24">
       {reviews}
+      {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
       {communities.length === 0 ? (
         <EmptyState
           icon={<Users size={24} />}
@@ -579,16 +695,34 @@ function MineTab({
               const owner = card.owner ? t("mine.owner", { name: card.owner.displayName }) : t("mine.noOwner");
               const role =
                 card.role === "owner" ? t("roles.owner") : card.role === "editor" ? t("roles.editor") : isAdmin ? t("roles.admin") : t("roles.creator");
+              const { remedy, note } = catalogNote(card);
               return (
                 <Row
                   key={card.id}
                   card={card}
-                  badge={<Badge tone={card.role === "owner" ? "success" : card.role === "editor" ? "accent" : card.role ? "neutral" : "warm"}>{role}</Badge>}
+                  badge={
+                    <>
+                      <Badge tone={card.role === "owner" ? "success" : card.role === "editor" ? "accent" : card.role ? "neutral" : "warm"}>{role}</Badge>
+                      {note !== undefined ? <Badge tone="neutral">{t("mine.notInCatalog")}</Badge> : null}
+                    </>
+                  }
                   sub={[
                     owner,
                     t("card.servers", { count: card.servers.length }),
                     t("stats.followersCount", { count: card.counts.followers, formatted: formatCount(card.counts.followers, i18n.language) }),
                   ].join(" · ")}
+                  note={
+                    note === undefined ? undefined : (
+                      <>
+                        <span className="min-w-0 flex-1 basis-[240px] text-body-sm text-fg-secondary [overflow-wrap:anywhere]">{note}</span>
+                        {remedy === "publish" ? (
+                          <Button size="sm" wrap icon={<Eye size={14} />} disabled={publishing !== null} onClick={() => onPublish(card)}>
+                            {t("manage.strip.publish")}
+                          </Button>
+                        ) : null}
+                      </>
+                    )
+                  }
                   actions={
                     <>
                       <Button wrap onClick={() => platform.navigate({ view: "community", id: card.id, tab: "overview" })}>
