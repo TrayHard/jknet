@@ -237,12 +237,8 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
-      <Tabs
-        tabs={tabs}
-        value={tab}
-        onChange={go}
-        className="overflow-x-auto pb-px [scrollbar-width:none]"
-      />
+      {/* The tabs wrap on a narrow page instead of scrolling sideways: a phone shows every tab. */}
+      <Tabs tabs={tabs} value={tab} onChange={go} className="flex-wrap pb-px" />
 
       {tab === "overview" ? (
         <div className="grid grid-cols-[minmax(0,1fr)_352px] items-start gap-16 @max-[900px]/community:grid-cols-1">

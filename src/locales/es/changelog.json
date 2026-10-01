@@ -11,6 +11,12 @@
     "release": "Versión"
   },
   "entries": {
+    "v0_11_0_communities": "Las comunidades sustituyen a las antiguas páginas de servidores: una comunidad reúne hasta 10 servidores con sus jugadores, sus jugadores habituales, eventos y noticias. Sigue una comunidad para tenerla siempre a mano.",
+    "v0_11_0_catalog": "El catálogo de comunidades filtra por juego, etiquetas, idioma y región, ofrece varios criterios de orden y muestra el top de comunidades.",
+    "v0_11_0_events": "La página Eventos muestra los eventos de las comunidades por mes o en lista. Responde «Voy» o «Quizá», añade un evento a tu calendario y, desde 30 minutos antes del inicio, «Unirse» prepara tu cliente y te conecta al servidor.",
+    "v0_11_0_notifications": "Los avisos del lanzador y las notificaciones de Windows informan de los eventos y las noticias de las comunidades que sigues y te recuerdan 15 minutos antes los eventos a los que respondiste. Cada tipo tiene su propio interruptor en Ajustes.",
+    "v0_11_0_management": "Los propietarios y editores gestionan su comunidad desde una sola pantalla: textos, logotipo y portada, enlaces, etiquetas, archivos recomendados, servidores verificados con un código, editores, noticias y el bot de JKNet, que lleva a la página los anuncios de Discord.",
+    "v0_11_0_privacy": "Las páginas de las comunidades muestran a sus jugadores habituales. Desactiva «Mostrarme entre los jugadores habituales de las comunidades» en Ajustes para salir de todas las listas. JKNet Online borrará el tiempo de juego contabilizado.",
     "v0_10_0_webApp": "Chatea con tus amigos desde el teléfono o cualquier navegador: inicia sesión en online.jknet.app y añade JKNet a la pantalla de inicio.",
     "v0_10_0_signIn": "El inicio de sesión en el navegador queda vinculado al launcher que lo inició: un enlace de inicio de sesión ajeno ya no entrega tu cuenta a quien lo envió.",
     "v0_10_0_attachments": "El menú de adjuntos del chat se divide en archivos, multimedia, datos del juego, configuración y catálogos. Mapas, configuraciones y perfiles de jugador llegan de todos tus clientes en una sola lista que indica su origen.",

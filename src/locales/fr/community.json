@@ -460,6 +460,7 @@
       "errors": {
         "noAccess": "Le bot n’a plus accès au serveur Discord : il en a été retiré, ou son rôle ne lui permet pas de voir les salons. Reconnectez-le.",
         "announcementsHidden": "Le salon d’annonces n’est pas visible par tous les membres du serveur. Choisissez un autre salon ou ouvrez celui-ci à tous.",
+        "announcementsHistoryHidden": "Tout le monde sur le serveur voit le salon d’annonces, mais personne ne peut lire son historique. Autorisez tout le monde à lire son historique ou choisissez un autre salon.",
         "announcementsDenied": "Le bot ne peut pas lire le salon d’annonces. Dans ce salon, accordez-lui les permissions « Voir les salons » et « Voir les anciens messages ».",
         "botToken": "Discord a refusé le bot de JKNet Online. L’équipe JKNet doit corriger le problème ; en attendant, la page affiche les dernières données lues par le bot.",
         "unavailable": "Discord n’a pas répondu au bot. Il réessaiera dans les 5 minutes."

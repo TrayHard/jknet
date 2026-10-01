@@ -442,6 +442,7 @@
       "errors": {
         "noAccess": "The bot lost the Discord server: it was removed, or its role cannot view the channels. Connect it again.",
         "announcementsHidden": "Not everyone on the server sees the announcements channel. Choose another channel, or open this one to everyone.",
+        "announcementsHistoryHidden": "Everyone on the server sees the announcements channel but cannot read its history. Let everyone read its message history, or choose another channel.",
         "announcementsDenied": "The bot cannot read the announcements channel. Give it View Channels and Read Message History in that channel.",
         "botToken": "Discord refused the bot of JKNet Online. The JKNet team has to fix it; the page keeps what the bot read last.",
         "unavailable": "Discord did not answer the bot. It tries again within 5 minutes."

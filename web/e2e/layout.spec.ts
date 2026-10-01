@@ -145,7 +145,9 @@ test.describe("wide: W1", () => {
     await visit(page, "/friends");
     await expect(page.locator("[data-layout=wide]")).toBeVisible();
     const rail = page.getByTestId("rail");
-    await expect(rail.getByRole("link")).toHaveCount(8);
+    // The eight sections, the calendar of community events among them, and the account.
+    await expect(rail.getByRole("link")).toHaveCount(9);
+    await expect(rail.locator("[data-section=events]")).toHaveAttribute("href", "/events");
     await expect(rail.locator("[aria-current=page]")).toHaveAttribute("data-section", "friends");
     await expect(page.locator("[data-pane=list]")).toBeVisible();
     await expect(page.getByTestId("empty-pane")).toHaveText("Pick a friend");
