@@ -31,16 +31,21 @@ export const communityIpc = {
   request: <T>(method: string, path: string, body?: unknown) => call<T>("community_request", { method, path, body: body ?? null }),
   // --- slice: communities ---
   /**
-   * The core's dialog for a logo or a cover: the picked file is checked,
-   * stripped of its metadata and put in the store of the service.
-   * `title` and `filter` are the dialog's words in the player's language.
+   * The core's dialog for a logo or a cover of a community or the cover of
+   * an event: the picked file is checked, stripped of its metadata and put
+   * in the store of the service. `title` and `filter` are the dialog's
+   * words in the player's language.
    */
   pickImage: (kind: CommunityImageKind, title: string, filter: string) =>
     call<CommunityPickedImage>("community_pick_image", { kind, title, filter }),
 };
 
-/** The two pictures of a community, `ImageKind` in `src-tauri/src/community_images.rs`. */
-export type CommunityImageKind = "logo" | "banner";
+/**
+ * The pictures the core uploads, `ImageKind` in
+ * `src-tauri/src/community_images.rs`: the logo and the cover (`banner`) of
+ * a community, and the cover of an event.
+ */
+export type CommunityImageKind = "logo" | "banner" | "cover";
 
 /** What `community_pick_image` answers: `PickedImage` in `src-tauri/src/community_images.rs`. */
 export type CommunityPickedImage =
@@ -48,6 +53,31 @@ export type CommunityPickedImage =
   | { outcome: "refused"; reason: "tooBig"; fileName: string; maxBytes: number }
   | { outcome: "refused"; reason: "notPicture"; fileName: string }
   | { outcome: "uploaded"; sha256: string; size: number; fileName: string; width: number | null; height: number | null };
+
+// --- slice: community events ---
+/** The words of the Windows notifications of events: `{community}`, `{title}`, `{when}`, `{place}` stay slots. */
+export interface CommunityEventLabels {
+  created: string;
+  createdText: string;
+  changed: string;
+  changedText: string;
+  cancelled: string;
+  cancelledText: string;
+  reminder: string;
+  reminderText: string;
+  offline: string;
+}
+
+/**
+ * `src-tauri/src/community_events.rs`: what only the launcher's core does for
+ * events. The cover of an event goes up with `communityIpc.pickImage`.
+ */
+export const communityEventsIpc = {
+  /** Hands the core the words of its notifications, in the language on screen. */
+  setLabels: (labels: CommunityEventLabels) => call<void>("community_event_labels", { labels }),
+  /** The save dialog, then the file. The name it was saved under, or `null` when cancelled. */
+  saveIcs: (name: string, text: string) => call<string | null>("community_save_ics", { name, text }),
+};
 
 export interface PreviewAsset { name: string; path: string | null; text: string | null }
 /**
@@ -498,6 +528,20 @@ export interface Settings {
    * window. Absent, or a value this build does not know: `main`.
    */
   chatOpenIn?: ChatOpenIn;
+  // --- slice: community events ---
+  /** Absent from a core that predates it: every switch on. */
+  communityNotifications?: CommunityNotifications;
+}
+
+// --- slice: community events ---
+/** `src-tauri/src/settings.rs`: `CommunityNotifications`. */
+export interface CommunityNotifications {
+  /** A community the player follows announced an event. */
+  newEvents: boolean;
+  /** An event the player answered starts in 15 minutes. */
+  reminders: boolean;
+  /** A Windows notification while no window of JKNet is focused. */
+  os: boolean;
 }
 
 // --- slice: chat notifications ---
@@ -619,6 +663,9 @@ export interface SettingsPatch {
   chatOpenIn?: ChatOpenIn;
   /** 0 to 25; the core refuses more. */
   chatAutoDownloadMb?: number;
+  // --- slice: community events ---
+  /** The switches that changed, and only those. */
+  communityNotifications?: Partial<CommunityNotifications>;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */

@@ -53,9 +53,14 @@ mod bundles;
 // `chat.*` frames. The core is the only writer; windows display and report.
 mod chat;
 mod community;
-// --- slice: communities --- the logo and the cover of a community, picked
-// in the core's dialog, checked and put in the store of the service.
+// --- slice: communities --- the logo and the cover of a community and the
+// cover of an event, picked in the core's dialog, checked and put in the
+// store of the service.
 mod community_images;
+// --- slice: community events ---
+// The `community.event` frames of the live socket and what they show, and
+// the calendar file of an event.
+mod community_events;
 // --- slice: player profiles ---
 // The skins and saber hilts a client can offer a profile, read out of the
 // archives it loads. Its own module rather than a part of `library`: that one
@@ -513,6 +518,8 @@ pub fn run() {
         // The one chat window: its build lock and its mode, bounds and
         // switches between writes of `settings.json`.
         .manage(chat::window::ChatWindowState::default())
+        // --- slice: community events --- the words of their Windows notifications.
+        .manage(community_events::CommunityEventsState::default())
         // --- slice: servers browser ---
         // Which tabs of which game have a scan in flight. Two tabs may scan at
         // once, one tab may not scan twice: the guard lives here rather than in
@@ -667,6 +674,9 @@ pub fn run() {
             // --- slice: account ---
             account::get_account_state,
             community::community_request,
+            // --- slice: community events ---
+            community_events::community_event_labels,
+            community_events::community_save_ics,
             account::begin_sign_in,
             account::poll_sign_in,
             // --- slice: sign-in binding ---

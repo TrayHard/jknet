@@ -1,5 +1,5 @@
 /**
- * The seven sections, in the order the phone's menu and the wide rail show
+ * The eight sections, in the order the phone's menu and the wide rail show
  * them, with their group, icon and root path.
  *
  * The icons are the launcher sidebar's where the launcher has the section:
@@ -8,6 +8,7 @@
  */
 
 import {
+  CalendarDays,
   Globe,
   Library,
   MessageCircle,
@@ -34,6 +35,7 @@ const GROUPS: Record<Section, NavGroup> = {
   chats: "chat",
   friends: "chat",
   community: "browse",
+  events: "browse",
   servers: "browse",
   bundles: "browse",
   jkhub: "browse",
@@ -44,6 +46,7 @@ const ICONS: Record<Section, LucideIcon> = {
   chats: MessageCircle,
   friends: Users,
   community: Globe,
+  events: CalendarDays,
   servers: Server,
   bundles: Package,
   jkhub: Library,

@@ -21,6 +21,8 @@ import type clients from "../locales/en/clients.json";
 import type common from "../locales/en/common.json";
 // --- slice: communities ---
 import type community from "../locales/en/community.json";
+// --- slice: community events ---
+import type events from "../locales/en/events.json";
 import type errors from "../locales/en/errors.json";
 import type friends from "../locales/en/friends.json";
 import type games from "../locales/en/games.json";
@@ -76,6 +78,8 @@ declare module "i18next" {
       chat: typeof chat;
       // --- slice: communities ---
       community: typeof community;
+      // --- slice: community events ---
+      events: typeof events;
       // --- slice: web app ---
       web: typeof web;
     };

@@ -7,10 +7,11 @@
  * launcher through the `community_request` bridge of the core, the other two
  * over HTTP. Field names are camelCase on the wire.
  *
- * Events, news, the live status of servers, their activity and the top
- * communities are not served yet. Their shapes below are provisional and
- * marked `TODO(S4)`, `TODO(S5)` and `TODO(S6)`: the screens read them
- * defensively and draw nothing of a part the service does not answer.
+ * News, the live status of servers, their activity and the top communities
+ * are not served yet. Their shapes below are provisional and marked
+ * `TODO(S5)` and `TODO(S6)`: the screens read them defensively and draw
+ * nothing of a part the service does not answer. Events have their own
+ * types in `components/events/types.ts`.
  */
 
 export type Game = "ja" | "jo";
@@ -308,20 +309,6 @@ export interface CommunityActivity {
   heatmap: number[];
   peak: { players: number; at: string } | null;
   online: number;
-}
-
-/** TODO(S4): an event of `GET events` and `GET events/{id}`. */
-export interface CommunityEvent {
-  id: string;
-  communityId: string;
-  title: string;
-  kind: string;
-  startsAt: string;
-  endsAt: string;
-  status: "scheduled" | "cancelled";
-  going: number;
-  maybe: number;
-  capacity: number | null;
 }
 
 /** TODO(S5): a post of `GET communities/{id}/posts`. */

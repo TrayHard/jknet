@@ -1,4 +1,4 @@
-import { ContactRound, History, Library, Monitor, Server, ServerCog, Settings, Users, Images, FileSliders, Globe, Swords } from "lucide-react";
+import { ContactRound, History, Library, Monitor, Server, ServerCog, Settings, Users, Images, FileSliders, Globe, Swords, CalendarDays } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
@@ -15,6 +15,8 @@ import {
 import { GameSwitch } from "./GameSwitch";
 // --- slice: play with friends ---
 import { humanCount } from "./host/hostModel";
+// --- slice: community events ---
+import { useGoingSoonCount } from "../lib/useCommunityEvents";
 import { Avatar, NavItem } from "./ui";
 
 /**
@@ -26,6 +28,9 @@ export function Sidebar() {
   const { t: communityText } = useTranslation("servers");
   // --- slice: play with friends ---
   const { t: hostText } = useTranslation("host");
+  // --- slice: community events --- the player's «going» events of the next 7 days.
+  const { t: eventsText } = useTranslation("events");
+  const goingSoon = useGoingSoonCount();
   // People on the private server while it runs; nothing while it does not,
   // so a zero never reads as «a server with nobody on it» that is not there.
   const hostSession = useHostSession().data ?? null;
@@ -101,6 +106,8 @@ export function Sidebar() {
 
           <Group title={t("groups.community")}>
             <NavItem to="/community" icon={<Globe size={20} />} label={communityText("community.browse")} />
+            {/* --- slice: community events --- */}
+            <NavItem to="/events" icon={<CalendarDays size={20} />} label={eventsText("nav.title")} count={goingSoon} />
           <NavItem
             to="/friends"
             icon={<Users size={20} />}

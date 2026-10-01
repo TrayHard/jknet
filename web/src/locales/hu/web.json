@@ -13,6 +13,7 @@
       "chats": "Csevegések",
       "friends": "Barátok",
       "community": "Közösségi szerverek",
+      "events": "Események",
       "servers": "Szerverlista",
       "bundles": "Bundle-ök",
       "jkhub": "JKHub-modok",
@@ -22,6 +23,7 @@
       "chats": "Cseve\u00adgések",
       "friends": "Barátok",
       "community": "Közösség",
+      "events": "Esemé\u00adnyek",
       "servers": "Szerverek",
       "bundles": "Bundle-ök",
       "jkhub": "JKHub",
@@ -32,6 +34,7 @@
       "chats": "Válasszon csevegést",
       "friends": "Válasszon barátot",
       "community": "Válasszon szervert",
+      "events": "Válasszon eseményt",
       "servers": "Válasszon szervert",
       "bundles": "Válasszon bundle-t",
       "jkhub": "Válasszon modot"
@@ -180,7 +183,11 @@
     "invite": "Meghívja a saját szerverére",
     "test": "A JKNet értesítései működnek ezen az eszközön.",
     "reactionPlain": "Reagált az üzenetére",
-    "groupInvitePlain": "Meghívja egy csoportba"
+    "groupInvitePlain": "Meghívja egy csoportba",
+    "eventCreated": "{{community}} eseményt hirdetett",
+    "eventChanged": "Megváltozott az időpont vagy a helyszín",
+    "eventCancelled": "Az eseményt lemondták",
+    "eventReminder": "15 perc múlva kezdődik"
   },
   "sessions": {
     "title": "Eszközök és munkamenetek",

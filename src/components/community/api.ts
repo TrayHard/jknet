@@ -8,9 +8,10 @@
  * languages and regions are the service's (`community/pages.rs`), and a value
  * outside them is dropped before it reaches a query.
  *
- * Events, news, the activity of servers and the top communities are
- * provisional (`TODO(S4)`–`TODO(S6)`): the service does not serve them yet,
- * and the helpers read whatever arrives defensively.
+ * News, the activity of servers and the top communities are provisional
+ * (`TODO(S5)`, `TODO(S6)`): the service does not serve them yet, and the
+ * helpers read whatever arrives defensively. Events have their own client,
+ * `components/events/api.ts`, over the path {@link eventsPath} builds here.
  */
 
 import type {
@@ -21,7 +22,6 @@ import type {
   CommunityClaim,
   CommunityCreated,
   CommunityDiscord,
-  CommunityEvent,
   CommunityMe,
   CommunityPost,
   CommunityRankingEntry,
@@ -163,7 +163,7 @@ function whole(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : null;
 }
 
-/** TODO(S4): the filters of `GET events`. */
+/** The filters of `GET events`. */
 export interface EventsQuery {
   from?: string | null;
   to?: string | null;
@@ -172,7 +172,7 @@ export interface EventsQuery {
   community?: string | null;
 }
 
-/** TODO(S4): the path of `GET events`, keys and values as the bridges check them. */
+/** The path of `GET events`, keys and values as the bridges check them. */
 export function eventsPath(query: EventsQuery = {}): string {
   const params: string[] = [];
   const moment = (value: string | null | undefined) =>
@@ -346,10 +346,8 @@ export function communityApi(request: CommunityRequest) {
     unfollow: (id: string) => request<null>("DELETE", `${community(id)}/follow`),
     players: (id: string) => request<CommunityRegulars>("GET", `${community(id)}/players`),
     discord: (id: string) => request<CommunityDiscord>("GET", `${community(id)}/discord`),
-    // --- TODO(S4)–TODO(S6): provisional routes
+    // --- TODO(S5), TODO(S6): provisional routes
     activity: (id: string) => request<CommunityActivity>("GET", `${community(id)}/activity`),
-    events: (query?: EventsQuery) => request<{ events: CommunityEvent[] }>("GET", eventsPath(query)),
-    event: (eventId: string) => request<CommunityEvent>("GET", `events/${segment(eventId)}`),
     posts: (id: string) => request<{ posts: CommunityPost[] }>("GET", `${community(id)}/posts`),
   };
 }

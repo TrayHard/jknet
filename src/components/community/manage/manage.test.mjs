@@ -285,6 +285,18 @@ describe("a picture from a file input", () => {
     });
   });
 
+  test("the cover of an event holds what the cover of a page holds", async () => {
+    assert.equal(IMAGE_MAX_BYTES.cover, 3 * 1024 * 1024);
+    assert.equal(IMAGE_MAX_BYTES.cover, IMAGE_MAX_BYTES.banner);
+    const huge = new Uint8Array(IMAGE_MAX_BYTES.cover + 1);
+    huge.set(png());
+    assert.deepEqual(await prepareImage(file(huge, "huge.png"), "cover"), {
+      refused: { reason: "tooBig", fileName: "huge.png", maxBytes: IMAGE_MAX_BYTES.cover },
+    });
+    const prepared = await prepareImage(file(huge.subarray(0, IMAGE_MAX_BYTES.cover), "cover.png"), "cover");
+    assert.equal("image" in prepared && prepared.image.type, "image/png");
+  });
+
   test("a picture goes to the store under its hash", async () => {
     const sent = [];
     const result = await uploadImageFile(file(png(), "logo.png"), "logo", async (sha256, blob) => {

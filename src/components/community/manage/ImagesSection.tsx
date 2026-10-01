@@ -1,5 +1,5 @@
 import { ImagePlus, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "../../../lib/format";
@@ -8,12 +8,11 @@ import { blobUrl } from "../api";
 import { hueStyle } from "../bits";
 import { useFailureText } from "../errors";
 import { monogram } from "../format";
-import { useCommunityPlatform, type CommunityImageKind, type ImageRefusal, type UploadedImage } from "../platform";
+import { usePictureRefusalText, usePictureUpload } from "../pictureUpload";
+import { useCommunityPlatform, type CommunityImageKind, type UploadedImage } from "../platform";
 import type { Community } from "../types";
-import { useAction } from "../useRemote";
 import type { ManageDraft } from "./model";
 import { FieldNote, Section, useSizeText } from "./parts";
-import { IMAGE_ACCEPT, uploadImageFile } from "./upload";
 
 /** What the screen knows of a picture it uploaded in this visit. */
 type Picked = Record<CommunityImageKind, UploadedImage | null>;
@@ -23,9 +22,9 @@ type Picked = Record<CommunityImageKind, UploadedImage | null>;
  * **Replace** and **Remove**, or the empty box with **Choose file**.
  *
  * Choosing a file uploads it to the store of the service at once — the
- * launcher's core behind its own dialog, the website through a file input —
- * and the form holds its hash. The page shows it after **Save changes**,
- * which binds the hash to the community.
+ * launcher's core behind its own dialog, the website through a file input,
+ * both by `usePictureUpload` — and the form holds its hash. The page shows
+ * it after **Save changes**, which binds the hash to the community.
  */
 export function ImagesSection({
   community,
@@ -39,9 +38,7 @@ export function ImagesSection({
   edit: (patch: Partial<ManageDraft>) => void;
 }) {
   const { t } = useTranslation("community");
-  const platform = useCommunityPlatform();
   const [picked, setPicked] = useState<Picked>({ logo: null, banner: null });
-  const canUpload = platform.pickImage !== undefined || platform.putBlob !== undefined;
 
   return (
     <Section section="images" title={t("manage.sections.images")}>
@@ -52,7 +49,6 @@ export function ImagesSection({
           sha256={draft.logo}
           saved={base.logo}
           picked={picked.logo}
-          canUpload={canUpload}
           onUploaded={(image) => {
             setPicked((current) => ({ ...current, logo: image }));
             edit({ logo: image.sha256 });
@@ -65,7 +61,6 @@ export function ImagesSection({
           sha256={draft.banner}
           saved={base.banner}
           picked={picked.banner}
-          canUpload={canUpload}
           onUploaded={(image) => {
             setPicked((current) => ({ ...current, banner: image }));
             edit({ banner: image.sha256 });
@@ -83,7 +78,6 @@ function ImageBox({
   sha256,
   saved,
   picked,
-  canUpload,
   onUploaded,
   onRemove,
 }: {
@@ -92,7 +86,6 @@ function ImageBox({
   sha256: string | null;
   saved: string | null;
   picked: UploadedImage | null;
-  canUpload: boolean;
   onUploaded: (image: UploadedImage) => void;
   onRemove: () => void;
 }) {
@@ -100,48 +93,19 @@ function ImageBox({
   const platform = useCommunityPlatform();
   const failure = useFailureText();
   const sizeText = useSizeText();
-  const action = useAction();
-  const input = useRef<HTMLInputElement>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const refusalText = usePictureRefusalText();
   const [broken, setBroken] = useState<string | null>(null);
   const logo = kind === "logo";
   const label = logo ? t("manage.images.logo") : t("manage.images.cover");
+  const upload = usePictureUpload(kind, label, onUploaded);
   const url = blobUrl(platform.apiBase, sha256);
   const shown = url !== null && broken !== sha256;
-
-  const refusal = (refused: ImageRefusal) =>
-    refused.reason === "tooBig"
-      ? t("manage.images.tooBig", { name: refused.fileName, max: sizeText(refused.maxBytes) })
-      : t("manage.images.notPicture", { name: refused.fileName });
-
-  const choose = () => {
-    setProblem(null);
-    if (platform.pickImage) {
-      void action.run(
-        async () => {
-          const result = await platform.pickImage!(kind);
-          if (result.outcome === "refused") setProblem(refusal(result));
-          if (result.outcome === "uploaded") onUploaded(result);
-        },
-        (reason) => setProblem(t("manage.images.failed", { reason: failure(reason) })),
-      );
-      return;
-    }
-    input.current?.click();
-  };
-
-  const fromInput = (file: File | undefined) => {
-    if (!file || !platform.putBlob) return;
-    const put = platform.putBlob;
-    void action.run(
-      async () => {
-        const result = await uploadImageFile(file, kind, put);
-        if ("refused" in result) setProblem(refusal(result.refused));
-        else onUploaded(result.uploaded);
-      },
-      (reason) => setProblem(t("manage.images.failed", { reason: failure(reason) })),
-    );
-  };
+  const problem =
+    upload.problem === null
+      ? null
+      : "refused" in upload.problem
+        ? refusalText(upload.problem.refused)
+        : t("manage.images.failed", { reason: failure(upload.problem.failed) });
 
   const meta =
     picked !== null && picked.sha256 === sha256
@@ -149,7 +113,7 @@ function ImageBox({
         ? t("manage.images.metaSized", { name: picked.fileName, width: picked.width, height: picked.height, size: sizeText(picked.size) })
         : t("manage.images.meta", { name: picked.fileName, size: sizeText(picked.size) })
       : null;
-  const status = action.busy
+  const status = upload.busy
     ? t("manage.images.uploading")
     : sha256 !== saved
       ? sha256 === null
@@ -203,18 +167,18 @@ function ImageBox({
         <div className="flex min-w-0 flex-1 flex-col gap-6">
           {meta ? <span className="text-mono-xs text-fg [overflow-wrap:anywhere]">{meta}</span> : null}
           {status ? (
-            <span role="status" className={cn("text-body-sm", sha256 !== saved && !action.busy ? "text-fg-warm" : "text-fg-secondary")}>
+            <span role="status" className={cn("text-body-sm", sha256 !== saved && !upload.busy ? "text-fg-warm" : "text-fg-secondary")}>
               {status}
             </span>
           ) : null}
           <span className="text-body-sm text-fg-secondary">{sha256 === null ? `${limits} ${empty}` : limits}</span>
-          {canUpload ? (
+          {upload.canUpload ? (
             <div className="flex flex-wrap gap-6">
-              <Button size="sm" wrap icon={<Upload size={14} />} disabled={action.busy} onClick={choose}>
+              <Button size="sm" wrap icon={<Upload size={14} />} disabled={upload.busy} onClick={upload.choose}>
                 {sha256 === null ? t("manage.images.pick") : t("manage.images.replace")}
               </Button>
               {sha256 !== null ? (
-                <Button size="sm" variant="ghost" wrap disabled={action.busy} onClick={onRemove}>
+                <Button size="sm" variant="ghost" wrap disabled={upload.busy} onClick={onRemove}>
                   {t("manage.images.remove")}
                 </Button>
               ) : null}
@@ -223,19 +187,7 @@ function ImageBox({
         </div>
       </div>
       {problem ? <FieldNote tone="bad">{problem}</FieldNote> : null}
-      {platform.pickImage === undefined && platform.putBlob ? (
-        <input
-          ref={input}
-          type="file"
-          accept={IMAGE_ACCEPT}
-          hidden
-          aria-label={label}
-          onChange={(event) => {
-            fromInput(event.target.files?.[0]);
-            event.target.value = "";
-          }}
-        />
-      ) : null}
+      {upload.fileInput}
     </div>
   );
 }

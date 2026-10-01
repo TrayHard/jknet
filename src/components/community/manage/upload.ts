@@ -1,25 +1,26 @@
 /**
- * A logo or a cover from a file input: the website's way to the store of
- * JKNet Online. The launcher does the same in its core, behind its own
- * dialog (`community_pick_image`).
+ * A logo or a cover of a community, or the cover of an event, from a file
+ * input: the website's way to the store of JKNet Online. The launcher does
+ * the same in its core, behind its own dialog (`community_pick_image`).
  *
- * The checks are the service's (`PUT communities/{id}/images`): PNG, JPEG
- * or WebP by the first bytes of the file, a logo up to 1 MiB and a cover up
- * to 3 MiB. A file that fails them is refused before a byte is sent; one
- * that passes is hashed with SHA-256 and handed to the host's `putBlob`,
- * which answers `PUT /v1/blobs/{sha256}`.
+ * The checks are the service's (`PUT communities/{id}/images` and the
+ * cover of an event): PNG, JPEG or WebP by the first bytes of the file, a
+ * logo up to 1 MiB and either cover up to 3 MiB. A file that fails them is
+ * refused before a byte is sent; one that passes is hashed with SHA-256 and
+ * handed to the host's `putBlob`, which answers `PUT /v1/blobs/{sha256}`.
  *
  * Pure but for `crypto.subtle`, which Node has as well: the tests run it.
  */
 
-import type { CommunityImageKind, ImageRefusal, UploadedImage } from "../platform.tsx";
+import type { ImageRefusal, PictureKind, UploadedImage } from "../platform.tsx";
 
 const MIB = 1024 * 1024;
 
 /** The largest picture of each kind, in bytes. */
-export const IMAGE_MAX_BYTES: Record<CommunityImageKind, number> = {
+export const IMAGE_MAX_BYTES: Record<PictureKind, number> = {
   logo: MIB,
   banner: 3 * MIB,
+  cover: 3 * MIB,
 };
 
 /** What a file input offers: the three types the service takes. */
@@ -52,7 +53,7 @@ export interface PreparedImage {
 /** Checks a picked file the way the service will, and hashes it. */
 export async function prepareImage(
   file: Blob & { name?: string },
-  kind: CommunityImageKind,
+  kind: PictureKind,
 ): Promise<{ refused: ImageRefusal } | { image: PreparedImage }> {
   const fileName = file.name ?? "";
   const maxBytes = IMAGE_MAX_BYTES[kind];
@@ -82,7 +83,7 @@ export async function pictureSize(blob: Blob): Promise<{ width: number; height: 
  */
 export async function uploadImageFile(
   file: Blob & { name?: string },
-  kind: CommunityImageKind,
+  kind: PictureKind,
   putBlob: (sha256: string, file: Blob) => Promise<void>,
 ): Promise<{ refused: ImageRefusal } | { uploaded: UploadedImage }> {
   const prepared = await prepareImage(file, kind);

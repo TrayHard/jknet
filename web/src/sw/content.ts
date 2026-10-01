@@ -14,7 +14,8 @@
  * | `none`   | kind and conversation only      | "JKNet" and "Activity in JKNet"    |
  *
  * One notification per conversation (`c:<id>`), one for friend requests, one
- * per server invite; a mention alerts again (`renotify`). While a window of
+ * per server invite, one per event of a community (`e:<id>`); a mention and
+ * the reminder of an event alert again (`renotify`). While a window of
  * the app is open the notification is silent: the page has played the
  * chat's sound already.
  *
@@ -35,6 +36,11 @@ export interface PushStrings {
   friendAccepted: string;
   invite: string;
   test: string;
+  // --- slice: community events ---
+  eventCreated: string;
+  eventChanged: string;
+  eventCancelled: string;
+  eventReminder: string;
 }
 
 /** The fields of a payload the notification reads; anything else is ignored. */
@@ -54,6 +60,11 @@ export interface PushPayload {
   inviteId?: string;
   badge?: number;
   silent?: boolean;
+  // --- slice: community events --- `community.event`: the event, why, its community and start.
+  eventId?: string;
+  eventKind?: string;
+  community?: string;
+  startsAt?: string;
 }
 
 export interface NotificationPlan {
@@ -107,7 +118,16 @@ export function payloadOf(raw: unknown): PushPayload {
     inviteId: text(value.inviteId) ?? undefined,
     badge: typeof value.badge === "number" && Number.isFinite(value.badge) ? Math.max(0, Math.floor(value.badge)) : undefined,
     silent: value.silent === true,
+    eventId: text(value.eventId) ?? undefined,
+    eventKind: text(value.eventKind) ?? undefined,
+    community: text(value.community) ?? undefined,
+    startsAt: text(value.startsAt) ?? undefined,
   };
+}
+
+/** The address an event's notification opens. */
+export function eventUrl(eventId: string): string {
+  return `/events/${encodeURIComponent(eventId)}`;
 }
 
 /** The address a conversation's notification opens. */
@@ -132,6 +152,10 @@ export function targetOf(payload: PushPayload): { tag: string; url: string } {
       return { tag: payload.inviteId === undefined ? "invites" : `invite:${payload.inviteId}`, url: "/friends/requests" };
     case "test":
       return { tag: "test", url: "/settings/notifications" };
+    // --- slice: community events --- one notification per event: a reminder replaces the announcement.
+    case "community.event":
+      if (payload.eventId !== undefined) return { tag: `e:${payload.eventId}`, url: eventUrl(payload.eventId) };
+      return { tag: "events", url: "/events" };
     default:
       if (conversation !== undefined) return { tag: `c:${conversation}`, url: threadUrl(conversation) };
       return { tag: "jknet", url: "/chats" };
@@ -177,8 +201,34 @@ function wordsOf(payload: PushPayload, strings: PushStrings): { title: string; b
       return payload.sender === undefined ? generic : { title: payload.sender, body: strings.invite };
     case "test":
       return { title: APP_TITLE, body: strings.test };
+    // --- slice: community events ---
+    case "community.event":
+      return eventWords(payload, strings) ?? generic;
     default:
       return generic;
+  }
+}
+
+/**
+ * The words of an event: who announced it, or what happened to it. `null`
+ * when the preview level left the title out.
+ */
+function eventWords(payload: PushPayload, strings: PushStrings): { title: string; body: string } | null {
+  if (payload.title === undefined) return null;
+  switch (payload.eventKind) {
+    case "created":
+      return {
+        title: payload.community === undefined ? APP_TITLE : fill(strings.eventCreated, { community: payload.community }),
+        body: payload.title,
+      };
+    case "changed":
+      return { title: payload.title, body: strings.eventChanged };
+    case "cancelled":
+      return { title: payload.title, body: strings.eventCancelled };
+    case "reminder":
+      return { title: payload.title, body: strings.eventReminder };
+    default:
+      return { title: payload.title, body: strings.activity };
   }
 }
 
@@ -196,7 +246,8 @@ export function notificationOf(raw: unknown, stringsFor: (lang: string) => PushS
     options: {
       body,
       tag,
-      renotify: payload.mention === true,
+      // A mention, and the reminder of an event: both are worth a second sound.
+      renotify: payload.mention === true || (payload.kind === "community.event" && payload.eventKind === "reminder"),
       silent: windowOpen || payload.silent === true,
       icon: ICON,
       badge: BADGE_ICON,
