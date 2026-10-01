@@ -454,6 +454,7 @@
       "errors": {
         "noAccess": "Der Bot hat den Zugriff auf den Discord-Server verloren: Er wurde entfernt, oder seine Rolle kann die Kanäle nicht sehen. Verbinden Sie ihn erneut.",
         "announcementsHidden": "Nicht alle Mitglieder des Servers sehen den Ankündigungskanal. Wählen Sie einen anderen Kanal, oder geben Sie diesen für alle frei.",
+        "announcementsHistoryHidden": "Alle auf dem Server sehen den Ankündigungskanal, können seinen Verlauf aber nicht lesen. Erlaube allen, den Nachrichtenverlauf zu lesen, oder wähle einen anderen Kanal.",
         "announcementsDenied": "Der Bot kann den Ankündigungskanal nicht lesen. Erteilen Sie ihm in diesem Kanal die Berechtigungen „Kanäle ansehen“ und „Nachrichtenverlauf anzeigen“.",
         "botToken": "Discord hat den Bot von JKNet Online abgelehnt. Das muss das JKNet-Team beheben; bis dahin zeigt die Seite, was der Bot zuletzt ausgelesen hat.",
         "unavailable": "Discord hat dem Bot nicht geantwortet. Er versucht es innerhalb von 5 Minuten erneut."

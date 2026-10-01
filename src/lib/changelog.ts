@@ -12,7 +12,14 @@ export const CHANGELOG_RELEASES = [
     key: "unreleased",
     version: null,
     date: null,
-    items: [],
+    items: [
+      "entries.v0_11_0_communities",
+      "entries.v0_11_0_catalog",
+      "entries.v0_11_0_events",
+      "entries.v0_11_0_notifications",
+      "entries.v0_11_0_management",
+      "entries.v0_11_0_privacy",
+    ],
   },
   {
     key: "v0_10_0",

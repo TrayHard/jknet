@@ -11,6 +11,12 @@
     "release": "Version"
   },
   "entries": {
+    "v0_11_0_communities": "Communitys ersetzen die bisherigen Serverseiten: Eine Community bündelt bis zu 10 Server mit den Spielern darauf, ihre Stammspieler, Events und News. Folge einer Community, um sie immer griffbereit zu haben.",
+    "v0_11_0_catalog": "Der Community-Katalog filtert nach Spiel, Tags, Sprache und Region, sortiert nach Followern, Spielerstunden oder Spielern online und zeigt die Top der Woche.",
+    "v0_11_0_events": "Die Seite Events zeigt die Events der Communitys als Monat oder als Liste. Antworte mit „Dabei“ oder „Vielleicht“, füge ein Event deinem Kalender hinzu, und ab 30 Minuten vor dem Start bereitet „Beitreten“ deinen Client vor und verbindet dich mit dem Server.",
+    "v0_11_0_notifications": "Hinweise im Launcher und Windows-Benachrichtigungen melden Events und News der Communitys, denen du folgst, und erinnern 15 Minuten vorher an Events, auf die du geantwortet hast. Jede Art hat in den Einstellungen einen eigenen Schalter.",
+    "v0_11_0_management": "Besitzer und Redakteure führen ihre Community auf einem Bildschirm: Texte, Logo und Titelbild, Links, Tags, empfohlene Dateien, per Code bestätigte Server, Redakteure, News und den JKNet-Bot, der Ankündigungen aus Discord auf die Seite bringt.",
+    "v0_11_0_privacy": "Community-Seiten zeigen ihre Stammspieler. Schalte in den Einstellungen „Mich als Stammspieler in Communitys zeigen“ aus, um aus allen Listen zu verschwinden. JKNet Online löscht dann die gezählte Spielzeit.",
     "v0_10_0_webApp": "Chatte mit Freunden vom Handy oder aus jedem Browser: Melde dich auf online.jknet.app an und lege JKNet auf den Startbildschirm.",
     "v0_10_0_signIn": "Die Anmeldung im Browser ist jetzt an den Launcher gebunden, der sie gestartet hat. Ein fremder Anmeldelink gibt dein Konto nicht mehr an den Absender weiter.",
     "v0_10_0_attachments": "Das Anhangmenü im Chat ist in Dateien, Medien, Spieldaten, Einstellungen und Kataloge gegliedert. Karten, Konfigurationen und Spielerprofile kommen aus allen deinen Clients in einer Liste, die ihre Herkunft zeigt.",

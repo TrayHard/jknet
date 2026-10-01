@@ -338,12 +338,14 @@ function BotHint({ bot, onBot }: { bot: DiscordBot; onBot?: () => void }) {
 }
 
 /** The key of a code of the bot's last failure; a code this launcher does not know reads as Discord not answering. */
-export function botErrorKey(code: string): "noAccess" | "announcementsHidden" | "announcementsDenied" | "botToken" | "unavailable" {
+export function botErrorKey(code: string): "noAccess" | "announcementsHidden" | "announcementsHistoryHidden" | "announcementsDenied" | "botToken" | "unavailable" {
   switch (code) {
     case "no_access":
       return "noAccess";
     case "announcements_hidden":
       return "announcementsHidden";
+    case "announcements_history_hidden":
+      return "announcementsHistoryHidden";
     case "announcements_denied":
       return "announcementsDenied";
     case "bot_token":

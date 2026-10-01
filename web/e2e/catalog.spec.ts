@@ -309,6 +309,10 @@ test("a bundle's page opens from a link, and the menu counts what the catalogs h
 test("a page of the community catalog that is not there says so", async ({ page }) => {
   await signIn(page, uniqueName("Kyle"));
   await visit(page, "/community/01J9Z3M2K4V8Q6R5T7W9X1Y2Z3");
-  await expect(page.getByTestId("community-details").getByRole("alert")).toBeVisible({ timeout: 15_000 });
+  // The page says so in its empty state, with the way back to the catalog.
+  const details = page.getByTestId("community-details");
+  await expect(details.getByRole("heading", { name: COMMUNITY.page.notFoundTitle })).toBeVisible({ timeout: 15_000 });
+  await expect(details).toContainText(COMMUNITY.page.notFound);
+  await expect(details.getByRole("button", { name: COMMUNITY.page.back })).toBeVisible();
   await expectNoGameControls(page);
 });

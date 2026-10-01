@@ -179,11 +179,12 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
         </div>
       )}
 
+      {/* The tabs wrap on a narrow page instead of scrolling sideways: a phone shows every tab. */}
       <Tabs
         tabs={tabs}
         value={tab}
         onChange={(next) => platform.navigate({ view: "catalog", tab: next })}
-        className="overflow-x-auto pb-px [scrollbar-width:none]"
+        className="flex-wrap pb-px"
       />
 
       {error ? (

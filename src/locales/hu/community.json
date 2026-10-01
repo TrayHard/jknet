@@ -454,6 +454,7 @@
       "errors": {
         "noAccess": "A bot elvesztette a hozzáférést a Discord-szerverhez: eltávolították, vagy a rangja nem láthatja a csatornákat. Csatlakoztassa újra.",
         "announcementsHidden": "A bejelentési csatornát nem látja mindenki a szerveren. Válasszon másik csatornát, vagy tegye ezt mindenki számára láthatóvá.",
+        "announcementsHistoryHidden": "A szerveren mindenki látja a bejelentések csatornáját, de az előzményeit senki sem olvashatja. Engedd meg mindenkinek az üzenetelőzmények olvasását, vagy válassz másik csatornát.",
         "announcementsDenied": "A bot nem tudja olvasni a bejelentési csatornát. Adja meg neki ebben a csatornában a „Csatornák megtekintése” és az „Üzenetelőzmények olvasása” engedélyt.",
         "botToken": "A Discord elutasította a JKNet Online botját. Ezt a JKNet csapatának kell kijavítania; addig az oldalon a bot által legutóbb beolvasott tartalom marad.",
         "unavailable": "A Discord nem válaszolt a botnak. A bot 5 percen belül újra próbálkozik."

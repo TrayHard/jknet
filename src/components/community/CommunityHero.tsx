@@ -132,7 +132,11 @@ export function CommunityHero({
           <CommunityLogo card={community} size="hero" className="-mt-48 shadow-[0_0_0_4px_var(--color-bg-surface)]" />
           <div className="flex min-w-0 flex-1 flex-col gap-4 pt-16 @max-[560px]/community:pt-0">
             <div className="flex flex-wrap items-center gap-x-12 gap-y-8">
-              <h1 id="community-name" className="min-w-0 text-display-lg text-fg [overflow-wrap:anywhere]">
+              {/* A phone sets a long name a size smaller (display-md), so it does not break after every word. */}
+              <h1
+                id="community-name"
+                className="min-w-0 text-display-lg text-fg [overflow-wrap:anywhere] @max-[560px]/community:text-[length:22px] @max-[560px]/community:leading-[28px]"
+              >
                 {community.name}
               </h1>
               {community.featured ? (

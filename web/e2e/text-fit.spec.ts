@@ -653,7 +653,17 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
   const bundle = `/bundles/${encodeURIComponent(seeded.bundleId)}${bundleSearch}`;
   const communitySearch = async (page: Page) => {
     const box = page.getByPlaceholder(community.catalog.searchPlaceholder, { exact: true });
-    if (await box.isVisible()) await box.fill(seeded.communityName);
+    if (!(await box.isVisible()) || (await box.inputValue()) === seeded.communityName) return;
+    // The catalog asks the service 300 ms after the last key and shows no
+    // cards until the answer: wait for it, so no later width is measured, or
+    // its marker looked for, while the list is between two answers.
+    const answered = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/v1/community/communities" && url.searchParams.get("q") === seeded.communityName;
+    });
+    await box.fill(seeded.communityName);
+    await answered;
+    await expect(page.getByText(seeded.communityName, { exact: false }).first()).toBeVisible();
   };
   const cards = ["[data-testid=card-actions]", "[data-testid=card-facts]"];
   return [

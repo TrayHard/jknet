@@ -500,6 +500,7 @@
       "errors": {
         "noAccess": "Bot stracił dostęp do serwera Discord: został z niego usunięty albo jego rola nie widzi kanałów. Podłącz go ponownie.",
         "announcementsHidden": "Nie wszyscy na serwerze widzą kanał ogłoszeń. Wybierz inny kanał albo udostępnij ten kanał wszystkim.",
+        "announcementsHistoryHidden": "Wszyscy na serwerze widzą kanał ogłoszeń, ale nikt nie może czytać jego historii. Pozwól wszystkim czytać historię wiadomości albo wybierz inny kanał.",
         "announcementsDenied": "Bot nie może odczytać kanału ogłoszeń. Nadaj mu w tym kanale uprawnienia „Wyświetlanie kanałów” i „Czytanie historii wiadomości”.",
         "botToken": "Discord odrzucił bota JKNet Online. Naprawić to musi zespół JKNet, a do tego czasu strona pokazuje ostatnio odczytane dane.",
         "unavailable": "Discord nie odpowiedział botowi. Bot spróbuje ponownie w ciągu 5 minut."

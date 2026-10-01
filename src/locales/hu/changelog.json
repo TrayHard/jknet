@@ -11,6 +11,12 @@
     "release": "Kiadás"
   },
   "entries": {
+    "v0_11_0_communities": "A közösségek felváltják a korábbi szerveroldalakat: egy közösség legfeljebb 10 szervert fog össze a rajtuk játszó játékosokkal, valamint a törzsjátékosait, eseményeit és híreit. Kövesd a közösséget, hogy mindig kéznél legyen.",
+    "v0_11_0_catalog": "A közösségek katalógusa játék, címke, nyelv és régió szerint szűr, követők, játékosórák vagy online játékosok szerint rendez, és megmutatja a heti toplistát.",
+    "v0_11_0_events": "Az Események oldal hónapnézetben vagy listában mutatja a közösségek eseményeit. Válaszolj „Megyek” vagy „Talán” gombbal, add hozzá az eseményt a naptáradhoz, a „Csatlakozás” pedig a kezdés előtt 30 perccel előkészíti a kliensedet, és csatlakoztat a szerverhez.",
+    "v0_11_0_notifications": "A felugró értesítések és a Windows-értesítések jelzik a követett közösségek eseményeit és híreit, és 15 perccel a kezdés előtt emlékeztetnek azokra az eseményekre, amelyekre válaszoltál. Minden fajtának saját kapcsolója van a beállításokban.",
+    "v0_11_0_management": "A tulajdonos és a szerkesztők egyetlen képernyőn kezelik a közösséget: szövegek, logó és borítókép, hivatkozások, címkék, ajánlott fájlok, kóddal igazolt szerverek, szerkesztők, hírek és a JKNet-bot, amely a Discord közleményeit az oldalra hozza.",
+    "v0_11_0_privacy": "A közösségi oldalak megmutatják a törzsjátékosaikat. Kapcsold ki a beállításokban a „Megjelenés a közösségek törzsjátékosai között” lehetőséget, hogy minden listáról lekerülj. A JKNet Online ekkor törli az eddig számolt játékidődet.",
     "v0_10_0_webApp": "Csevegj a barátaiddal telefonról vagy bármelyik böngészőből: jelentkezz be az online.jknet.app oldalon, és tedd ki a JKNetet a kezdőképernyőre.",
     "v0_10_0_signIn": "A böngészős bejelentkezés mostantól ahhoz a launcherhez kötődik, amelyik elindította: egy mástól kapott bejelentkezési hivatkozás már nem adja át a fiókodat a küldőnek.",
     "v0_10_0_attachments": "A csevegés mellékletmenüje fájlokra, médiára, játékadatokra, beállításokra és katalógusokra oszlik. A pályák, konfigurációk és játékosprofilok az összes kliensedből egyetlen listába kerülnek, amely a forrásukat is mutatja.",

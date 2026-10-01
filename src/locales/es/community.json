@@ -477,6 +477,7 @@
       "errors": {
         "noAccess": "El bot perdió el acceso al servidor de Discord: lo quitaron del servidor o su rol no puede ver los canales. Vuelva a conectarlo.",
         "announcementsHidden": "No todos los miembros del servidor ven el canal de anuncios. Elija otro canal o haga que este sea visible para todos.",
+        "announcementsHistoryHidden": "Todos en el servidor ven el canal de anuncios, pero nadie puede leer su historial. Permite que todos lean su historial de mensajes o elige otro canal.",
         "announcementsDenied": "El bot no puede leer el canal de anuncios. Concédale en ese canal los permisos «Ver canales» y «Leer el historial de mensajes».",
         "botToken": "Discord rechazó el bot de JKNet Online. El equipo de JKNet tiene que solucionarlo; mientras tanto, la página conserva lo último que leyó el bot.",
         "unavailable": "Discord no respondió al bot. El bot volverá a intentarlo en los próximos 5 minutos."

@@ -46,7 +46,7 @@ export function CatalogCard({
   return (
     <article
       className={cn(
-        "relative flex min-w-0 flex-col overflow-hidden rounded-lg border bg-surface transition-colors hover:border-line-strong hover:bg-surface-hover",
+        "@container/card relative flex min-w-0 flex-col overflow-hidden rounded-lg border bg-surface transition-colors hover:border-line-strong hover:bg-surface-hover",
         selected ? "border-line-accent" : "border-line",
       )}
     >
@@ -75,9 +75,11 @@ export function CatalogCard({
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-8 px-16 pb-16">
-        <div className="-mt-24 flex min-w-0 items-start gap-12">
+        {/* A card narrower than 320 px (a phone, the list pane of the web app) puts the name
+            under the logo: beside it the name would break after nearly every word. */}
+        <div className="-mt-24 flex min-w-0 items-start gap-12 @max-[320px]/card:flex-col @max-[320px]/card:gap-8">
           <CommunityLogo card={card} size="xl" className="shadow-[0_0_0_3px_var(--color-bg-surface)]" />
-          <div className="flex min-w-0 flex-1 flex-col gap-2 pt-28">
+          <div className="flex min-w-0 flex-1 flex-col gap-2 pt-28 @max-[320px]/card:w-full @max-[320px]/card:pt-0">
             <h3 className="flex min-w-0 items-center gap-6 text-heading-sm text-fg">
               <RouteLink
                 route={{ view: "community", id: card.id, tab: "overview" }}
