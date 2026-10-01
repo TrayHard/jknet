@@ -1,85 +1,144 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { useNavigate, useParams, useSearchParams } from "react-router";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { CommunityBrowser, type CommunityLabels } from "../components/community/CommunityBrowser";
-import type { CommunityRequest, CommunityServer } from "../components/community/types";
-import { communityIpc, jkhubIpc } from "../lib/ipc";
-import { useAccountState, useClients, useRunningGame, useLaunchClient, useAddServerHistory } from "../lib/queries";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router";
+
+import { Notice } from "../components/community/bits";
+import {
+  CommunityApp,
+  catalogTab,
+  pageTab,
+  type CommunityLiveStatus,
+  type CommunityPlatform,
+  type CommunityRequest,
+  type CommunityRoute,
+  type Game,
+} from "../components/community";
 import { useErrorText } from "../i18n/errors";
+import { bundlesTabRoute } from "../lib/bundleRoutes";
+import { communityIpc, serversIpc, type ServerStatus } from "../lib/ipc";
+import { useAccountState, useActiveGame, useOnlineUrl } from "../lib/queries";
+import { isTauri } from "../lib/runtime";
+import { LauncherFiles, LauncherPlay, LauncherPlayProvider } from "./communityPlay";
+
+/** The website's page of a community: what **Share** copies. */
+const PUBLIC_PAGE = "https://jknet.app/servers/";
+
+/** The anchor of the setting on the Settings screen: `#/settings?section=regulars`. */
+const PRIVACY_ROUTE = "/settings?section=regulars";
 
 const request: CommunityRequest = (method, path, body) => communityIpc.request(method, path, body);
+
+/** What a server said to `getstatus`, as the community screens read it. */
+export function liveOf(status: ServerStatus): CommunityLiveStatus {
+  const number = (key: string) => {
+    const value = Number.parseInt(status.info[key] ?? "", 10);
+    return Number.isFinite(value) ? value : null;
+  };
+  const bots = status.players.filter((player) => player.isBot).length;
+  const hostname = status.info.sv_hostname ?? "";
+  return {
+    hostnameRaw: hostname,
+    hostnameClean: hostname.replace(/\^\d/g, "").trim(),
+    map: status.info.mapname ?? "",
+    gametype: number("g_gametype"),
+    players: status.players.length - bots,
+    bots,
+    maxPlayers: number("sv_maxclients") ?? 0,
+    password: status.info.g_needpass === "1",
+    at: new Date().toISOString(),
+    names: status.players.map((player) => ({
+      nameRaw: player.nameRaw,
+      nameClean: player.nameClean,
+      score: player.score,
+      ping: player.ping,
+      bot: player.isBot,
+    })),
+  };
+}
+
+const serverStatus = (address: string, game: Game) => serversIpc.getServerStatus(address, game).then(liveOf);
+
+/** The path of a route inside the launcher's router. */
+function pathOf(route: CommunityRoute): string {
+  if (route.view === "catalog") return route.tab === "catalog" ? "/community" : `/community?tab=${route.tab}`;
+  const base = `/community/${encodeURIComponent(route.id)}`;
+  return route.tab === "overview" ? base : `${base}?tab=${route.tab}`;
+}
+
+/**
+ * **Community**: the catalogue at `#/community` and a page at
+ * `#/community/:id`, each with `?tab=` for its tabs. The screens are the
+ * shared ones of `components/community`; this page gives them the launcher —
+ * the core's bridge to the service, the account, the system browser, the
+ * active game of the sidebar, the UDP status of the servers and the client,
+ * install and join of **Play**.
+ *
+ * `?address=&name=&game=` on the catalogue comes from the Servers screen: the
+ * community of that server opens, or the dialog that creates one.
+ */
 export function CommunityPage() {
-  const { t } = useTranslation("servers");
-  const labels = t("community", { returnObjects: true }) as CommunityLabels;
-  const account = useAccountState();
   const { id } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [externalError, setExternalError] = useState("");
-  const openExternal = useCallback((url: string) => { void openUrl(url).catch(error => setExternalError(String(error))); }, []);
-  return <div className="flex-1 min-h-0 overflow-y-auto">{externalError && <p role="alert">{externalError}</p>}<CommunityBrowser
-    request={request} labels={labels} signedIn={account.data?.onlineSignedIn ?? false} accountKey={account.data?.onlineUser?.id ?? ""}
-    signIn={() => navigate("/settings")} pageId={id} navigate={page => navigate(page ? `/community/${page}` : "/community")}
-    seed={params.has("address") ? { address: params.get("address")!, name: params.get("name") ?? "", game: params.get("game") === "jo" ? "jo" : "ja" } : undefined}
-    openExternal={openExternal} renderInstall={server => <InstallRecommendations key={server.id + server.revision} server={server} labels={labels} />}
-  /></div>;
-}
-
-function InstallRecommendations({ server, labels: l }: { server: CommunityServer; labels: CommunityLabels }) {
-  const clients = useClients();
-  const running = useRunningGame();
-  const launch = useLaunchClient();
-  const history = useAddServerHistory();
+  const account = useAccountState();
+  const game = useActiveGame();
+  const apiBase = useOnlineUrl();
   const errorText = useErrorText();
-  const choices = clients.data?.filter(c => c.game === server.game && c.engineInstalledAt) ?? [];
-  const [chosen, setChosen] = useState("");
-  const clientId = choices.some(c => c.id === chosen) ? chosen : choices[0]?.id ?? "";
-  const [busy, setBusy] = useState(false);
-  const [current, setCurrent] = useState("");
-  const [done, setDone] = useState<number[]>([]);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
-  const cancel = useRef(false);
-  const locked = useRef(false);
-  const alive = useRef(true);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; cancel.current = true; }; }, []);
-  async function run(install: boolean, join: boolean) {
-    if (locked.current || !clientId || running.data || running.isPending || running.isError) return;
-    locked.current = true; cancel.current = false; setBusy(true); setError(""); setNotice("");
-    let currentFile = "";
-    try {
-      if (install) {
-        // Always recheck the entire list. The core compares every archive member,
-        // so a removed file is restored and a partially installed pack is repaired.
-        setDone([]);
-        for (const file of server.recommendations) {
-          if (cancel.current) break;
-          setCurrent(file.title); currentFile = file.title;
-          const detail = await jkhubIpc.file(file.jkhubId);
-          if (detail.game !== server.game && detail.game !== "both") throw new Error(l.wrongGame);
-          if (cancel.current) break;
-          const result = await jkhubIpc.install(file.jkhubId, clientId, false, true);
-          if (result.kind !== "installed") throw new Error(result.kind === "conflicts" ? l.conflicts : l.unsupported);
-          if (alive.current) setDone(ids => [...ids, file.jkhubId]);
-        }
+  const [externalError, setExternalError] = useState<string | null>(null);
+
+  const signedIn = account.data?.onlineSignedIn ?? false;
+  const accountId = account.data?.onlineUser?.id ?? null;
+  const route: CommunityRoute = id ? { view: "community", id, tab: pageTab(params.get("tab")) } : { view: "catalog", tab: catalogTab(params.get("tab")) };
+  const seedAddress = id ? null : params.get("address");
+  const seedName = params.get("name") ?? "";
+  const seedGame: Game = params.get("game") === "jo" ? "jo" : "ja";
+
+  const openExternal = useCallback(
+    (url: string) => {
+      setExternalError(null);
+      if (!isTauri()) {
+        window.open(url, "_blank", "noopener,noreferrer");
+        return;
       }
-      if (cancel.current) { if (alive.current) setNotice(l.stopped); return; }
-      if (install) setNotice(l.complete);
-      if (join && alive.current) {
-        await launch.mutateAsync({ clientId, connect: server.address });
-        history.mutate({ address: server.address, clientId, game: server.game });
-      }
-    } catch (err) { if (alive.current) setError(`${currentFile ? currentFile + ": " : ""}${errorText(err)}`); }
-    finally { locked.current = false; if (alive.current) { setBusy(false); setCurrent(""); } }
-  }
-  const disabled = busy || !clientId || !!running.data || running.isPending || running.isError;
-  return <div className="community-install"><label>{l.client}<select value={clientId} disabled={busy} onChange={e => { setChosen(e.target.value); setDone([]); setError(""); setNotice(""); }}>{choices.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-    {!clientId && <p>{l.noClient}</p>}{running.data && <p>{l.running}</p>}{running.isError && <p role="alert">{errorText(running.error)}</p>}
-    {!!server.recommendations.length && <><p>{l.installHint}</p><button disabled={disabled} onClick={() => void run(true, false)}>{error ? l.retry : l.installAll}</button><button className="community-primary" disabled={disabled} onClick={() => void run(true, true)}>{l.installJoin}</button></>}
-    <button disabled={disabled} onClick={() => void run(false, true)}>{l.join}</button>
-    {busy && <><p role="status">{l.installing}: {current} ({done.length}/{server.recommendations.length})</p><button onClick={() => { cancel.current = true; }}>{l.stop}</button></>}
-    {!!done.length && <p>{l.installed}: {done.length}/{server.recommendations.length}</p>}
-    {error && <p className="community-error" role="alert">{current && `${current}: `}{error}</p>}{notice && <p role="status">{notice}</p>}
-  </div>;
+      openUrl(url).catch((error: unknown) => setExternalError(errorText(error)));
+    },
+    [errorText],
+  );
+
+  const platform = useMemo<CommunityPlatform>(
+    () => ({
+      host: "launcher",
+      request,
+      signedIn,
+      accountId,
+      apiBase,
+      signIn: () => navigate("/settings?section=account"),
+      openExternal,
+      navigate: (next) => navigate(pathOf(next)),
+      href: (next) => `#${pathOf(next)}`,
+      canManage: true,
+      game,
+      pageUrl: (communityId) => `${PUBLIC_PAGE}?id=${encodeURIComponent(communityId)}`,
+      renderPlay: (context) => <LauncherPlay {...context} />,
+      renderFiles: (community) => <LauncherFiles community={community} />,
+      serverStatus,
+      openBundle: (bundleId) => navigate(bundlesTabRoute(bundleId)),
+      openPrivacySettings: () => navigate(PRIVACY_ROUTE),
+      seed: seedAddress ? { address: seedAddress, name: seedName, game: seedGame } : undefined,
+    }),
+    [signedIn, accountId, apiBase, navigate, openExternal, game, seedAddress, seedName, seedGame],
+  );
+
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      {externalError ? (
+        <div className="px-24 pt-16">
+          <Notice tone="danger">{externalError}</Notice>
+        </div>
+      ) : null}
+      <LauncherPlayProvider>
+        <CommunityApp platform={platform} route={route} />
+      </LauncherPlayProvider>
+    </div>
+  );
 }

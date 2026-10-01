@@ -301,6 +301,12 @@ pub struct Me {
     /// Whether this account may manage the featured server mod list.
     #[serde(default)]
     pub server_mod_admin: bool,
+    // --- slice: communities ---
+    /// Whether the account shows among the regular players of the
+    /// communities it plays in. `None` from a service older than the
+    /// communities feature, which has no such setting.
+    #[serde(default)]
+    pub show_in_regulars: Option<bool>,
 }
 
 /// Someone on the friends list, with where they are.

@@ -19,6 +19,8 @@ import type chat from "../locales/en/chat.json";
 import type changelog from "../locales/en/changelog.json";
 import type clients from "../locales/en/clients.json";
 import type common from "../locales/en/common.json";
+// --- slice: communities ---
+import type community from "../locales/en/community.json";
 import type errors from "../locales/en/errors.json";
 import type friends from "../locales/en/friends.json";
 import type games from "../locales/en/games.json";
@@ -72,6 +74,8 @@ declare module "i18next" {
       host: typeof host;
       // --- slice: chat ---
       chat: typeof chat;
+      // --- slice: communities ---
+      community: typeof community;
       // --- slice: web app ---
       web: typeof web;
     };

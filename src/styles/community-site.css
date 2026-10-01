@@ -1,0 +1,143 @@
+/*
+ * The community screens on the website, jknet.app/servers/.
+ *
+ * The page is the site's: its header, its fonts and `site.css`, whose rules
+ * name bare elements — `h2` at 46 px, `p` in the site's grey, `button`
+ * without a border — outside every cascade layer. An unlayered rule beats a
+ * layered one whatever its specificity, so left alone the site's `h2` would
+ * win over `text-heading-sm` of the screens.
+ *
+ * So this sheet brings the launcher's theme and the utilities the shared
+ * components use — scanned from those components only — without Tailwind's
+ * global preflight, which would restyle the site's header; a preflight of
+ * its own, scoped to the screens and to the popovers of the kit that render
+ * into `body`; and, outside the layers, one rule that reverts the site's
+ * rules to the layers inside the screens.
+ */
+
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+@source "../components/community";
+@source "../components/ui";
+@source "../components/servers/Tabs.tsx";
+@source "../components/servers/ServerName.tsx";
+@source "../community-site.tsx";
+
+@import "./tokens.css";
+@import "./theme.css";
+
+/* The display face of the Cyrillic languages, as `fonts.css` of the
+   launcher sets it: Chakra Petch has no Cyrillic. */
+html[lang="ru"],
+html[lang="uk"] {
+  --font-display: "Exo 2", "Segoe UI", system-ui, sans-serif;
+}
+
+/* Muted text at 4.5:1 on the page and on its surfaces, as the web app has it:
+   a website is read in daylight too. */
+:root {
+  --color-text-muted: #808ba3;
+}
+
+@layer base {
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]),
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) *,
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) ::before,
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) ::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :where(.jk-community) :where(h1, h2, h3, h4, h5, h6) {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) :where(ol, ul, menu) {
+    list-style: none;
+  }
+
+  :where(.jk-community) :where(a) {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  :where(.jk-community) :where(b, strong) {
+    font-weight: bolder;
+  }
+
+  :where(.jk-community) :where(code, kbd, samp, pre) {
+    font-family: var(--font-mono);
+    font-size: 1em;
+  }
+
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) :where(img, svg, video, canvas) {
+    display: block;
+    vertical-align: middle;
+  }
+
+  :where(.jk-community) :where(img, video) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) :where(button, input, select, textarea) {
+    font: inherit;
+    letter-spacing: inherit;
+    color: inherit;
+    background-color: transparent;
+    border-radius: 0;
+  }
+
+  :where(.jk-community) :where(textarea) {
+    resize: vertical;
+  }
+
+  :where(.jk-community) ::placeholder {
+    color: var(--color-text-muted);
+    opacity: 1;
+  }
+
+  :where(.jk-community) :where([hidden]:not([hidden="until-found"])) {
+    display: none !important;
+  }
+
+  :where(.jk-community, body > [role="listbox"], body > [role="menu"]) :focus-visible {
+    outline: 2px solid var(--color-border-focus);
+    outline-offset: 2px;
+  }
+
+  :where(.jk-community) :where(button, [role="tab"], [role="switch"], svg) {
+    user-select: none;
+  }
+}
+
+/*
+ * Outside the layers on purpose: inside the screens and the kit's popovers,
+ * whatever the site's unlayered rules set falls back to the layers above —
+ * the scoped preflight, the components and the utilities. The site's
+ * `!important` rules, such as reduced motion, still apply.
+ */
+.jk-community,
+.jk-community *,
+.jk-community ::before,
+.jk-community ::after,
+body > [role="listbox"],
+body > [role="listbox"] *,
+body > [role="menu"],
+body > [role="menu"] * {
+  all: revert-layer;
+}

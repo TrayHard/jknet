@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bundleListPath, communityRead, createCatalogs, MAX_BUNDLE_PAGE } from "./catalogs.ts";
+import { bundleListPath, catalogueQuery, communityRoute, createCatalogs, eventsQuery, MAX_BUNDLE_PAGE } from "./catalogs.ts";
 import { NEEDS_LAUNCHER } from "./errors.ts";
 import { createHttp } from "./http.ts";
 
@@ -11,7 +11,7 @@ const ID = "01J9Z3M2K4V8Q6R5T7W9X1Y2Z3";
 function catalogsAnswering(body, { signedIn = true, activeGame = "ja" } = {}) {
   const calls = [];
   const fetchImpl = async (url, init) => {
-    calls.push({ url, method: init.method, auth: init.headers.Authorization ?? null });
+    calls.push({ url, method: init.method, auth: init.headers.Authorization ?? null, body: init.body ?? null });
     return new Response(JSON.stringify(body), { status: 200 });
   };
   const http = createHttp({
@@ -23,19 +23,41 @@ function catalogsAnswering(body, { signedIn = true, activeGame = "ja" } = {}) {
   return { calls, catalogs: createCatalogs({ http, signedIn: () => signedIn, activeGame: () => activeGame }) };
 }
 
-test("the community bridge takes the four reads of the launcher's bridge", () => {
-  assert.deepEqual(communityRead("GET", "servers"), { auth: false });
-  assert.deepEqual(communityRead("GET", `servers/${ID}`), { auth: false });
-  assert.deepEqual(communityRead("GET", "me"), { auth: true });
-  assert.deepEqual(communityRead("GET", "admin/claims"), { auth: true });
+test("the community bridge takes every read of the contract", () => {
+  for (const [path, auth] of [
+    ["communities", "optional"],
+    ["ranking", "optional"],
+    ["events", "optional"],
+    ["servers", "optional"],
+    [`communities/${ID}`, "optional"],
+    [`communities/${ID}/players`, "optional"],
+    [`communities/${ID}/discord`, "optional"],
+    [`communities/${ID}/activity`, "optional"],
+    [`communities/${ID}/events`, "optional"],
+    [`communities/${ID}/posts`, "optional"],
+    [`servers/${ID}`, "optional"],
+    [`events/${ID}`, "optional"],
+    ["me", "required"],
+    ["following", "required"],
+    ["admin/claims", "required"],
+    [`events/${ID}/attendees`, "required"],
+  ]) {
+    assert.deepEqual(communityRoute("GET", path), { path, auth, body: false }, path);
+  }
 });
 
-test("the community bridge refuses writes and paths outside its routes", () => {
+test("the web app follows a community and makes no other write", () => {
+  assert.deepEqual(communityRoute("PUT", `communities/${ID}/follow`), { path: `communities/${ID}/follow`, auth: "required", body: true });
+  assert.deepEqual(communityRoute("DELETE", `communities/${ID}/follow`), { path: `communities/${ID}/follow`, auth: "required", body: false });
   for (const [method, path] of [
+    ["POST", "communities"],
+    ["PUT", `communities/${ID}`],
+    ["POST", `communities/${ID}/servers`],
     ["POST", "servers"],
     ["PUT", `servers/${ID}`],
     ["POST", `servers/${ID}/claims`],
     ["POST", `claims/${ID}/verify`],
+    ["PUT", `events/${ID}/rsvp`],
     ["GET", "../me"],
     ["GET", "servers/../../me"],
     ["GET", "servers?token=x"],
@@ -43,25 +65,71 @@ test("the community bridge refuses writes and paths outside its routes", () => {
     ["GET", "me/extra"],
     ["GET", "servers/short"],
     ["GET", `servers/${ID}/claims`],
+    ["GET", `communities/${ID}/follow`],
+    ["GET", `communities/${ID}?tab=servers`],
     ["DELETE", "servers"],
   ]) {
-    assert.equal(communityRead(method, path), null, `${method} ${path}`);
+    assert.equal(communityRoute(method, path), null, `${method} ${path}`);
   }
 });
 
-test("a community read goes to /v1/community with the token only where the route wants it", async () => {
-  const { calls, catalogs } = catalogsAnswering({ servers: [] });
-  await catalogs.community("GET", "servers");
-  await catalogs.community("GET", "me");
+test("the catalogue query keeps to its keys and lists and is written back", () => {
+  assert.equal(
+    catalogueQuery("game=jo&tag=power-duel&language=ru&region=cis&sort=followers&limit=50&offset=0"),
+    "communities?game=jo&tag=power-duel&language=ru&region=cis&sort=followers&limit=50",
+  );
+  assert.equal(catalogueQuery("q=%D0%94%D1%83%D1%8D%D0%BB%D0%B8+%26+FFA"), "communities?q=%D0%94%D1%83%D1%8D%D0%BB%D0%B8%20%26%20FFA");
+  assert.equal(catalogueQuery("tag=&q="), "communities");
+  for (const query of ["tag=pvp", "language=xx", "region=mars", "game=jk3", "sort=random", "limit=-1", "offset=abc", "token=x", "tag=duel&tag=ffa", "q", "q=%FF", "q=a%0Ab"]) {
+    assert.equal(catalogueQuery(query), null, query);
+  }
+  assert.equal(catalogueQuery(`q=${"a".repeat(101)}`), null);
+  assert.deepEqual(communityRoute("GET", "communities?sort=new&q=duel"), { path: "communities?q=duel&sort=new", auth: "optional", body: false });
+  assert.equal(communityRoute("GET", "communities?sort=random"), null);
+});
+
+test("the calendar query keeps to its keys", () => {
+  assert.equal(
+    eventsQuery(`from=2026-10-01T00:00:00Z&to=2026-11-01&scope=following&game=jo&community=${ID}`),
+    `events?from=2026-10-01T00%3A00%3A00Z&to=2026-11-01&scope=following&game=jo&community=${ID}`,
+  );
+  for (const query of ["scope=mine", "from=yesterday", "community=../me", "limit=10"]) {
+    assert.equal(eventsQuery(query), null, query);
+  }
+});
+
+test("a community read carries the token while there is one, and a guest reads without it", async () => {
+  const signedIn = catalogsAnswering({ communities: [], total: 0 });
+  await signedIn.catalogs.community("GET", "communities?sort=new");
+  await signedIn.catalogs.community("GET", "me");
+  assert.deepEqual(signedIn.calls, [
+    { url: "https://api.example.com/v1/community/communities?sort=new", method: "GET", auth: "Bearer T", body: null },
+    { url: "https://api.example.com/v1/community/me", method: "GET", auth: "Bearer T", body: null },
+  ]);
+  const guest = catalogsAnswering({ communities: [], total: 0 }, { signedIn: false });
+  await guest.catalogs.community("GET", `communities/${ID}`);
+  assert.equal(guest.calls[0].auth, null);
+  await assert.rejects(guest.catalogs.community("GET", "following"), (error) => error.code === "online");
+  assert.equal(guest.calls.length, 1);
+});
+
+test("following sends its body with the token, unfollowing none", async () => {
+  const { calls, catalogs } = catalogsAnswering({ id: ID });
+  await catalogs.community("PUT", `communities/${ID}/follow`, { notify: false });
+  await catalogs.community("PUT", `communities/${ID}/follow`);
+  await catalogs.community("DELETE", `communities/${ID}/follow`, { notify: true });
   assert.deepEqual(calls, [
-    { url: "https://api.example.com/v1/community/servers", method: "GET", auth: null },
-    { url: "https://api.example.com/v1/community/me", method: "GET", auth: "Bearer T" },
+    { url: `https://api.example.com/v1/community/communities/${ID}/follow`, method: "PUT", auth: "Bearer T", body: "{\"notify\":false}" },
+    { url: `https://api.example.com/v1/community/communities/${ID}/follow`, method: "PUT", auth: "Bearer T", body: null },
+    { url: `https://api.example.com/v1/community/communities/${ID}/follow`, method: "DELETE", auth: "Bearer T", body: null },
   ]);
 });
 
 test("a community write is the launcher's, an unknown path is invalid, and neither reaches the service", async () => {
   const { calls, catalogs } = catalogsAnswering({});
+  await assert.rejects(catalogs.community("POST", "communities"), (error) => error.code === NEEDS_LAUNCHER);
   await assert.rejects(catalogs.community("POST", "servers"), (error) => error.code === NEEDS_LAUNCHER);
+  await assert.rejects(catalogs.community("PUT", `communities/${ID}`), (error) => error.code === NEEDS_LAUNCHER);
   await assert.rejects(catalogs.community("GET", "../me"), (error) => error.code === "invalidInput");
   assert.equal(calls.length, 0);
 });

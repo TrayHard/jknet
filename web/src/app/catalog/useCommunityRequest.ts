@@ -1,37 +1,29 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback } from "react";
 
 import type { CommunityRequest } from "../../../../src/components/community/types.ts";
-import { useErrorText } from "../../../../src/i18n/errors.ts";
 import { communityIpc } from "../../../../src/lib/ipc.ts";
 import { setCatalogCount } from "./counts.ts";
 
+/** The filters that make a catalogue answer smaller than the whole catalogue. */
+const FILTERS = ["q=", "tag=", "language=", "region=", "game="];
+
 /**
- * The `request` a `CommunityBrowser` of the web app talks through: the web
- * core's `community_request`, which reads the catalog with the player's
- * token where the route wants one.
+ * The `request` the community screens of the web app talk through: the web
+ * core's `community_request`, which reads the contract with the player's
+ * token where there is one and follows a community with it.
  *
- * The browser prints a failure's message as it is, so a refusal is turned
- * into the sentence the rest of the app shows for it. The function keeps its
- * identity for the life of the screen: the browser loads again whenever it
- * changes. The size of the public list feeds the menu's count.
+ * A failure reaches the screens as the core threw it — the launcher's
+ * envelope of a code, a message and details — and the screens print it in
+ * the words of the `community` catalog. The function keeps its identity for
+ * the life of the app: the screens read again whenever it changes. The size
+ * of the unfiltered catalogue feeds the menu's count.
  */
 export function useCommunityRequest(): CommunityRequest {
-  const errorText = useErrorText();
-  const text = useRef(errorText);
-  useEffect(() => {
-    text.current = errorText;
-  }, [errorText]);
-
   return useCallback(async <T,>(method: string, path: string, body?: unknown): Promise<T> => {
-    let answer: T;
-    try {
-      answer = await communityIpc.request<T>(method, path, body);
-    } catch (error) {
-      throw new Error(text.current(error));
-    }
-    if (method === "GET" && path === "servers") {
-      const servers = (answer as { servers?: unknown }).servers;
-      if (Array.isArray(servers)) setCatalogCount("community", servers.length);
+    const answer = await communityIpc.request<T>(method, path, body);
+    if (method === "GET" && (path === "communities" || path.startsWith("communities?")) && !FILTERS.some((filter) => path.includes(filter))) {
+      const total = (answer as { total?: unknown }).total;
+      if (typeof total === "number") setCatalogCount("community", total);
     }
     return answer;
   }, []) as CommunityRequest;

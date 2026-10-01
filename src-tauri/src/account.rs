@@ -752,6 +752,87 @@ pub async fn update_display_name(
     Ok(user)
 }
 
+// --- slice: communities ---
+/// Whether the account shows among the regular players of communities: the
+/// `showInRegulars` of `GET /v1/me`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegularsPrivacy {
+    /// `None` when the service is older than the communities feature and has
+    /// no such setting: the Settings card then says so instead of a switch.
+    pub show_in_regulars: Option<bool>,
+}
+
+/// Reads the setting from the service. It is not cached in `settings.json`:
+/// the card that shows it is the only reader, and the service is where the
+/// setting lives, for every device of the account.
+#[tauri::command]
+pub async fn get_regulars_privacy(
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+) -> Result<RegularsPrivacy> {
+    let settings = state.settings()?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let me = online.get_me(&ctx).await?;
+    Ok(RegularsPrivacy {
+        show_in_regulars: me.show_in_regulars,
+    })
+}
+
+/// Shows the account among the regular players of communities, or hides it.
+///
+/// Hiding it makes the service forget the days of play it counted. The
+/// answer of `PATCH /v1/me` is the account as the service has it now, and it
+/// replaces the stored copy — the name the sidebar prints included — as long
+/// as the launcher is still signed in with the token the request carried.
+#[tauri::command]
+pub async fn set_show_in_regulars(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    online: tauri::State<'_, OnlineClient>,
+    show: bool,
+) -> Result<RegularsPrivacy> {
+    let settings = state.settings()?;
+    let ctx = OnlineContext::from_settings(&settings);
+    let user = online.patch_show_in_regulars(&ctx, show).await?;
+    if refresh_user(&state, ctx.token.as_deref(), user)? {
+        announce(&app, true, AccountChangeReason::Renamed);
+    }
+    Ok(RegularsPrivacy {
+        show_in_regulars: Some(show),
+    })
+}
+
+/// Replaces the stored account with the one the service just answered, and
+/// says whether anything a screen prints changed.
+///
+/// The flags of the stored copy survive: the contract's `User` carries none
+/// (see [`update_display_name`]). Nothing is written when the token of the
+/// request is no longer the one on file — a sign-out or another sign-in
+/// finished while the request was out — so an answer cannot bring a
+/// session back.
+fn refresh_user(state: &AppState, token: Option<&str>, mut user: OnlineUser) -> Result<bool> {
+    let mut settings = Settings::current(state)?;
+    if token.is_none() || settings.online_token.as_deref() != token {
+        return Ok(false);
+    }
+    let Some(known) = settings.online_user.as_ref() else {
+        return Ok(false);
+    };
+    if known.id != user.id {
+        return Ok(false);
+    }
+    user.admin = known.admin;
+    user.server_mod_admin = known.server_mod_admin;
+    if *known == user {
+        return Ok(false);
+    }
+    settings.online_user = Some(user);
+    settings.save(state)?;
+    state.set_settings(settings)?;
+    Ok(true)
+}
+
 /// Deletes the account, its friendships, its requests and its invites.
 ///
 /// Nothing on this machine goes with it: clients, library files and settings
@@ -1143,6 +1224,28 @@ mod tests {
             !me.user.admin,
             "the flag lives on the answer, not on the user"
         );
+    }
+
+    // --- slice: communities ---
+    #[test]
+    fn the_regulars_setting_reads_out_of_me_and_is_unknown_to_an_older_service() {
+        let me: crate::online::Me = serde_json::from_str(
+            r#"{"user":{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"}}"#,
+        )
+        .expect("an older answer parses");
+        assert_eq!(me.show_in_regulars, None);
+        for (text, show) in [("true", true), ("false", false)] {
+            let me: crate::online::Me = serde_json::from_str(&format!(
+                r#"{{"user":{{"id":"01J","displayName":"Kyle","provider":"jkhub","providerName":"kyle"}},"showInRegulars":{text}}}"#
+            ))
+            .expect("the answer parses");
+            assert_eq!(me.show_in_regulars, Some(show));
+        }
+        let answer = serde_json::to_value(RegularsPrivacy {
+            show_in_regulars: Some(false),
+        })
+        .expect("serializes");
+        assert_eq!(answer, serde_json::json!({ "showInRegulars": false }));
     }
 
     // --- slice: online gate ---

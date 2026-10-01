@@ -2,12 +2,15 @@
  * The read-only catalogs of JKNet Online that the reused components ask the
  * web core for: community servers and bundles.
  *
- * Community servers go through `community_request`, the bridge the
- * launcher's `CommunityBrowser` talks to (`src-tauri/src/community.rs`).
- * The web app only reads the catalog, so the bridge takes the four reads of
- * that module and nothing else: the list, one page, the player's own pages
- * and claims, and an administrator's queue. Adding a page, claiming one and
- * editing it stay with the launcher and the website.
+ * Communities go through `community_request`, the bridge the shared
+ * community screens talk to (`src-tauri/src/community.rs` in the launcher).
+ * The web app reads every page of the contract — the catalogue, a
+ * community, its players and its Discord, the top communities, the player's own
+ * lists — and follows a community with the web session; creating a
+ * community, claiming a server and editing a page stay with the launcher and
+ * the website. The two queries the screens build, the catalogue and the
+ * calendar, are checked key by key and written back, as the launcher's
+ * bridge does.
  *
  * Bundles come from the catalogue the launcher reads (`GET /v1/bundles…`),
  * with the same query `list_bundles` builds (`src-tauri/src/bundles/mod.rs`,
@@ -25,6 +28,14 @@ import type {
   BundleVersion,
   Game,
 } from "../../../src/lib/ipc.ts";
+import {
+  CATALOG_SORT_KEYS,
+  catalogPath,
+  COMMUNITY_LANGUAGES,
+  COMMUNITY_REGIONS,
+  COMMUNITY_TAGS,
+  eventsPath,
+} from "../../../src/components/community/api.ts";
 import { invalidInput, needsLauncher } from "./errors.ts";
 import { segment, type Http } from "./http.ts";
 
@@ -36,8 +47,8 @@ export interface CatalogsDeps {
 }
 
 export interface Catalogs {
-  /** `community_request`: one read of the community catalog. */
-  community(method: string, path: string): Promise<unknown>;
+  /** `community_request`: one read of the communities contract, or following a community. */
+  community(method: string, path: string, body?: unknown): Promise<unknown>;
   /** `list_bundles`: one page of the catalogue of one game. */
   bundles(query: unknown): Promise<BundleList>;
   /** `get_bundle`: one record of the catalogue, with nothing of it installed here. */
@@ -51,36 +62,175 @@ export interface Catalogs {
 /** Most cards one page of the catalogue holds, `MAX_PAGE` of the launcher. */
 export const MAX_BUNDLE_PAGE = 100;
 
-/** A page id of the community catalog: 26 letters and digits, as `route` of `community.rs` checks. */
-function communityId(value: string): boolean {
-  return value.length === 26 && /^[A-Za-z0-9]+$/.test(value);
+/** A ULID of the service: 26 letters and digits, as `route` of `community.rs` checks. */
+function communityId(value: string | undefined): boolean {
+  return value !== undefined && value.length === 26 && /^[A-Za-z0-9]+$/.test(value);
+}
+
+/** The largest search the bridges let through, in characters. */
+const MAX_SEARCH = 100;
+
+/**
+ * The pairs of a query, decoded; `null` for a pair without `=`, a key
+ * given twice or an escape that is not UTF-8.
+ */
+function queryPairs(query: string): Map<string, string> | null {
+  const pairs = new Map<string, string>();
+  for (const pair of query.split("&")) {
+    if (pair === "") continue;
+    const at = pair.indexOf("=");
+    if (at < 0) return null;
+    const key = pair.slice(0, at);
+    let value: string;
+    try {
+      value = decodeURIComponent(pair.slice(at + 1).replace(/\+/g, " "));
+    } catch {
+      return null;
+    }
+    if (pairs.has(key)) return null;
+    pairs.set(key, value);
+  }
+  return pairs;
+}
+
+const count = (value: string) => /^\d{1,5}$/.test(value);
+/** A control character, which no search of a player holds. */
+const CONTROL = /[\u0000-\u001f\u007f]/;
+const listed = (list: readonly string[], value: string) => list.includes(value);
+
+/**
+ * The query of `GET communities`, checked key by key the way the launcher's
+ * bridge checks it and written back by `catalogPath`; `null` when a key or
+ * a value is not one the service takes.
+ */
+export function catalogueQuery(query: string): string | null {
+  const pairs = queryPairs(query);
+  if (pairs === null) return null;
+  for (const [key, value] of pairs) {
+    if (value === "") continue;
+    const fits =
+      key === "game" ? value === "ja" || value === "jo"
+      : key === "tag" ? listed(COMMUNITY_TAGS, value)
+      : key === "language" ? listed(COMMUNITY_LANGUAGES, value)
+      : key === "region" ? listed(COMMUNITY_REGIONS, value)
+      : key === "sort" ? listed(CATALOG_SORT_KEYS, value)
+      : key === "q" ? Array.from(value).length <= MAX_SEARCH && !CONTROL.test(value)
+      : key === "limit" || key === "offset" ? count(value)
+      : false;
+    if (!fits) return null;
+  }
+  const number = (key: string) => (pairs.get(key) ? Number(pairs.get(key)) : null);
+  return catalogPath({
+    game: (pairs.get("game") || null) as "ja" | "jo" | null,
+    tag: pairs.get("tag") || null,
+    language: pairs.get("language") || null,
+    region: pairs.get("region") || null,
+    q: pairs.get("q") || null,
+    sort: pairs.get("sort") || null,
+    limit: number("limit"),
+    offset: number("offset"),
+  });
+}
+
+/** The query of `GET events` (TODO(S4)), checked the same way. */
+export function eventsQuery(query: string): string | null {
+  const pairs = queryPairs(query);
+  if (pairs === null) return null;
+  const moment = (value: string) => /^[0-9TZ:.+-]{10,35}$/.test(value);
+  for (const [key, value] of pairs) {
+    if (value === "") continue;
+    const fits =
+      key === "from" || key === "to" ? moment(value)
+      : key === "scope" ? value === "all" || value === "following" || value === "going"
+      : key === "game" ? value === "ja" || value === "jo"
+      : key === "community" ? communityId(value)
+      : false;
+    if (!fits) return null;
+  }
+  const scope = pairs.get("scope");
+  return eventsPath({
+    from: pairs.get("from") || null,
+    to: pairs.get("to") || null,
+    scope: scope === "all" || scope === "following" || scope === "going" ? scope : null,
+    game: (pairs.get("game") || null) as "ja" | "jo" | null,
+    community: pairs.get("community") || null,
+  });
+}
+
+/** What the web core does with one call of the community bridge. */
+export interface CommunityRoute {
+  /** The path under `/v1/community/` to send, its query rebuilt. */
+  path: string;
+  /** `optional`: the token goes along while there is one. `required`: a guest is refused before the request. */
+  auth: "optional" | "required";
+  /** The call carries its body: following and its notifications. */
+  body: boolean;
 }
 
 /**
- * The reads of the community bridge, with whether each needs the token: the
- * public list and pages go without it, as the launcher sends them.
- * `null` for anything else — a write, a path of another route, a path that
- * climbs out of `/v1/community/`.
+ * The calls of the community bridge the web app makes: every read of the
+ * contract — the catalogue, a page, its players, its Discord, the top communities,
+ * the player's own lists — and following a community, with the web
+ * session's token. `null` for anything else: a write the launcher and the
+ * website make, a path of another route, a path that climbs out of
+ * `/v1/community/`, a query with a key or a value the service does not take.
  */
-export function communityRead(method: string, path: string): { auth: boolean } | null {
-  if (method !== "GET") return null;
-  const parts = path.split("/");
-  if (parts.length === 1 && parts[0] === "servers") return { auth: false };
-  if (parts.length === 2 && parts[0] === "servers" && communityId(parts[1])) return { auth: false };
-  if (parts.length === 1 && parts[0] === "me") return { auth: true };
-  if (parts.length === 2 && parts[0] === "admin" && parts[1] === "claims") return { auth: true };
+export function communityRoute(method: string, path: string): CommunityRoute | null {
+  const at = path.indexOf("?");
+  const bare = at < 0 ? path : path.slice(0, at);
+  const query = at < 0 ? null : path.slice(at + 1);
+  const parts = bare.split("/");
+  const [a, b, c] = parts;
+  const read = (auth: "optional" | "required" = "optional"): CommunityRoute => ({ path: bare, auth, body: false });
+
+  if (method === "GET") {
+    if (query !== null) {
+      if (parts.length === 1 && a === "communities") {
+        const rebuilt = catalogueQuery(query);
+        return rebuilt === null ? null : { path: rebuilt, auth: "optional", body: false };
+      }
+      if (parts.length === 1 && a === "events") {
+        const rebuilt = eventsQuery(query);
+        return rebuilt === null ? null : { path: rebuilt, auth: "optional", body: false };
+      }
+      return null;
+    }
+    if (parts.length === 1) {
+      if (a === "communities" || a === "ranking" || a === "events" || a === "servers") return read();
+      if (a === "me" || a === "following") return read("required");
+      return null;
+    }
+    if (parts.length === 2) {
+      if ((a === "communities" || a === "servers" || a === "events") && communityId(b)) return read();
+      if (a === "admin" && b === "claims") return read("required");
+      return null;
+    }
+    if (parts.length === 3 && a === "communities" && communityId(b)) {
+      if (c === "players" || c === "discord" || c === "activity" || c === "events" || c === "posts") return read();
+      return null;
+    }
+    if (parts.length === 3 && a === "events" && communityId(b) && c === "attendees") return read("required");
+    return null;
+  }
+  if ((method === "PUT" || method === "DELETE") && query === null && parts.length === 3 && a === "communities" && communityId(b) && c === "follow") {
+    return { path: bare, auth: "required", body: method === "PUT" };
+  }
   return null;
 }
 
-/** The community operations the launcher's bridge also allows: the ones the web leaves to it. */
+/**
+ * The writes of the community bridge the launcher and the website make and
+ * the web app leaves to them: creating a community, claiming a server,
+ * editing a page, the organizers' and the administrators' tools, answering
+ * an event.
+ */
 function communityWrite(method: string, path: string): boolean {
-  const parts = path.split("/");
-  const id = (value: string | undefined) => value !== undefined && communityId(value);
-  if (method === "POST" && parts.length === 1 && parts[0] === "servers") return true;
-  if (method === "PUT" && parts.length === 2 && parts[0] === "servers" && id(parts[1])) return true;
-  if (method === "POST" && parts.length === 3 && parts[0] === "servers" && id(parts[1]) && parts[2] === "claims") return true;
-  if (method === "POST" && parts.length === 3 && parts[0] === "claims" && id(parts[1]) && parts[2] === "verify") return true;
-  if (method === "POST" && parts.length === 3 && parts[0] === "admin" && parts[1] === "claims" && id(parts[2])) return true;
+  if (method !== "POST" && method !== "PUT" && method !== "DELETE") return false;
+  const parts = path.split("?")[0].split("/");
+  const [a, b] = parts;
+  if (a === "communities" || a === "servers" || a === "claims" || a === "admin" || a === "events" || a === "posts") {
+    return parts.length === 1 || communityId(b) || (a === "admin" && b === "claims");
+  }
   return false;
 }
 
@@ -131,13 +281,15 @@ export function createCatalogs(deps: CatalogsDeps): Catalogs {
   const optional = () => ({ auth: deps.signedIn() });
 
   return {
-    async community(method, path) {
-      const read = communityRead(method, path);
-      if (read === null) {
+    async community(method, path, body) {
+      const route = communityRoute(method, path);
+      if (route === null) {
         if (communityWrite(method, path)) throw needsLauncher(`community_request.${method}`);
         throw invalidInput("unknown community operation");
       }
-      return http.request<unknown>("GET", `/v1/community/${path}`, { auth: read.auth });
+      const auth = route.auth === "required" || deps.signedIn();
+      const payload = route.body && body !== null && body !== undefined ? { body } : {};
+      return http.request<unknown>(method, `/v1/community/${route.path}`, { auth, ...payload });
     },
     async bundles(query) {
       return http.request<BundleList>("GET", bundleListPath(query, deps.activeGame()), optional());

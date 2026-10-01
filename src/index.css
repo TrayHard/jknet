@@ -3,98 +3,12 @@
 @import "./styles/tokens.css";
 
 /*
- * Tailwind theme.
- *
- * The block does three things:
- *   1. wipes the stock Tailwind color palette so `bg-slate-700` and friends
- *      cannot creep in next to the design tokens;
- *   2. aliases the semantic tokens from `tokens.css` under short utility
- *      names: `bg-app`, `bg-surface`, `text-fg-muted`, `border-line`;
- *   3. owns the namespaces Tailwind reserves for itself: `--spacing`,
- *      `--radius-*`, `--font-*` and `--shadow-*`.
- *
- * `--spacing: 1px` makes every spacing utility a pixel value, so the Figma
- * token `space/16` is written `p-16`, `gap-16`, `mt-16`. The naming table is
- * in the project rules.
+ * The Tailwind theme: the aliases of the tokens and the namespaces Tailwind
+ * owns. In a file of its own so the website's stylesheet of the community
+ * screens (`styles/community-site.css`) reads the same theme without the
+ * launcher's base rules.
  */
-@theme {
-  --color-*: initial;
-
-  --color-transparent: transparent;
-  --color-current: currentColor;
-  --color-white: #ffffff;
-  --color-black: #000000;
-
-  /* Surfaces: `bg-app`, `bg-surface`, `bg-accent-subtle`. */
-  --color-app: var(--color-bg-app);
-  --color-sidebar: var(--color-bg-sidebar);
-  --color-titlebar: var(--color-bg-titlebar);
-  --color-surface: var(--color-bg-surface);
-  --color-surface-hover: var(--color-bg-surface-hover);
-  --color-elevated: var(--color-bg-elevated);
-  --color-input: var(--color-bg-input);
-  --color-accent: var(--color-bg-accent);
-  --color-accent-hover: var(--color-bg-accent-hover);
-  --color-accent-subtle: var(--color-bg-accent-subtle);
-  --color-warm: var(--color-bg-warm);
-  --color-warm-subtle: var(--color-bg-warm-subtle);
-  --color-success: var(--color-bg-success);
-  --color-success-subtle: var(--color-bg-success-subtle);
-  --color-danger: var(--color-bg-danger);
-  --color-danger-subtle: var(--color-bg-danger-subtle);
-  --color-purple-subtle: var(--color-bg-purple-subtle);
-  /* --- slice: skins and hilts --- `bg-icon-plate`. */
-  --color-icon-plate: var(--color-bg-icon-plate);
-  --color-overlay: var(--color-bg-overlay);
-  --color-scrim: var(--color-bg-scrim);
-  --color-hover-overlay: var(--color-bg-hover-overlay);
-  --color-selected-overlay: var(--color-bg-selected-overlay);
-  --color-accent-glow: var(--color-bg-accent-glow);
-
-  /* Foreground: `text-fg`, `text-fg-muted`, `text-fg-accent`. */
-  --color-fg: var(--color-text-primary);
-  --color-fg-secondary: var(--color-text-secondary);
-  --color-fg-muted: var(--color-text-muted);
-  --color-fg-disabled: var(--color-text-disabled);
-  --color-fg-on-accent: var(--color-text-on-accent);
-  --color-fg-accent: var(--color-text-accent);
-  --color-fg-warm: var(--color-text-warm);
-  --color-fg-success: var(--color-text-success);
-  --color-fg-danger: var(--color-text-danger);
-  --color-fg-purple: var(--color-text-purple);
-  --color-fg-inverse: var(--color-text-inverse);
-
-  /* Borders: `border-line`, `border-line-focus`. */
-  --color-line: var(--color-border-default);
-  --color-line-strong: var(--color-border-strong);
-  --color-line-subtle: var(--color-border-subtle);
-  --color-line-accent: var(--color-border-accent);
-  --color-line-focus: var(--color-border-focus);
-  --color-line-danger: var(--color-border-danger);
-  --color-line-warm: var(--color-border-warm);
-
-  /* Spacing utilities are pixels: `p-16` is 16 px. */
-  --spacing: 1px;
-
-  /* Figma tokens radius/xs … radius/full. */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --radius-full: 999px;
-
-  /* Font families used by the text-style classes in tokens.css.
-     `--font-display` is overridden for the Cyrillic languages in
-     `styles/fonts.css`, where the reason lives: Chakra Petch has no Cyrillic. */
-  --font-display: "Chakra Petch", "Segoe UI", system-ui, sans-serif;
-  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
-
-  /* Figma effects shadow/card and shadow/popover. */
-  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
-}
+@import "./styles/theme.css";
 
 @layer base {
   /*

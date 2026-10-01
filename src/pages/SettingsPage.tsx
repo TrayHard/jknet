@@ -19,6 +19,8 @@ import { MapPicturesCard } from "../components/MapPicturesCard";
 import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCard";
 // --- slice: web app ---
 import { SessionsCard, SESSIONS_SECTION_ID } from "../components/account/SessionsCard";
+// --- slice: communities ---
+import { RegularsPrivacyCard, REGULARS_SECTION_ID } from "../components/account/RegularsPrivacyCard";
 // --- slice: chat notifications ---
 import { ChatSettings, CHAT_SETTINGS_SECTION_ID } from "../components/chat/settings/ChatSettings";
 import { TRAY_SECTION_ID } from "../components/chat/settings/TrayStartupCard";
@@ -83,7 +85,10 @@ export function SettingsPage() {
             ? CHAT_SETTINGS_SECTION_ID
             : section === "tray"
               ? TRAY_SECTION_ID
-              : null;
+              : // --- slice: communities --- the Players tab of a community.
+                section === "regulars"
+                ? REGULARS_SECTION_ID
+                : null;
     if (anchor === null) return;
     document
       .getElementById(anchor)
@@ -167,6 +172,10 @@ export function SettingsPage() {
       {/* --- slice: web app --- every device of the account, while there is
           one to be signed in to. */}
       {account.data?.onlineConfigured && account.data.onlineSignedIn ? <SessionsCard /> : null}
+
+      {/* --- slice: communities --- whether communities list the player
+          among their regular players, after the devices of the account. */}
+      {account.data?.onlineConfigured ? <RegularsPrivacyCard /> : null}
 
       {/* --- slice: chat notifications --- notifications, sounds, the tray,
           privacy and files of the chat, after the account they belong to. */}

@@ -83,6 +83,8 @@ export const NAMESPACES = [
   "serverConfigs",
   "serverConfigFields",
   "serverInstances",
+  // --- slice: communities ---
+  "community",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

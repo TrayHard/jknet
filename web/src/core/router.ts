@@ -6,8 +6,9 @@
  *
  * - implemented: the account with its devices and sessions, the settings,
  *   the friends, the chat with its files and cards, the chats of friends'
- *   servers, the reads of the community servers and the bundles (plus a
- *   bundle's like), the general server list and the JKHub catalog;
+ *   servers, the reads of the communities (plus following one) and the
+ *   bundles (plus a bundle's like), the general server list and the JKHub
+ *   catalog;
  * - neutral: read-only launcher state whose empty answer is true in a
  *   browser (`neutral.ts`), counted in `stats.neutral`;
  * - refused with `needs_launcher`: anything that needs the game, local files
@@ -227,7 +228,7 @@ export function createRouter(deps: RouterDeps): CommandRouter {
 
       // -- Catalogs -------------------------------------------------------------
       case "community_request":
-        return catalogs.community(text(args, "method"), text(args, "path"));
+        return catalogs.community(text(args, "method"), text(args, "path"), args.body);
       case "list_bundles":
         return catalogs.bundles(args.query);
       case "get_bundle":
