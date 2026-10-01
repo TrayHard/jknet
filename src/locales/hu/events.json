@@ -469,6 +469,8 @@
     "cancelledText": "{{community}} · {{when}}",
     "reminder": "15 perc múlva: {{title}}",
     "reminderText": "{{community}} · {{place}}",
+    "post": "{{community}} hírt tett közzé",
+    "postTitled": "{{community}} hírt tett közzé: {{title}}",
     "open": "Megnyitás",
     "join": "Csatlakozás"
   },
@@ -476,6 +478,8 @@
     "title": "Közösségi értesítések",
     "newEvents": "A követett közösségek új eseményei",
     "newEventsHelp": "Amikor egy követett közösség, amelynél be vannak kapcsolva az értesítések, eseményt hirdet",
+    "news": "A követett közösségek hírei",
+    "newsHelp": "Amikor egy követett közösség, amelynél be vannak kapcsolva az értesítések, hírt tesz közzé",
     "reminders": "Emlékeztető 15 perccel az esemény előtt",
     "remindersHelp": "Azoknál az eseményeknél, amelyekre „Megyek” vagy „Talán” választ adott",
     "windows": "Windows-értesítések",

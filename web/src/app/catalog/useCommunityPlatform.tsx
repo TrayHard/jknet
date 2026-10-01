@@ -39,7 +39,8 @@ export function communityRoutePath(route: CommunityRoute): string {
  * reads and follows; creating, claiming and editing stay with the launcher
  * and the website, and so do the client, install and join of **Play**,
  * which a note names instead. An organizer's hero leads to the website's
- * management screen of the page.
+ * management screen of the page; the note under the regular players leads
+ * to the web app's own privacy settings.
  */
 export function useWebCommunityPlatform(share?: { run: (community: Community) => void; label: string }): CommunityPlatform {
   const request = useCommunityRequest();
@@ -72,6 +73,7 @@ export function useWebCommunityPlatform(share?: { run: (community: Community) =>
       share: shareRun,
       shareLabel,
       openBundle: (bundleId) => void navigate(`/bundles/${encodeURIComponent(bundleId)}`),
+      openPrivacySettings: () => void navigate("/settings/privacy"),
       playNote: <PlatformNote text={tWeb("catalog.playNote")} />,
       embedded: true,
       manageUrl: (id) => siteManageUrl(id, language),

@@ -209,7 +209,7 @@ export function CommunityHero({
         className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-px overflow-hidden rounded-b-[11px] border-t border-line-subtle bg-line-subtle"
       >
         {stats.map((stat) => (
-          <div key={stat.key} className="flex min-w-0 flex-col-reverse gap-2 bg-surface px-24 pt-14 pb-16 @max-[560px]/community:px-16">
+          <div key={stat.key} className="flex min-w-0 flex-col-reverse justify-end gap-2 bg-surface px-24 pt-14 pb-16 @max-[560px]/community:px-16">
             <dt className="flex items-center gap-6 text-body-sm text-fg-secondary">{stat.label}</dt>
             <dd className="text-display-md tabular-nums text-fg">{stat.value}</dd>
           </div>

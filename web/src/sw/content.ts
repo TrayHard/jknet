@@ -14,8 +14,9 @@
  * | `none`   | kind and conversation only      | "JKNet" and "Activity in JKNet"    |
  *
  * One notification per conversation (`c:<id>`), one for friend requests, one
- * per server invite, one per event of a community (`e:<id>`); a mention and
- * the reminder of an event alert again (`renotify`). While a window of
+ * per server invite, one per event of a community (`e:<id>`), one for the
+ * news of each community (`n:<id>`); a mention and the reminder of an event
+ * alert again (`renotify`). While a window of
  * the app is open the notification is silent: the page has played the
  * chat's sound already.
  *
@@ -41,6 +42,9 @@ export interface PushStrings {
   eventChanged: string;
   eventCancelled: string;
   eventReminder: string;
+  // --- slice: community news ---
+  newsPosted: string;
+  newsPlain: string;
 }
 
 /** The fields of a payload the notification reads; anything else is ignored. */
@@ -65,6 +69,9 @@ export interface PushPayload {
   eventKind?: string;
   community?: string;
   startsAt?: string;
+  // --- slice: community news --- `community.post`: the community and the post.
+  communityId?: string;
+  postId?: string;
 }
 
 export interface NotificationPlan {
@@ -122,7 +129,14 @@ export function payloadOf(raw: unknown): PushPayload {
     eventKind: text(value.eventKind) ?? undefined,
     community: text(value.community) ?? undefined,
     startsAt: text(value.startsAt) ?? undefined,
+    communityId: text(value.communityId) ?? undefined,
+    postId: text(value.postId) ?? undefined,
   };
+}
+
+/** The address a post's notification opens: the **News** tab of its community. */
+export function newsUrl(communityId: string): string {
+  return `/community/${encodeURIComponent(communityId)}?tab=news`;
 }
 
 /** The address an event's notification opens. */
@@ -156,6 +170,10 @@ export function targetOf(payload: PushPayload): { tag: string; url: string } {
     case "community.event":
       if (payload.eventId !== undefined) return { tag: `e:${payload.eventId}`, url: eventUrl(payload.eventId) };
       return { tag: "events", url: "/events" };
+    // --- slice: community news --- one notification for the news of a community: a new post replaces the one before.
+    case "community.post":
+      if (payload.communityId !== undefined) return { tag: `n:${payload.communityId}`, url: newsUrl(payload.communityId) };
+      return { tag: "news", url: "/community?tab=following" };
     default:
       if (conversation !== undefined) return { tag: `c:${conversation}`, url: threadUrl(conversation) };
       return { tag: "jknet", url: "/chats" };
@@ -204,9 +222,23 @@ function wordsOf(payload: PushPayload, strings: PushStrings): { title: string; b
     // --- slice: community events ---
     case "community.event":
       return eventWords(payload, strings) ?? generic;
+    // --- slice: community news ---
+    case "community.post":
+      return newsWords(payload, strings) ?? generic;
     default:
       return generic;
   }
+}
+
+/**
+ * The words of a post: the community it came from, then its title and the
+ * start of its text as the preview level left them. `null` when the level
+ * left the community out.
+ */
+function newsWords(payload: PushPayload, strings: PushStrings): { title: string; body: string } | null {
+  if (payload.community === undefined) return null;
+  const parts = [payload.title, payload.text].filter((part): part is string => part !== undefined);
+  return { title: fill(strings.newsPosted, { community: payload.community }), body: parts.length > 0 ? parts.join(" · ") : strings.newsPlain };
 }
 
 /**

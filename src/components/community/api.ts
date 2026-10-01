@@ -8,9 +8,9 @@
  * languages and regions are the service's (`community/pages.rs`), and a value
  * outside them is dropped before it reaches a query.
  *
- * News, the activity of servers and the top communities are provisional
- * (`TODO(S5)`, `TODO(S6)`): the service does not serve them yet, and the
- * helpers read whatever arrives defensively. Events have their own client,
+ * A service from before the news, the activity, the top communities and the
+ * bot answers `404` to their routes: the readers of the top and of the
+ * activity take that as "nothing to show". Events have their own client,
  * `components/events/api.ts`, over the path {@link eventsPath} builds here.
  */
 
@@ -24,6 +24,7 @@ import type {
   CommunityDiscord,
   CommunityMe,
   CommunityPost,
+  CommunityPosts,
   CommunityRankingEntry,
   CommunityRegulars,
   CommunityRequest,
@@ -32,8 +33,11 @@ import type {
   CommunityVerified,
   CommunityLink,
   CommunityRecommendation,
+  DiscordBotLink,
   FollowedCommunity,
   Game,
+  NewPostBody,
+  PostPatch,
 } from "./types";
 
 /** The tags of the service's closed list, in the order the chips show them. */
@@ -84,18 +88,31 @@ export const COMMUNITY_REGIONS = ["eu", "na", "sa", "cis", "asia", "oce", "afric
 
 export type CommunityRegion = (typeof COMMUNITY_REGIONS)[number];
 
-/** The orders of the catalogue the screens offer: the ones the service knows now. */
-export const CATALOG_SORTS = ["featured", "followers", "regulars", "new", "name"] as const;
+/**
+ * The orders the catalogue offers: recommended, followers, regular players,
+ * humans online now (`online`), the newest, and the name.
+ */
+export const CATALOG_SORTS = ["featured", "followers", "regulars", "online", "new", "name"] as const;
 
 export type CatalogSort = (typeof CATALOG_SORTS)[number];
 
 /**
- * Every order a catalogue query may carry: the offered ones and the two
- * the live status adds (`players`, `online`, TODO(S6)). The service sorts
- * a key it does not know as `featured`. The bridges of the launcher and
- * the web app let exactly these through.
+ * Every order a catalogue query may carry: the ones the catalogue offers,
+ * and `players`, one it no longer offers that the service still takes. How
+ * each order ranks is the service's, and it sorts a key it does not know as
+ * `featured`; the bridges of the launcher and the web app let exactly these
+ * through.
  */
-export const CATALOG_SORT_KEYS = [...CATALOG_SORTS, "players", "online"] as const;
+export const CATALOG_SORT_KEYS = ["featured", "followers", "players", "regulars", "online", "new", "name"] as const;
+
+/**
+ * A cursor of a list that pages in time order, as the service writes it:
+ * the time of the last item in UTC to the second, `_`, and its id. The
+ * calendar's `next` and the news' `next` are both of this shape.
+ */
+export function isTimeCursor(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z_[A-Za-z0-9]{26}$/.test(value);
+}
 
 /** The filters of `GET communities`. An empty or unknown value filters nothing. */
 export interface CatalogQuery {
@@ -170,6 +187,8 @@ export interface EventsQuery {
   scope?: "all" | "following" | "going" | null;
   game?: Game | null;
   community?: string | null;
+  /** The `next` of the page before: the same range, the page after it. */
+  after?: string | null;
 }
 
 /** The path of `GET events`, keys and values as the bridges check them. */
@@ -184,7 +203,29 @@ export function eventsPath(query: EventsQuery = {}): string {
   if (query.scope === "all" || query.scope === "following" || query.scope === "going") params.push(`scope=${query.scope}`);
   if (query.game === "ja" || query.game === "jo") params.push(`game=${query.game}`);
   if (isCommunityId(query.community)) params.push(`community=${query.community}`);
+  if (isTimeCursor(query.after)) params.push(`after=${encodeURIComponent(query.after)}`);
   return params.length === 0 ? "events" : `events?${params.join("&")}`;
+}
+
+/** The most posts one page of the news holds, besides the pinned ones. */
+export const MAX_POSTS_PAGE = 50;
+
+/** The page of the news `GET communities/{id}/posts` reads. */
+export interface PostsQuery {
+  /** Posts that are not pinned on the page: 20 when not given, 1 to 50. */
+  limit?: number | null;
+  /** The `next` of the page before. */
+  before?: string | null;
+}
+
+/** The path of `GET communities/{id}/posts`, keys and values as the bridges check them. */
+export function postsPath(id: string, query: PostsQuery = {}): string {
+  const params: string[] = [];
+  const limit = whole(query.limit);
+  if (limit !== null) params.push(`limit=${Math.min(Math.max(limit, 1), MAX_POSTS_PAGE)}`);
+  if (isTimeCursor(query.before)) params.push(`before=${encodeURIComponent(query.before)}`);
+  const path = `communities/${segment(id)}/posts`;
+  return params.length === 0 ? path : `${path}?${params.join("&")}`;
 }
 
 /** The fields `PUT communities/{id}` takes. A field left out keeps its value; `null` clears it. */
@@ -224,24 +265,25 @@ function isCard(value: unknown): value is CommunityCard {
 }
 
 /**
- * TODO(S6): the top communities out of whatever `GET ranking` answered, or
- * `null` when the answer is not a ranking. Two shapes are read: a list of
- * cards with their `followers`, and a list of `{ rank, community,
- * followers }`, in the order given.
+ * The top communities out of what `GET ranking` answered — `{ communities }`,
+ * each a card with its `rank` and its `followers` — or `null` when the
+ * answer holds no place. A place of another shape is skipped; one without
+ * its number takes the next place in the order given, and one without its
+ * followers takes those of its card.
  */
 export function readRanking(answer: unknown): CommunityRankingEntry[] | null {
   if (answer === null || typeof answer !== "object") return null;
   const body = answer as Record<string, unknown>;
-  const list = records(body.ranking ?? body.communities ?? body.top);
+  const list = records(body.communities);
   const entries: CommunityRankingEntry[] = [];
   for (const item of list) {
-    const community = isCard(item.community) ? item.community : isCard(item) ? item : null;
-    if (community === null) continue;
+    if (!isCard(item)) continue;
+    const community = item as unknown as CommunityCard;
     const followers = [item.followers, community.counts?.followers].find(
       (value): value is number => typeof value === "number" && Number.isFinite(value),
     );
     entries.push({
-      rank: typeof item.rank === "number" ? item.rank : entries.length + 1,
+      rank: typeof item.rank === "number" && Number.isFinite(item.rank) ? item.rank : entries.length + 1,
       community,
       followers: followers ?? 0,
     });
@@ -296,7 +338,7 @@ export function communityApi(request: CommunityRequest) {
   return {
     // --- the catalogue and the player's lists
     catalog: (query?: CatalogQuery) => request<CommunityCatalog>("GET", catalogPath(query)),
-    /** TODO(S6): `null` when the service has no ranking yet. */
+    /** The top communities; `null` when it is empty or the service has no ranking yet. */
     ranking: async (): Promise<CommunityRankingEntry[] | null> => {
       try {
         return readRanking(await request<unknown>("GET", "ranking"));
@@ -346,9 +388,57 @@ export function communityApi(request: CommunityRequest) {
     unfollow: (id: string) => request<null>("DELETE", `${community(id)}/follow`),
     players: (id: string) => request<CommunityRegulars>("GET", `${community(id)}/players`),
     discord: (id: string) => request<CommunityDiscord>("GET", `${community(id)}/discord`),
-    // --- TODO(S5), TODO(S6): provisional routes
-    activity: (id: string) => request<CommunityActivity>("GET", `${community(id)}/activity`),
-    posts: (id: string) => request<{ posts: CommunityPost[] }>("GET", `${community(id)}/posts`),
+    // --- the JKNet bot of the community's Discord server
+    /** Discord's page that adds the bot; the organizer opens it in a browser. */
+    discordBotLink: (id: string) => request<DiscordBotLink>("POST", `${community(id)}/discord/bot/link`),
+    /** The announcements channel (`null`: none) and whether the page lists the channels; the Discord card after it. */
+    discordBot: (id: string, body: { announcementsChannelId?: string | null; showChannels?: boolean }) =>
+      request<CommunityDiscord>("PUT", `${community(id)}/discord/bot`, body),
+    unlinkDiscordBot: (id: string) => request<null>("DELETE", `${community(id)}/discord/bot`),
+    // --- activity and news
+    /** The heat map and the peak; `null` when the service has no activity yet. */
+    activity: async (id: string): Promise<CommunityActivity | null> => {
+      try {
+        return readActivity(await request<unknown>("GET", `${community(id)}/activity`));
+      } catch (error) {
+        if (isNotFound(error) && isCommunityId(id)) return null;
+        throw error;
+      }
+    },
+    /** A page of the news; an empty one when the service has no news yet. */
+    posts: async (id: string, query?: PostsQuery): Promise<CommunityPosts> => {
+      try {
+        return await request<CommunityPosts>("GET", postsPath(id, query));
+      } catch (error) {
+        if (isNotFound(error) && isCommunityId(id)) return { posts: [], next: null };
+        throw error;
+      }
+    },
+    createPost: (id: string, body: NewPostBody) => request<CommunityPost>("POST", `${community(id)}/posts`, body),
+    updatePost: (postId: string, patch: PostPatch) => request<CommunityPost>("PUT", `posts/${segment(postId)}`, patch),
+    removePost: (postId: string) => request<null>("DELETE", `posts/${segment(postId)}`),
+  };
+}
+
+/**
+ * The activity out of what `GET communities/{id}/activity` answered, or
+ * `null` when it is not one: a heat map of 168 finite numbers at least.
+ */
+export function readActivity(answer: unknown): CommunityActivity | null {
+  if (answer === null || typeof answer !== "object") return null;
+  const body = answer as Record<string, unknown>;
+  const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+  if (!Array.isArray(body.heatmap) || body.heatmap.length !== 168) return null;
+  const heatmap = body.heatmap.map((value) => Math.max(0, number(value)));
+  const peak =
+    body.peak !== null && typeof body.peak === "object" && typeof (body.peak as { at?: unknown }).at === "string"
+      ? { humans: number((body.peak as { humans?: unknown }).humans), at: (body.peak as { at: string }).at }
+      : null;
+  return {
+    heatmap,
+    peak: peak !== null && peak.humans > 0 ? peak : null,
+    onlineNow: number(body.onlineNow),
+    days: number(body.days),
   };
 }
 

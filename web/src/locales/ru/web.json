@@ -187,7 +187,9 @@
     "eventCreated": "{{community}} объявило событие",
     "eventChanged": "Изменились время или место",
     "eventCancelled": "Событие отменено",
-    "eventReminder": "Начнётся через 15 минут"
+    "eventReminder": "Начнётся через 15 минут",
+    "newsPosted": "Новость в {{community}}",
+    "newsPlain": "Новая запись"
   },
   "sessions": {
     "title": "Устройства и сеансы",

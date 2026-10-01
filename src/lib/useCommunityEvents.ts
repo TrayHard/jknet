@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 
 import { eventsPath } from "../components/community/api";
 import { DAY, goingSoon, HOUR } from "../components/events/logic";
+import type { CommunityPostSummary } from "../components/community/types";
 import type { EventCard, EventNotice } from "../components/events/types";
 import { hasBackend, listen, type UnlistenFn } from "./backend";
 import { communityEventsIpc, communityIpc, type Game } from "./ipc";
@@ -26,6 +27,17 @@ import { isTauri } from "./runtime";
 export const COMMUNITY_EVENT = "community:event";
 /** The launcher window: a click on a Windows notification asks for an event's page. */
 export const COMMUNITY_OPEN_EVENT = "community:open-event";
+// --- slice: community news ---
+/** Every window: a `community.post` frame arrived. */
+export const COMMUNITY_POST = "community:post";
+/** The launcher window: a click on a Windows notification asks for the news of a community. */
+export const COMMUNITY_OPEN_POST = "community:open-post";
+
+/** What the core emits for a `community.post` frame: the post and whether a toast may show it. */
+export interface PostNotice {
+  post: CommunityPostSummary;
+  toast: boolean;
+}
 
 export const eventsKeys = {
   all: ["communityEvents"] as const,
@@ -104,9 +116,34 @@ export function useCommunityEventNotices(onNotice: (notice: EventNotice) => void
 }
 
 /**
- * Hands the core the words of its Windows notifications of events, in the
- * language on screen, whenever it changes. The slots stay for the core to
- * fill: `{community}`, `{title}`, `{when}`, `{place}`.
+ * Hears the core's `community:post` and `community:open-post`: the first
+ * hands a post of the news on, the second asks for the news of a
+ * community. Mount once, in the launcher window.
+ */
+export function useCommunityPostNotices(onNotice: (notice: PostNotice) => void, onOpen: (communityId: string) => void): void {
+  const handlers = useRef({ onNotice, onOpen });
+  handlers.current = { onNotice, onOpen };
+  useEffect(() => {
+    if (!hasBackend()) return;
+    let disposed = false;
+    const stops: UnlistenFn[] = [];
+    const keep = (stop: UnlistenFn) => {
+      if (disposed) stop();
+      else stops.push(stop);
+    };
+    void listen<PostNotice>(COMMUNITY_POST, (event) => handlers.current.onNotice(event.payload)).then(keep, () => undefined);
+    void listen<string>(COMMUNITY_OPEN_POST, (event) => handlers.current.onOpen(event.payload), { target: "own" }).then(keep, () => undefined);
+    return () => {
+      disposed = true;
+      for (const stop of stops) stop();
+    };
+  }, []);
+}
+
+/**
+ * Hands the core the words of its Windows notifications of events and news,
+ * in the language on screen, whenever it changes. The slots stay for the
+ * core to fill: `{community}`, `{title}`, `{when}`, `{place}`.
  */
 export function useCommunityEventLabels(): void {
   const { t, i18n } = useTranslation("events");
@@ -124,6 +161,7 @@ export function useCommunityEventLabels(): void {
         reminder: t("notify.reminder", slots),
         reminderText: t("notify.reminderText", slots),
         offline: t("place.offline"),
+        post: t("notify.post", slots),
       })
       .catch((error: unknown) => console.warn("community events: the labels did not reach the core", error));
   }, [t, i18n.language]);

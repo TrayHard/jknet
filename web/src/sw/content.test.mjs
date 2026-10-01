@@ -175,3 +175,46 @@ test("an event without its title says only that something happened, and still op
   const { eventId: ___, ...nothing } = bare;
   assert.deepEqual(notificationOf(nothing, stringsFor, false).options.data, { url: "/events" });
 });
+
+// --- slice: community news ---
+/** The payload of the service's test `news_reaches_the_devices_that_want_it`. */
+const post = {
+  badge: 0,
+  community: "Duel Masters",
+  communityId: "01M3TEKN2NNV2Y3V5H8J2Y0MW5",
+  kind: "community.post",
+  lang: "en",
+  postId: "01M3TEKN349007DM8KQAKEW9Q6",
+  silent: false,
+  text: "The ladder opens on Friday.",
+  title: "Season two",
+  v: 1,
+};
+
+test("a post names its community, its title and its text, and opens the news, one notification per community", () => {
+  const plan = notificationOf(post, stringsFor, false);
+  assert.equal(plan.title, EN.newsPosted.replace("{{community}}", "Duel Masters"));
+  assert.equal(plan.options.body, "Season two · The ladder opens on Friday.");
+  assert.equal(plan.options.tag, "n:01M3TEKN2NNV2Y3V5H8J2Y0MW5");
+  assert.deepEqual(plan.options.data, { url: "/community/01M3TEKN2NNV2Y3V5H8J2Y0MW5?tab=news" });
+  assert.equal(plan.options.renotify, false);
+  const ru = notificationOf({ ...post, lang: "ru" }, stringsFor, false);
+  assert.equal(ru.title, RU.newsPosted.replace("{{community}}", "Duel Masters"));
+});
+
+test("a post without a title, or without its text under the sender preview, says what is left", () => {
+  const { title: _, ...untitled } = post;
+  assert.equal(notificationOf(untitled, stringsFor, false).options.body, "The ladder opens on Friday.");
+  const { text: __, ...sender } = post;
+  assert.equal(notificationOf(sender, stringsFor, false).options.body, "Season two");
+  const { text: ___, title: ____, ...bare } = post;
+  assert.equal(notificationOf(bare, stringsFor, false).options.body, EN.newsPlain);
+});
+
+test("a post under the none preview says only that something happened, and still opens the news", () => {
+  const plan = notificationOf({ badge: 0, communityId: post.communityId, kind: "community.post", lang: "en", postId: post.postId, silent: false, v: 1 }, stringsFor, false);
+  assert.equal(plan.title, "JKNet");
+  assert.equal(plan.options.body, EN.activity);
+  assert.deepEqual(plan.options.data, { url: "/community/01M3TEKN2NNV2Y3V5H8J2Y0MW5?tab=news" });
+  assert.deepEqual(targetOf(payloadOf({ kind: "community.post" })), { tag: "news", url: "/community?tab=following" });
+});

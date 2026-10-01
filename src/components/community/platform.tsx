@@ -13,11 +13,15 @@
  * | `request` | `community_request` of the core | `fetch` with the session token | the web core |
  * | `navigate` | `#/community/:id?tab=` | `/servers/?id=&tab=` | `/community/:id?tab=` |
  * | `renderPlay`, `renderFiles` | client, install, join | — | — |
- * | `serverStatus` | UDP `getstatus` of the core | — | — |
+ * | `serverStatus` | UDP `getstatus` of the core, the service's poll when it fails | the service's poll | the service's poll |
  * | `canManage` | yes | yes | no: read and follow |
  * | pictures: a page's logo and cover, an event's cover | `pickImage`: the core's dialog and upload | `putBlob` after a file input | — |
  * | `friends`, `findBundles` | the friends list, the bundle catalogue | `GET /v1/friends`, `GET /v1/bundles` | — |
  * | `manageUrl` | — | — | the website's management screen |
+ * | `renderNewsComposer` | the composer of the news | the same | — |
+ * | `openExternalLater` | — | a tab opened on the click, filled when the link comes | — |
+ * | `setUnsaved` | the launcher's guard: a route change and closing the window ask | `beforeunload` and the site's own routes ask | — |
+ * | `subscribePosts` | `community:post` of the live socket | — | — |
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
@@ -28,6 +32,7 @@ import type {
   CommunityBundleRef,
   CommunityLiveStatus,
   CommunityPerson,
+  CommunityPost,
   CommunityRequest,
   CommunityServer,
   Game,
@@ -39,13 +44,13 @@ export type CommunityHost = "launcher" | "website" | "web";
 export type CatalogTab = "catalog" | "mine" | "following";
 
 /** The tabs of a community page. `manage` is the organizers'. */
-export type PageTab = "overview" | "servers" | "events" | "players" | "manage";
+export type PageTab = "overview" | "servers" | "events" | "players" | "news" | "manage";
 
 export const CATALOG_TABS: readonly CatalogTab[] = ["catalog", "mine", "following"];
-export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "events", "players", "manage"];
+export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "events", "players", "news", "manage"];
 
 /** The sections of the management screen, in the order of its navigation. */
-export const MANAGE_SECTIONS = ["profile", "images", "links", "tags", "files", "bundle", "servers", "team", "admin"] as const;
+export const MANAGE_SECTIONS = ["profile", "images", "links", "tags", "files", "bundle", "servers", "team", "bot", "admin"] as const;
 
 export type ManageSection = (typeof MANAGE_SECTIONS)[number];
 
@@ -114,6 +119,19 @@ export interface CommunitySeed {
   game: Game;
 }
 
+/** What the composer of the news is given by the **News** tab. */
+export interface NewsComposerProps {
+  community: Community;
+  /** The post being changed, or `null` for a new one. */
+  editing: CommunityPost | null;
+  /** How many posts the community pins now: it pins three at most. */
+  pinned: number;
+  /** A post went out or a change of one was saved. */
+  onSaved: (post: CommunityPost, created: boolean) => void;
+  /** **Cancel** of a change: the composer goes back to a new post. */
+  onCancel: () => void;
+}
+
 export interface CommunityPlatform {
   host: CommunityHost;
   /** One call of the contract, `/v1/community/` implied. */
@@ -177,6 +195,31 @@ export interface CommunityPlatform {
   findBundles?: (query: string, game: Game) => Promise<CommunityBundleRef[]>;
   /** The address of the management screen on another host, for a host that only reads. */
   manageUrl?: (id: string) => string;
+  /**
+   * The composer of the news, with the Markdown editor of the management
+   * screen: a host that manages imports it from `./manage`, so a host that
+   * only reads never bundles the editor.
+   */
+  renderNewsComposer?: (props: NewsComposerProps) => ReactNode;
+  /**
+   * Opens a tab at once, during the click, and fills it when the address
+   * comes: a browser lets a page open a tab only while the click lasts, and
+   * the address of the JKNet bot comes from the service after it. `null`
+   * closes the tab. A host that opens links outside the page leaves it out.
+   */
+  openExternalLater?: () => (url: string | null) => void;
+  /**
+   * The management screen holds edits nobody saved (`true`) or none any
+   * more (`false`): the host asks before a route change or closing the
+   * window loses them.
+   */
+  setUnsaved?: (dirty: boolean) => void;
+  /**
+   * Hears the posts of the news as they come out — the launcher's
+   * `community:post`, from the live socket — so an open page reads its news
+   * again. Answers the function that stops listening.
+   */
+  subscribePosts?: (listener: (communityId: string) => void) => () => void;
 }
 
 const PlatformContext = createContext<CommunityPlatform | null>(null);

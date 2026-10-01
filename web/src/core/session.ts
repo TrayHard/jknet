@@ -153,6 +153,13 @@ interface LoginSessionWire {
 interface MeWire {
   user: OnlineUser;
   admin?: boolean;
+  /** --- slice: communities --- absent from a service before the regular players. */
+  showInRegulars?: boolean;
+}
+
+/** `get_regulars_privacy` of the launcher: `null` from a service that does not have the setting. */
+export interface RegularsPrivacy {
+  showInRegulars: boolean | null;
 }
 
 export interface SessionDeps {
@@ -197,6 +204,10 @@ export interface Session {
   endedElsewhere(): boolean;
   refreshMe(): Promise<void>;
   updateDisplayName(displayName: string): Promise<OnlineUser>;
+  /** --- slice: communities --- whether communities list the player among their regulars. */
+  regularsPrivacy(): Promise<RegularsPrivacy>;
+  /** Shows the player in the regular players of communities, or hides them and has the service forget the days it counted. */
+  setShowInRegulars(show: boolean): Promise<RegularsPrivacy>;
   deleteAccount(): Promise<void>;
   setUser(user: OnlineUser): void;
   stop(): void;
@@ -506,6 +517,22 @@ export function createSession(deps: SessionDeps): Session {
       }
       emit({ signedIn: true, reason: "renamed" });
       return user;
+    },
+    regularsPrivacy: async () => {
+      if (record === null) throw onlineError("unauthorized", "Sign in to JKNet first", 401);
+      const me = await http.request<MeWire>("GET", "/v1/me");
+      return { showInRegulars: typeof me.showInRegulars === "boolean" ? me.showInRegulars : null };
+    },
+    setShowInRegulars: async (show: boolean) => {
+      if (record === null) throw onlineError("unauthorized", "Sign in to JKNet first", 401);
+      const user = await http.request<OnlineUser>("PATCH", "/v1/me", { body: { showInRegulars: show } });
+      if (record !== null) {
+        const renamed = record.user?.displayName !== undefined && record.user.displayName !== user.displayName;
+        record = { ...record, user };
+        await save();
+        if (renamed) emit({ signedIn: true, reason: "renamed" });
+      }
+      return { showInRegulars: show };
     },
     deleteAccount: async () => {
       leaving = "deleted";

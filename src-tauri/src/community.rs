@@ -3,8 +3,9 @@
 //! The webview names a route of `/v1/community/` and this module decides
 //! whether the launcher sends it at all: every path of the communities
 //! contract is on the list, each id is checked for the shape of a ULID, and
-//! the two queries the screens build — the catalogue and the calendar — may
-//! only carry the keys and values the service accepts. Anything else never
+//! the three queries the screens build — the catalogue, the calendar and a
+//! page of the news — may only carry the keys and values the service
+//! accepts. Anything else never
 //! leaves the machine, so a script in the webview cannot use the bridge to
 //! reach another route of the service with the player's token.
 //!
@@ -84,17 +85,18 @@ const LANGUAGES: &[&str] = &[
 /// The regions of the service's closed list.
 const REGIONS: &[&str] = &["eu", "na", "sa", "cis", "asia", "oce", "africa", "me"];
 
-/// The orders of the catalogue: the service's, and the two the live status
-/// adds (`players`, `online`). The service sorts a key it does not know as
-/// `featured`, so a launcher ahead of it does no harm.
+/// The orders of the catalogue the service knows; how each one ranks is the
+/// service's. `players` is one the catalogue no longer offers and the
+/// service still takes. The service sorts a key it does not know as
+/// `featured`.
 const SORTS: &[&str] = &[
     "featured",
     "followers",
+    "players",
     "regulars",
+    "online",
     "new",
     "name",
-    "players",
-    "online",
 ];
 
 /// Which events the calendar asks for.
@@ -138,6 +140,9 @@ fn route(method: &str, path: &str) -> Result<Route> {
         ("PUT" | "DELETE", ["communities", c, "follow"]) => id(c),
         ("GET", ["communities", c, "players" | "discord" | "activity"]) => id(c),
         ("GET" | "POST", ["communities", c, "events" | "posts"]) => id(c),
+        // --- the JKNet bot of the community's Discord server
+        ("POST", ["communities", c, "discord", "bot", "link"]) => id(c),
+        ("PUT" | "DELETE", ["communities", c, "discord", "bot"]) => id(c),
         // --- servers and claims; `servers/{id}` is also the route of before
         ("GET" | "POST", ["servers"]) => true,
         ("GET" | "PUT", ["servers", s]) => id(s),
@@ -159,6 +164,7 @@ fn route(method: &str, path: &str) -> Result<Route> {
         (_, _, None) => None,
         ("GET", ["communities"], Some(query)) => Some(catalogue_query(query)?),
         ("GET", ["events"], Some(query)) => Some(events_query(query)?),
+        ("GET", ["communities", _, "posts"], Some(query)) => Some(posts_query(query)?),
         _ => return Err(refuse()),
     };
     let method = reqwest::Method::from_bytes(method.as_bytes())
@@ -243,7 +249,25 @@ fn moment(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || matches!(b, b'-' | b':' | b'.' | b'+' | b'T' | b'Z'))
 }
 
-/// `GET events`: `from` and `to`, `scope`, `game` and `community`.
+/// A cursor of a list that pages in time order, as the service writes it:
+/// `YYYY-MM-DDTHH:MM:SSZ`, `_`, and the id of the last item of the page.
+fn cursor(value: &str) -> bool {
+    let Some((at, item)) = value.split_once('_') else {
+        return false;
+    };
+    let shape = at.len() == 20
+        && at.bytes().enumerate().all(|(index, b)| match index {
+            4 | 7 => b == b'-',
+            10 => b == b'T',
+            13 | 16 => b == b':',
+            19 => b == b'Z',
+            _ => b.is_ascii_digit(),
+        });
+    shape && id(item)
+}
+
+/// `GET events`: `from` and `to`, `scope`, `game`, `community` and the
+/// `after` of a page.
 fn events_query(query: &str) -> Result<String> {
     let pairs = pairs(query)?;
     for (key, value) in &pairs {
@@ -252,6 +276,24 @@ fn events_query(query: &str) -> Result<String> {
             "scope" => EVENT_SCOPES.contains(&value.as_str()),
             "game" => matches!(value.as_str(), "ja" | "jo"),
             "community" => id(value),
+            "after" => cursor(value),
+            _ => false,
+        };
+        if !fits && !value.is_empty() {
+            return Err(refuse());
+        }
+    }
+    Ok(rebuild(&pairs))
+}
+
+/// `GET communities/{id}/posts`: the `limit` of a page and the `before`
+/// that names it.
+fn posts_query(query: &str) -> Result<String> {
+    let pairs = pairs(query)?;
+    for (key, value) in &pairs {
+        let fits = match key.as_str() {
+            "limit" => count(value),
+            "before" => cursor(value),
             _ => false,
         };
         if !fits && !value.is_empty() {
@@ -332,6 +374,9 @@ mod tests {
             ("POST", format!("communities/{C}/posts")),
             ("PUT", format!("posts/{S}")),
             ("DELETE", format!("posts/{S}")),
+            ("POST", format!("communities/{C}/discord/bot/link")),
+            ("PUT", format!("communities/{C}/discord/bot")),
+            ("DELETE", format!("communities/{C}/discord/bot")),
             ("GET", "me".to_string()),
             // The routes of before, which JKNet 0.10.0 still speaks.
             ("GET", "servers".to_string()),
@@ -367,6 +412,12 @@ mod tests {
             ("DELETE", "admin/claims".to_string()),
             ("GET", format!("communities/{C}/players/extra")),
             ("TRACE", format!("communities/{C}")),
+            ("GET", format!("communities/{C}/discord/bot")),
+            ("GET", format!("communities/{C}/discord/bot/link")),
+            ("PUT", format!("communities/{C}/discord/bot/link")),
+            ("POST", format!("communities/{C}/discord/bot")),
+            ("POST", format!("communities/{C}/discord/bot/link/extra")),
+            ("DELETE", "communities/short/discord/bot".to_string()),
         ] {
             assert!(route(method, &path).is_err(), "{method} {path} must be refused");
         }
@@ -449,15 +500,69 @@ mod tests {
             "to=2026-10-01%3Cscript",
             "community=../me",
             "limit=10",
+            "after=page2",
+            "after=2026-10-03T16%3A00%3A00%2B03%3A00_01M3SZFNW339EQKXRVRMCKHHMZ",
         ] {
             assert!(route("GET", &format!("events?{query}")).is_err(), "{query} must be refused");
         }
+        // The `next` of a page reads the page after, written back escaped.
+        let got = allowed(
+            "GET",
+            &format!("events?from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z&after=2026-10-03T16%3A00%3A00Z_{S}"),
+        );
+        assert_eq!(
+            got.path,
+            format!("events?from=2026-10-01T00%3A00%3A00Z&to=2026-11-01T00%3A00%3A00Z&after=2026-10-03T16%3A00%3A00Z_{S}")
+        );
     }
 
     #[test]
-    fn only_the_catalogue_and_the_calendar_take_a_query() {
+    fn a_page_of_the_news_takes_its_limit_and_its_cursor() {
+        let got = allowed(
+            "GET",
+            &format!("communities/{C}/posts?limit=20&before=2026-09-30T23%3A07%3A40Z_{S}"),
+        );
+        assert_eq!(
+            got.path,
+            format!("communities/{C}/posts?limit=20&before=2026-09-30T23%3A07%3A40Z_{S}")
+        );
+        assert_eq!(got.auth, Auth::Optional);
+        for query in [
+            "limit=-1",
+            "limit=abc",
+            "before=yesterday",
+            "before=2026-09-30T23:07:40Z",
+            "before=2026-09-30T23:07:40.5Z_01M3SZFNW339EQKXRVRMCKHHMZ",
+            "before=2026-09-30T23:07:40Z_../me",
+            "after=2026-09-30T23:07:40Z_01M3SZFNW339EQKXRVRMCKHHMZ",
+            "limit=1&limit=2",
+        ] {
+            assert!(
+                route("GET", &format!("communities/{C}/posts?{query}")).is_err(),
+                "{query} must be refused"
+            );
+        }
+        assert!(route("POST", &format!("communities/{C}/posts?limit=1")).is_err());
+    }
+
+    #[test]
+    fn the_bot_routes_are_the_organizers() {
+        for (method, path) in [
+            ("POST", format!("communities/{C}/discord/bot/link")),
+            ("PUT", format!("communities/{C}/discord/bot")),
+            ("DELETE", format!("communities/{C}/discord/bot")),
+        ] {
+            assert_eq!(allowed(method, &path).auth, Auth::Required, "{method} {path}");
+        }
+        assert_eq!(allowed("GET", &format!("communities/{C}/activity")).auth, Auth::Optional);
+    }
+
+    #[test]
+    fn only_the_catalogue_the_calendar_and_the_news_take_a_query() {
         for (method, path) in [
             ("GET", format!("communities/{C}?tab=servers")),
+            ("GET", format!("communities/{C}/activity?days=7")),
+            ("GET", "ranking?period=month".to_string()),
             ("GET", "following?sort=new".to_string()),
             ("POST", "communities?game=ja".to_string()),
             ("GET", "servers?game=ja".to_string()),

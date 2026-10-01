@@ -111,6 +111,13 @@ export function createRouter(deps: RouterDeps): CommandRouter {
       case "delete_account":
         requireAccount();
         return session.deleteAccount();
+      // --- slice: communities --- the regular players of communities, as the launcher's card reads them.
+      case "get_regulars_privacy":
+        requireAccount();
+        return session.regularsPrivacy();
+      case "set_show_in_regulars":
+        requireAccount();
+        return session.setShowInRegulars(args.show === true);
       case "get_sessions":
         return sessions.list();
       case "revoke_session":

@@ -9,11 +9,18 @@
  */
 
 // Runtime imports carry their extension: `node --test` loads this module as it is.
-import { eventsPath, failureOf, isCommunityId, type EventsQuery } from "../community/api.ts";
+import { eventsPath, failureOf, isCommunityId, isTimeCursor, type EventsQuery } from "../community/api.ts";
 import type { CommunityRequest } from "../community/types";
-import type { EventAttendees, EventDetails, EventPatch, EventsCalendar, NewEventBody, RsvpStatus } from "./types";
+import type { EventAttendees, EventCard, EventDetails, EventPatch, EventsCalendar, NewEventBody, RsvpStatus } from "./types";
 
 export type { EventsQuery };
+
+/**
+ * The most pages of one range the client reads: 500 events a page, so
+ * 10 000 events, far past what 62 days of the catalogue hold. A service
+ * that kept answering `next` past that would otherwise hold the screen.
+ */
+export const MAX_CALENDAR_PAGES = 20;
 
 /** An id as a path segment, or a refusal before any request: no event has an id of another shape. */
 function segment(value: string): string {
@@ -23,12 +30,48 @@ function segment(value: string): string {
   return value;
 }
 
+/**
+ * Every event of a range: the first page, then the page `next` names, until
+ * the service says there is none. An event that two pages both carry is
+ * kept once. A cursor of another shape, a cursor that repeats and the page
+ * cap end the reading with what came so far.
+ */
+export async function readAllPages(
+  read: (after: string | null) => Promise<EventsCalendar>,
+  maxPages: number = MAX_CALENDAR_PAGES,
+): Promise<EventsCalendar> {
+  const first = await read(null);
+  const seen = new Set<string>();
+  const events: EventCard[] = [];
+  const take = (page: EventsCalendar | null) => {
+    for (const event of page?.events ?? []) {
+      if (seen.has(event.id)) continue;
+      seen.add(event.id);
+      events.push(event);
+    }
+  };
+  take(first);
+  const cursors = new Set<string>();
+  let next = first?.next ?? null;
+  for (let pages = 1; pages < maxPages && isTimeCursor(next) && !cursors.has(next); pages += 1) {
+    cursors.add(next);
+    const page = await read(next);
+    take(page);
+    next = page?.next ?? null;
+  }
+  return { events, from: first?.from ?? "", to: first?.to ?? "", next: null };
+}
+
 /** The client: one function per route of the events contract. */
 export function eventsApi(request: CommunityRequest) {
   const one = (id: string) => `events/${segment(id)}`;
   return {
-    /** `GET events`: the events that cross `from`–`to`, at most 62 days. */
-    calendar: (query: EventsQuery) => request<EventsCalendar>("GET", eventsPath(query)),
+    /**
+     * `GET events`: every event that crosses `from`–`to`, at most 62 days,
+     * read page after page.
+     */
+    calendar: (query: EventsQuery) =>
+      readAllPages((after) => request<EventsCalendar>("GET", eventsPath({ ...query, after }))),
     get: (id: string) => request<EventDetails>("GET", one(id)),
     create: (communityId: string, body: NewEventBody) =>
       request<EventDetails>("POST", `communities/${segment(communityId)}/events`, body),

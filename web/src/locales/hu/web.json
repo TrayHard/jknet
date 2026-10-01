@@ -187,7 +187,9 @@
     "eventCreated": "{{community}} eseményt hirdetett",
     "eventChanged": "Megváltozott az időpont vagy a helyszín",
     "eventCancelled": "Az eseményt lemondták",
-    "eventReminder": "15 perc múlva kezdődik"
+    "eventReminder": "15 perc múlva kezdődik",
+    "newsPosted": "{{community}} hírt tett közzé",
+    "newsPlain": "Új bejegyzés"
   },
   "sessions": {
     "title": "Eszközök és munkamenetek",

@@ -1,7 +1,7 @@
 /**
  * Tests for src/components/community/api.ts and format.ts: the paths the
  * client builds for the bridges of the three hosts, how it reads a refusal
- * of any transport and the provisional ranking, and the small computations
+ * of any transport, the top communities and the activity, and the small computations
  * the community screens share.
  *
  * Node strips the TypeScript types itself (Node 22.18 and later), so the
@@ -21,7 +21,10 @@ import {
   failureOf,
   isCommunityId,
   isNotFound,
+  isTimeCursor,
   MAX_SEARCH,
+  postsPath,
+  readActivity,
   readRanking,
 } from "./api.ts";
 import { communityHue, daysSince, hostOf, isHttps, monogram, orderedServers, serverName } from "./format.ts";
@@ -144,19 +147,32 @@ describe("eventsPath", () => {
   });
 
   test("drops values of another shape", () => {
-    assert.equal(eventsPath({ from: "tomorrow", scope: "mine", game: "jk3", community: "example-server" }), "events");
+    assert.equal(eventsPath({ from: "tomorrow", scope: "mine", game: "jk3", community: "example-server", after: "page2" }), "events");
+  });
+
+  test("carries the cursor of the page before last", () => {
+    assert.equal(
+      eventsPath({ from: "2026-10-01T00:00:00Z", community: ID, after: `2026-10-03T16:00:00Z_${OTHER}` }),
+      `events?from=2026-10-01T00%3A00%3A00Z&community=${ID}&after=2026-10-03T16%3A00%3A00Z_${OTHER}`,
+    );
   });
 });
 
 describe("readRanking", () => {
-  test("is null when the answer is not a ranking", () => {
-    for (const answer of [null, undefined, 3, "top", {}, { ranking: [] }, { ranking: [{ rank: 1 }] }]) {
+  test("is null when the answer holds no place", () => {
+    for (const answer of [null, undefined, 3, "top", {}, { communities: [] }, { communities: [{ rank: 1 }] }, { period: "week" }]) {
       assert.equal(readRanking(answer), null, JSON.stringify(answer));
     }
   });
 
-  test("reads places with a community and its followers", () => {
-    const answer = { ranking: [{ rank: 1, community: card(), followers: 540 }, { rank: 2, community: card({ id: OTHER }), followers: 312 }] };
+  test("reads the places of the service: a card with its rank and followers", () => {
+    const answer = {
+      period: "week",
+      communities: [
+        { ...card({ counts: { followers: 540, regulars: 0, upcomingEvents: 0, online: 0 } }), rank: 1, followers: 540 },
+        { ...card({ id: OTHER }), rank: 2, followers: 312 },
+      ],
+    };
     assert.deepEqual(
       readRanking(answer).map((entry) => [entry.rank, entry.community.id, entry.followers]),
       [
@@ -166,7 +182,7 @@ describe("readRanking", () => {
     );
   });
 
-  test("reads a list of cards in the order given", () => {
+  test("falls back on the counts of the card and on the order given", () => {
     const answer = { communities: [card({ counts: { followers: 90, regulars: 0, upcomingEvents: 0 } }), card({ id: OTHER })] };
     assert.deepEqual(
       readRanking(answer).map((entry) => [entry.rank, entry.community.id, entry.followers]),
@@ -177,12 +193,82 @@ describe("readRanking", () => {
     );
   });
 
-  test("skips an entry without a valid card", () => {
-    const answer = { top: [{ community: { id: "bad", name: "Bad" } }, card()] };
+  test("skips a place without a valid card", () => {
+    const answer = { communities: [{ id: "bad", name: "Bad", rank: 1 }, { ...card(), rank: 2, followers: 4 }] };
     assert.deepEqual(
-      readRanking(answer).map((entry) => entry.community.id),
-      [ID],
+      readRanking(answer).map((entry) => [entry.rank, entry.community.id]),
+      [[2, ID]],
     );
+  });
+});
+
+describe("isTimeCursor", () => {
+  test("takes a time in UTC to the second and an id", () => {
+    assert.equal(isTimeCursor(`2026-09-30T23:07:40Z_${ID}`), true);
+  });
+
+  test("refuses every other shape", () => {
+    for (const value of [
+      "",
+      ID,
+      "2026-09-30T23:07:40Z",
+      `2026-09-30T23:07:40.123Z_${ID}`,
+      `2026-09-30T23:07:40+03:00_${ID}`,
+      `2026-09-30T23:07:40Z_${ID}x`,
+      `2026-09-30T23:07:40Z_../me`,
+      null,
+      undefined,
+    ]) {
+      assert.equal(isTimeCursor(value), false, String(value));
+    }
+  });
+});
+
+describe("postsPath", () => {
+  test("without a page asks for the first one", () => {
+    assert.equal(postsPath(ID), `communities/${ID}/posts`);
+  });
+
+  test("keeps the limit within 1 to 50 and a cursor of the service", () => {
+    const cursor = `2026-09-30T23:07:40Z_${OTHER}`;
+    assert.equal(postsPath(ID, { limit: 10, before: cursor }), `communities/${ID}/posts?limit=10&before=2026-09-30T23%3A07%3A40Z_${OTHER}`);
+    assert.equal(postsPath(ID, { limit: 0 }), `communities/${ID}/posts?limit=1`);
+    assert.equal(postsPath(ID, { limit: 500 }), `communities/${ID}/posts?limit=50`);
+  });
+
+  test("drops a cursor of another shape and refuses an id of another shape", () => {
+    assert.equal(postsPath(ID, { before: "yesterday" }), `communities/${ID}/posts`);
+    assert.throws(() => postsPath("example-server"), (error) => isNotFound(error));
+  });
+});
+
+describe("readActivity", () => {
+  const heatmap = Array.from({ length: 168 }, (_, index) => (index === 19 ? 12.5 : 0));
+
+  test("reads the activity of the service and leaves any other field out", () => {
+    const activity = readActivity({ heatmap, peak: { humans: 26, at: "2026-09-25T18:00:00Z" }, extra: 312.5, onlineNow: 14, days: 28 });
+    assert.equal(activity.heatmap.length, 168);
+    assert.equal(activity.heatmap[19], 12.5);
+    assert.deepEqual(activity.peak, { humans: 26, at: "2026-09-25T18:00:00Z" });
+    assert.equal(activity.onlineNow, 14);
+    assert.equal(activity.days, 28);
+    assert.deepEqual(Object.keys(activity).sort(), ["days", "heatmap", "onlineNow", "peak"]);
+  });
+
+  test("reads an empty community as no peak and zeros", () => {
+    const activity = readActivity({ heatmap: Array(168).fill(0), peak: null, onlineNow: 0, days: 0 });
+    assert.equal(activity.peak, null);
+    assert.equal(activity.days, 0);
+  });
+
+  test("is null without a heat map of 168 hours, and keeps the numbers finite", () => {
+    for (const answer of [null, {}, { heatmap: [] }, { heatmap: Array(167).fill(1) }, "x"]) {
+      assert.equal(readActivity(answer), null, JSON.stringify(answer));
+    }
+    const odd = readActivity({ heatmap: [...Array(167).fill(1), "x"], peak: { humans: "a", at: "t" }, onlineNow: Number.NaN });
+    assert.equal(odd.heatmap[167], 0);
+    assert.equal(odd.peak, null);
+    assert.equal(odd.onlineNow, 0);
   });
 });
 
@@ -290,8 +376,65 @@ describe("communityApi", () => {
     assert.equal(await missing.api.ranking(), null);
     const broken = recorder(() => Promise.reject({ code: "online", details: { code: "internal" } }));
     await assert.rejects(broken.api.ranking(), (error) => failureOf(error).code === "internal");
-    const ranked = recorder(() => Promise.resolve({ ranking: [{ rank: 1, community: card(), followers: 7 }] }));
+    const ranked = recorder(() => Promise.resolve({ period: "week", communities: [{ ...card(), rank: 1, followers: 7 }] }));
     assert.equal((await ranked.api.ranking())[0].followers, 7);
+    const empty = recorder(() => Promise.resolve({ period: "week", communities: [] }));
+    assert.equal(await empty.api.ranking(), null);
+  });
+
+  test("reads a missing activity as none", async () => {
+    const missing = recorder(() => Promise.reject({ code: "online", details: { code: "not_found" } }));
+    assert.equal(await missing.api.activity(ID), null);
+    const { calls, api } = recorder(() => Promise.resolve({ heatmap: Array(168).fill(0), peak: null, onlineNow: 0, days: 0 }));
+    assert.equal((await api.activity(ID)).days, 0);
+    assert.deepEqual(calls.map((call) => `${call.method} ${call.path}`), [`GET communities/${ID}/activity`]);
+  });
+
+  test("reads missing news as none and passes other refusals on", async () => {
+    const missing = recorder(() => Promise.reject({ code: "online", details: { code: "not_found" } }));
+    assert.deepEqual(await missing.api.posts(ID), { posts: [], next: null });
+    await assert.rejects(missing.api.posts("example-server"), (error) => isNotFound(error));
+    assert.equal(missing.calls.length, 1);
+    const broken = recorder(() => Promise.reject({ code: "online", details: { code: "internal" } }));
+    await assert.rejects(broken.api.posts(ID), (error) => failureOf(error).code === "internal");
+  });
+
+  test("builds the routes of the news", async () => {
+    const { calls, api } = recorder();
+    const cursor = `2026-09-30T23:07:40Z_${OTHER}`;
+    await api.posts(ID);
+    await api.posts(ID, { before: cursor });
+    await api.createPost(ID, { title: "Season two", body: "Ladder", pinned: true, notifyFollowers: false });
+    await api.updatePost(OTHER, { pinned: false, revision: 3 });
+    await api.removePost(OTHER);
+    assert.deepEqual(
+      calls.map((call) => [call.method, call.path, call.body]),
+      [
+        ["GET", `communities/${ID}/posts`, undefined],
+        ["GET", `communities/${ID}/posts?before=2026-09-30T23%3A07%3A40Z_${OTHER}`, undefined],
+        ["POST", `communities/${ID}/posts`, { title: "Season two", body: "Ladder", pinned: true, notifyFollowers: false }],
+        ["PUT", `posts/${OTHER}`, { pinned: false, revision: 3 }],
+        ["DELETE", `posts/${OTHER}`, undefined],
+      ],
+    );
+    assert.throws(() => api.removePost("../me"), (error) => isNotFound(error));
+  });
+
+  test("builds the routes of the JKNet bot", async () => {
+    const { calls, api } = recorder();
+    await api.discordBotLink(ID);
+    await api.discordBot(ID, { announcementsChannelId: "1187291503468114003" });
+    await api.discordBot(ID, { showChannels: false });
+    await api.unlinkDiscordBot(ID);
+    assert.deepEqual(
+      calls.map((call) => [call.method, call.path, call.body]),
+      [
+        ["POST", `communities/${ID}/discord/bot/link`, undefined],
+        ["PUT", `communities/${ID}/discord/bot`, { announcementsChannelId: "1187291503468114003" }],
+        ["PUT", `communities/${ID}/discord/bot`, { showChannels: false }],
+        ["DELETE", `communities/${ID}/discord/bot`, undefined],
+      ],
+    );
   });
 });
 

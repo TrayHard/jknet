@@ -156,6 +156,10 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
   const visibleTags = COMMUNITY_TAGS.filter((code, index) => index < FIRST_TAGS || moreTags || code === tag);
   const hiddenTags = COMMUNITY_TAGS.length - FIRST_TAGS;
   const cards = catalog.data?.communities ?? [];
+  // The top is of every game; the catalogue of one game shows its places there, numbered as the service ranks them.
+  const topEntries = (ranking.data ?? []).filter(
+    (entry) => !query.game || entry.community.games.length === 0 || entry.community.games.includes(query.game),
+  );
 
   return (
     <div className="flex flex-col">
@@ -190,8 +194,8 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
 
       {tab === "catalog" ? (
         <div className="flex flex-col gap-24 pt-24">
-          {ranking.data ? (
-            <TopCommunities entries={ranking.data} open={rankOpen} onToggle={() => setRankOpen((value) => !value)} />
+          {topEntries.length > 0 ? (
+            <TopCommunities entries={topEntries} open={rankOpen} onToggle={() => setRankOpen((value) => !value)} />
           ) : null}
 
           <section aria-label={t("catalog.filters")} className="flex flex-col gap-12">

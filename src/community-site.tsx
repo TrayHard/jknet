@@ -35,8 +35,8 @@ import {
   type CommunityRoute,
   type Game,
 } from "./components/community";
-import { CommunityManage } from "./components/community/manage";
-import { Button } from "./components/ui";
+import { CommunityManage, CommunityNewsComposer } from "./components/community/manage";
+import { Button, Dialog } from "./components/ui";
 // --- slice: community events ---
 import { EventsPlatformProvider, type EventsRoute } from "./components/events/platform";
 import { eventsRouteOfSearch, searchOfEvents, siteEventsPlatform } from "./events-site";
@@ -154,6 +154,12 @@ function Website() {
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [user, setUser] = useState<{ id: string; displayName: string }>();
   const [route, setRoute] = useState<CommunityRoute>(routeOfLocation);
+  // The management screen holds edits nobody saved: leaving the page or a
+  // route of the screens asks first (`setUnsaved` of the platform).
+  const unsaved = useRef(false);
+  const routeRef = useRef(route);
+  routeRef.current = route;
+  const [leaving, setLeaving] = useState<{ go: () => void } | null>(null);
   // --- slice: community events --- the calendar, an event or its editor, when the address names one.
   const [eventsRoute, setEventsRoute] = useState<EventsRoute | null>(() => eventsRouteOfSearch(location.search));
   const [loginBusy, setLoginBusy] = useState(false);
@@ -266,11 +272,32 @@ function Website() {
 
   useEffect(() => {
     const pop = () => {
+      if (unsaved.current) {
+        // The browser has moved already: back to the screen with the edits, and ask.
+        history.pushState(null, "", searchOf(routeRef.current));
+        setLeaving({
+          go: () => {
+            unsaved.current = false;
+            history.back();
+          },
+        });
+        return;
+      }
       setRoute(routeOfLocation());
       setEventsRoute(eventsRouteOfSearch(location.search));
     };
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
+  }, []);
+
+  useEffect(() => {
+    const before = (event: BeforeUnloadEvent) => {
+      if (!unsaved.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", before);
+    return () => window.removeEventListener("beforeunload", before);
   }, []);
 
   useEffect(() => {
@@ -287,10 +314,32 @@ function Website() {
   );
 
   const navigate = useCallback((next: CommunityRoute) => {
-    history.pushState(null, "", searchOf(next));
-    setEventsRoute(null);
-    setRoute(next);
-    window.scrollTo(0, 0);
+    const go = () => {
+      unsaved.current = false;
+      history.pushState(null, "", searchOf(next));
+      setEventsRoute(null);
+      setRoute(next);
+      window.scrollTo(0, 0);
+    };
+    if (unsaved.current) setLeaving({ go });
+    else go();
+  }, []);
+  const setUnsaved = useCallback((dirty: boolean) => {
+    unsaved.current = dirty;
+  }, []);
+  // The tab of the JKNet bot's link opens during the click; the address comes after it, and only one over HTTPS fills it.
+  const openExternalLater = useCallback(() => {
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
+    return (url: string | null) => {
+      const safe = url !== null && /^https:\/\//i.test(url) ? url : null;
+      if (tab === null) {
+        if (safe) window.open(safe, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (safe) tab.location.href = safe;
+      else tab.close();
+    };
   }, []);
 
   function cancelLogin(close = true) {
@@ -437,8 +486,11 @@ function Website() {
       putBlob,
       friends,
       findBundles,
+      renderNewsComposer: (props) => <CommunityNewsComposer {...props} />,
+      openExternalLater,
+      setUnsaved,
     }),
-    [request, signedIn, user?.id, openSignIn, navigate, putBlob, friends],
+    [request, signedIn, user?.id, openSignIn, navigate, putBlob, friends, openExternalLater, setUnsaved],
   );
 
   // --- slice: community events ---
@@ -576,6 +628,35 @@ function Website() {
           )}
         </EventsPlatformProvider>
       </div>
+      {leaving ? (
+        <CommunityFrame>
+          <Dialog
+            variant="danger"
+            title={t("manage.leave.title")}
+            body={t("manage.leave.body")}
+            onClose={() => setLeaving(null)}
+            actions={
+              <>
+                <Button size="sm" variant="ghost" wrap onClick={() => setLeaving(null)}>
+                  {t("manage.leave.keep")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  wrap
+                  onClick={() => {
+                    const next = leaving.go;
+                    setLeaving(null);
+                    next();
+                  }}
+                >
+                  {t("manage.leave.discard")}
+                </Button>
+              </>
+            }
+          />
+        </CommunityFrame>
+      ) : null}
     </>
   );
 }
