@@ -19,6 +19,7 @@
     "v0_11_0_privacy": "Las páginas de las comunidades muestran a sus jugadores habituales. Desactiva «Mostrarme entre los jugadores habituales de las comunidades» en Ajustes para salir de todas las listas. JKNet Online borrará el tiempo de juego contabilizado.",
     "v0_11_1_imageDrop": "Arrastra una imagen directamente al recuadro del logotipo o de la portada en la pantalla de gestión de una comunidad, o a la portada de un evento en el editor. El recuadro se ilumina mientras el archivo está encima.",
     "v0_11_1_catalogVisibility": "«Mis comunidades» marca una comunidad que no aparece en el catálogo y explica el motivo. Los administradores de JKNet publican una página sin propietario desde esa misma fila.",
+    "v0_11_2_followersTop": "El top de comunidades ahora se ordena por seguidores y muestra cuántos tiene cada una. Las horas de juego por semana ya no aparecen en las páginas de las comunidades ni en el catálogo.",
     "v0_10_0_webApp": "Chatea con tus amigos desde el teléfono o cualquier navegador: inicia sesión en online.jknet.app y añade JKNet a la pantalla de inicio.",
     "v0_10_0_signIn": "El inicio de sesión en el navegador queda vinculado al launcher que lo inició: un enlace de inicio de sesión ajeno ya no entrega tu cuenta a quien lo envió.",
     "v0_10_0_attachments": "El menú de adjuntos del chat se divide en archivos, multimedia, datos del juego, configuración y catálogos. Mapas, configuraciones y perfiles de jugador llegan de todos tus clientes en una sola lista que indica su origen.",
