@@ -47,7 +47,7 @@ import { communityApi, isNotFound } from "../community/api";
 import { CommunityLogo, Failure, Notice } from "../community/bits";
 import { CommunityMarkdown } from "../community/CommunityMarkdown";
 import { GAME_NAMES, orderedServers, serverName } from "../community/format";
-import { usePictureRefusalText, usePictureUpload } from "../community/pictureUpload";
+import { PictureDropZone, usePictureRefusalText, usePictureUpload } from "../community/pictureUpload";
 import { useCommunityPlatform } from "../community/platform";
 import type { Community, CommunityServer, Game } from "../community/types";
 import { useRemote } from "../community/useRemote";
@@ -1184,7 +1184,8 @@ function bundleOptions(t: Translate, community: Community, event: EventDetails |
 /**
  * The cover: the picture with **Replace** and **Remove**, or the place to
  * choose one. It goes up the way the logo and the cover of a page do
- * (`usePictureUpload`): the launcher's dialog, or the website's file input.
+ * (`usePictureUpload`): the launcher's dialog, or the website's file input,
+ * and a file dropped on it the same way (`PictureDropZone`).
  */
 function CoverField({ draft, communityId, update }: { draft: EventDraft; communityId: string; update: (patch: Partial<EventDraft>) => void }) {
   const { t } = useTranslation("events");
@@ -1204,7 +1205,7 @@ function CoverField({ draft, communityId, update }: { draft: EventDraft; communi
         {t("editor.cover")} <span className="font-normal text-fg-secondary">{t("editor.coverHint")}</span>
       </span>
       {draft.cover ? (
-        <div className="relative">
+        <PictureDropZone upload={upload} className="rounded-lg">
           <EventCover event={{ cover: draft.cover, communityId }} className="h-[120px] rounded-lg border border-line" />
           <div className="absolute top-8 right-8 flex gap-6">
             {canUpload ? (
@@ -1216,18 +1217,26 @@ function CoverField({ draft, communityId, update }: { draft: EventDraft; communi
               {t("editor.coverRemove")}
             </Button>
           </div>
-        </div>
+          {busy ? (
+            <span role="status" className="absolute bottom-8 left-8 flex items-center gap-6 rounded-md bg-scrim px-8 py-4 text-body-sm-medium text-fg">
+              <LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              {t("editor.coverUploading")}
+            </span>
+          ) : null}
+        </PictureDropZone>
       ) : canUpload ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={choose}
-          className="flex h-[120px] w-full cursor-pointer flex-col items-center justify-center gap-6 rounded-lg border border-dashed border-line-strong bg-input px-16 text-center text-fg-secondary select-none hover:border-line-accent hover:text-fg"
-        >
-          {busy ? <LoaderCircle size={20} className="animate-spin" aria-hidden="true" /> : <ImagePlus size={20} aria-hidden="true" />}
-          <span className="text-body-sm-medium text-fg">{busy ? t("editor.coverUploading") : t("editor.coverPick")}</span>
-          <span className="text-body-sm">{t("editor.coverPickText")}</span>
-        </button>
+        <PictureDropZone upload={upload} className="rounded-lg">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={choose}
+            className="flex h-[120px] w-full cursor-pointer flex-col items-center justify-center gap-6 rounded-lg border border-dashed border-line-strong bg-input px-16 text-center text-fg-secondary select-none hover:border-line-accent hover:text-fg"
+          >
+            {busy ? <LoaderCircle size={20} className="animate-spin" aria-hidden="true" /> : <ImagePlus size={20} aria-hidden="true" />}
+            <span className="text-body-sm-medium text-fg">{busy ? t("editor.coverUploading") : t("editor.coverPick")}</span>
+            <span className="text-body-sm">{t("editor.coverPickText")}</span>
+          </button>
+        </PictureDropZone>
       ) : (
         <p className="text-body-sm text-fg-secondary">{t("editor.coverUnavailable")}</p>
       )}

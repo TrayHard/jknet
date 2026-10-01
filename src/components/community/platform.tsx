@@ -16,6 +16,7 @@
  * | `serverStatus` | UDP `getstatus` of the core, the service's poll when it fails | the service's poll | the service's poll |
  * | `canManage` | yes | yes | no: read and follow |
  * | pictures: a page's logo and cover, an event's cover | `pickImage`: the core's dialog and upload | `putBlob` after a file input | — |
+ * | a picture dropped on its tile | `dropZones` for the drags of the window, `dropImage`: the core's checks and upload | the page's drag events, then `putBlob` | — |
  * | `friends`, `findBundles` | the friends list, the bundle catalogue | `GET /v1/friends`, `GET /v1/bundles` | — |
  * | `manageUrl` | — | — | the website's management screen |
  * | `renderNewsComposer` | the composer of the news | the same | — |
@@ -27,6 +28,7 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 import { communityApi, type CommunityApi } from "./api";
+import type { DropZones } from "./pictureDrop";
 import type {
   Community,
   CommunityBundleRef,
@@ -184,6 +186,20 @@ export interface CommunityPlatform {
    * it gets a file input and `putBlob` (`usePictureUpload`).
    */
   pickImage?: (kind: PictureKind) => Promise<PickedImage>;
+  /**
+   * The launcher's drags of files over the window. Its webview gets the paths
+   * and the position of a drag, never the bytes, so a picture's tile adds
+   * itself here and hears when a drag is over it and what was dropped on it
+   * (`PictureDropZone`). A host without it lets a tile read the page's own
+   * drag events, with the files in them.
+   */
+  dropZones?: DropZones;
+  /**
+   * The core's way to a dropped picture: the file of the last drop on the
+   * window at `path` is checked, stripped and uploaded as `pickImage` does
+   * with a picked one. Never `cancelled`.
+   */
+  dropImage?: (kind: PictureKind, path: string) => Promise<PickedImage>;
   /** Puts bytes in the store of the service under their SHA-256: `PUT /v1/blobs/{sha256}`. */
   putBlob?: (sha256: string, file: Blob) => Promise<void>;
   /**

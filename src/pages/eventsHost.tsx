@@ -3,7 +3,8 @@
  * draw events: the events pages and Home. It repeats the one
  * `CommunityPage` builds, without the seed of a server, the controls of
  * **Play** and what only the management screen asks for; the core's dialog
- * of pictures stays, for the cover in the editor of an event.
+ * of pictures and the drop of one on its tile stay, for the cover in the
+ * editor of an event.
  */
 
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -17,6 +18,7 @@ import { communityIpc, serversIpc } from "../lib/ipc";
 import { useAccountState, useActiveGame, useOnlineUrl } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { communityPath, liveOf, useLauncherPickImage } from "./CommunityPage";
+import { launcherPictureDrops } from "./communityDrops";
 import { PUBLIC_PAGE, useLauncherEventsPlatform } from "./eventsPlatform";
 
 const request: CommunityPlatform["request"] = (method, path, body) => communityIpc.request(method, path, body);
@@ -59,6 +61,7 @@ export function useLauncherCommunityPlatform(onExternalError?: (error: unknown) 
       openBundle: (bundleId) => navigate(bundlesTabRoute(bundleId)),
       openPrivacySettings: () => navigate("/settings?section=regulars"),
       pickImage,
+      ...launcherPictureDrops(),
     }),
     [signedIn, accountId, apiBase, navigate, openExternal, game, pickImage],
   );

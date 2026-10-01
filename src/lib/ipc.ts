@@ -38,6 +38,18 @@ export const communityIpc = {
    */
   pickImage: (kind: CommunityImageKind, title: string, filter: string) =>
     call<CommunityPickedImage>("community_pick_image", { kind, title, filter }),
+  /**
+   * A picture dropped on its tile. The core reads `path` only when it is a
+   * file of the last drop on this window, then checks, strips and uploads it
+   * as `pickImage` does; the answer is never `cancelled`.
+   */
+  dropImage: (kind: CommunityImageKind, path: string) =>
+    call<CommunityPickedImage>("community_drop_image", { kind, path }),
+  /**
+   * Whether a drop now would land on a picture's tile: the core then keeps
+   * that drop from the chat composer of the window.
+   */
+  claimDrop: (claimed: boolean) => call<void>("community_claim_drop", { claimed }),
 };
 
 /**
@@ -47,7 +59,10 @@ export const communityIpc = {
  */
 export type CommunityImageKind = "logo" | "banner" | "cover";
 
-/** What `community_pick_image` answers: `PickedImage` in `src-tauri/src/community_images.rs`. */
+/**
+ * What `community_pick_image` and `community_drop_image` answer: `PickedImage`
+ * in `src-tauri/src/community_images.rs`.
+ */
 export type CommunityPickedImage =
   | { outcome: "cancelled" }
   | { outcome: "refused"; reason: "tooBig"; fileName: string; maxBytes: number }
