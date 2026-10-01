@@ -85,6 +85,8 @@ export const NAMESPACES = [
   "serverInstances",
   // --- slice: communities ---
   "community",
+  // --- slice: community events ---
+  "events",
 ] as const;
 
 export type Namespace = (typeof NAMESPACES)[number];

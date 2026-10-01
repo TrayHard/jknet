@@ -329,6 +329,61 @@ pub struct Settings {
     /// window shows them; 0 turns that off. At most [`MAX_CHAT_AUTO_DOWNLOAD_MB`],
     /// the largest file a chat carries.
     pub chat_auto_download_mb: u32,
+    // --- slice: community events ---
+    /// How the events of communities reach the player: new events of the
+    /// communities they follow, the reminder 15 minutes before an event they
+    /// answered, and whether either shows as a Windows notification.
+    pub community_notifications: CommunityNotifications,
+}
+
+// --- slice: community events ---
+/// The switches of **Community notifications**. Each starts on; a
+/// `settings.json` written before them reads them as on
+/// (`#[serde(default)]`). A change of time or place and a cancellation of
+/// an event the player answered always come: they have no switch.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CommunityNotifications {
+    /// A community the player follows, with its bell on, announced an event.
+    pub new_events: bool,
+    /// An event the player answered «going» or «maybe» starts in 15 minutes.
+    pub reminders: bool,
+    /// A Windows notification while no window of the launcher is focused.
+    pub os: bool,
+}
+
+impl Default for CommunityNotifications {
+    fn default() -> Self {
+        CommunityNotifications {
+            new_events: true,
+            reminders: true,
+            os: true,
+        }
+    }
+}
+
+/// A partial update of [`CommunityNotifications`]: the switches sent, merged
+/// one by one.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommunityNotificationsPatch {
+    pub new_events: Option<bool>,
+    pub reminders: Option<bool>,
+    pub os: Option<bool>,
+}
+
+impl CommunityNotificationsPatch {
+    fn apply(self, target: &mut CommunityNotifications) {
+        for (value, field) in [
+            (self.new_events, &mut target.new_events),
+            (self.reminders, &mut target.reminders),
+            (self.os, &mut target.os),
+        ] {
+            if let Some(value) = value {
+                *field = value;
+            }
+        }
+    }
 }
 
 // --- slice: chat notifications ---
@@ -593,6 +648,8 @@ impl Default for Settings {
             start_minimized: true,
             // --- slice: chat files ---
             chat_auto_download_mb: DEFAULT_CHAT_AUTO_DOWNLOAD_MB,
+            // --- slice: community events ---
+            community_notifications: CommunityNotifications::default(),
         }
     }
 }
@@ -913,6 +970,9 @@ pub struct SettingsPatch {
     /// 0 to [`MAX_CHAT_AUTO_DOWNLOAD_MB`]; [`SettingsPatch::validate`]
     /// refuses more.
     pub chat_auto_download_mb: Option<u32>,
+    // --- slice: community events ---
+    /// The switches the caller changed, merged one by one.
+    pub community_notifications: Option<CommunityNotificationsPatch>,
 }
 
 // --- slice: chat notifications ---
@@ -1136,6 +1196,10 @@ impl SettingsPatch {
         // --- slice: chat files ---
         if let Some(value) = self.chat_auto_download_mb {
             settings.chat_auto_download_mb = value;
+        }
+        // --- slice: community events ---
+        if let Some(patch) = self.community_notifications {
+            patch.apply(&mut settings.community_notifications);
         }
     }
 
@@ -1452,6 +1516,12 @@ mod tests {
             start_minimized: false,
             // --- slice: chat files ---
             chat_auto_download_mb: 25,
+            // --- slice: community events ---
+            community_notifications: CommunityNotifications {
+                new_events: false,
+                reminders: false,
+                os: false,
+            },
         }
     }
 
@@ -2474,5 +2544,66 @@ mod tests {
             .map(|n| format!("name{n}"))
             .collect();
         assert_eq!(clean_nicknames(many).len(), MAX_NICKNAMES);
+    }
+
+    // --- slice: community events ---
+    #[test]
+    fn community_notifications_start_on_and_older_settings_read_them_as_on() {
+        let fresh = Settings::default();
+        assert_eq!(fresh.community_notifications, CommunityNotifications::default());
+        assert!(fresh.community_notifications.new_events);
+        assert!(fresh.community_notifications.reminders);
+        assert!(fresh.community_notifications.os);
+        // A document written before the block existed.
+        let older: Settings = serde_json::from_str(r#"{"activeGame":"ja"}"#).expect("an older document reads");
+        assert_eq!(older.community_notifications, CommunityNotifications::default());
+        // A block that names one switch keeps the others on.
+        let partial: Settings =
+            serde_json::from_str(r#"{"communityNotifications":{"reminders":false}}"#).expect("a partial block reads");
+        assert_eq!(
+            partial.community_notifications,
+            CommunityNotifications {
+                reminders: false,
+                ..CommunityNotifications::default()
+            }
+        );
+        // It is written in camelCase, as the frontend reads it.
+        let written = serde_json::to_value(&fresh).expect("the settings serialize");
+        assert_eq!(
+            written["communityNotifications"],
+            serde_json::json!({ "newEvents": true, "reminders": true, "os": true })
+        );
+    }
+
+    #[test]
+    fn a_patch_of_community_notifications_moves_the_switches_it_names() {
+        let mut settings = Settings::default();
+        let patch: SettingsPatch =
+            serde_json::from_str(r#"{"communityNotifications":{"os":false}}"#).expect("the patch reads");
+        patch.validate().expect("the patch is valid");
+        patch.apply(&mut settings);
+        assert_eq!(
+            settings.community_notifications,
+            CommunityNotifications {
+                os: false,
+                ..CommunityNotifications::default()
+            }
+        );
+        let back: SettingsPatch =
+            serde_json::from_str(r#"{"communityNotifications":{"os":true,"newEvents":false}}"#).expect("the patch reads");
+        back.apply(&mut settings);
+        assert_eq!(
+            settings.community_notifications,
+            CommunityNotifications {
+                new_events: false,
+                ..CommunityNotifications::default()
+            }
+        );
+        // An unknown switch is refused, like every other field of a patch.
+        assert!(serde_json::from_str::<SettingsPatch>(r#"{"communityNotifications":{"news":true}}"#).is_err());
+        // A patch about something else leaves the block alone.
+        let other: SettingsPatch = serde_json::from_str(r#"{"closeOnLaunch":true}"#).expect("the patch reads");
+        other.apply(&mut settings);
+        assert!(!settings.community_notifications.new_events);
     }
 }

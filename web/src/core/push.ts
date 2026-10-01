@@ -54,6 +54,8 @@ export interface PushSettings {
   friendAccepted: boolean;
   groupInvites: boolean;
   serverInvites: boolean;
+  // --- slice: community events --- a new event, a change, a reminder. Absent from a service before S4: on.
+  communityEvents: boolean;
   preview: PushPreview;
   silent: boolean;
   quietHours: PushQuietHours | null;
@@ -73,6 +75,7 @@ export const DEFAULT_PUSH_SETTINGS: Readonly<PushSettings> = Object.freeze({
   friendAccepted: true,
   groupInvites: true,
   serverInvites: true,
+  communityEvents: true,
   preview: "full",
   silent: false,
   quietHours: null,

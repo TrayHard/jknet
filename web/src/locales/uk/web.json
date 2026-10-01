@@ -13,6 +13,7 @@
       "chats": "Чати",
       "friends": "Друзі",
       "community": "Сервери спільнот",
+      "events": "Події",
       "servers": "Список серверів",
       "bundles": "Збірки",
       "jkhub": "Моди JKHub",
@@ -22,6 +23,7 @@
       "chats": "Чати",
       "friends": "Друзі",
       "community": "Спільноти",
+      "events": "Події",
       "servers": "Сервери",
       "bundles": "Збірки",
       "jkhub": "JKHub",
@@ -32,6 +34,7 @@
       "chats": "Виберіть чат",
       "friends": "Виберіть друга",
       "community": "Виберіть сервер",
+      "events": "Виберіть подію",
       "servers": "Виберіть сервер",
       "bundles": "Виберіть збірку",
       "jkhub": "Виберіть мод"
@@ -180,7 +183,11 @@
     "invite": "Запрошує вас на свій сервер",
     "test": "Сповіщення JKNet працюють на цьому пристрої.",
     "reactionPlain": "Реакція на ваше повідомлення",
-    "groupInvitePlain": "Запрошує вас до групи"
+    "groupInvitePlain": "Запрошує вас до групи",
+    "eventCreated": "{{community}} оголошує подію",
+    "eventChanged": "Змінилися час або місце",
+    "eventCancelled": "Подію скасовано",
+    "eventReminder": "Почнеться за 15 хвилин"
   },
   "sessions": {
     "title": "Пристрої та сеанси",

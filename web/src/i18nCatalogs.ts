@@ -29,6 +29,8 @@ export const WEB_NAMESPACES = [
   "jkhub",
   // --- slice: communities ---
   "community",
+  // --- slice: community events ---
+  "events",
   "web",
 ] as const;
 

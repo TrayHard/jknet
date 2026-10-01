@@ -28,10 +28,10 @@ export type CommunityHost = "launcher" | "website" | "web";
 export type CatalogTab = "catalog" | "mine" | "following";
 
 /** The tabs of a community page. `manage` is the organizers'. */
-export type PageTab = "overview" | "servers" | "players" | "manage";
+export type PageTab = "overview" | "servers" | "events" | "players" | "manage";
 
 export const CATALOG_TABS: readonly CatalogTab[] = ["catalog", "mine", "following"];
-export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "players", "manage"];
+export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "events", "players", "manage"];
 
 /** Where the community screens are: the catalogue on a tab, or a page on a tab. */
 export type CommunityRoute =

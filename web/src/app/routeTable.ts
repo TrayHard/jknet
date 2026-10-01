@@ -12,7 +12,7 @@
  * | `/friends`                  | list                  | —                    |
  * | `/friends/requests`         | list, detail          | `/friends`           |
  * | `/friends/:userId`          | list, detail          | `/friends`           |
- * | `/community`, `/servers`, `/bundles`, `/jkhub` | list | —                  |
+ * | `/community`, `/events`, `/servers`, `/bundles`, `/jkhub` | list | —        |
  * | their details               | list, detail          | the section root     |
  *
  * A bundle's page is `/bundles/:bundleId`: the service reads a bundle by its
@@ -21,15 +21,16 @@
  * | `/settings/<page>`          | list, detail          | `/settings`          |
  */
 
-export type Section = "chats" | "friends" | "community" | "servers" | "bundles" | "jkhub" | "settings";
+export type Section = "chats" | "friends" | "community" | "events" | "servers" | "bundles" | "jkhub" | "settings";
 
-export const SECTIONS: readonly Section[] = ["chats", "friends", "community", "servers", "bundles", "jkhub", "settings"];
+export const SECTIONS: readonly Section[] = ["chats", "friends", "community", "events", "servers", "bundles", "jkhub", "settings"];
 
 /** The root path of each section. */
 export const SECTION_ROOTS: Record<Section, string> = {
   chats: "/chats",
   friends: "/friends",
   community: "/community",
+  events: "/events",
   servers: "/servers",
   bundles: "/bundles",
   jkhub: "/jkhub",
@@ -46,6 +47,9 @@ export type ScreenId =
   | "friendDetails"
   | "community"
   | "communityDetails"
+  // --- slice: community events ---
+  | "events"
+  | "eventDetails"
   | "serverList"
   | "serverDetails"
   | "bundles"
@@ -88,6 +92,9 @@ export const ROUTES: readonly RouteSpec[] = [
   { path: "/friends/:userId", section: "friends", list: "friends", detail: "friendDetails", parent: "/friends" },
   { path: "/community", section: "community", list: "community" },
   { path: "/community/:serverId", section: "community", list: "community", detail: "communityDetails", parent: "/community" },
+  // --- slice: community events --- the calendar of every community, and one event.
+  { path: "/events", section: "events", list: "events" },
+  { path: "/events/:eventId", section: "events", list: "events", detail: "eventDetails", parent: "/events" },
   { path: "/servers", section: "servers", list: "serverList" },
   { path: "/servers/:game/:address", section: "servers", list: "serverList", detail: "serverDetails", parent: "/servers" },
   { path: "/bundles", section: "bundles", list: "bundles" },
