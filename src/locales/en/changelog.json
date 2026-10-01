@@ -17,6 +17,8 @@
     "v0_11_0_notifications": "In-launcher toasts and Windows notifications report the events and news of the communities you follow and remind you 15 minutes before the events you answered. Each kind has its own switch in Settings.",
     "v0_11_0_management": "Owners and editors run their community from one screen: texts, logo and cover, links, tags, recommended files, servers verified by a code, editors, news and the JKNet bot that brings Discord announcements to the page.",
     "v0_11_0_privacy": "Community pages list their regular players. Turn off Show me in the regular players of communities in Settings to leave every list, and JKNet Online deletes the playing time it has counted.",
+    "v0_11_1_imageDrop": "Drop a picture straight onto the logo or cover tile of the community management screen, or onto the event cover in the event editor. The tile lights up while the file is over it.",
+    "v0_11_1_catalogVisibility": "My communities marks a community that the catalog does not list and says why. JKNet administrators publish a page without an owner right from that row.",
     "v0_10_0_webApp": "Chat with friends from your phone or any browser: sign in at online.jknet.app and add JKNet to your home screen.",
     "v0_10_0_signIn": "Browser sign-in is now bound to the launcher that started it, so a sign-in link someone else sends you can no longer hand them your account.",
     "v0_10_0_attachments": "The chat attachment menu is split into files, media, game data, settings and catalogs. Maps, configs and player profiles come from all your clients in one list that shows where each item comes from.",
