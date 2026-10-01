@@ -50,7 +50,7 @@ room than the English text suggests:
 
 | Where | Key | Room |
 | --- | --- | --- |
-| Sidebar navigation | `nav:items.*` | about 160 px, one line, truncated with an ellipsis |
+| Sidebar navigation | `nav:items.*` | about 150 px, 130 px beside a counter and 10 px less while the column scrolls; one line, truncated with an ellipsis |
 | Game switcher | `nav:gameSwitch.label` and the game names | half of 232 px each; the names come from the core and are not translated |
 | Server table headings | `servers:columns.*` | 56–116 px, uppercase, no wrapping |
 | Mode badges | `games:gametypesShort.*` | 60 px, uppercase; keep them to 5–6 characters |
@@ -68,6 +68,7 @@ Everything else wraps.
 | `common:actions.delete`, `disable`, `remove` | Three different actions, and they need three different words. `delete` destroys the thing, `disable` switches it off and leaves it in place, `remove` detaches it without destroying it — the button that ends a friendship is `remove`, not `delete`. `common:states.deleting` and `common:states.removing` follow the verb you picked for each. |
 | `common:actions.seeAll` | A general «show the whole list», reused by any screen that shortens one. Do not name what is being listed — the screen that needs a specific label has its own key, as `home:topServers.seeAll` does. |
 | `common:actions.apply` | The button of a small dialog that puts a typed value in place — the address of a link or a video in the description editor — and closes. One word; it is not `save`, nothing is written to disk by it alone. |
+| `nav:items.servers`, `nav:items.serverInstances` | Two sidebar items for two different screens: `servers` is the list of public servers the player joins, `serverInstances` the dedicated servers the player runs on this computer. Give them different words: two items that read the same leave the player guessing which one to press. `servers:title` and `serverInstances:title` head the same two screens and repeat these names word for word. |
 | `home:hero.continueText` | Names two buttons of the same block: use the exact wording you gave `home:hero.connect` and `home:hero.play`, or the sentence describes buttons the player cannot find. `{{client}}` is a name the player typed. |
 | `home:hero.lastServer` | The caption over a map picture, under 20 characters. It says what the picture is, so it is a label, not a sentence. |
 | `home:hero.otherClients`, `newClient` | A button of the hero and the last line of the menu it opens. Both end in the ellipsis the launcher puts on a control that opens something instead of acting — keep it, and keep it as one character, «…». The button stands beside **Play** in a row that never wraps to a second line: two words at most. |

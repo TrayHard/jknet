@@ -31,8 +31,8 @@
     "history": "Verlauf",
     "busiest": "Meistbesuchte Server",
     "emptyTitle": "Noch keine Server im Cache",
-    "emptyText": "Öffnen Sie den Bereich Server einmal, dann erscheinen die meistbesuchten hier.",
-    "openServers": "Server öffnen",
+    "emptyText": "Öffnen Sie einmal die Serverliste, dann erscheinen die meistbesuchten Server hier.",
+    "openServers": "Serverliste öffnen",
     "seeAll": "Alle anzeigen",
     "connect": "Connect",
     "lastConnected": "{{age}} ago"

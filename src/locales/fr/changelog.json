@@ -20,6 +20,7 @@
     "v0_11_1_imageDrop": "Déposez une image directement sur la tuile du logo ou de la couverture dans l’écran de gestion d’une communauté, ou sur la couverture d’un événement dans l’éditeur. La tuile s’allume tant que le fichier la survole.",
     "v0_11_1_catalogVisibility": "« Mes communautés » signale une communauté absente du catalogue et en donne la raison. Les administrateurs JKNet publient une page sans propriétaire directement depuis cette ligne.",
     "v0_11_2_followersTop": "Le top des communautés a été remanié et affiche le nombre d’abonnés de chaque communauté.",
+    "v0_11_2_serverNames": "Dans la barre latérale, le navigateur de serveurs s’appelle « Liste des serveurs » et vos serveurs dédiés « Mes serveurs ».",
     "v0_10_0_webApp": "Discutez avec vos amis depuis votre téléphone ou n’importe quel navigateur : connectez-vous sur online.jknet.app et ajoutez JKNet à l’écran d’accueil.",
     "v0_10_0_signIn": "La connexion dans le navigateur est désormais liée au launcher qui l’a lancée : un lien de connexion envoyé par quelqu’un d’autre ne lui donne plus votre compte.",
     "v0_10_0_attachments": "Le menu des pièces jointes du chat est divisé en fichiers, médias, données de jeu, paramètres et catalogues. Cartes, configurations et profils de joueur proviennent de tous vos clients dans une seule liste qui indique leur source.",

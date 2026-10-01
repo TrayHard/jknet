@@ -6,10 +6,10 @@
   },
   "items": {
     "home": "Accueil",
-    "servers": "Serveurs",
+    "servers": "Liste des serveurs",
     "library": "Bibliothèque",
     "clients": "Clients",
-    "serverInstances": "Dedicated servers",
+    "serverInstances": "Mes serveurs",
     "friends": "Amis",
     "settings": "Paramètres",
     "playerProfiles": "Player profiles",

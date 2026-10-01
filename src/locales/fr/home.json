@@ -31,8 +31,8 @@
     "history": "Historique",
     "busiest": "Serveurs les plus remplis",
     "emptyTitle": "Aucun serveur dans le cache",
-    "emptyText": "Ouvrez une fois l’écran Serveurs et les plus remplis apparaissent ici.",
-    "openServers": "Ouvrir Serveurs",
+    "emptyText": "Ouvrez une fois l’écran Liste des serveurs et les plus remplis apparaissent ici.",
+    "openServers": "Ouvrir la liste des serveurs",
     "seeAll": "Tout voir",
     "connect": "Connect",
     "lastConnected": "{{age}} ago"

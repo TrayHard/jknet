@@ -6,10 +6,10 @@
   },
   "items": {
     "home": "Kezdőlap",
-    "servers": "Szerverek",
+    "servers": "Szerverlista",
     "library": "Könyvtár",
     "clients": "Kliensek",
-    "serverInstances": "Dedicated servers",
+    "serverInstances": "Saját szerverek",
     "friends": "Barátok",
     "settings": "Beállítások",
     "playerProfiles": "Player profiles",

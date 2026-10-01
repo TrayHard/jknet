@@ -31,8 +31,8 @@
     "history": "Előzmények",
     "busiest": "Legnépesebb szerverek",
     "emptyTitle": "Még nincs szerver a gyorsítótárban",
-    "emptyText": "Nyissa meg egyszer a Szerverek képernyőt, és itt megjelennek a legnépesebbek.",
-    "openServers": "Szerverek megnyitása",
+    "emptyText": "Nyissa meg egyszer a Szerverlista képernyőt, és itt megjelennek a legnépesebb szerverek.",
+    "openServers": "Szerverlista megnyitása",
     "seeAll": "Összes szerver",
     "connect": "Connect",
     "lastConnected": "{{age}} ago"
