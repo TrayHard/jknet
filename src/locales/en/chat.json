@@ -631,7 +631,7 @@
     },
     "server": {
       "title": "Share a server",
-      "empty": "No servers yet. Press Get new list on the Servers screen.",
+      "empty": "No servers yet. Press Get new list on the Server list screen.",
       "emptyWeb": "The server list has no servers right now."
     },
     "map": {

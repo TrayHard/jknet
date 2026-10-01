@@ -31,8 +31,8 @@
     "history": "Historia",
     "busiest": "Najbardziej oblegane serwery",
     "emptyTitle": "Brak serwerów w pamięci podręcznej",
-    "emptyText": "Otwórz raz ekran Serwery, a pojawią się tu najbardziej oblegane.",
-    "openServers": "Otwórz Serwery",
+    "emptyText": "Otwórz raz ekran Lista serwerów, a pojawią się tu najbardziej oblegane serwery.",
+    "openServers": "Otwórz listę serwerów",
     "seeAll": "Zobacz wszystkie",
     "connect": "Connect",
     "lastConnected": "{{age}} ago"

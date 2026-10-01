@@ -679,7 +679,7 @@
     },
     "server": {
       "title": "Udostępnij serwer",
-      "empty": "Nie ma jeszcze serwerów. Kliknij „Get new list” na ekranie „Serwery”.",
+      "empty": "Nie ma jeszcze serwerów. Kliknij „Get new list” na ekranie „Lista serwerów”.",
       "emptyWeb": "Na liście serwerów nie ma teraz żadnych serwerów."
     },
     "map": {

@@ -20,6 +20,7 @@
     "v0_11_1_imageDrop": "A közösség logóját és borítóját a kezelőképernyőn, az esemény borítóját pedig a szerkesztőben közvetlenül a csempére húzhatod. A csempe kivilágosodik, amíg a fájl fölötte van.",
     "v0_11_1_catalogVisibility": "A „Közösségeim” megjelöli azt a közösséget, amely nincs a katalógusban, és megmondja az okát. A JKNet adminisztrátorai tulajdonos nélküli oldalt közvetlenül ebből a sorból tesznek közzé.",
     "v0_11_2_followersTop": "A közösségek toplistája mostantól a követők száma szerint rangsorol, és mutatja ezt a számot. A heti játékórák már nem jelennek meg a közösségi oldalakon és a katalógusban.",
+    "v0_11_2_serverNames": "Az oldalsávon a szerverböngésző neve „Szerverlista”, a saját dedikált szervereidé „Saját szerverek”.",
     "v0_10_0_webApp": "Csevegj a barátaiddal telefonról vagy bármelyik böngészőből: jelentkezz be az online.jknet.app oldalon, és tedd ki a JKNetet a kezdőképernyőre.",
     "v0_10_0_signIn": "A böngészős bejelentkezés mostantól ahhoz a launcherhez kötődik, amelyik elindította: egy mástól kapott bejelentkezési hivatkozás már nem adja át a fiókodat a küldőnek.",
     "v0_10_0_attachments": "A csevegés mellékletmenüje fájlokra, médiára, játékadatokra, beállításokra és katalógusokra oszlik. A pályák, konfigurációk és játékosprofilok az összes kliensedből egyetlen listába kerülnek, amely a forrásukat is mutatja.",

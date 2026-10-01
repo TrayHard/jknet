@@ -20,6 +20,7 @@
     "v0_11_1_imageDrop": "Drop a picture straight onto the logo or cover tile of the community management screen, or onto the event cover in the event editor. The tile lights up while the file is over it.",
     "v0_11_1_catalogVisibility": "My communities marks a community that the catalog does not list and says why. JKNet administrators publish a page without an owner right from that row.",
     "v0_11_2_followersTop": "The top of communities now ranks by followers and shows each community’s follower count. Weekly player hours are no longer shown on community pages and in the catalog.",
+    "v0_11_2_serverNames": "The sidebar names the server browser Server list and your dedicated servers My servers, in every language.",
     "v0_10_0_webApp": "Chat with friends from your phone or any browser: sign in at online.jknet.app and add JKNet to your home screen.",
     "v0_10_0_signIn": "Browser sign-in is now bound to the launcher that started it, so a sign-in link someone else sends you can no longer hand them your account.",
     "v0_10_0_attachments": "The chat attachment menu is split into files, media, game data, settings and catalogs. Maps, configs and player profiles come from all your clients in one list that shows where each item comes from.",

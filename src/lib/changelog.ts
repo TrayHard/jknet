@@ -18,7 +18,7 @@ export const CHANGELOG_RELEASES = [
     key: "v0_11_2",
     version: "0.11.2",
     date: "2026-10-01",
-    items: ["entries.v0_11_2_followersTop"],
+    items: ["entries.v0_11_2_followersTop", "entries.v0_11_2_serverNames"],
   },
   {
     key: "v0_11_1",

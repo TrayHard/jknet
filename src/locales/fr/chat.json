@@ -654,7 +654,7 @@
     },
     "server": {
       "title": "Partager un serveur",
-      "empty": "Aucun serveur pour l’instant. Cliquez sur « Get new list » sur l’écran « Serveurs ».",
+      "empty": "Aucun serveur pour l’instant. Cliquez sur « Get new list » sur l’écran « Liste des serveurs ».",
       "emptyWeb": "La liste des serveurs ne contient aucun serveur pour le moment."
     },
     "map": {

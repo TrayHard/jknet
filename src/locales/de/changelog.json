@@ -20,6 +20,7 @@
     "v0_11_1_imageDrop": "Logo und Titelbild einer Community lassen sich im Verwaltungsbildschirm direkt auf die Kachel ziehen, ebenso das Titelbild eines Events im Editor. Die Kachel leuchtet auf, solange die Datei darüber liegt.",
     "v0_11_1_catalogVisibility": "„Meine Communitys“ markiert eine Community, die nicht im Katalog steht, und nennt den Grund. JKNet-Administratoren veröffentlichen eine Seite ohne Besitzer direkt aus dieser Zeile.",
     "v0_11_2_followersTop": "Die Top-Communitys werden jetzt nach Followern sortiert und zeigen deren Anzahl. Spielstunden pro Woche erscheinen nicht mehr auf Community-Seiten und im Katalog.",
+    "v0_11_2_serverNames": "In der Seitenleiste heißt der Serverbrowser jetzt „Serverliste“ und deine dedizierten Server „Meine Server“.",
     "v0_10_0_webApp": "Chatte mit Freunden vom Handy oder aus jedem Browser: Melde dich auf online.jknet.app an und lege JKNet auf den Startbildschirm.",
     "v0_10_0_signIn": "Die Anmeldung im Browser ist jetzt an den Launcher gebunden, der sie gestartet hat. Ein fremder Anmeldelink gibt dein Konto nicht mehr an den Absender weiter.",
     "v0_10_0_attachments": "Das Anhangmenü im Chat ist in Dateien, Medien, Spieldaten, Einstellungen und Kataloge gegliedert. Karten, Konfigurationen und Spielerprofile kommen aus allen deinen Clients in einer Liste, die ihre Herkunft zeigt.",

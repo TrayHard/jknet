@@ -31,8 +31,8 @@
     "history": "Historial",
     "busiest": "Servidores más concurridos",
     "emptyTitle": "Todavía no hay servidores en la caché",
-    "emptyText": "Abra la pantalla Servidores una vez y los más concurridos aparecerán aquí.",
-    "openServers": "Abrir Servidores",
+    "emptyText": "Abra la pantalla Lista de servidores una vez y los más concurridos aparecerán aquí.",
+    "openServers": "Abrir la lista de servidores",
     "seeAll": "Ver todo",
     "connect": "Connect",
     "lastConnected": "{{age}} ago"

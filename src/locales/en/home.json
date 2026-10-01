@@ -31,8 +31,8 @@
     "history": "History",
     "busiest": "Busiest servers",
     "emptyTitle": "No servers in the cache yet",
-    "emptyText": "Open the Servers screen once and the busiest ones show up here.",
-    "openServers": "Open Servers",
+    "emptyText": "Open the Server list screen once and the busiest servers show up here.",
+    "openServers": "Open Server list",
     "seeAll": "See all",
     "connect": "Connect",
     "lastConnected": "{{age}} ago"

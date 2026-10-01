@@ -6,10 +6,10 @@
   },
   "items": {
     "home": "Головна",
-    "servers": "Сервери",
+    "servers": "Список серверів",
     "library": "Бібліотека",
     "clients": "Клієнти",
-    "serverInstances": "Dedicated servers",
+    "serverInstances": "Мої сервери",
     "friends": "Друзі",
     "settings": "Налаштування",
     "playerProfiles": "Player profiles",
