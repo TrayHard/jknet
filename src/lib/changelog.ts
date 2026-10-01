@@ -12,6 +12,12 @@ export const CHANGELOG_RELEASES = [
     key: "unreleased",
     version: null,
     date: null,
+    items: [],
+  },
+  {
+    key: "v0_11_0",
+    version: "0.11.0",
+    date: "2026-10-01",
     items: [
       "entries.v0_11_0_communities",
       "entries.v0_11_0_catalog",
