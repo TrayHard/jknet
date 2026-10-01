@@ -1,7 +1,8 @@
 /**
  * The community screens of the website, jknet.app/servers/: the catalogue at
- * `/servers/` and a page at `/servers/?id=…&tab=…`, in each of the site's
- * languages.
+ * `/servers/`, a page at `/servers/?id=…&tab=…` and its management screen at
+ * `/servers/?id=…&view=manage&section=…`, in each of the site's languages.
+ * The management screen comes as a chunk of its own, with its editors.
  *
  * The screens are the launcher's own (`components/community`); this entry
  * gives them the website — requests over `fetch` with the session of the
@@ -21,11 +22,16 @@ import {
   catalogTab,
   CommunityApp,
   CommunityFrame,
+  manageSection,
   pageTab,
+  type CommunityBundleRef,
+  type CommunityPerson,
   type CommunityPlatform,
   type CommunityRequest,
   type CommunityRoute,
+  type Game,
 } from "./components/community";
+import { CommunityManage } from "./components/community/manage";
 import { Button } from "./components/ui";
 import "./styles/community-site.css";
 
@@ -70,10 +76,14 @@ const local = location.hostname === "127.0.0.1" || location.hostname === "localh
 const API = local ? "http://127.0.0.1:8787" : "https://api.jknet.app";
 const TOKEN_KEY = "jknet-community-session";
 
-/** The route the address names: `?id=` for a page, `?tab=` for its tab or the catalogue's. */
+/**
+ * The route the address names: `?id=` for a page, `?tab=` for its tab or the
+ * catalogue's, `?id=&view=manage&section=` for the management screen.
+ */
 function routeOfLocation(): CommunityRoute {
   const params = new URLSearchParams(location.search);
   const id = params.get("id");
+  if (id && params.get("view") === "manage") return { view: "manage", id, section: manageSection(params.get("section")) };
   return id ? { view: "community", id, tab: pageTab(params.get("tab")) } : { view: "catalog", tab: catalogTab(params.get("tab")) };
 }
 
@@ -83,11 +93,27 @@ function searchOf(route: CommunityRoute): string {
   if (route.view === "community") {
     params.set("id", route.id);
     if (route.tab !== "overview") params.set("tab", route.tab);
+  } else if (route.view === "manage") {
+    params.set("id", route.id);
+    params.set("view", "manage");
+    if (route.section) params.set("section", route.section);
   } else if (route.tab !== "catalog") {
     params.set("tab", route.tab);
   }
   const query = params.toString();
   return query === "" ? location.pathname : `?${query}`;
+}
+
+/** The public bundles of a game whose name matches: the community's client on the management screen. */
+async function findBundles(query: string, game: Game): Promise<CommunityBundleRef[]> {
+  const params = new URLSearchParams({ game, sort: "popular", limit: "100" });
+  if (query.trim() !== "") params.set("q", query.trim());
+  const response = await fetch(`${API}/v1/bundles?${params}`, { credentials: "omit", signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw refusal(response.status, await response.json().catch(() => null));
+  const body = (await response.json()) as { items?: { id?: unknown; name?: unknown }[] };
+  return (body.items ?? []).flatMap((item) =>
+    typeof item.id === "string" && typeof item.name === "string" ? [{ id: item.id, name: item.name }] : [],
+  );
 }
 
 /** A refusal of the service in the envelope the screens read: code `online`, the contract's code in `details`. */
@@ -159,6 +185,38 @@ function Website() {
       return send<T>(method, `/v1/community/${path}`, body, own ? "required" : "optional");
     },
     [send],
+  );
+
+  // A logo or a cover of the management screen: `HEAD` first, so a picture
+  // the store holds is not sent again, then the bytes under their hash.
+  const putBlob = useCallback(
+    async (sha256: string, file: Blob) => {
+      if (token === "") throw refusal(401, null);
+      const path = `${API}/v1/blobs/${sha256}`;
+      try {
+        const head = await fetch(path, { method: "HEAD", credentials: "omit", signal: AbortSignal.timeout(12000) });
+        if (head.ok) return;
+      } catch {
+        // The upload below answers for the store.
+      }
+      let response: Response;
+      try {
+        response = await fetch(path, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream" },
+          body: file,
+          credentials: "omit",
+          signal: AbortSignal.timeout(60000),
+        });
+      } catch (failure) {
+        throw Object.assign(new Error(failure instanceof Error ? failure.message : String(failure)), { code: "network", details: {} });
+      }
+      if (!response.ok) {
+        if (response.status === 401) forget();
+        throw refusal(response.status, await response.json().catch(() => null));
+      }
+    },
+    [token, forget],
   );
 
   useEffect(() => {
@@ -302,6 +360,32 @@ function Website() {
     setLoginOpen(true);
   }, []);
 
+  // The friends name editors on the management screen, and only there: the
+  // catalogue and the pages never ask for them. A list that failed leaves the
+  // account id to type.
+  const managing = route.view === "manage" && signedIn;
+  const [friends, setFriends] = useState<CommunityPerson[] | null | undefined>(null);
+  useEffect(() => {
+    if (!managing) return;
+    let active = true;
+    setFriends(null);
+    send<{ friends?: { user?: CommunityPerson }[] }>("GET", "/v1/friends", undefined, "required")
+      .then((result) => {
+        if (!active) return;
+        setFriends(
+          (result.friends ?? []).flatMap((friend) =>
+            friend.user ? [{ id: friend.user.id, displayName: friend.user.displayName, avatarUrl: friend.user.avatarUrl ?? null }] : [],
+          ),
+        );
+      })
+      .catch(() => {
+        if (active) setFriends(undefined);
+      });
+    return () => {
+      active = false;
+    };
+  }, [managing, send]);
+
   const platform = useMemo<CommunityPlatform>(
     () => ({
       host: "website",
@@ -317,8 +401,11 @@ function Website() {
       href: searchOf,
       canManage: true,
       pageUrl: (id) => `${location.origin}${location.pathname}?id=${encodeURIComponent(id)}`,
+      putBlob,
+      friends,
+      findBundles,
     }),
-    [request, signedIn, user?.id, openSignIn, navigate],
+    [request, signedIn, user?.id, openSignIn, navigate, putBlob, friends],
   );
 
   return (
@@ -409,7 +496,11 @@ function Website() {
         </dialog>
       </CommunityFrame>
       <div className="mx-auto w-full max-w-[1280px]">
-        <CommunityApp platform={platform} route={route} />
+        <CommunityApp
+          platform={platform}
+          route={route}
+          renderManage={(screen) => <CommunityManage id={screen.id} section={screen.section} />}
+        />
       </div>
     </>
   );

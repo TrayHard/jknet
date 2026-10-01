@@ -225,6 +225,7 @@ function getMainRouter() {
           <Route path="/host" element={<HostPage />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/community/:id" element={<CommunityPage />} />
+          <Route path="/community/:id/manage" element={<CommunityPage manage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/server-instances" element={<ServerInstancesPage />} />

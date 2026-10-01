@@ -29,7 +29,25 @@ function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
 
 export const communityIpc = {
   request: <T>(method: string, path: string, body?: unknown) => call<T>("community_request", { method, path, body: body ?? null }),
+  // --- slice: communities ---
+  /**
+   * The core's dialog for a logo or a cover: the picked file is checked,
+   * stripped of its metadata and put in the store of the service.
+   * `title` and `filter` are the dialog's words in the player's language.
+   */
+  pickImage: (kind: CommunityImageKind, title: string, filter: string) =>
+    call<CommunityPickedImage>("community_pick_image", { kind, title, filter }),
 };
+
+/** The two pictures of a community, `ImageKind` in `src-tauri/src/community_images.rs`. */
+export type CommunityImageKind = "logo" | "banner";
+
+/** What `community_pick_image` answers: `PickedImage` in `src-tauri/src/community_images.rs`. */
+export type CommunityPickedImage =
+  | { outcome: "cancelled" }
+  | { outcome: "refused"; reason: "tooBig"; fileName: string; maxBytes: number }
+  | { outcome: "refused"; reason: "notPicture"; fileName: string }
+  | { outcome: "uploaded"; sha256: string; size: number; fileName: string; width: number | null; height: number | null };
 
 export interface PreviewAsset { name: string; path: string | null; text: string | null }
 /**

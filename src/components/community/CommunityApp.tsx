@@ -23,15 +23,29 @@ export function CommunityFrame({ children, className }: { children: ReactNode; c
  * The community screens of a host: the catalogue or a page, as the route
  * says. The launcher and the website draw this; the web app puts the
  * catalogue and the page in two panes of its own.
+ *
+ * The management screen comes from the host through `renderManage`, so a
+ * host that never shows it — the web app — never bundles its editors either.
+ * Without it, the route of the screen opens the page.
  */
-export function CommunityApp({ platform, route }: { platform: CommunityPlatform; route: CommunityRoute }) {
+export function CommunityApp({
+  platform,
+  route,
+  renderManage,
+}: {
+  platform: CommunityPlatform;
+  route: CommunityRoute;
+  renderManage?: (route: Extract<CommunityRoute, { view: "manage" }>) => ReactNode;
+}) {
   return (
     <CommunityPlatformProvider platform={platform}>
       <CommunityFrame className="p-24 @max-[560px]/community:p-16">
         {route.view === "catalog" ? (
           <CommunityCatalog tab={route.tab} />
+        ) : route.view === "manage" && renderManage ? (
+          renderManage(route)
         ) : (
-          <CommunityView key={route.id} id={route.id} tab={route.tab} />
+          <CommunityView key={route.id} id={route.id} tab={route.view === "community" ? route.tab : "overview"} />
         )}
       </CommunityFrame>
     </CommunityPlatformProvider>

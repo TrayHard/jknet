@@ -594,7 +594,7 @@ function MineTab({
                           variant="primary"
                           wrap
                           icon={<Settings2 size={16} />}
-                          onClick={() => platform.navigate({ view: "community", id: card.id, tab: "manage" })}
+                          onClick={() => platform.navigate({ view: "manage", id: card.id })}
                         >
                           {t("mine.manage")}
                         </Button>
