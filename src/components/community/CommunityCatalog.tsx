@@ -17,7 +17,7 @@ import { CommunityLogo, Failure, hueStyle, LinkButton, Notice, RouteLink } from 
 import { CatalogCard } from "./CatalogCard";
 import { CreateDialog } from "./CreateDialog";
 import { useFailureText } from "./errors";
-import { formatCount, GAME_NAMES, LANGUAGE_NAMES } from "./format";
+import { formatCount, formatHours, GAME_NAMES, LANGUAGE_NAMES, roundHours } from "./format";
 import { useCommunityApi, useCommunityPlatform, type CatalogTab } from "./platform";
 import type { CommunityCard, CommunityRankingEntry, FollowedCommunity, MyCommunity } from "./types";
 import { useAction, useRemote } from "./useRemote";
@@ -156,6 +156,10 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
   const visibleTags = COMMUNITY_TAGS.filter((code, index) => index < FIRST_TAGS || moreTags || code === tag);
   const hiddenTags = COMMUNITY_TAGS.length - FIRST_TAGS;
   const cards = catalog.data?.communities ?? [];
+  // The top is of every game; the catalogue of one game shows its places there, numbered as the service ranks them.
+  const topEntries = (ranking.data ?? []).filter(
+    (entry) => !query.game || entry.community.games.length === 0 || entry.community.games.includes(query.game),
+  );
 
   return (
     <div className="flex flex-col">
@@ -190,8 +194,8 @@ export function CommunityCatalog({ tab, selectedId }: { tab: CatalogTab; selecte
 
       {tab === "catalog" ? (
         <div className="flex flex-col gap-24 pt-24">
-          {ranking.data ? (
-            <WeekTop entries={ranking.data} open={rankOpen} onToggle={() => setRankOpen((value) => !value)} />
+          {topEntries.length > 0 ? (
+            <WeekTop entries={topEntries} open={rankOpen} onToggle={() => setRankOpen((value) => !value)} />
           ) : null}
 
           <section aria-label={t("catalog.filters")} className="flex flex-col gap-12">
@@ -408,10 +412,10 @@ function Chip({
   );
 }
 
-/** The week's top: three places on a podium, the rest on request. */
+/** The top of the week, as the design's A1 draws it: three places on a podium, the rest on request. */
 function WeekTop({ entries, open, onToggle }: { entries: CommunityRankingEntry[]; open: boolean; onToggle: () => void }) {
   const { t, i18n } = useTranslation("community");
-  const most = Math.max(1, ...entries.map((entry) => entry.playerHours));
+  const most = Math.max(1, ...entries.map((entry) => entry.playerHoursWeek));
   const podium = entries.slice(0, 3);
   const rest = entries.slice(3, 10);
   return (
@@ -444,13 +448,13 @@ function WeekTop({ entries, open, onToggle }: { entries: CommunityRankingEntry[]
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-body-md-medium text-fg">{entry.community.name}</span>
                 <span className="text-body-sm text-fg-secondary">
-                  <b className="font-semibold text-fg tabular-nums">{formatCount(Math.round(entry.playerHours), i18n.language)}</b>{" "}
-                  {t("top.hours", { count: Math.round(entry.playerHours) })}
+                  <b className="font-semibold text-fg tabular-nums">{formatHours(entry.playerHoursWeek, i18n.language)}</b>{" "}
+                  {t("top.hours", { count: roundHours(entry.playerHoursWeek) })}
                 </span>
               </span>
             </span>
             <span className="h-4 overflow-hidden rounded-full bg-elevated" aria-hidden="true" style={hueStyle(entry.community.id)}>
-              <span className="jkc-hue-bar block h-full rounded-full" style={{ width: `${Math.round((entry.playerHours / most) * 100)}%` }} />
+              <span className="jkc-hue-bar block h-full rounded-full" style={{ width: `${Math.round((entry.playerHoursWeek / most) * 100)}%` }} />
             </span>
           </RouteLink>
         ))}
@@ -467,10 +471,10 @@ function WeekTop({ entries, open, onToggle }: { entries: CommunityRankingEntry[]
               <CommunityLogo card={entry.community} size="sm" />
               <span className="truncate text-body-sm-medium text-fg">{entry.community.name}</span>
               <span className="h-4 overflow-hidden rounded-full bg-elevated" aria-hidden="true" style={hueStyle(entry.community.id)}>
-                <span className="jkc-hue-bar block h-full rounded-full" style={{ width: `${Math.round((entry.playerHours / most) * 100)}%` }} />
+                <span className="jkc-hue-bar block h-full rounded-full" style={{ width: `${Math.round((entry.playerHoursWeek / most) * 100)}%` }} />
               </span>
               <span className="text-right text-body-sm tabular-nums text-fg-secondary">
-                {formatCount(Math.round(entry.playerHours), i18n.language)}
+                {formatHours(entry.playerHoursWeek, i18n.language)}
               </span>
             </RouteLink>
           ))}

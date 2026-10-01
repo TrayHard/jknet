@@ -9,7 +9,7 @@ import { Badge } from "../ui";
 import { CopyButton, LiveDot, type LiveState } from "./bits";
 import { serverName } from "./format";
 import { useCommunityPlatform } from "./platform";
-import type { CommunityLivePlayer, CommunityLiveStatus, CommunityServer } from "./types";
+import type { CommunityLivePlayer, CommunityLiveStatus, CommunityServer, CommunityServerStatus } from "./types";
 
 /** How often a page asks its servers again while it is open. */
 const LIVE_EVERY_MS = 60_000;
@@ -19,15 +19,52 @@ export interface LiveView {
   state: LiveState;
   status: CommunityLiveStatus | null;
   asking: boolean;
+  /** The answer is the service's poll, up to 5 minutes old, rather than the host's own. */
+  polled?: boolean;
+}
+
+/**
+ * The service's last poll of a server as the screens draw it. A server that
+ * stopped answering keeps its last name, map and slots, with nobody on it.
+ */
+export function liveOfService(status: CommunityServerStatus): CommunityLiveStatus {
+  return {
+    hostnameRaw: status.hostname ?? undefined,
+    hostnameClean: status.cleanHostname ?? undefined,
+    map: status.map ?? "",
+    gametype: status.gametype ?? null,
+    players: status.humans,
+    bots: status.bots,
+    maxPlayers: status.maxClients ?? 0,
+    password: status.needPass === true,
+    at: status.checkedAt,
+    names: status.players.map((player) => ({
+      nameRaw: player.name,
+      nameClean: player.cleanName,
+      score: player.score,
+      ping: player.ping,
+      bot: player.bot,
+    })),
+  };
+}
+
+/** What the service's poll says of a server, or `null` when it has not read it. */
+export function serviceView(server: CommunityServer): LiveView | null {
+  const status = server.status;
+  if (!status) return null;
+  return { state: status.online ? "live" : "off", status: liveOfService(status), asking: false, polled: true };
 }
 
 /**
  * The live state of every server of a page.
  *
- * The service's own answer (`status`, from S6) wins; without it the host may
- * ask the servers itself — the launcher does, over UDP — and a host that can
- * do neither leaves the state unknown. The launcher asks again every minute
- * while the page is open.
+ * The launcher asks the servers itself over UDP every minute while the page
+ * is open, and its own answer wins: it is the freshest. Until it comes, and
+ * when a server does not answer the launcher, the page shows what the
+ * service's poll of every 5 minutes said (`status` of the page), so a server
+ * the launcher cannot reach still shows its last map and players. The
+ * website and the web app cannot ask a server and show the poll alone; a
+ * server the service has not read stays unknown.
  */
 export function useLiveStatuses(servers: CommunityServer[]): Record<string, LiveView> {
   const platform = useCommunityPlatform();
@@ -38,9 +75,8 @@ export function useLiveStatuses(servers: CommunityServer[]): Record<string, Live
   useEffect(() => {
     if (!ask) return;
     let alive = true;
-    const targets = servers.filter((server) => !server.status);
     const round = () => {
-      for (const server of targets) {
+      for (const server of servers) {
         setViews((current) => ({
           ...current,
           [server.id]: { state: current[server.id]?.state ?? "unknown", status: current[server.id]?.status ?? null, asking: true },
@@ -66,17 +102,20 @@ export function useLiveStatuses(servers: CommunityServer[]): Record<string, Live
 
   const result: Record<string, LiveView> = {};
   for (const server of servers) {
-    if (server.status) result[server.id] = { state: "live", status: server.status, asking: false };
-    else result[server.id] = views[server.id] ?? { state: "unknown", status: null, asking: ask !== undefined };
+    const own = views[server.id];
+    const polled = serviceView(server);
+    if (own?.state === "live") result[server.id] = own;
+    else if (polled !== null) result[server.id] = { ...polled, asking: own?.asking ?? ask !== undefined };
+    else result[server.id] = own ?? { state: "unknown", status: null, asking: ask !== undefined };
   }
   return result;
 }
 
-/** People on the servers now, when every answer that counts is in. */
+/** People on the servers now, when an answer that counts is in. */
 export function onlineCount(live: Record<string, LiveView>): number | null {
   const answered = Object.values(live).filter((view) => view.status !== null);
   if (answered.length === 0) return null;
-  return answered.reduce((sum, view) => sum + (view.status?.players ?? 0), 0);
+  return answered.reduce((sum, view) => sum + (view.state === "live" ? view.status?.players ?? 0 : 0), 0);
 }
 
 interface ServerBlockProps {
@@ -126,7 +165,7 @@ export function ServerBlock({ server, live, selected, onSelect, expanded, collap
           {t("play.unverified")}
         </Badge>
       ) : null}
-      {status ? (
+      {status && live.state === "live" ? (
         <span className="shrink-0 text-mono-sm tabular-nums text-fg">
           {status.players}/{status.maxPlayers}
         </span>

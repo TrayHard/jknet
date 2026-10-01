@@ -348,6 +348,9 @@ pub struct CommunityNotifications {
     pub new_events: bool,
     /// An event the player answered «going» or «maybe» starts in 15 minutes.
     pub reminders: bool,
+    // --- slice: community news ---
+    /// A community the player follows, with its bell on, published news.
+    pub news: bool,
     /// A Windows notification while no window of the launcher is focused.
     pub os: bool,
 }
@@ -357,6 +360,7 @@ impl Default for CommunityNotifications {
         CommunityNotifications {
             new_events: true,
             reminders: true,
+            news: true,
             os: true,
         }
     }
@@ -369,6 +373,7 @@ impl Default for CommunityNotifications {
 pub struct CommunityNotificationsPatch {
     pub new_events: Option<bool>,
     pub reminders: Option<bool>,
+    pub news: Option<bool>,
     pub os: Option<bool>,
 }
 
@@ -377,6 +382,7 @@ impl CommunityNotificationsPatch {
         for (value, field) in [
             (self.new_events, &mut target.new_events),
             (self.reminders, &mut target.reminders),
+            (self.news, &mut target.news),
             (self.os, &mut target.os),
         ] {
             if let Some(value) = value {
@@ -1520,6 +1526,7 @@ mod tests {
             community_notifications: CommunityNotifications {
                 new_events: false,
                 reminders: false,
+                news: false,
                 os: false,
             },
         }
@@ -2554,6 +2561,7 @@ mod tests {
         assert!(fresh.community_notifications.new_events);
         assert!(fresh.community_notifications.reminders);
         assert!(fresh.community_notifications.os);
+        assert!(fresh.community_notifications.news);
         // A document written before the block existed.
         let older: Settings = serde_json::from_str(r#"{"activeGame":"ja"}"#).expect("an older document reads");
         assert_eq!(older.community_notifications, CommunityNotifications::default());
@@ -2571,7 +2579,7 @@ mod tests {
         let written = serde_json::to_value(&fresh).expect("the settings serialize");
         assert_eq!(
             written["communityNotifications"],
-            serde_json::json!({ "newEvents": true, "reminders": true, "os": true })
+            serde_json::json!({ "newEvents": true, "reminders": true, "news": true, "os": true })
         );
     }
 
@@ -2600,7 +2608,13 @@ mod tests {
             }
         );
         // An unknown switch is refused, like every other field of a patch.
-        assert!(serde_json::from_str::<SettingsPatch>(r#"{"communityNotifications":{"news":true}}"#).is_err());
+        assert!(serde_json::from_str::<SettingsPatch>(r#"{"communityNotifications":{"digest":true}}"#).is_err());
+        // --- slice: community news --- the switch of the news moves alone.
+        let news: SettingsPatch =
+            serde_json::from_str(r#"{"communityNotifications":{"news":false}}"#).expect("the patch reads");
+        news.apply(&mut settings);
+        assert!(!settings.community_notifications.news);
+        assert!(settings.community_notifications.os);
         // A patch about something else leaves the block alone.
         let other: SettingsPatch = serde_json::from_str(r#"{"closeOnLaunch":true}"#).expect("the patch reads");
         other.apply(&mut settings);

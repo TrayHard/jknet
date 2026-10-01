@@ -66,6 +66,8 @@ export interface CommunityEventLabels {
   reminder: string;
   reminderText: string;
   offline: string;
+  // --- slice: community news --- the title of a post's notification, `{community}` in it.
+  post: string;
 }
 
 /**
@@ -540,6 +542,9 @@ export interface CommunityNotifications {
   newEvents: boolean;
   /** An event the player answered starts in 15 minutes. */
   reminders: boolean;
+  // --- slice: community news ---
+  /** A community the player follows published news. Absent from a core before it: on. */
+  news?: boolean;
   /** A Windows notification while no window of JKNet is focused. */
   os: boolean;
 }

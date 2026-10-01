@@ -6,11 +6,12 @@
  * community screens talk to (`src-tauri/src/community.rs` in the launcher).
  * The web app reads every page of the contract — the catalogue, a
  * community, its players and its Discord, the week's top, the player's own
- * lists — and follows a community with the web session; creating a
- * community, claiming a server and editing a page stay with the launcher and
- * the website. The two queries the screens build, the catalogue and the
- * calendar, are checked key by key and written back, as the launcher's
- * bridge does.
+ * lists, the news and the activity — and follows a community with the web
+ * session; creating a community, claiming a server, editing a page and
+ * writing the news stay with the launcher and the website. The three
+ * queries the screens build, the catalogue, the calendar and a page of the
+ * news, are checked key by key and written back, as the launcher's bridge
+ * does.
  *
  * Bundles come from the catalogue the launcher reads (`GET /v1/bundles…`),
  * with the same query `list_bundles` builds (`src-tauri/src/bundles/mod.rs`,
@@ -35,6 +36,8 @@ import {
   COMMUNITY_REGIONS,
   COMMUNITY_TAGS,
   eventsPath,
+  isTimeCursor,
+  postsPath,
 } from "../../../src/components/community/api.ts";
 import { invalidInput, needsLauncher } from "./errors.ts";
 import { segment, type Http } from "./http.ts";
@@ -132,7 +135,7 @@ export function catalogueQuery(query: string): string | null {
   });
 }
 
-/** The query of `GET events` (TODO(S4)), checked the same way. */
+/** The query of `GET events`, checked the same way: the range, the filters and the `after` of a page. */
 export function eventsQuery(query: string): string | null {
   const pairs = queryPairs(query);
   if (pairs === null) return null;
@@ -144,6 +147,7 @@ export function eventsQuery(query: string): string | null {
       : key === "scope" ? value === "all" || value === "following" || value === "going"
       : key === "game" ? value === "ja" || value === "jo"
       : key === "community" ? communityId(value)
+      : key === "after" ? isTimeCursor(value)
       : false;
     if (!fits) return null;
   }
@@ -154,7 +158,21 @@ export function eventsQuery(query: string): string | null {
     scope: scope === "all" || scope === "following" || scope === "going" ? scope : null,
     game: (pairs.get("game") || null) as "ja" | "jo" | null,
     community: pairs.get("community") || null,
+    after: pairs.get("after") || null,
   });
+}
+
+/** The query of a page of the news, `GET communities/{id}/posts`: its `limit` and its `before`. */
+export function postsQuery(id: string, query: string): string | null {
+  const pairs = queryPairs(query);
+  if (pairs === null || !communityId(id)) return null;
+  for (const [key, value] of pairs) {
+    if (value === "") continue;
+    const fits = key === "limit" ? count(value) : key === "before" ? isTimeCursor(value) : false;
+    if (!fits) return null;
+  }
+  const limit = pairs.get("limit");
+  return postsPath(id, { limit: limit ? Number(limit) : null, before: pairs.get("before") || null });
 }
 
 /** What the web core does with one call of the community bridge. */
@@ -169,8 +187,9 @@ export interface CommunityRoute {
 
 /**
  * The calls of the community bridge the web app makes: every read of the
- * contract — the catalogue, a page, its players, its Discord, the week's top,
- * the calendar and its events, the player's own lists — following a
+ * contract — the catalogue, a page, its players, its Discord, its activity
+ * and its news, the week's top, the calendar and its events, the player's
+ * own lists — following a
  * community and answering an event, with the web session's token. `null`
  * for anything else: a write the launcher and the website make, a path of
  * another route, a path that climbs out of `/v1/community/`, a query with
@@ -192,6 +211,10 @@ export function communityRoute(method: string, path: string): CommunityRoute | n
       }
       if (parts.length === 1 && a === "events") {
         const rebuilt = eventsQuery(query);
+        return rebuilt === null ? null : { path: rebuilt, auth: "optional", body: false };
+      }
+      if (parts.length === 3 && a === "communities" && communityId(b) && c === "posts") {
+        const rebuilt = postsQuery(b, query);
         return rebuilt === null ? null : { path: rebuilt, auth: "optional", body: false };
       }
       return null;
@@ -226,8 +249,8 @@ export function communityRoute(method: string, path: string): CommunityRoute | n
 /**
  * The writes of the community bridge the launcher and the website make and
  * the web app leaves to them: creating a community, claiming a server,
- * editing a page, the organizers' and the administrators' tools, creating
- * and changing events.
+ * editing a page, the organizers' and the administrators' tools, the JKNet
+ * bot, creating and changing events, writing the news.
  */
 function communityWrite(method: string, path: string): boolean {
   if (method !== "POST" && method !== "PUT" && method !== "DELETE") return false;

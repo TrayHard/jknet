@@ -21,6 +21,7 @@
 //! | `ping`             | —                   | answered with `pong`        |
 //! | `chat.*`           | `chat:*`            | see `crate::chat::frames`   |
 //! | `community.event`  | `community:event`   | see `crate::community_events` |
+//! | `community.post`   | `community:post`    | see `crate::community_events` |
 //!
 //! --- slice: chat ---
 //! The upgrade request says `X-JKNet-Features: chat`, and only a socket that
@@ -336,6 +337,8 @@ fn handle_frame(app: &AppHandle, text: &str) -> bool {
         kind if kind.starts_with("chat.") => crate::chat::frames::handle(app, kind, frame.payload),
         // --- slice: community events --- the calendar, the toasts and Windows notifications.
         "community.event" => crate::community_events::frame(app, frame.payload),
+        // --- slice: community news --- the news of the communities the player follows.
+        "community.post" => crate::community_events::post_frame(app, frame.payload),
         other => log::debug!("live frame {other} ignored"),
     }
     false

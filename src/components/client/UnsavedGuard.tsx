@@ -11,6 +11,18 @@ import { useTranslation } from "react-i18next";
 
 import { Button, Dialog } from "../ui";
 
+/**
+ * The words of the question, for a form that is not a player profile.
+ * --- slice: communities --- the management screen of a community asks in
+ * its own words.
+ */
+export interface GuardWords {
+  title: string;
+  body: string;
+  keep: string;
+  discard: string;
+}
+
 /** What a form and a window ask of the guard. */
 interface Guard {
   /**
@@ -18,9 +30,10 @@ interface Guard {
    *
    * Called by the form as its draft changes, and with `false` as it unmounts:
    * a guard that outlived the form it was guarding would refuse to let the
-   * window close over a draft that is no longer there.
+   * window close over a draft that is no longer there. `words` is how the
+   * question reads for this form; without them it speaks of a profile.
    */
-  setDirty: (dirty: boolean) => void;
+  setDirty: (dirty: boolean, words?: GuardWords) => void;
   isDirty: () => boolean;
   /**
    * Runs `next` at once when nothing is unsaved, and after the player agrees
@@ -65,6 +78,7 @@ export function useUnsavedGuard(): Guard {
 export function UnsavedGuardProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation("clients");
   const dirty = useRef(false);
+  const words = useRef<GuardWords | undefined>(undefined);
   const request = useRef<{ next: () => void; cancel?: () => void } | null>(null);
   const [pending, setPending] = useState(false);
   const isDirty = useCallback(() => dirty.current, []);
@@ -76,8 +90,9 @@ export function UnsavedGuardProvider({ children }: { children: ReactNode }) {
     previous?.cancel?.();
   }, []);
 
-  const setDirty = useCallback((value: boolean) => {
+  const setDirty = useCallback((value: boolean, own?: GuardWords) => {
     dirty.current = value;
+    words.current = value ? own : undefined;
     // A completed save or an unmounted form must not leave a stale action.
     if (!value) keep();
   }, [keep]);
@@ -114,18 +129,18 @@ export function UnsavedGuardProvider({ children }: { children: ReactNode }) {
       {pending ? (
         <Dialog
           variant="danger"
-          title={t("clientWindow.profiles.unsaved.title")}
-          body={t("clientWindow.profiles.unsaved.body")}
+          title={words.current?.title ?? t("clientWindow.profiles.unsaved.title")}
+          body={words.current?.body ?? t("clientWindow.profiles.unsaved.body")}
           // Escape and a click outside mean «I did not mean to leave», which
           // is the safe half of this question.
           onClose={keep}
           actions={
             <>
               <Button size="sm" variant="ghost" onClick={keep}>
-                {t("clientWindow.profiles.unsaved.keep")}
+                {words.current?.keep ?? t("clientWindow.profiles.unsaved.keep")}
               </Button>
               <Button size="sm" variant="danger" onClick={discard}>
-                {t("clientWindow.profiles.unsaved.discard")}
+                {words.current?.discard ?? t("clientWindow.profiles.unsaved.discard")}
               </Button>
             </>
           }

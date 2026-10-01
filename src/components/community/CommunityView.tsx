@@ -5,16 +5,18 @@ import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/format";
 import { Tabs } from "../servers/Tabs";
 import { Button, EmptyState } from "../ui";
+import { ActivityPanel } from "./Activity";
 import { AdminStrip } from "./AdminStrip";
 import { isNotFound } from "./api";
 import { Failure, LinkButton, Notice, Panel, PanelHead, RouteLink } from "./bits";
 import { ClaimPanel } from "./ClaimPanel";
 import { CommunityHero } from "./CommunityHero";
 import { CommunityMarkdown } from "./CommunityMarkdown";
-import { DiscordCard } from "./DiscordCard";
+import { botShows, DiscordCard } from "./DiscordCard";
 import { useFailureText } from "./errors";
 import { orderedServers } from "./format";
 import { ManageSummary } from "./ManageSummary";
+import { NewsPanel, NewsTab, useNews } from "./News";
 import { useCommunityApi, useCommunityPlatform, type ManageSection, type PageTab } from "./platform";
 import { PlayPanel } from "./PlayPanel";
 import { PlayersTab, RegularsPreview } from "./Regulars";
@@ -27,16 +29,23 @@ import type { Community } from "./types";
 import { useAction, useRemote } from "./useRemote";
 
 /**
+ * How often a page that knows its servers only from the service's poll reads
+ * itself again. The service polls every 5 minutes; a page read every two and
+ * a half is never more than one poll behind.
+ */
+const PAGE_REFRESH_MS = 150_000;
+
+/**
  * A community page, as the design's B3 draws it: the hero of B2, then the
  * tabs of B1 — **Overview**, **Servers**, **Events** where the host draws
- * events, **Players** and, for an organizer, **Manage**, which sums the page
- * up and leads to the management screen. News joins the tabs with the slice
- * that serves it.
+ * events, **Players**, **News** and, for an organizer, **Manage**, which
+ * sums the page up and leads to the management screen.
  *
- * The overview puts the upcoming events and the description on the left and,
- * on the right, **Play** with the servers and the way in, Discord, the
- * regular players, the recommended files and the links. **Servers** splits **Play** in two and
- * carries the claim of a server for a page that has no owner yet.
+ * The overview puts the upcoming events, the description, the news and
+ * «When people play here» on the left and, on the right, **Play** with the
+ * servers and the way in, Discord, the regular players, the recommended
+ * files and the links. **Servers** splits **Play** in two and carries the
+ * claim of a server for a page that has no owner yet.
  */
 export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) {
   const { t } = useTranslation("community");
@@ -51,13 +60,16 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
   const page = useRemote(`page:${id}:${account}`, () => api.get(id));
   const community = page.data;
   const players = useRemote(community ? `players:${id}:${account}` : null, () => api.players(id));
-  const discord = useRemote(community && community.discord.trim() !== "" ? `discord:${id}:${community.discord}` : null, () =>
-    api.discord(id),
-  );
-  const ranking = useRemote(community ? "ranking" : null, () => api.ranking());
-
   const viewer = community?.viewer ?? null;
   const organizer = viewer !== null && (viewer.role !== null || viewer.isAdmin);
+  // Every page reads its card: the JKNet bot may read a server the page has no invite to.
+  const discord = useRemote(community ? `discord:${id}:${account}:${community.discord}` : null, () => api.discord(id));
+  const activity = useRemote(community && community.servers.length > 0 ? `activity:${id}` : null, () => api.activity(id));
+  const news = useNews(id, community !== undefined, account);
+  // A post that comes out while the page is open joins its news.
+  const subscribePosts = platform.subscribePosts;
+  const refreshNews = news.refresh;
+  useEffect(() => subscribePosts?.((communityId) => (communityId === id ? refreshNews() : undefined)), [subscribePosts, id, refreshNews]);
   const manager = organizer && platform.canManage;
   const tab: PageTab = asked === "manage" && !manager ? "overview" : asked;
   const claimable = community !== undefined && platform.canManage && community.ownerId === null && !organizer;
@@ -65,6 +77,16 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
 
   const servers = community ? orderedServers(community) : [];
   const live = useLiveStatuses(servers);
+  // The website and the web app see a server through the service's poll alone, which the page carries: an open page reads itself again.
+  const pollOnly = platform.serverStatus === undefined && servers.length > 0;
+  const reloadPage = page.reload;
+  useEffect(() => {
+    if (!pollOnly) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "hidden") reloadPage();
+    }, PAGE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [pollOnly, reloadPage]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -86,10 +108,10 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
   const toggle = (serverId: string) => setExpanded((current) => ({ ...current, [serverId]: !isExpanded(serverId) }));
   const go = (next: PageTab) => platform.navigate({ view: "community", id, tab: next });
 
-  const rankEntry = ranking.data?.find((entry) => entry.community.id === id) ?? null;
-  const rank = typeof community?.counts.rank === "number" ? community.counts.rank : rankEntry?.rank ?? null;
-  const playerHours = typeof community?.counts.playerHours === "number" ? community.counts.playerHours : rankEntry?.playerHours ?? null;
-  const online = typeof community?.counts.online === "number" ? community.counts.online : onlineCount(live);
+  const rank = typeof community?.rank === "number" ? community.rank : null;
+  const playerHours = typeof community?.counts.playerHoursWeek === "number" ? community.counts.playerHoursWeek : null;
+  // The launcher's own answers are fresher than the service's poll; the website and the web app have the poll alone.
+  const online = onlineCount(live) ?? (typeof community?.counts.online === "number" ? community.counts.online : null);
 
   const onFollow = () =>
     follow.run(
@@ -179,6 +201,8 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
     { id: "servers" as const, label: t("tabs.servers"), count: servers.length },
     ...(eventsHost ? [{ id: "events" as const, label: tEvents("title"), count: community.counts.upcomingEvents }] : []),
     { id: "players" as const, label: t("tabs.players"), count: community.counts.regulars },
+    // The count is exact only while every post came on the first page.
+    { id: "news" as const, label: t("tabs.news"), count: news.remote.data && !news.hasMore ? news.posts.length : undefined },
     ...(manager ? [{ id: "manage" as const, label: t("tabs.manage") }] : []),
   ];
 
@@ -261,11 +285,19 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
                 </>
               ) : null}
             </Panel>
+            <NewsPanel news={news} organizer={manager && platform.renderNewsComposer !== undefined} onAll={() => go("news")} />
+            <ActivityPanel remote={activity} />
           </div>
           <div className="flex min-w-0 flex-col gap-16">
             <PlayPanel {...playProps} mode="overview" />
-            {community.discord.trim() !== "" ? (
-              <DiscordCard community={community} info={discord.data} organizer={organizer} onFix={manager ? () => manage("links") : undefined} />
+            {community.discord.trim() !== "" || botShows(discord.data?.bot) ? (
+              <DiscordCard
+                community={community}
+                info={discord.data}
+                organizer={organizer}
+                onFix={manager ? () => manage("links") : undefined}
+                onBot={manager ? () => manage("bot") : undefined}
+              />
             ) : null}
             <RegularsPreview remote={players} onAll={() => go("players")} />
             {platform.renderFiles ? platform.renderFiles(community) : <FilesCard community={community} />}
@@ -307,6 +339,8 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
       {tab === "events" ? <CommunityEventsTab community={community} organizer={manager} /> : null}
 
       {tab === "players" ? <PlayersTab remote={players} /> : null}
+
+      {tab === "news" ? <NewsTab community={community} news={news} organizer={manager} /> : null}
 
       {tab === "manage" && manager ? <ManageSummary community={community} discord={discord.data} onOpen={(section) => manage(section)} /> : null}
     </div>

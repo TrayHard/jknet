@@ -21,6 +21,13 @@
 //! A click on the Windows notification brings the launcher window back and
 //! sends it `community:open-event`, which opens `#/events/:id`.
 //!
+//! The news of a community come as `community.post`, with a summary of the
+//! post: its title and the start of its text. They reach every window as
+//! `community:post` and follow **News of your subscriptions** the way a new
+//! event follows its switch ([`decide_post`]); a click on the Windows
+//! notification sends `community:open-post`, which opens the **News** tab of
+//! the community.
+//!
 //! The core has no translations: the words of the notifications are the
 //! labels the launcher window hands over with
 //! [`community_event_labels`], in English until then. A label holds
@@ -43,6 +50,10 @@ use crate::state::AppState;
 pub const EVENT_FRAME: &str = "community:event";
 /// The launcher window: open the page of an event.
 pub const EVENT_OPEN: &str = "community:open-event";
+/// Every window: a post of the news arrived, with what it deserves.
+pub const POST_FRAME: &str = "community:post";
+/// The launcher window: open the news of a community.
+pub const POST_OPEN: &str = "community:open-post";
 
 const MAIN_LABEL: &str = "main";
 
@@ -157,6 +168,54 @@ pub struct EventNotice {
 }
 
 // ---------------------------------------------------------------------------
+// News
+// ---------------------------------------------------------------------------
+
+/// The post a `community.post` frame names, as the service sends it.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostSummary {
+    pub id: String,
+    pub community_id: String,
+    pub community_name: String,
+    /// One line, or empty: a post may have no title.
+    #[serde(default)]
+    pub title: String,
+    /// The start of the text without its Markdown.
+    #[serde(default)]
+    pub excerpt: String,
+}
+
+/// Reads the payload of a `community.post` frame, or `None` for a summary
+/// of another shape.
+pub fn parse_post(payload: Value) -> Option<PostSummary> {
+    #[derive(Deserialize)]
+    struct Wire {
+        post: PostSummary,
+    }
+    let wire: Wire = serde_json::from_value(payload).ok()?;
+    (is_id(&wire.post.id) && is_id(&wire.post.community_id)).then_some(wire.post)
+}
+
+/// The rule of a post: a toast while **News of your subscriptions** is on,
+/// a Windows notification as for an event.
+pub fn decide_post(settings: &CommunityNotifications, focused: bool) -> Delivery {
+    Delivery {
+        toast: settings.news,
+        os: settings.news && settings.os && !focused,
+    }
+}
+
+/// What every window hears of a `community.post` frame.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PostNotice {
+    pub post: PostSummary,
+    /// The settings let a toast through.
+    pub toast: bool,
+}
+
+// ---------------------------------------------------------------------------
 // Words
 // ---------------------------------------------------------------------------
 
@@ -175,6 +234,8 @@ pub struct EventLabels {
     pub reminder_text: String,
     /// The place of an event outside the game.
     pub offline: String,
+    /// The title of a post's notification: `{community}`.
+    pub post: String,
 }
 
 impl Default for EventLabels {
@@ -189,6 +250,7 @@ impl Default for EventLabels {
             reminder: "In 15 minutes: {title}".into(),
             reminder_text: "{community} · {place}".into(),
             offline: "Outside the game".into(),
+            post: "News from {community}".into(),
         }
     }
 }
@@ -288,6 +350,21 @@ pub fn compose(frame: &EventFrame, labels: &EventLabels, when: &str) -> (String,
     (line(&fill(head, &values)), line(&fill(body, &values)))
 }
 
+/// The title and the text of the Windows notification of a post: the label
+/// with the community, then the post's title and the start of its text.
+pub fn compose_post(post: &PostSummary, labels: &EventLabels) -> (String, String) {
+    let community = line(&post.community_name);
+    let title = line(&post.title);
+    let excerpt = line(&post.excerpt);
+    let head = line(&fill(&labels.post, &[("community", community.as_str())]));
+    let body = match (title.is_empty(), excerpt.is_empty()) {
+        (false, false) => line(&format!("{title} · {excerpt}")),
+        (false, true) => title,
+        (true, _) => excerpt,
+    };
+    (head, body)
+}
+
 // ---------------------------------------------------------------------------
 // Carrying it out
 // ---------------------------------------------------------------------------
@@ -338,6 +415,43 @@ pub fn open_event(app: &AppHandle, event_id: &str) {
     crate::tray::show_main(app);
     if let Err(e) = app.emit_to(MAIN_LABEL, EVENT_OPEN, event_id.to_string()) {
         log::debug!("cannot emit {EVENT_OPEN}: {e}");
+    }
+}
+
+/// One `community.post` frame of the live socket: every window hears it,
+/// and the player is told as [`decide_post`] says.
+pub fn post_frame(app: &AppHandle, payload: Value) {
+    let Some(post) = parse_post(payload) else {
+        log::debug!("live frame community.post of another shape ignored");
+        return;
+    };
+    let settings = app
+        .state::<AppState>()
+        .settings()
+        .map(|settings| settings.community_notifications)
+        .unwrap_or_default();
+    let delivery = decide_post(&settings, any_focused(app));
+    log::debug!("community post {} notifies {delivery:?}", post.id);
+    let notice = PostNotice {
+        post: post.clone(),
+        toast: delivery.toast,
+    };
+    if let Err(e) = app.emit(POST_FRAME, notice) {
+        log::debug!("cannot emit {POST_FRAME}: {e}");
+    }
+    if delivery.os {
+        let labels = app.state::<CommunityEventsState>().labels();
+        let (title, text) = compose_post(&post, &labels);
+        let community = post.community_id.clone();
+        crate::chat::notify::show_toast_with(app, title, text, move |clicked| open_post(clicked, &community));
+    }
+}
+
+/// Brings the launcher window back on the news of a community.
+pub fn open_post(app: &AppHandle, community_id: &str) {
+    crate::tray::show_main(app);
+    if let Err(e) = app.emit_to(MAIN_LABEL, POST_OPEN, community_id.to_string()) {
+        log::debug!("cannot emit {POST_OPEN}: {e}");
     }
 }
 
@@ -506,6 +620,7 @@ mod tests {
         let quiet = CommunityNotifications {
             new_events: false,
             reminders: false,
+            news: false,
             os: true,
         };
         let no_os = CommunityNotifications {
@@ -570,6 +685,95 @@ mod tests {
         let mut long = frame;
         long.event.title = "x".repeat(500);
         assert!(compose(&long, &labels, "x").0.chars().count() <= MAX_LINE_CHARS);
+    }
+
+    /// The `community.post` frame of the service's test, `payload` only.
+    fn post() -> Value {
+        json!({
+            "post": {
+                "communityId": COMMUNITY,
+                "communityName": "Duel Masters",
+                "excerpt": "Ladder The ladder opens on Friday at the arena.",
+                "id": EVENT,
+                "title": "Season two"
+            }
+        })
+    }
+
+    #[test]
+    fn a_post_of_the_service_reads_whole_and_others_are_left_alone() {
+        let read = parse_post(post()).expect("the frame of the service reads");
+        assert_eq!(read.id, EVENT);
+        assert_eq!(read.community_id, COMMUNITY);
+        assert_eq!(read.community_name, "Duel Masters");
+        assert_eq!(read.title, "Season two");
+        assert_eq!(read.excerpt, "Ladder The ladder opens on Friday at the arena.");
+        // A post without a title, and a field the launcher does not know yet.
+        let mut untitled = post();
+        untitled["post"]["title"] = json!("");
+        untitled["post"]["pinned"] = json!(true);
+        assert_eq!(parse_post(untitled).expect("reads").title, "");
+        let mut bad_id = post();
+        bad_id["post"]["communityId"] = json!("../me");
+        assert!(parse_post(bad_id).is_none());
+        let mut no_name = post();
+        no_name["post"].as_object_mut().unwrap().remove("communityName");
+        assert!(parse_post(no_name).is_none());
+        assert!(parse_post(json!({ "kind": "created" })).is_none());
+        assert!(parse_post(changed()).is_none(), "an event is no post");
+    }
+
+    #[test]
+    fn the_news_switch_decides_the_toast_of_a_post() {
+        let on = CommunityNotifications::default();
+        assert_eq!(decide_post(&on, false), Delivery { toast: true, os: true });
+        assert_eq!(decide_post(&on, true), Delivery { toast: true, os: false });
+        let off = CommunityNotifications {
+            news: false,
+            ..CommunityNotifications::default()
+        };
+        assert_eq!(decide_post(&off, false), Delivery::default());
+        let no_os = CommunityNotifications {
+            os: false,
+            ..CommunityNotifications::default()
+        };
+        assert_eq!(decide_post(&no_os, false), Delivery { toast: true, os: false });
+        // The events' switches do not speak for the news.
+        let events_off = CommunityNotifications {
+            new_events: false,
+            reminders: false,
+            ..CommunityNotifications::default()
+        };
+        assert_eq!(decide_post(&events_off, false), Delivery { toast: true, os: true });
+    }
+
+    #[test]
+    fn the_notification_of_a_post_names_the_community_and_the_post() {
+        let labels = EventLabels::default();
+        let read = parse_post(post()).unwrap();
+        let (title, text) = compose_post(&read, &labels);
+        assert_eq!(title, "News from Duel Masters");
+        assert_eq!(text, "Season two · Ladder The ladder opens on Friday at the arena.");
+        let untitled = PostSummary {
+            title: String::new(),
+            ..read.clone()
+        };
+        assert_eq!(compose_post(&untitled, &labels).1, "Ladder The ladder opens on Friday at the arena.");
+        let bare = PostSummary {
+            excerpt: String::new(),
+            ..read.clone()
+        };
+        assert_eq!(compose_post(&bare, &labels).1, "Season two");
+        let russian = EventLabels {
+            post: "Новость в {community}".into(),
+            ..EventLabels::default()
+        };
+        assert_eq!(compose_post(&read, &russian).0, "Новость в Duel Masters");
+        let long = PostSummary {
+            excerpt: "x".repeat(400),
+            ..read
+        };
+        assert!(compose_post(&long, &labels).1.chars().count() <= MAX_LINE_CHARS);
     }
 
     #[test]

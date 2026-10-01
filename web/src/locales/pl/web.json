@@ -187,7 +187,9 @@
     "eventCreated": "{{community}} ogłasza wydarzenie",
     "eventChanged": "Zmieniła się godzina lub miejsce",
     "eventCancelled": "Wydarzenie odwołane",
-    "eventReminder": "Zaczyna się za 15 minut"
+    "eventReminder": "Zaczyna się za 15 minut",
+    "newsPosted": "{{community}}: nowy wpis",
+    "newsPlain": "Nowy wpis"
   },
   "sessions": {
     "title": "Urządzenia i sesje",

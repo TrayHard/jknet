@@ -469,6 +469,8 @@
     "cancelledText": "{{community}} · {{when}}",
     "reminder": "In 15 Minuten: {{title}}",
     "reminderText": "{{community}} · {{place}}",
+    "post": "News von {{community}}",
+    "postTitled": "News von {{community}}: {{title}}",
     "open": "Öffnen",
     "join": "Beitreten"
   },
@@ -476,6 +478,8 @@
     "title": "Community-Benachrichtigungen",
     "newEvents": "Neue Events von Communitys, denen Sie folgen",
     "newEventsHelp": "Wenn eine Community, der Sie mit eingeschalteten Benachrichtigungen folgen, ein Event ankündigt",
+    "news": "News von Communitys, denen Sie folgen",
+    "newsHelp": "Wenn eine Community, der Sie mit eingeschalteten Benachrichtigungen folgen, einen Beitrag veröffentlicht",
     "reminders": "An Events 15 Minuten vorher erinnern",
     "remindersHelp": "Für Events, auf die Sie mit „Dabei“ oder „Vielleicht“ geantwortet haben",
     "windows": "Windows-Benachrichtigungen",

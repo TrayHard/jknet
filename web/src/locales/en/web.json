@@ -187,7 +187,9 @@
     "eventCreated": "{{community}} announced an event",
     "eventChanged": "The time or the place changed",
     "eventCancelled": "The event is cancelled",
-    "eventReminder": "Starts in 15 minutes"
+    "eventReminder": "Starts in 15 minutes",
+    "newsPosted": "News from {{community}}",
+    "newsPlain": "A new post"
   },
   "sessions": {
     "title": "Devices and sessions",

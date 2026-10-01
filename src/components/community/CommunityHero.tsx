@@ -6,7 +6,7 @@ import { cn } from "../../lib/format";
 import { Badge, Button } from "../ui";
 import { CommunityCover, CommunityLogo, LiveDot, Notice, TagChip, useCopy } from "./bits";
 import { FollowControl } from "./FollowControl";
-import { formatCount, GAME_NAMES, isHttps, LANGUAGE_NAMES } from "./format";
+import { formatCount, formatHours, GAME_NAMES, isHttps, LANGUAGE_NAMES, roundHours } from "./format";
 import { useCommunityPlatform } from "./platform";
 import type { Community } from "./types";
 
@@ -14,9 +14,9 @@ export interface HeroProps {
   community: Community;
   /** People on the servers now, when the host or the service knows. */
   online: number | null;
-  /** The place in the week's top, when the service ranks. */
+  /** The place in the top of the week, while the community is in it. */
   rank: number | null;
-  /** Player-hours of the week, when the service counts them. */
+  /** Player-hours of the last 7 days, when the service counts them. */
   playerHours: number | null;
   organizer: boolean;
   /** Discord said the invite is not valid: a player gets no button that leads nowhere. */
@@ -111,11 +111,11 @@ export function CommunityHero({
   if (playerHours !== null) {
     stats.push({
       key: "hours",
-      value: formatCount(Math.round(playerHours), language),
+      value: formatHours(playerHours, language),
       label: (
         <>
           <Clock size={14} className="shrink-0 text-fg-muted" aria-hidden="true" />
-          {t("stats.playerHours", { count: Math.round(playerHours) })}
+          {t("stats.playerHours", { count: roundHours(playerHours) })}
         </>
       ),
     });
@@ -224,7 +224,7 @@ export function CommunityHero({
         className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-px overflow-hidden rounded-b-[11px] border-t border-line-subtle bg-line-subtle"
       >
         {stats.map((stat) => (
-          <div key={stat.key} className="flex min-w-0 flex-col-reverse gap-2 bg-surface px-24 pt-14 pb-16 @max-[560px]/community:px-16">
+          <div key={stat.key} className="flex min-w-0 flex-col-reverse justify-end gap-2 bg-surface px-24 pt-14 pb-16 @max-[560px]/community:px-16">
             <dt className="flex items-center gap-6 text-body-sm text-fg-secondary">{stat.label}</dt>
             <dd className="text-display-md tabular-nums text-fg">{stat.value}</dd>
           </div>

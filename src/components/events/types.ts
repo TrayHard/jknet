@@ -99,11 +99,17 @@ export interface EventDetails extends EventCard {
   updatedAt: string;
 }
 
-/** `GET events`: the events that cross the range, the earliest first. */
+/**
+ * `GET events`: the events that cross the range, the earliest first, 500 a
+ * page. `next`, passed as `after` with the same range and filters, reads
+ * the page after; `null` on the last page. A service from before pages
+ * leaves it out.
+ */
 export interface EventsCalendar {
   events: EventCard[];
   from: string;
   to: string;
+  next?: string | null;
 }
 
 /** One player who answered, for the organizers. */

@@ -513,6 +513,8 @@
     "cancelledText": "{{community}} · {{when}}",
     "reminder": "Za 15 minut: {{title}}",
     "reminderText": "{{community}} · {{place}}",
+    "post": "{{community}}: nowy wpis",
+    "postTitled": "{{community}}: nowy wpis „{{title}}”",
     "open": "Otwórz",
     "join": "Dołącz"
   },
@@ -520,6 +522,8 @@
     "title": "Powiadomienia społeczności",
     "newEvents": "Nowe wydarzenia obserwowanych społeczności",
     "newEventsHelp": "Gdy obserwowana społeczność z włączonymi powiadomieniami ogłasza wydarzenie",
+    "news": "Aktualności obserwowanych społeczności",
+    "newsHelp": "Gdy obserwowana społeczność z włączonymi powiadomieniami publikuje wpis",
     "reminders": "Przypominaj o wydarzeniach 15 minut przed startem",
     "remindersHelp": "Dla wydarzeń z twoją odpowiedzią „Idę” lub „Może”",
     "windows": "Powiadomienia Windows",

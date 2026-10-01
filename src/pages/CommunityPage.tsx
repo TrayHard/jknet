@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 
+import { useUnsavedGuard } from "../components/client/UnsavedGuard";
 import { Notice } from "../components/community/bits";
 import {
   CommunityApp,
@@ -18,10 +19,12 @@ import {
   type Game,
   type PictureKind,
 } from "../components/community";
-import { CommunityManage } from "../components/community/manage";
+import { CommunityManage, CommunityNewsComposer } from "../components/community/manage";
 import { useErrorText } from "../i18n/errors";
 import { bundlesTabRoute } from "../lib/bundleRoutes";
+import { hasBackend, listen } from "../lib/backend";
 import { bundlesIpc, communityIpc, serversIpc, type ServerStatus } from "../lib/ipc";
+import { COMMUNITY_POST, type PostNotice } from "../lib/useCommunityEvents";
 import { useAccountState, useActiveGame, useFriendsState, useOnlineUrl } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { LauncherFiles, LauncherPlay, LauncherPlayProvider } from "./communityPlay";
@@ -67,6 +70,24 @@ export function liveOf(status: ServerStatus): CommunityLiveStatus {
 
 const serverStatus = (address: string, game: Game) => serversIpc.getServerStatus(address, game).then(liveOf);
 
+/** The posts of the news the core hears on the live socket, by community. */
+function subscribePosts(listener: (communityId: string) => void): () => void {
+  if (!hasBackend()) return () => undefined;
+  let stop: (() => void) | undefined;
+  let gone = false;
+  void listen<PostNotice>(COMMUNITY_POST, (event) => listener(event.payload.post.communityId)).then(
+    (off) => {
+      if (gone) off();
+      else stop = off;
+    },
+    () => undefined,
+  );
+  return () => {
+    gone = true;
+    stop?.();
+  };
+}
+
 /** Public bundles of the catalogue for the community's client: the first hundred of a game that match. */
 const findBundles = (query: string, game: Game): Promise<CommunityBundleRef[]> =>
   bundlesIpc
@@ -106,7 +127,9 @@ export function communityPath(route: CommunityRoute): string {
  *
  * `#/community/:id/manage?section=` is the management screen of a page: the
  * core's dialog uploads its pictures, and the friends list and the bundle
- * catalogue of the launcher name its editors and its client.
+ * catalogue of the launcher name its editors and its client. While it holds
+ * edits nobody saved, the guard of the main window asks before a route
+ * change, a switch of the game or closing the window loses them.
  *
  * The events of a page — its tab and the block of the overview — get the
  * launcher's events platform; the calendar and the editor of an event are
@@ -145,6 +168,16 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
     [friendsData, friendsState.isError],
   );
   const pickImage = useLauncherPickImage();
+  const guard = useUnsavedGuard();
+  const { t } = useTranslation("community");
+  const leaveTitle = t("manage.leave.title");
+  const leaveBody = t("manage.leave.body");
+  const leaveKeep = t("manage.leave.keep");
+  const leaveDiscard = t("manage.leave.discard");
+  const setUnsaved = useCallback(
+    (dirty: boolean) => guard.setDirty(dirty, { title: leaveTitle, body: leaveBody, keep: leaveKeep, discard: leaveDiscard }),
+    [guard, leaveTitle, leaveBody, leaveKeep, leaveDiscard],
+  );
   const seedAddress = id ? null : params.get("address");
   const seedName = params.get("name") ?? "";
   const seedGame: Game = params.get("game") === "jo" ? "jo" : "ja";
@@ -184,8 +217,11 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
       pickImage,
       friends,
       findBundles,
+      renderNewsComposer: (props) => <CommunityNewsComposer {...props} />,
+      setUnsaved,
+      subscribePosts,
     }),
-    [signedIn, accountId, apiBase, navigate, openExternal, game, seedAddress, seedName, seedGame, pickImage, friends],
+    [signedIn, accountId, apiBase, navigate, openExternal, game, seedAddress, seedName, seedGame, pickImage, friends, setUnsaved],
   );
 
   // No scroll box of its own: the shell's <main> scrolls, and the sticky

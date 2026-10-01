@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bundleListPath, catalogueQuery, communityRoute, createCatalogs, eventsQuery, MAX_BUNDLE_PAGE } from "./catalogs.ts";
+import { bundleListPath, catalogueQuery, communityRoute, createCatalogs, eventsQuery, MAX_BUNDLE_PAGE, postsQuery } from "./catalogs.ts";
 import { NEEDS_LAUNCHER } from "./errors.ts";
 import { createHttp } from "./http.ts";
 
@@ -69,6 +69,12 @@ test("the web app follows a community and answers events, and makes no other wri
     ["DELETE", `events/${ID}`],
     ["PUT", `events/${ID}/rsvp?x=1`],
     ["PUT", `events/short/rsvp`],
+    ["POST", `communities/${ID}/posts`],
+    ["PUT", `posts/${ID}`],
+    ["DELETE", `posts/${ID}`],
+    ["POST", `communities/${ID}/discord/bot/link`],
+    ["PUT", `communities/${ID}/discord/bot`],
+    ["DELETE", `communities/${ID}/discord/bot`],
     ["GET", "../me"],
     ["GET", "servers/../../me"],
     ["GET", "servers?token=x"],
@@ -104,9 +110,26 @@ test("the calendar query keeps to its keys", () => {
     eventsQuery(`from=2026-10-01T00:00:00Z&to=2026-11-01&scope=following&game=jo&community=${ID}`),
     `events?from=2026-10-01T00%3A00%3A00Z&to=2026-11-01&scope=following&game=jo&community=${ID}`,
   );
-  for (const query of ["scope=mine", "from=yesterday", "community=../me", "limit=10"]) {
+  for (const query of ["scope=mine", "from=yesterday", "community=../me", "limit=10", "after=page2", `after=2026-10-03T16:00:00Z_${ID}x`]) {
     assert.equal(eventsQuery(query), null, query);
   }
+  // The `next` of a page reads the page after, written back escaped.
+  assert.equal(
+    eventsQuery(`from=2026-10-01T00:00:00Z&after=2026-10-03T16%3A00%3A00Z_${ID}`),
+    `events?from=2026-10-01T00%3A00%3A00Z&after=2026-10-03T16%3A00%3A00Z_${ID}`,
+  );
+});
+
+test("a page of the news keeps to its limit and its cursor", () => {
+  assert.equal(postsQuery(ID, `limit=20&before=2026-09-30T23%3A07%3A40Z_${ID}`), `communities/${ID}/posts?limit=20&before=2026-09-30T23%3A07%3A40Z_${ID}`);
+  assert.equal(postsQuery(ID, "limit="), `communities/${ID}/posts`);
+  for (const query of ["limit=-1", "limit=abc", "before=yesterday", "before=2026-09-30T23:07:40Z", "after=x", "limit=1&limit=2"]) {
+    assert.equal(postsQuery(ID, query), null, query);
+  }
+  assert.equal(postsQuery("short", "limit=1"), null);
+  assert.deepEqual(communityRoute("GET", `communities/${ID}/posts?limit=5`), { path: `communities/${ID}/posts?limit=5`, auth: "optional", body: false });
+  assert.equal(communityRoute("GET", `communities/${ID}/players?limit=5`), null);
+  assert.equal(communityRoute("POST", `communities/${ID}/posts?limit=5`), null);
 });
 
 test("a community read carries the token while there is one, and a guest reads without it", async () => {

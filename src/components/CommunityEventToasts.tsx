@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useEventFormat } from "./events/format";
 import type { EventNotice } from "./events/types";
-import { useCommunityEventLabels, useCommunityEventNotices } from "../lib/useCommunityEvents";
+import { useCommunityEventLabels, useCommunityEventNotices, useCommunityPostNotices, type PostNotice } from "../lib/useCommunityEvents";
 import { useToasts } from "./ToastsProvider";
 import { Button } from "./ui";
 
@@ -16,6 +16,11 @@ function openEvent(eventId: string) {
   window.location.hash = `#/events/${encodeURIComponent(eventId)}`;
 }
 
+/** Opens the news of a community from anywhere in the launcher window. */
+function openNews(communityId: string) {
+  window.location.hash = `#/community/${encodeURIComponent(communityId)}?tab=news`;
+}
+
 /**
  * --- slice: community events ---
  *
@@ -24,6 +29,10 @@ function openEvent(eventId: string) {
  * the reminder 15 minutes before one. The core decides which frames deserve
  * a toast (`community_events::decide`) and shows the Windows notification
  * itself; a click on that one arrives here as `community:open-event`.
+ *
+ * --- slice: community news --- the same for a post of the news of a
+ * followed community, as the design's G1 draws it: **Open** leads to the
+ * **News** tab, and so does `community:open-post`.
  *
  * The component also hands the core the words of those Windows
  * notifications in the language on screen. Mount it once, in the launcher
@@ -88,6 +97,40 @@ export function CommunityEventToasts() {
     },
     openEvent,
   );
+
+  // --- slice: community news ---
+  useCommunityPostNotices((notice: PostNotice) => {
+    if (!notice.toast) return;
+    const { post } = notice;
+    const key = `community-post:${post.id}`;
+    const title = post.title.trim();
+    toasts.show(key, {
+      variant: "info",
+      title: title !== "" ? t("notify.postTitled", { community: post.communityName, title }) : t("notify.post", { community: post.communityName }),
+      text: post.excerpt.trim() !== "" ? post.excerpt : undefined,
+      action: (
+        <Button
+          size="sm"
+          wrap
+          onClick={() => {
+            toasts.dismiss(key);
+            openNews(post.communityId);
+          }}
+        >
+          {t("notify.open")}
+        </Button>
+      ),
+    });
+    const before = timers.current.get(key);
+    if (before) clearTimeout(before);
+    timers.current.set(
+      key,
+      setTimeout(() => {
+        timers.current.delete(key);
+        toasts.dismiss(key);
+      }, TOAST_MS),
+    );
+  }, openNews);
 
   return null;
 }

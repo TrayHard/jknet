@@ -9,15 +9,15 @@ import { Toggle } from "../ui";
 /** The anchor of the card: `#/settings?section=events`. */
 export const COMMUNITY_NOTIFICATIONS_SECTION_ID = "settings-community-notifications";
 
-const DEFAULTS: CommunityNotifications = { newEvents: true, reminders: true, os: true };
+const DEFAULTS: Required<CommunityNotifications> = { newEvents: true, reminders: true, news: true, os: true };
 
 /**
  * --- slice: community events ---
  *
- * **Community notifications**: whether a new event of a followed community
- * and the reminder 15 minutes before an answered event reach the player,
- * and whether either shows as a Windows notification while the launcher is
- * minimized or in the tray. Each switch writes itself alone into
+ * **Community notifications**: whether a new event of a followed community,
+ * the reminder 15 minutes before an answered event and the news of a
+ * followed community reach the player, and whether they show as a Windows
+ * notification while the launcher is minimized or in the tray. Each switch writes itself alone into
  * `settings.json`; the core reads them when a frame arrives
  * (`community_events::decide`). A change and a cancellation of an event the
  * player answered have no switch: they always come.
@@ -32,6 +32,8 @@ export function CommunityNotificationsCard() {
   const value = (key: keyof CommunityNotifications) => pending?.[key] ?? current[key];
   const rows: Array<{ key: keyof CommunityNotifications; label: string; help: string }> = [
     { key: "newEvents", label: t("settings.newEvents"), help: t("settings.newEventsHelp") },
+    // --- slice: community news ---
+    { key: "news", label: t("settings.news"), help: t("settings.newsHelp") },
     { key: "reminders", label: t("settings.reminders"), help: t("settings.remindersHelp") },
     { key: "os", label: t("settings.windows"), help: t("settings.windowsHelp") },
   ];

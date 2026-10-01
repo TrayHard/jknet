@@ -7,10 +7,10 @@
  * launcher through the `community_request` bridge of the core, the other two
  * over HTTP. Field names are camelCase on the wire.
  *
- * News, the live status of servers, their activity and the week's ranking
- * are not served yet. Their shapes below are provisional and marked
- * `TODO(S5)` and `TODO(S6)`: the screens read them defensively and draw
- * nothing of a part the service does not answer. Events have their own
+ * The fields of the news, the live status, the activity, the week's top and
+ * the JKNet bot came with later slices of the service: a service from
+ * before them leaves them out, so they are optional here and the screens
+ * draw nothing of a part the service does not answer. Events have their own
  * types in `components/events/types.ts`.
  */
 
@@ -39,9 +39,9 @@ export interface CommunityPerson {
 }
 
 /**
- * TODO(S6): the last `getstatus` answer of a server, which the service will
- * poll every 5 minutes. Provisional: the launcher asks the server itself over
- * UDP and fills the same shape from its own answer.
+ * What the screens draw of a server now: its last `getstatus` answer. The
+ * launcher fills it from its own UDP answer, every host from the service's
+ * {@link CommunityServerStatus} (`liveOfService` in `ServerBlock.tsx`).
  */
 export interface CommunityLiveStatus {
   /** `sv_hostname` with its colour codes, when the answer carried it. */
@@ -71,6 +71,46 @@ export interface CommunityLivePlayer {
   bot: boolean;
 }
 
+/** A player of the service's live status: `LivePlayer` in the contract. */
+export interface CommunityServerPlayer {
+  /** The name as the server sent it, colour codes included. */
+  name: string;
+  /** The name without its colour codes `^0` to `^9`. */
+  cleanName: string;
+  score: number;
+  ping: number;
+  /** A bot: the engine gives a bot ping 0. */
+  bot: boolean;
+}
+
+/**
+ * The service's last poll of a server, every 5 minutes: `ServerStatus` in
+ * the contract. A server that stopped answering keeps the name, map, mode,
+ * slots and password of its last answer, with no players.
+ */
+export interface CommunityServerStatus {
+  /** The server answered the last poll. */
+  online: boolean;
+  /** `sv_hostname` with its colour codes; `null` until it answered once. */
+  hostname: string | null;
+  cleanHostname: string | null;
+  /** Lowercased: `mp/ffa3`. */
+  map: string | null;
+  gametype: number | null;
+  /** Players with a ping above 0, at most the slots; 0 while it does not answer. */
+  humans: number;
+  bots: number;
+  /** Public slots: `sv_maxclients` less `sv_privateClients`. */
+  maxClients: number | null;
+  needPass: boolean | null;
+  /** The players of the last answer, the highest score first. */
+  players: CommunityServerPlayer[];
+  /** When the poll asked, RFC 3339. */
+  checkedAt: string;
+  /** When the server last answered; `null` while it has not since the service started. */
+  lastOnlineAt: string | null;
+}
+
 /** A game server of a community: `Server` in the contract. */
 export interface CommunityServer {
   id: string;
@@ -83,8 +123,12 @@ export interface CommunityServer {
   /** Proven by a code in `sv_hostname` or approved by an administrator. */
   verified: boolean;
   verifiedAt: string | null;
-  /** TODO(S6): the service's last live answer. */
-  status?: CommunityLiveStatus | null;
+  /**
+   * The service's last poll, on a page only: a list leaves the key out. `null`
+   * until the poller read the server, and always for a server whose control
+   * is not established.
+   */
+  status?: CommunityServerStatus | null;
 }
 
 /** The numbers every card and page carries. */
@@ -93,12 +137,10 @@ export interface CommunityCounts {
   /** Players with 3 days of 10 minutes or more in the last 30 days. */
   regulars: number;
   upcomingEvents: number;
-  /** TODO(S6): people on the community's servers now. */
+  /** Humans on the established servers at the service's last poll. */
   online?: number | null;
-  /** TODO(S6): the sum of people over the week's samples, in hours. */
-  playerHours?: number | null;
-  /** TODO(S6): the place in the week's top, from 1. */
-  rank?: number | null;
+  /** Player-hours on the established servers in the last 7 days, to a tenth. */
+  playerHoursWeek?: number | null;
 }
 
 /** What the reader is to the page. `null` for a guest. */
@@ -157,6 +199,8 @@ export interface Community extends CommunityCard {
   recommendations: CommunityRecommendation[];
   editors: CommunityPerson[];
   viewer: CommunityViewer | null;
+  /** The place in the top of the week, from 1; `null` outside it. */
+  rank?: number | null;
 }
 
 /** `GET communities`. */
@@ -302,38 +346,163 @@ export type DiscordWidget =
       membersTotal: number;
     };
 
+/** A channel of the linked Discord server that everyone in it can see. */
+export interface DiscordBotChannel {
+  id: string;
+  name: string;
+  /** `text` or `announcement`; a string, so a kind added later still reads. */
+  kind: string;
+  /** The category the channel sits in, or `null`. */
+  category: string | null;
+  /** The channel in Discord. */
+  url: string;
+}
+
+/** A message of the announcements channel, as plain text with names for mentions. */
+export interface DiscordBotMessage {
+  id: string;
+  /** The display name of the author, else the user name. */
+  author: string;
+  content: string;
+  /** RFC 3339 in UTC. */
+  postedAt: string;
+  /** The message in Discord. */
+  url: string;
+  /** Files attached to the message. */
+  attachments: number;
+}
+
+/** The latest messages of the announcements channel, the newest first. */
+export interface DiscordBotAnnouncements {
+  channelId: string;
+  channelName: string;
+  url: string;
+  messages: DiscordBotMessage[];
+}
+
+/**
+ * What the JKNet bot read in the Discord server linked to the community:
+ * `bot` of the Discord card. `{ linked: false }` reaches an organizer while
+ * the bot is on and not linked yet.
+ */
+export interface DiscordBot {
+  linked: boolean;
+  /** `null` until the bot has read the server. */
+  guildName?: string | null;
+  /** The channels the page lists, while the organizers show them. */
+  channels?: DiscordBotChannel[];
+  announcements?: DiscordBotAnnouncements | null;
+  /** When the bot read the server; `null` until it has. */
+  syncedAt?: string | null;
+  // What only the organizers see.
+  guildId?: string;
+  showChannels?: boolean;
+  announcementsChannelId?: string | null;
+  /** Every channel the announcements may come from, listed or not. */
+  availableChannels?: DiscordBotChannel[];
+  /** `no_access`, `announcements_hidden`, `announcements_denied`, `bot_token`, `unavailable`, or `null`. */
+  error?: string | null;
+  /** The community's invite leads to another Discord server. */
+  inviteGuildMismatch?: boolean;
+  linkedAt?: string;
+}
+
 /** `GET communities/{id}/discord`. */
 export interface CommunityDiscord {
   inviteStatus: "ok" | "invalid" | "unavailable" | "none";
   invite: DiscordInvite | null;
   widget: DiscordWidget | null;
   fetchedAt: string;
+  /**
+   * The JKNet bot: `null` while the bot is off on the service, and for a
+   * reader who is not an organizer while it has nothing to show. A service
+   * from before the bot leaves the key out.
+   */
+  bot?: DiscordBot | null;
 }
 
-/** TODO(S6): a place of `GET ranking`, the week's top by player-hours. */
+/** `POST communities/{id}/discord/bot/link`: Discord's page that adds the bot. */
+export interface DiscordBotLink {
+  url: string;
+  /** When the link stops working, RFC 3339. */
+  expiresAt: string;
+}
+
+/** A place of the top of the week, as the screens read `GET ranking`. */
 export interface CommunityRankingEntry {
+  /** From 1. */
   rank: number;
   community: CommunityCard;
-  playerHours: number;
+  playerHoursWeek: number;
 }
 
-/** TODO(S6): `GET communities/{id}/activity`. */
+/** `GET communities/{id}/activity`: how busy the established servers are. */
 export interface CommunityActivity {
-  /** 168 hours of the week in UTC, Monday 00:00 first: the average of people. */
+  /**
+   * 168 numbers: the average humans in each UTC hour of the week, Monday
+   * 00:00 first, over the hours of the last 28 days that have samples.
+   */
   heatmap: number[];
-  peak: { players: number; at: string } | null;
-  playerHours: number;
-  online: number;
+  /** The most humans in one hour of the last 28 days and the start of that hour; `null` while nobody played. */
+  peak: { humans: number; at: string } | null;
+  playerHoursWeek: number;
+  onlineNow: number;
+  /** UTC days of the last 28 with samples: how much the heat map knows. */
+  days: number;
 }
 
-/** TODO(S5): a post of `GET communities/{id}/posts`. */
+/** A post of the news of a community: `Post` in the contract. */
 export interface CommunityPost {
   id: string;
+  communityId: string;
+  /** One line of at most 100 characters, or empty. */
   title: string;
+  /** Markdown, 1 to 4000 characters. */
   body: string;
+  /** Pinned posts come first; a community pins at most 3. */
   pinned: boolean;
-  author: CommunityPerson;
+  /** The organizer who wrote it, while the account exists. */
+  author: CommunityPerson | null;
   createdAt: string;
+  updatedAt: string;
+  revision: number;
+  /** What a signed-in reader may do with it; `null` for a guest. */
+  viewer: { canEdit: boolean } | null;
+}
+
+/** `GET communities/{id}/posts`: a page of the news and the cursor of the next one. */
+export interface CommunityPosts {
+  posts: CommunityPost[];
+  /** Passed as `before`, it asks for the older posts that are not pinned; `null` after the last page. */
+  next: string | null;
+}
+
+/** The body of `POST communities/{id}/posts`. */
+export interface NewPostBody {
+  title?: string;
+  body: string;
+  pinned?: boolean;
+  /** Off: the followers hear nothing of it. On by default. */
+  notifyFollowers?: boolean;
+}
+
+/** The body of `PUT posts/{id}`: a field left out keeps its value. */
+export interface PostPatch {
+  title?: string | null;
+  body?: string;
+  pinned?: boolean;
+  /** The revision of the post the change was made on; another one answers `409`. */
+  revision: number;
+}
+
+/** The post a `community.post` frame names: enough for a toast. */
+export interface CommunityPostSummary {
+  id: string;
+  communityId: string;
+  communityName: string;
+  title: string;
+  /** The first 140 characters of the body as plain text. */
+  excerpt: string;
 }
 
 /** A page of the routes of before: the community as JKNet 0.10.0 reads it. */

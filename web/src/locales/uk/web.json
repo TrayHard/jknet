@@ -187,7 +187,9 @@
     "eventCreated": "{{community}} оголошує подію",
     "eventChanged": "Змінилися час або місце",
     "eventCancelled": "Подію скасовано",
-    "eventReminder": "Почнеться за 15 хвилин"
+    "eventReminder": "Почнеться за 15 хвилин",
+    "newsPosted": "Новина спільноти {{community}}",
+    "newsPlain": "Новий допис"
   },
   "sessions": {
     "title": "Пристрої та сеанси",

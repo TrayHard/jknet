@@ -9,7 +9,19 @@
  * to `CommunityApp` as `renderManage`.
  */
 
-export { communityApi, catalogPath, eventsPath, failureOf, isCommunityId, readRanking, type CatalogQuery, type CommunityApi } from "./api";
+export {
+  communityApi,
+  catalogPath,
+  eventsPath,
+  failureOf,
+  isCommunityId,
+  isTimeCursor,
+  postsPath,
+  readActivity,
+  readRanking,
+  type CatalogQuery,
+  type CommunityApi,
+} from "./api";
 export { CommunityApp, CommunityFrame } from "./CommunityApp";
 export { CommunityCatalog } from "./CommunityCatalog";
 export { CommunityView } from "./CommunityView";
@@ -27,6 +39,7 @@ export {
   type CommunitySeed,
   type ImageRefusal,
   type ManageSection,
+  type NewsComposerProps,
   type PageTab,
   type PickedImage,
   type PictureKind,

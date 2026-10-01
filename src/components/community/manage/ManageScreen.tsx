@@ -11,6 +11,7 @@ import { MANAGE_SECTIONS, useCommunityApi, useCommunityPlatform, type ManageSect
 import type { Community } from "../types";
 import { useAction, useRemote } from "../useRemote";
 import { AdminSection } from "./AdminSection";
+import { BotSection } from "./BotSection";
 import { BundleSection } from "./BundleSection";
 import { FilesSection } from "./FilesSection";
 import { ImagesSection } from "./ImagesSection";
@@ -154,6 +155,8 @@ function useSectionLabel(): (section: ManageSection) => string {
         return t("manage.sections.servers");
       case "team":
         return t("manage.sections.team");
+      case "bot":
+        return t("manage.sections.bot");
       case "admin":
         return t("manage.sections.admin");
     }
@@ -226,9 +229,8 @@ function ManageBody({
   const [active, setActive] = useState<ManageSection>(section ?? "profile");
   const save = useAction();
   const reload = useAction();
-  const discord = useRemote(community.discord.trim() !== "" ? `manage-discord:${community.id}:${community.discord}` : null, () =>
-    api.discord(community.id),
-  );
+  // The card of the invite, and of the JKNet bot, which may read a server without one.
+  const discord = useRemote(`manage-discord:${community.id}:${community.discord}`, () => api.discord(community.id));
 
   const admin = community.viewer?.isAdmin === true;
   const sections = MANAGE_SECTIONS.filter((item) => item !== "admin" || admin);
@@ -237,6 +239,13 @@ function ManageBody({
   const stopped = troubled(problems);
   const changedSections = edited(form.base, form.draft);
   const pending = community.servers.some((server) => !server.verified);
+
+  // The host asks before a route change or closing the window loses edits nobody saved.
+  const setUnsaved = platform.setUnsaved;
+  useEffect(() => {
+    setUnsaved?.(dirty);
+  }, [setUnsaved, dirty]);
+  useEffect(() => () => setUnsaved?.(false), [setUnsaved]);
 
   const edit = useCallback((patch: Partial<ManageDraft>) => {
     setSaved(false);
@@ -412,6 +421,7 @@ function ManageBody({
             onLeft={() => platform.navigate({ view: "community", id: community.id, tab: "overview" })}
             onAssignOwner={() => pick("admin")}
           />
+          <BotSection community={community} discord={discord} onApplied={applied} />
           {admin ? <AdminSection community={community} onApplied={applied} onDeleted={onDeleted} /> : null}
 
           <div role="region" aria-label={t("manage.save.region")} className="sticky bottom-0 z-10 mt-auto flex flex-col gap-8 bg-app pt-12 pb-16">
