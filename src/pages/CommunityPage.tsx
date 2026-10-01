@@ -16,6 +16,7 @@ import {
   type CommunityRequest,
   type CommunityRoute,
   type Game,
+  type PictureKind,
 } from "../components/community";
 import { CommunityManage } from "../components/community/manage";
 import { useErrorText } from "../i18n/errors";
@@ -24,6 +25,9 @@ import { bundlesIpc, communityIpc, serversIpc, type ServerStatus } from "../lib/
 import { useAccountState, useActiveGame, useFriendsState, useOnlineUrl } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { LauncherFiles, LauncherPlay, LauncherPlayProvider } from "./communityPlay";
+// --- slice: community events ---
+import { EventsPlatformProvider } from "../components/events";
+import { useLauncherEventsPlatform } from "./eventsPlatform";
 
 /** The website's page of a community: what **Share** copies. */
 const PUBLIC_PAGE = "https://jknet.app/servers/";
@@ -69,8 +73,20 @@ const findBundles = (query: string, game: Game): Promise<CommunityBundleRef[]> =
     .list({ game, sort: "popular", q: query, limit: 100 })
     .then((list) => list.items.map((bundle) => ({ id: bundle.id, name: bundle.name })));
 
-/** The path of a route inside the launcher's router. */
-function pathOf(route: CommunityRoute): string {
+/**
+ * The core's dialog for a picture — a logo or a cover of a community, the
+ * cover of an event — with its words in the player's language. Outside
+ * Tauri (`npm run dev`) there is none, and the screens offer no upload.
+ */
+export function useLauncherPickImage(): CommunityPlatform["pickImage"] {
+  const { t } = useTranslation("community");
+  const title = t("manage.images.dialogTitle");
+  const filter = t("manage.images.dialogFilter");
+  return useMemo(() => (isTauri() ? (kind: PictureKind) => communityIpc.pickImage(kind, title, filter) : undefined), [title, filter]);
+}
+
+/** The path of a route inside the launcher's router; the events pages lead to the community screens by it too. */
+export function communityPath(route: CommunityRoute): string {
   if (route.view === "catalog") return route.tab === "catalog" ? "/community" : `/community?tab=${route.tab}`;
   const base = `/community/${encodeURIComponent(route.id)}`;
   if (route.view === "manage") return route.section ? `${base}/manage?section=${route.section}` : `${base}/manage`;
@@ -91,18 +107,23 @@ function pathOf(route: CommunityRoute): string {
  * `#/community/:id/manage?section=` is the management screen of a page: the
  * core's dialog uploads its pictures, and the friends list and the bundle
  * catalogue of the launcher name its editors and its client.
+ *
+ * The events of a page — its tab and the block of the overview — get the
+ * launcher's events platform; the calendar and the editor of an event are
+ * `EventsPage`.
  */
 export function CommunityPage({ manage = false }: { manage?: boolean }) {
   const { id } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { t } = useTranslation("community");
   const account = useAccountState();
   const game = useActiveGame();
   const apiBase = useOnlineUrl();
   const friendsState = useFriendsState();
   const errorText = useErrorText();
   const [externalError, setExternalError] = useState<string | null>(null);
+  // --- slice: community events --- the tab and the block of events on a page.
+  const eventsPlatform = useLauncherEventsPlatform();
 
   const signedIn = account.data?.onlineSignedIn ?? false;
   const accountId = account.data?.onlineUser?.id ?? null;
@@ -123,8 +144,7 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
           : null,
     [friendsData, friendsState.isError],
   );
-  const dialogTitle = t("manage.images.dialogTitle");
-  const dialogFilter = t("manage.images.dialogFilter");
+  const pickImage = useLauncherPickImage();
   const seedAddress = id ? null : params.get("address");
   const seedName = params.get("name") ?? "";
   const seedGame: Game = params.get("game") === "jo" ? "jo" : "ja";
@@ -150,8 +170,8 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
       apiBase,
       signIn: () => navigate("/settings?section=account"),
       openExternal,
-      navigate: (next) => navigate(pathOf(next)),
-      href: (next) => `#${pathOf(next)}`,
+      navigate: (next) => navigate(communityPath(next)),
+      href: (next) => `#${communityPath(next)}`,
       canManage: true,
       game,
       pageUrl: (communityId) => `${PUBLIC_PAGE}?id=${encodeURIComponent(communityId)}`,
@@ -161,12 +181,11 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
       openBundle: (bundleId) => navigate(bundlesTabRoute(bundleId)),
       openPrivacySettings: () => navigate(PRIVACY_ROUTE),
       seed: seedAddress ? { address: seedAddress, name: seedName, game: seedGame } : undefined,
-      // The core's dialog: outside Tauri (`npm run dev`) the screen offers no upload.
-      pickImage: isTauri() ? (kind) => communityIpc.pickImage(kind, dialogTitle, dialogFilter) : undefined,
+      pickImage,
       friends,
       findBundles,
     }),
-    [signedIn, accountId, apiBase, navigate, openExternal, game, seedAddress, seedName, seedGame, dialogTitle, dialogFilter, friends],
+    [signedIn, accountId, apiBase, navigate, openExternal, game, seedAddress, seedName, seedGame, pickImage, friends],
   );
 
   // No scroll box of its own: the shell's <main> scrolls, and the sticky
@@ -179,11 +198,13 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
         </div>
       ) : null}
       <LauncherPlayProvider>
-        <CommunityApp
-          platform={platform}
-          route={route}
-          renderManage={(screen) => <CommunityManage id={screen.id} section={screen.section} />}
-        />
+        <EventsPlatformProvider platform={eventsPlatform}>
+          <CommunityApp
+            platform={platform}
+            route={route}
+            renderManage={(screen) => <CommunityManage id={screen.id} section={screen.section} />}
+          />
+        </EventsPlatformProvider>
       </LauncherPlayProvider>
     </div>
   );

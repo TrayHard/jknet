@@ -7,6 +7,9 @@ import type { Community } from "../../../../src/components/community/types.ts";
 import { serverCard } from "../../../../src/lib/chat/cardDrafts.ts";
 import type { ChatCard } from "../../../../src/lib/ipc.ts";
 import { useWebCommunityPlatform } from "../catalog/useCommunityPlatform.tsx";
+// --- slice: community events ---
+import { EventsPlatformProvider } from "../../../../src/components/events/platform.tsx";
+import { useWebEventsPlatform } from "../catalog/useEventsPlatform.ts";
 
 /**
  * A community's card for the chat: the address and game of its first
@@ -38,6 +41,8 @@ export function CommunityDetailsScreen({ serverId }: { serverId: string }) {
   const { t: tChat } = useTranslation("chat");
   const [params] = useSearchParams();
   const share = useShareDialog();
+  // --- slice: community events --- the tab and the block of events on the page.
+  const events = useWebEventsPlatform();
   const platform = useWebCommunityPlatform(
     share.available
       ? {
@@ -53,9 +58,11 @@ export function CommunityDetailsScreen({ serverId }: { serverId: string }) {
   return (
     <div className="web-catalog flex flex-col" data-testid="community-details">
       <CommunityPlatformProvider platform={platform}>
-        <CommunityFrame className="px-16 pt-8 pb-24">
-          <CommunityView key={serverId} id={serverId} tab={pageTab(params.get("tab"))} />
-        </CommunityFrame>
+        <EventsPlatformProvider platform={events}>
+          <CommunityFrame className="px-16 pt-8 pb-24">
+            <CommunityView key={serverId} id={serverId} tab={pageTab(params.get("tab"))} />
+          </CommunityFrame>
+        </EventsPlatformProvider>
       </CommunityPlatformProvider>
       {share.dialog}
     </div>

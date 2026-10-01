@@ -50,6 +50,9 @@ import { OnboardingPage } from "./pages/onboarding/OnboardingPage";
 import { ServersPage } from "./pages/ServersPage";
 import { ServerInstancesPage } from "./pages/ServerInstancesPage";
 import { CommunityPage } from "./pages/CommunityPage";
+// --- slice: community events ---
+import { CommunityEventToasts } from "./components/CommunityEventToasts";
+import { EventsPage } from "./pages/EventsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 /**
@@ -107,6 +110,9 @@ export default function App() {
             the download outlives the screen it was started on: the player
             presses Install and walks off to the server browser. */}
         <JkhubDownloadToasts />
+        {/* --- slice: community events --- a new event, a change, a
+            reminder: they arrive on any screen, into the same column. */}
+        <CommunityEventToasts />
         {/* Above the router: an engine install must survive a route change. */}
         <GameEventsProvider>
           {/* --- slice: installer --- */}
@@ -226,6 +232,11 @@ function getMainRouter() {
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/community/:id" element={<CommunityPage />} />
           <Route path="/community/:id/manage" element={<CommunityPage manage />} />
+          {/* --- slice: community events --- the calendar, an event, its editor. */}
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/events/:id" element={<EventsPage />} />
+          <Route path="/events/:id/edit" element={<EventsPage />} />
+          <Route path="/community/:communityId/events/new" element={<EventsPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/server-instances" element={<ServerInstancesPage />} />

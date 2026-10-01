@@ -1,0 +1,55 @@
+/*
+ * What the events screens cannot say with the utilities of the theme: the
+ * chips of the month grid and the marks drawn on the hue of a community.
+ *
+ * The hue is the one colour computed outside the tokens, as on the
+ * community screens (`community.css`): `--jkc-hue`, set by `hueStyle`.
+ * Everything else reads the semantic tokens. The rules sit in the
+ * `components` layer, so a utility on the same element still wins.
+ */
+
+@layer theme, base, components, utilities;
+
+@layer components {
+  /* An event in a day of the month grid, tinted by its community. */
+  .jke-chip {
+    background: hsl(var(--jkc-hue, 195) 60% 50% / 0.14);
+    border: 1px solid transparent;
+  }
+
+  .jke-chip-time {
+    color: hsl(var(--jkc-hue, 195) 75% 74%);
+  }
+
+  /* «Going»: a warm outline around the chip. */
+  .jke-chip.jke-going {
+    border-color: var(--color-border-warm);
+  }
+
+  .jke-chip.jke-quiet {
+    background: var(--color-bg-hover-overlay);
+  }
+
+  .jke-chip.jke-quiet .jke-chip-time {
+    color: var(--color-text-secondary);
+  }
+
+  /* The dot of a community in a list, on its hue. */
+  .jke-dot {
+    background: hsl(var(--jkc-hue, 195) 70% 58%);
+  }
+
+  /* A selected day of the grid: an inner ring that does not move the content. */
+  .jke-selected::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--color-border-accent);
+    pointer-events: none;
+  }
+
+  /* A cancelled event's cover fades. */
+  .jke-dim {
+    filter: grayscale(0.85) brightness(0.65);
+  }
+}

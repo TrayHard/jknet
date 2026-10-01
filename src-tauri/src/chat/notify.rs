@@ -684,6 +684,21 @@ pub(crate) fn show_toast(
     text: String,
     open: Option<Option<String>>,
 ) {
+    show_toast_with(app, title, text, move |clicked| match open.clone() {
+        Some(conversation_id) => super::window::open_conversation(clicked, conversation_id),
+        None => crate::tray::show_main(clicked),
+    });
+}
+
+/// --- slice: community events ---
+/// Shows a Windows notification whose click runs `on_click`: the events of
+/// communities open the page of their event with it.
+pub(crate) fn show_toast_with(
+    app: &AppHandle,
+    title: String,
+    text: String,
+    on_click: impl Fn(&AppHandle) + Send + 'static,
+) {
     #[cfg(windows)]
     {
         use tauri_winrt_notification::Toast;
@@ -703,23 +718,18 @@ pub(crate) fn show_toast(
                 .text1(&text)
                 .sound(None)
                 .on_activated(move |_| {
-                    match open.clone() {
-                        Some(conversation_id) => {
-                            super::window::open_conversation(&clicked, conversation_id)
-                        }
-                        None => crate::tray::show_main(&clicked),
-                    }
+                    on_click(&clicked);
                     Ok(())
                 });
             if let Err(e) = toast.show() {
-                log::warn!("chat: cannot show a Windows notification: {e}");
+                log::warn!("cannot show a Windows notification: {e}");
             }
         });
     }
     #[cfg(not(windows))]
     {
-        let _ = (app, open);
-        log::debug!("chat: no notification area on this system: {title}: {text}");
+        let _ = (app, on_click);
+        log::debug!("no notification area on this system: {title}: {text}");
     }
 }
 

@@ -21,6 +21,7 @@
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 
 @source "../components/community";
+@source "../components/events";
 @source "../components/ui";
 @source "../components/servers/Tabs.tsx";
 @source "../components/servers/ServerName.tsx";

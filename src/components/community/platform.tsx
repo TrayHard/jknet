@@ -15,7 +15,7 @@
  * | `renderPlay`, `renderFiles` | client, install, join | — | — |
  * | `serverStatus` | UDP `getstatus` of the core | — | — |
  * | `canManage` | yes | yes | no: read and follow |
- * | pictures of the management screen | `pickImage`: the core's dialog and upload | `putBlob` after a file input | — |
+ * | pictures: a page's logo and cover, an event's cover | `pickImage`: the core's dialog and upload | `putBlob` after a file input | — |
  * | `friends`, `findBundles` | the friends list, the bundle catalogue | `GET /v1/friends`, `GET /v1/bundles` | — |
  * | `manageUrl` | — | — | the website's management screen |
  */
@@ -39,10 +39,10 @@ export type CommunityHost = "launcher" | "website" | "web";
 export type CatalogTab = "catalog" | "mine" | "following";
 
 /** The tabs of a community page. `manage` is the organizers'. */
-export type PageTab = "overview" | "servers" | "players" | "manage";
+export type PageTab = "overview" | "servers" | "events" | "players" | "manage";
 
 export const CATALOG_TABS: readonly CatalogTab[] = ["catalog", "mine", "following"];
-export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "players", "manage"];
+export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "events", "players", "manage"];
 
 /** The sections of the management screen, in the order of its navigation. */
 export const MANAGE_SECTIONS = ["profile", "images", "links", "tags", "files", "bundle", "servers", "team", "admin"] as const;
@@ -66,7 +66,13 @@ export function manageSection(value: string | null | undefined): ManageSection |
 /** The two pictures of a community. `banner` is the cover of its page. */
 export type CommunityImageKind = "logo" | "banner";
 
-/** A picture the host put in the store of the service, ready to bind to a community. */
+/**
+ * A picture the screens put in the store: one of a community, or the cover
+ * of an event, which the service takes on the terms of a page's cover.
+ */
+export type PictureKind = CommunityImageKind | "cover";
+
+/** A picture the host put in the store of the service, ready to bind to a community or an event. */
 export interface UploadedImage {
   /** Lowercase hex: the address of the picture in the store. */
   sha256: string;
@@ -154,11 +160,12 @@ export interface CommunityPlatform {
   /** Drawn in a pane of a layout that names the section: no heading of its own. */
   embedded?: boolean;
   /**
-   * The launcher's way to a logo or a cover: the system dialog of the core,
-   * which checks the file, strips what a photo records of its taking and
-   * uploads it. A host without it gets a file input and `putBlob`.
+   * The launcher's way to a picture — a logo or a cover of a community, the
+   * cover of an event: the system dialog of the core, which checks the file,
+   * strips what a photo records of its taking and uploads it. A host without
+   * it gets a file input and `putBlob` (`usePictureUpload`).
    */
-  pickImage?: (kind: CommunityImageKind) => Promise<PickedImage>;
+  pickImage?: (kind: PictureKind) => Promise<PickedImage>;
   /** Puts bytes in the store of the service under their SHA-256: `PUT /v1/blobs/{sha256}`. */
   putBlob?: (sha256: string, file: Blob) => Promise<void>;
   /**

@@ -1,14 +1,17 @@
 /**
  * The community screens of the website, jknet.app/servers/: the catalogue at
  * `/servers/`, a page at `/servers/?id=…&tab=…` and its management screen at
- * `/servers/?id=…&view=manage&section=…`, in each of the site's languages.
- * The management screen comes as a chunk of its own, with its editors.
+ * `/servers/?id=…&view=manage&section=…`, and the events of communities at
+ * `?events`, `?event=…` and `?id=…&new-event` (`events-site.ts`), in each
+ * of the site's languages. The management screen, with its editors, and the
+ * screens of events come as chunks of their own.
  *
- * The screens are the launcher's own (`components/community`); this entry
- * gives them the website — requests over `fetch` with the session of the
- * sign-in dialog below, a new tab for every link, the address bar for the
- * route — and starts i18next with the `community` catalog of the page's
- * language, English under it. The build (`jknet-site/scripts/build-community.mjs`)
+ * The screens are the launcher's own (`components/community`,
+ * `components/events`); this entry gives them the website — requests over
+ * `fetch` with the session of the sign-in dialog below, a new tab for every
+ * link, the address bar for the route — and starts i18next with the
+ * `community` and `events` catalogs of the page's language, English under
+ * them. The build (`jknet-site/scripts/build-community.mjs`)
  * bundles it with Tailwind and `styles/community-site.css`.
  */
 
@@ -22,6 +25,7 @@ import {
   catalogTab,
   CommunityApp,
   CommunityFrame,
+  CommunityPlatformProvider,
   manageSection,
   pageTab,
   type CommunityBundleRef,
@@ -33,9 +37,17 @@ import {
 } from "./components/community";
 import { CommunityManage } from "./components/community/manage";
 import { Button } from "./components/ui";
+// --- slice: community events ---
+import { EventsPlatformProvider, type EventsRoute } from "./components/events/platform";
+import { eventsRouteOfSearch, searchOfEvents, siteEventsPlatform } from "./events-site";
 import "./styles/community-site.css";
 
 type Catalog = Record<string, unknown>;
+
+// The screens of events come as chunks of their own: most visits open a community page.
+const EventsCalendar = React.lazy(() => import("./components/events/EventsCalendar").then((module) => ({ default: module.EventsCalendar })));
+const EventView = React.lazy(() => import("./components/events/EventView").then((module) => ({ default: module.EventView })));
+const EventEditor = React.lazy(() => import("./components/events/EventEditor").then((module) => ({ default: module.EventEditor })));
 
 /** English, in the bundle: the fallback of every other language. */
 const ENGLISH = import.meta.glob<Catalog>("./locales/en/community.json", { eager: true, import: "default" });
@@ -43,12 +55,17 @@ const ENGLISH = import.meta.glob<Catalog>("./locales/en/community.json", { eager
 const TRANSLATED = import.meta.glob<Catalog>(["./locales/*/community.json", "!./locales/en/community.json"], {
   import: "default",
 });
+// --- slice: community events --- the events screens' own catalog, loaded the same way.
+const ENGLISH_EVENTS = import.meta.glob<Catalog>("./locales/en/events.json", { eager: true, import: "default" });
+const TRANSLATED_EVENTS = import.meta.glob<Catalog>(["./locales/*/events.json", "!./locales/en/events.json"], {
+  import: "default",
+});
 const LANGUAGE = document.documentElement.lang || "en";
 
 /** Starts i18next with English and the page's language, so the first render is in that language. */
 async function startI18n() {
-  const resources: Record<string, { community: Catalog }> = {
-    en: { community: ENGLISH["./locales/en/community.json"] },
+  const resources: Record<string, Record<string, Catalog>> = {
+    en: { community: ENGLISH["./locales/en/community.json"], events: ENGLISH_EVENTS["./locales/en/events.json"] },
   };
   const own = TRANSLATED[`./locales/${LANGUAGE}/community.json`];
   if (own) {
@@ -58,10 +75,19 @@ async function startI18n() {
       // A chunk that did not load leaves the page in English rather than blank.
     }
   }
+  // --- slice: community events ---
+  const ownEvents = TRANSLATED_EVENTS[`./locales/${LANGUAGE}/events.json`];
+  if (ownEvents) {
+    try {
+      resources[LANGUAGE] = { ...(resources[LANGUAGE] ?? {}), events: await ownEvents() };
+    } catch {
+      // The events then read in English, the rest of the page in its language.
+    }
+  }
   await i18next.use(initReactI18next).init({
     lng: LANGUAGE,
     fallbackLng: "en",
-    ns: ["community"],
+    ns: ["community", "events"],
     defaultNS: "community",
     resources,
     returnNull: false,
@@ -128,6 +154,8 @@ function Website() {
   const [token, setToken] = useState(() => sessionStorage.getItem(TOKEN_KEY) ?? "");
   const [user, setUser] = useState<{ id: string; displayName: string }>();
   const [route, setRoute] = useState<CommunityRoute>(routeOfLocation);
+  // --- slice: community events --- the calendar, an event or its editor, when the address names one.
+  const [eventsRoute, setEventsRoute] = useState<EventsRoute | null>(() => eventsRouteOfSearch(location.search));
   const [loginBusy, setLoginBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -187,8 +215,9 @@ function Website() {
     [send],
   );
 
-  // A logo or a cover of the management screen: `HEAD` first, so a picture
-  // the store holds is not sent again, then the bytes under their hash.
+  // A logo or a cover of the management screen, or the cover of an event:
+  // `HEAD` first, so a picture the store holds is not sent again, then the
+  // bytes under their hash.
   const putBlob = useCallback(
     async (sha256: string, file: Blob) => {
       if (token === "") throw refusal(401, null);
@@ -236,7 +265,10 @@ function Website() {
   }, [send, token]);
 
   useEffect(() => {
-    const pop = () => setRoute(routeOfLocation());
+    const pop = () => {
+      setRoute(routeOfLocation());
+      setEventsRoute(eventsRouteOfSearch(location.search));
+    };
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);
@@ -256,6 +288,7 @@ function Website() {
 
   const navigate = useCallback((next: CommunityRoute) => {
     history.pushState(null, "", searchOf(next));
+    setEventsRoute(null);
     setRoute(next);
     window.scrollTo(0, 0);
   }, []);
@@ -408,6 +441,17 @@ function Website() {
     [request, signedIn, user?.id, openSignIn, navigate, putBlob, friends],
   );
 
+  // --- slice: community events ---
+  const navigateEvents = useCallback((next: EventsRoute) => {
+    history.pushState(null, "", searchOfEvents(next));
+    setEventsRoute(next);
+    window.scrollTo(0, 0);
+  }, []);
+  const eventsPlatform = useMemo(
+    () => siteEventsPlatform({ api: API, navigate: navigateEvents }),
+    [navigateEvents],
+  );
+
   return (
     <>
       <CommunityFrame className="mx-auto flex w-full max-w-[1280px] flex-wrap items-center justify-end gap-12 px-24 pt-16 @max-[560px]/community:px-16">
@@ -496,11 +540,41 @@ function Website() {
         </dialog>
       </CommunityFrame>
       <div className="mx-auto w-full max-w-[1280px]">
-        <CommunityApp
-          platform={platform}
-          route={route}
-          renderManage={(screen) => <CommunityManage id={screen.id} section={screen.section} />}
-        />
+        <EventsPlatformProvider platform={eventsPlatform}>
+          {eventsRoute ? (
+            <CommunityPlatformProvider platform={platform}>
+              <CommunityFrame className="p-24 @max-[560px]/community:p-16">
+                <React.Suspense
+                  fallback={
+                    <p role="status" className="flex items-center gap-8 text-body-sm text-fg-muted">
+                      <LoaderCircle size={16} className="animate-spin" aria-hidden="true" />
+                      {t("common.loading")}
+                    </p>
+                  }
+                >
+                  {eventsRoute.view === "calendar" ? (
+                    <EventsCalendar />
+                  ) : eventsRoute.view === "event" ? (
+                    <EventView key={eventsRoute.id} id={eventsRoute.id} />
+                  ) : eventsRoute.view === "edit" ? (
+                    <EventEditor key={`edit:${eventsRoute.id}`} target={{ mode: "edit", id: eventsRoute.id }} />
+                  ) : (
+                    <EventEditor
+                      key={`new:${eventsRoute.communityId}:${eventsRoute.copyOf ?? ""}`}
+                      target={{ mode: "new", communityId: eventsRoute.communityId, copyOf: eventsRoute.copyOf }}
+                    />
+                  )}
+                </React.Suspense>
+              </CommunityFrame>
+            </CommunityPlatformProvider>
+          ) : (
+            <CommunityApp
+              platform={platform}
+              route={route}
+              renderManage={(screen) => <CommunityManage id={screen.id} section={screen.section} />}
+            />
+          )}
+        </EventsPlatformProvider>
       </div>
     </>
   );

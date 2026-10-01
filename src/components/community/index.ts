@@ -29,6 +29,7 @@ export {
   type ManageSection,
   type PageTab,
   type PickedImage,
+  type PictureKind,
   type PlayContext,
   type UploadedImage,
 } from "./platform";

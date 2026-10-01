@@ -1,15 +1,16 @@
-//! The logo and the cover of a community, picked on disk and put in the
-//! store of JKNet Online.
+//! The logo and the cover of a community and the cover of an event, picked
+//! on disk and put in the store of JKNet Online.
 //!
 //! The webview never names a path: the core opens the system dialog, reads
 //! the file and checks it the way the service will when the picture is bound
-//! to the community (`PUT communities/{id}/images`): PNG, JPEG or WebP by
-//! its first bytes, a logo up to 1 MiB and a cover up to 3 MiB. A picture
-//! that passes loses what a JPEG or a PNG records about where and when it
-//! was taken, as a picture sent to chat does, is hashed with SHA-256 and goes
-//! up with `PUT /v1/blobs/{sha256}`, unless `HEAD` says the store holds it
-//! already. The webview gets the hash back and binds it through the bridge
-//! of `crate::community`.
+//! to the community (`PUT communities/{id}/images`) or to an event
+//! (`POST communities/{id}/events`, `PUT events/{id}`): PNG, JPEG or WebP
+//! by its first bytes, a logo up to 1 MiB and either cover up to 3 MiB. A
+//! picture that passes loses what a JPEG or a PNG records about where and
+//! when it was taken, as a picture sent to chat does, is hashed with SHA-256
+//! and goes up with `PUT /v1/blobs/{sha256}`, unless `HEAD` says the store
+//! holds it already. The webview gets the hash back and binds it through the
+//! bridge of `crate::community`.
 //!
 //! A cancelled dialog and a refused file are answers, not errors: the screen
 //! says them in the player's language. A failure of the upload is an error.
@@ -31,20 +32,24 @@ const MIB: u64 = 1024 * 1024;
 /// The extensions the dialog offers: the three types the service takes.
 const EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
 
-/// The two pictures of a community. `banner` is the cover of its page.
+/// The pictures the screens put in the store: the two of a community, where
+/// `banner` is the cover of its page, and the cover of an event. A kind the
+/// service has no picture of does not deserialize.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ImageKind {
     Logo,
     Banner,
+    Cover,
 }
 
 impl ImageKind {
-    /// The most bytes the service binds as this picture.
+    /// The most bytes the service binds as this picture: its
+    /// `community/images.rs` for a community, `community/events` for an event.
     pub fn max_bytes(self) -> u64 {
         match self {
             ImageKind::Logo => MIB,
-            ImageKind::Banner => 3 * MIB,
+            ImageKind::Banner | ImageKind::Cover => 3 * MIB,
         }
     }
 }
@@ -187,8 +192,9 @@ async fn upload(online: &OnlineClient, ctx: &OnlineContext, picture: &Picture) -
     Ok(())
 }
 
-/// The system dialog for a logo or a cover, over the window that asked; the
-/// picture goes to the store of the service. `title` and `filter` are the
+/// The system dialog for a logo or a cover of a community or the cover of an
+/// event, over the window that asked; the picture goes to the store of the
+/// service. `title` and `filter` are the
 /// dialog's words in the player's language.
 #[tauri::command]
 pub async fn community_pick_image(
@@ -323,16 +329,21 @@ mod tests {
                 max_bytes: Some(MIB)
             })
         );
-        assert!(
-            prepare("big.png", big, ImageKind::Banner).is_ok(),
-            "a cover takes it"
-        );
-        let mut huge = encoded(image::ImageFormat::Png, 4, 4);
-        huge.resize(3 * MIB as usize + 1, 0);
-        assert!(matches!(
-            prepare("huge.png", huge, ImageKind::Banner),
-            Err(PickedImage::Refused { reason: Refusal::TooBig, max_bytes: Some(max), .. }) if max == 3 * MIB
-        ));
+        for kind in [ImageKind::Banner, ImageKind::Cover] {
+            assert!(
+                prepare("big.png", big.clone(), kind).is_ok(),
+                "a cover takes it: {kind:?}"
+            );
+            let mut huge = encoded(image::ImageFormat::Png, 4, 4);
+            huge.resize(3 * MIB as usize + 1, 0);
+            assert!(
+                matches!(
+                    prepare("huge.png", huge, kind),
+                    Err(PickedImage::Refused { reason: Refusal::TooBig, max_bytes: Some(max), .. }) if max == 3 * MIB
+                ),
+                "{kind:?}"
+            );
+        }
     }
 
     #[test]
@@ -416,7 +427,19 @@ mod tests {
             serde_json::to_value(uploaded).unwrap(),
             serde_json::json!({ "outcome": "uploaded", "sha256": "a".repeat(64), "size": 10, "fileName": "logo.png", "width": 1, "height": null })
         );
-        let kind: ImageKind = serde_json::from_value(serde_json::json!("banner")).unwrap();
-        assert_eq!(kind, ImageKind::Banner);
+        for (name, kind) in [
+            ("logo", ImageKind::Logo),
+            ("banner", ImageKind::Banner),
+            ("cover", ImageKind::Cover),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<ImageKind>(serde_json::json!(name)).unwrap(),
+                kind
+            );
+        }
+        assert!(
+            serde_json::from_value::<ImageKind>(serde_json::json!("avatar")).is_err(),
+            "the service has no such picture"
+        );
     }
 }

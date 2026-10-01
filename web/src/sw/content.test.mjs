@@ -124,3 +124,54 @@ test("every language has every word of the push section", () => {
     assert.deepEqual(Object.keys(catalog(lang)).sort(), keys, lang);
   }
 });
+
+// --- slice: community events ---
+const event = {
+  v: 1,
+  kind: "community.event",
+  lang: "en",
+  title: "Duel Cup",
+  eventId: "01M3T9GBRRNNGKAZY47BXH205Q",
+  eventKind: "created",
+  community: "Duel Masters",
+  startsAt: "2026-09-30T23:23:29Z",
+  badge: 0,
+  silent: false,
+};
+
+test("a new event names its community and opens the event, one notification per event", () => {
+  const plan = notificationOf(event, stringsFor, false);
+  assert.equal(plan.title, EN.eventCreated.replace("{{community}}", "Duel Masters"));
+  assert.equal(plan.options.body, "Duel Cup");
+  assert.equal(plan.options.tag, "e:01M3T9GBRRNNGKAZY47BXH205Q");
+  assert.deepEqual(plan.options.data, { url: "/events/01M3T9GBRRNNGKAZY47BXH205Q" });
+  assert.equal(plan.options.renotify, false);
+  assert.deepEqual(targetOf(payloadOf(event)), { tag: "e:01M3T9GBRRNNGKAZY47BXH205Q", url: "/events/01M3T9GBRRNNGKAZY47BXH205Q" });
+});
+
+test("a change, a cancellation and a reminder are titled by the event, and the reminder alerts again", () => {
+  for (const [eventKind, body] of [
+    ["changed", EN.eventChanged],
+    ["cancelled", EN.eventCancelled],
+    ["reminder", EN.eventReminder],
+  ]) {
+    const plan = notificationOf({ ...event, eventKind }, stringsFor, false);
+    assert.equal(plan.title, "Duel Cup", eventKind);
+    assert.equal(plan.options.body, body, eventKind);
+    assert.equal(plan.options.tag, "e:01M3T9GBRRNNGKAZY47BXH205Q", eventKind);
+    assert.equal(plan.options.renotify, eventKind === "reminder", eventKind);
+  }
+  const ru = notificationOf({ ...event, eventKind: "reminder", lang: "ru" }, stringsFor, false);
+  assert.equal(ru.options.body, RU.eventReminder);
+  assert.notEqual(RU.eventReminder, EN.eventReminder);
+});
+
+test("an event without its title says only that something happened, and still opens the event", () => {
+  const { title: _, community: __, ...bare } = event;
+  const plan = notificationOf(bare, stringsFor, false);
+  assert.equal(plan.title, "JKNet");
+  assert.equal(plan.options.body, EN.activity);
+  assert.deepEqual(plan.options.data, { url: "/events/01M3T9GBRRNNGKAZY47BXH205Q" });
+  const { eventId: ___, ...nothing } = bare;
+  assert.deepEqual(notificationOf(nothing, stringsFor, false).options.data, { url: "/events" });
+});

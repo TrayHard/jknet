@@ -13,6 +13,7 @@
       "chats": "Discussions",
       "friends": "Amis",
       "community": "Serveurs communautaires",
+      "events": "Événements",
       "servers": "Liste des serveurs",
       "bundles": "Bundles",
       "jkhub": "Mods JKHub",
@@ -22,6 +23,7 @@
       "chats": "Discus\u00adsions",
       "friends": "Amis",
       "community": "Commu\u00adnauté",
+      "events": "Évé\u00adnements",
       "servers": "Serveurs",
       "bundles": "Bundles",
       "jkhub": "JKHub",
@@ -32,6 +34,7 @@
       "chats": "Choisissez une discussion",
       "friends": "Choisissez un ami",
       "community": "Choisissez un serveur",
+      "events": "Choisissez un événement",
       "servers": "Choisissez un serveur",
       "bundles": "Choisissez un bundle",
       "jkhub": "Choisissez un mod"
@@ -180,7 +183,11 @@
     "invite": "Vous invite sur son serveur",
     "test": "Les notifications de JKNet fonctionnent sur cet appareil.",
     "reactionPlain": "A réagi à votre message",
-    "groupInvitePlain": "Vous invite dans un groupe"
+    "groupInvitePlain": "Vous invite dans un groupe",
+    "eventCreated": "{{community}} annonce un événement",
+    "eventChanged": "L’heure ou le lieu a changé",
+    "eventCancelled": "L’événement est annulé",
+    "eventReminder": "Commence dans 15 minutes"
   },
   "sessions": {
     "title": "Appareils et sessions",
