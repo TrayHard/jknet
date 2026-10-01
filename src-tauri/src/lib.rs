@@ -275,12 +275,27 @@ pub fn run() {
                     // A closed window no longer shows a conversation, so
                     // messages there count as unread again.
                     chat::forget_window(window.app_handle(), label);
+                    // --- slice: communities --- the drop of a closed window goes with it.
+                    community_images::forget_window(window.app_handle(), label);
+                }
+                // --- slice: communities ---
+                // A drag that leaves the window ends the claim of a picture's
+                // tile on it; see `community_images::DropState`.
+                tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Leave) => {
+                    community_images::drag_left(window.app_handle(), label);
+                    return;
                 }
                 // --- slice: chat ---
                 // Files dropped on `main` or `chat` while that window reports
                 // an open composer become attachments; the window hears
                 // `chat:files-staged`. Any other drop is the screen's own.
                 tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) => {
+                    // --- slice: communities ---
+                    // Every drop is remembered for `community_drop_image`,
+                    // and a drop on a picture's tile is the tile's alone.
+                    if community_images::dropped(window.app_handle(), label, paths) {
+                        return;
+                    }
                     let url = window
                         .get_webview_window(label)
                         .and_then(|webview| webview.url().ok());
@@ -520,6 +535,9 @@ pub fn run() {
         .manage(chat::window::ChatWindowState::default())
         // --- slice: community events --- the words of their Windows notifications.
         .manage(community_events::CommunityEventsState::default())
+        // --- slice: communities --- the files of the last drop on each window
+        // and the claim of a picture's tile on it.
+        .manage(community_images::DropState::default())
         // --- slice: servers browser ---
         // Which tabs of which game have a scan in flight. Two tabs may scan at
         // once, one tab may not scan twice: the guard lives here rather than in
@@ -687,6 +705,8 @@ pub fn run() {
             account::get_regulars_privacy,
             account::set_show_in_regulars,
             community_images::community_pick_image,
+            community_images::community_drop_image,
+            community_images::community_claim_drop,
             account::delete_account,
             // --- slice: web app ---
             account::get_sessions,

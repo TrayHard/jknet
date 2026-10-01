@@ -8,7 +8,7 @@ import { blobUrl } from "../api";
 import { hueStyle } from "../bits";
 import { useFailureText } from "../errors";
 import { monogram } from "../format";
-import { usePictureRefusalText, usePictureUpload } from "../pictureUpload";
+import { PictureDropZone, usePictureRefusalText, usePictureUpload } from "../pictureUpload";
 import { useCommunityPlatform, type CommunityImageKind, type UploadedImage } from "../platform";
 import type { Community } from "../types";
 import type { ManageDraft } from "./model";
@@ -23,8 +23,9 @@ type Picked = Record<CommunityImageKind, UploadedImage | null>;
  *
  * Choosing a file uploads it to the store of the service at once — the
  * launcher's core behind its own dialog, the website through a file input,
- * both by `usePictureUpload` — and the form holds its hash. The page shows
- * it after **Save changes**, which binds the hash to the community.
+ * both by `usePictureUpload` — and the form holds its hash. A file dropped on
+ * a box goes the same way (`PictureDropZone`). The page shows the picture
+ * after **Save changes**, which binds the hash to the community.
  */
 export function ImagesSection({
   community,
@@ -131,7 +132,9 @@ function ImageBox({
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <span className="text-body-sm-medium text-fg-secondary">{label}</span>
-      <div
+      <PictureDropZone
+        upload={upload}
+        framed
         className={cn(
           "flex min-h-80 min-w-0 rounded-md border border-line bg-input p-8",
           wide ? "flex-col gap-12" : "items-center gap-16 pr-12 @max-[420px]/community:flex-col @max-[420px]/community:items-start",
@@ -185,7 +188,7 @@ function ImageBox({
             </div>
           ) : null}
         </div>
-      </div>
+      </PictureDropZone>
       {problem ? <FieldNote tone="bad">{problem}</FieldNote> : null}
       {upload.fileInput}
     </div>

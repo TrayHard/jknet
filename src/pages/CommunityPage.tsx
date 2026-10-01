@@ -27,6 +27,7 @@ import { bundlesIpc, communityIpc, serversIpc, type ServerStatus } from "../lib/
 import { COMMUNITY_POST, type PostNotice } from "../lib/useCommunityEvents";
 import { useAccountState, useActiveGame, useFriendsState, useOnlineUrl } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
+import { launcherPictureDrops } from "./communityDrops";
 import { LauncherFiles, LauncherPlay, LauncherPlayProvider } from "./communityPlay";
 // --- slice: community events ---
 import { EventsPlatformProvider } from "../components/events";
@@ -126,7 +127,8 @@ export function communityPath(route: CommunityRoute): string {
  * community of that server opens, or the dialog that creates one.
  *
  * `#/community/:id/manage?section=` is the management screen of a page: the
- * core's dialog uploads its pictures, and the friends list and the bundle
+ * core's dialog uploads its pictures, as it does a picture dropped on its
+ * tile (`communityDrops.ts`), and the friends list and the bundle
  * catalogue of the launcher name its editors and its client. While it holds
  * edits nobody saved, the guard of the main window asks before a route
  * change, a switch of the game or closing the window loses them.
@@ -215,6 +217,7 @@ export function CommunityPage({ manage = false }: { manage?: boolean }) {
       openPrivacySettings: () => navigate(PRIVACY_ROUTE),
       seed: seedAddress ? { address: seedAddress, name: seedName, game: seedGame } : undefined,
       pickImage,
+      ...launcherPictureDrops(),
       friends,
       findBundles,
       renderNewsComposer: (props) => <CommunityNewsComposer {...props} />,
