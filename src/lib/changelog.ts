@@ -15,6 +15,12 @@ export const CHANGELOG_RELEASES = [
     items: [],
   },
   {
+    key: "v0_11_2",
+    version: "0.11.2",
+    date: "2026-10-01",
+    items: ["entries.v0_11_2_followersTop"],
+  },
+  {
     key: "v0_11_1",
     version: "0.11.1",
     date: "2026-10-01",
