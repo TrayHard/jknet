@@ -53,6 +53,9 @@ mod bundles;
 // `chat.*` frames. The core is the only writer; windows display and report.
 mod chat;
 mod community;
+// --- slice: communities --- the logo and the cover of a community, picked
+// in the core's dialog, checked and put in the store of the service.
+mod community_images;
 // --- slice: player profiles ---
 // The skins and saber hilts a client can offer a profile, read out of the
 // archives it loads. Its own module rather than a part of `library`: that one
@@ -673,6 +676,7 @@ pub fn run() {
             // --- slice: communities ---
             account::get_regulars_privacy,
             account::set_show_in_regulars,
+            community_images::community_pick_image,
             account::delete_account,
             // --- slice: web app ---
             account::get_sessions,

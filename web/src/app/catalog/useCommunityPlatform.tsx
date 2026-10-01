@@ -12,10 +12,24 @@ import { useCommunityRequest } from "./useCommunityRequest.ts";
 /** The website's page of a community: what **Share** copies. */
 const PUBLIC_PAGE = "https://jknet.app/servers/";
 
-/** The path of a route in the web app: `/community?tab=…` and `/community/:id?tab=…`. */
+/** The languages the website has pages in; English lives at the root. */
+const SITE_LANGUAGES = ["ru", "uk", "de", "fr", "es", "pl", "hu"];
+
+/** The website's management screen of a community, in the reader's language when the site has it. */
+export function siteManageUrl(id: string, language: string): string {
+  const prefix = SITE_LANGUAGES.includes(language) ? `${language}/` : "";
+  return `https://jknet.app/${prefix}servers/?id=${encodeURIComponent(id)}&view=manage`;
+}
+
+/**
+ * The path of a route in the web app: `/community?tab=…` and
+ * `/community/:id?tab=…`. The web app has no management screen: its route
+ * opens the page, whose hero leads to the website's.
+ */
 export function communityRoutePath(route: CommunityRoute): string {
   if (route.view === "catalog") return route.tab === "catalog" ? "/community" : `/community?tab=${route.tab}`;
   const base = `/community/${encodeURIComponent(route.id)}`;
+  if (route.view === "manage") return base;
   return route.tab === "overview" ? base : `${base}?tab=${route.tab}`;
 }
 
@@ -24,14 +38,16 @@ export function communityRoutePath(route: CommunityRoute): string {
  * the web session, a new tab for a link, the routes of the web app. It
  * reads and follows; creating, claiming and editing stay with the launcher
  * and the website, and so do the client, install and join of **Play**,
- * which a note names instead.
+ * which a note names instead. An organizer's hero leads to the website's
+ * management screen of the page.
  */
 export function useWebCommunityPlatform(share?: { run: (community: Community) => void; label: string }): CommunityPlatform {
   const request = useCommunityRequest();
   const account = useAccountState().data;
   const navigate = useNavigate();
   const apiBase = useOnlineUrl();
-  const { t: tWeb } = useTranslation("web");
+  const { t: tWeb, i18n } = useTranslation("web");
+  const language = i18n.language;
   const signedIn = account?.onlineSignedIn ?? false;
   const accountId = account?.onlineUser?.id ?? null;
   const shareRun = share?.run;
@@ -58,7 +74,8 @@ export function useWebCommunityPlatform(share?: { run: (community: Community) =>
       openBundle: (bundleId) => void navigate(`/bundles/${encodeURIComponent(bundleId)}`),
       playNote: <PlatformNote text={tWeb("catalog.playNote")} />,
       embedded: true,
+      manageUrl: (id) => siteManageUrl(id, language),
     }),
-    [request, signedIn, accountId, apiBase, navigate, shareRun, shareLabel, tWeb],
+    [request, signedIn, accountId, apiBase, navigate, shareRun, shareLabel, tWeb, language],
   );
 }

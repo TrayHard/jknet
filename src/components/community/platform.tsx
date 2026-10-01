@@ -15,12 +15,23 @@
  * | `renderPlay`, `renderFiles` | client, install, join | — | — |
  * | `serverStatus` | UDP `getstatus` of the core | — | — |
  * | `canManage` | yes | yes | no: read and follow |
+ * | pictures of the management screen | `pickImage`: the core's dialog and upload | `putBlob` after a file input | — |
+ * | `friends`, `findBundles` | the friends list, the bundle catalogue | `GET /v1/friends`, `GET /v1/bundles` | — |
+ * | `manageUrl` | — | — | the website's management screen |
  */
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 import { communityApi, type CommunityApi } from "./api";
-import type { Community, CommunityLiveStatus, CommunityRequest, CommunityServer, Game } from "./types";
+import type {
+  Community,
+  CommunityBundleRef,
+  CommunityLiveStatus,
+  CommunityPerson,
+  CommunityRequest,
+  CommunityServer,
+  Game,
+} from "./types";
 
 export type CommunityHost = "launcher" | "website" | "web";
 
@@ -33,10 +44,45 @@ export type PageTab = "overview" | "servers" | "players" | "manage";
 export const CATALOG_TABS: readonly CatalogTab[] = ["catalog", "mine", "following"];
 export const PAGE_TABS: readonly PageTab[] = ["overview", "servers", "players", "manage"];
 
-/** Where the community screens are: the catalogue on a tab, or a page on a tab. */
+/** The sections of the management screen, in the order of its navigation. */
+export const MANAGE_SECTIONS = ["profile", "images", "links", "tags", "files", "bundle", "servers", "team", "admin"] as const;
+
+export type ManageSection = (typeof MANAGE_SECTIONS)[number];
+
+/**
+ * Where the community screens are: the catalogue on a tab, a page on a tab,
+ * or the management screen of a page, scrolled to a section.
+ */
 export type CommunityRoute =
   | { view: "catalog"; tab: CatalogTab }
-  | { view: "community"; id: string; tab: PageTab };
+  | { view: "community"; id: string; tab: PageTab }
+  | { view: "manage"; id: string; section?: ManageSection };
+
+/** A section of the management screen out of a query value, or none. */
+export function manageSection(value: string | null | undefined): ManageSection | undefined {
+  return (MANAGE_SECTIONS as readonly string[]).includes(value ?? "") ? (value as ManageSection) : undefined;
+}
+
+/** The two pictures of a community. `banner` is the cover of its page. */
+export type CommunityImageKind = "logo" | "banner";
+
+/** A picture the host put in the store of the service, ready to bind to a community. */
+export interface UploadedImage {
+  /** Lowercase hex: the address of the picture in the store. */
+  sha256: string;
+  /** Bytes, as stored. */
+  size: number;
+  /** The name of the file the organizer picked, for the screen to show. */
+  fileName: string;
+  width: number | null;
+  height: number | null;
+}
+
+/** Why a picture was not taken before it was uploaded. */
+export type ImageRefusal = { reason: "tooBig"; fileName: string; maxBytes: number } | { reason: "notPicture"; fileName: string };
+
+/** What the launcher's dialog came back with: nothing, a refusal, or a picture in the store. */
+export type PickedImage = { outcome: "cancelled" } | ({ outcome: "refused" } & ImageRefusal) | ({ outcome: "uploaded" } & UploadedImage);
 
 /** A tab of the catalogue out of a query value, the catalogue itself by default. */
 export function catalogTab(value: string | null | undefined): CatalogTab {
@@ -107,6 +153,23 @@ export interface CommunityPlatform {
   seed?: CommunitySeed;
   /** Drawn in a pane of a layout that names the section: no heading of its own. */
   embedded?: boolean;
+  /**
+   * The launcher's way to a logo or a cover: the system dialog of the core,
+   * which checks the file, strips what a photo records of its taking and
+   * uploads it. A host without it gets a file input and `putBlob`.
+   */
+  pickImage?: (kind: CommunityImageKind) => Promise<PickedImage>;
+  /** Puts bytes in the store of the service under their SHA-256: `PUT /v1/blobs/{sha256}`. */
+  putBlob?: (sha256: string, file: Blob) => Promise<void>;
+  /**
+   * The reader's JKNet friends, for naming editors and handing a community
+   * over. `null` while the host is still asking; `undefined` where it cannot.
+   */
+  friends?: CommunityPerson[] | null;
+  /** Public bundles of JKNet Online for one game, matching `query`, for the community's client. */
+  findBundles?: (query: string, game: Game) => Promise<CommunityBundleRef[]>;
+  /** The address of the management screen on another host, for a host that only reads. */
+  manageUrl?: (id: string) => string;
 }
 
 const PlatformContext = createContext<CommunityPlatform | null>(null);

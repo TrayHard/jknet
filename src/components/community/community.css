@@ -2,10 +2,11 @@
  * What the community screens cannot say with the utilities of the theme.
  *
  * The screens are built from Tailwind utilities and the UI kit. This file
- * holds four things the utilities do not reach: the placeholder cover and
- * logo of a community, drawn on its own hue; the ring of the one live
- * number of a page; and the elements of a description, which come out of
- * Markdown and take no class attribute.
+ * holds what the utilities do not reach: the placeholder cover and logo of a
+ * community, drawn on its own hue; the ring of the one live number of a
+ * page; the elements of a description, which come out of Markdown and take
+ * no class attribute; and the editor of a description on the management
+ * screen, whose text ProseMirror draws.
  *
  * The hue is the one colour computed outside the tokens: a decorative
  * gradient, like the previews of maps, set as `--jkc-hue` by `hueStyle`.
@@ -195,6 +196,141 @@
   .jkc-md.jkc-md-rules {
     font-size: 13px;
     line-height: 20px;
+  }
+
+  /*
+   * The editor of a description or the rules on the management screen: the
+   * frame of an input with the toolbar inside it, and the text drawn as the
+   * page draws it. The text is ProseMirror's and takes no utility.
+   */
+  .jkc-md-editor {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid var(--color-border-default);
+    border-radius: 8px;
+    background-color: var(--color-bg-input);
+    transition: border-color 150ms;
+  }
+
+  .jkc-md-editor:focus-within {
+    border-color: var(--color-border-focus);
+  }
+
+  .jkc-md-editor[data-invalid="true"] {
+    border-color: var(--color-border-danger);
+  }
+
+  /* ProseMirror's own base rules, which the editor does not inject: the
+     website's CSP refuses an inline style tag. */
+  .jkc-md-editor .ProseMirror {
+    position: relative;
+    min-height: 160px;
+    max-height: 480px;
+    max-width: none;
+    padding: 8px 12px;
+    overflow-y: auto;
+    outline: none;
+    user-select: text;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    white-space: break-spaces;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0;
+    color: var(--color-text-primary);
+  }
+
+  .jkc-md-editor .ProseMirror [contenteditable="false"] {
+    white-space: normal;
+  }
+
+  .jkc-md-editor .ProseMirror pre {
+    white-space: pre-wrap;
+  }
+
+  .jkc-md-editor .ProseMirror-hideselection *::selection {
+    background: transparent;
+  }
+
+  .jkc-md-editor img.ProseMirror-separator {
+    display: inline !important;
+    border: none !important;
+    margin: 0 !important;
+  }
+
+  .jkc-md-editor .ProseMirror-gapcursor {
+    display: none;
+    position: absolute;
+    pointer-events: none;
+  }
+
+  .jkc-md-editor .ProseMirror-gapcursor::after {
+    content: "";
+    display: block;
+    position: absolute;
+    top: -2px;
+    width: 20px;
+    border-top: 1px solid currentColor;
+    animation: jkc-cursor-blink 1.1s steps(2, start) infinite;
+  }
+
+  .jkc-md-editor .ProseMirror-focused .ProseMirror-gapcursor {
+    display: block;
+  }
+
+  .jkc-md-editor .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: var(--color-text-muted);
+    pointer-events: none;
+  }
+
+  .jkc-md-editor ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 4px;
+  }
+
+  .jkc-md-editor li[data-type="taskItem"] {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .jkc-md-editor li[data-type="taskItem"] > label {
+    flex: 0 0 auto;
+    padding-top: 1px;
+    user-select: none;
+  }
+
+  .jkc-md-editor li[data-type="taskItem"] > div {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .jkc-md-editor .tableWrapper {
+    overflow-x: auto;
+  }
+
+  /* A picture in the text, drawn as its caption: the editor fetches nothing. */
+  .jkc-md-picture {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    max-width: 100%;
+    padding: 2px 8px;
+    border: 1px dashed var(--color-border-strong);
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--color-text-secondary);
+  }
+}
+
+@keyframes jkc-cursor-blink {
+  to {
+    visibility: hidden;
   }
 }
 

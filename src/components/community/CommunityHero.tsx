@@ -1,4 +1,4 @@
-import { Clock, Crown, Gamepad2, Globe, Languages, MapPin, MessageCircle, Pencil, Share2, Sparkles, Trophy, UserCheck, Bell } from "lucide-react";
+import { Clock, Crown, ExternalLink, Gamepad2, Globe, Languages, MapPin, MessageCircle, Pencil, Share2, Sparkles, Trophy, UserCheck, Bell } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,7 +33,8 @@ export interface HeroProps {
  * logo over its edge, the name with the **JKNet community** mark, the
  * tagline, the games, languages, region, owner and tags, the actions —
  * **Follow** with its bell, Discord, the website, **Share** and, for an
- * organizer, **Edit page** — and the numbers along the bottom. A number the
+ * organizer, **Edit page**, or **Manage on the website** where the host only
+ * reads — and the numbers along the bottom. A number the
  * service does not count yet is left out rather than drawn as a zero.
  */
 export function CommunityHero({
@@ -202,6 +203,15 @@ export function CommunityHero({
           {organizer && platform.canManage ? (
             <Button wrap icon={<Pencil size={16} />} className="ml-auto @max-[560px]/community:ml-0" onClick={onEdit}>
               {t("page.edit")}
+            </Button>
+          ) : organizer && platform.manageUrl ? (
+            <Button
+              wrap
+              icon={<ExternalLink size={16} />}
+              className="ml-auto @max-[560px]/community:ml-0"
+              onClick={() => platform.openExternal(platform.manageUrl!(community.id))}
+            >
+              {t("manage.onWebsite")}
             </Button>
           ) : null}
         </div>

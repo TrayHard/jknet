@@ -1,10 +1,11 @@
-import { ArrowLeft, ChevronRight, SearchX } from "lucide-react";
+import { ArrowLeft, ChevronRight, Plus, SearchX } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "../../lib/format";
 import { Tabs } from "../servers/Tabs";
 import { Button, EmptyState } from "../ui";
+import { AdminStrip } from "./AdminStrip";
 import { isNotFound } from "./api";
 import { Failure, LinkButton, Notice, Panel, PanelHead, RouteLink } from "./bits";
 import { ClaimPanel } from "./ClaimPanel";
@@ -13,8 +14,8 @@ import { CommunityMarkdown } from "./CommunityMarkdown";
 import { DiscordCard } from "./DiscordCard";
 import { useFailureText } from "./errors";
 import { orderedServers } from "./format";
-import { ManageTab } from "./ManageTab";
-import { useCommunityApi, useCommunityPlatform, type PageTab } from "./platform";
+import { ManageSummary } from "./ManageSummary";
+import { useCommunityApi, useCommunityPlatform, type ManageSection, type PageTab } from "./platform";
 import { PlayPanel } from "./PlayPanel";
 import { PlayersTab, RegularsPreview } from "./Regulars";
 import { onlineCount, useLiveStatuses } from "./ServerBlock";
@@ -61,7 +62,6 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
   const [rulesOpen, setRulesOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editNow, setEditNow] = useState(false);
   const follow = useAction();
   const rulesId = useId();
 
@@ -115,10 +115,9 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
       },
       (reason) => setError(failure(reason)),
     );
-  const edit = () => {
-    setEditNow(true);
-    go("manage");
-  };
+  /** The management screen, scrolled to a section: **Edit page**, **Fix the link**, **Add server**. */
+  const manage = (section?: ManageSection) => platform.navigate({ view: "manage", id, section });
+  const edit = () => manage("profile");
   const verified = (next: Community) => {
     if (next.id !== id) {
       platform.navigate({ view: "community", id: next.id, tab: "servers" });
@@ -201,6 +200,9 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
         onNotify={(value) => void onNotify(value)}
         onEdit={edit}
       />
+      {viewer?.isAdmin && platform.canManage ? (
+        <AdminStrip community={community} onChanged={(next) => page.set(next)} onOwner={() => manage("admin")} />
+      ) : null}
       {error ? <Notice tone="danger">{error}</Notice> : null}
       {notice ? <Notice tone="success">{notice}</Notice> : null}
 
@@ -253,7 +255,7 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
           <div className="flex min-w-0 flex-col gap-16">
             <PlayPanel {...playProps} mode="overview" />
             {community.discord.trim() !== "" ? (
-              <DiscordCard community={community} info={discord.data} organizer={organizer} onFix={manager ? edit : undefined} />
+              <DiscordCard community={community} info={discord.data} organizer={organizer} onFix={manager ? () => manage("links") : undefined} />
             ) : null}
             <RegularsPreview remote={players} onAll={() => go("players")} />
             {platform.renderFiles ? platform.renderFiles(community) : <FilesCard community={community} />}
@@ -264,10 +266,17 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
 
       {tab === "servers" ? (
         <div className="flex flex-col gap-16">
-          <p className="text-body-md text-fg-secondary">
-            {t("servers.lead", { count: servers.length })}
-            {organizer ? ` ${t("servers.organizerLead")}` : ""}
-          </p>
+          <div className="flex flex-wrap items-center gap-x-16 gap-y-8">
+            <p className="min-w-0 flex-1 basis-[320px] text-body-md text-fg-secondary">
+              {t("servers.lead", { count: servers.length })}
+              {organizer ? ` ${t("servers.organizerLead")}` : ""}
+            </p>
+            {manager ? (
+              <Button wrap icon={<Plus size={16} />} onClick={() => manage("servers")}>
+                {t("manage.servers.add")}
+              </Button>
+            ) : null}
+          </div>
           <div className="grid grid-cols-[minmax(0,1fr)_352px] items-start gap-16 @max-[900px]/community:grid-cols-1">
             <PlayPanel {...playProps} mode="servers" />
             <div className="flex min-w-0 flex-col gap-16">
@@ -287,14 +296,7 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
 
       {tab === "players" ? <PlayersTab remote={players} /> : null}
 
-      {tab === "manage" && manager ? (
-        <ManageTab
-          community={community}
-          editing={editNow}
-          onEditing={setEditNow}
-          onSaved={(next) => page.set(next)}
-        />
-      ) : null}
+      {tab === "manage" && manager ? <ManageSummary community={community} discord={discord.data} onOpen={(section) => manage(section)} /> : null}
     </div>
   );
 }
