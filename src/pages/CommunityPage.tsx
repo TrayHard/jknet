@@ -19,6 +19,9 @@ import { communityIpc, serversIpc, type ServerStatus } from "../lib/ipc";
 import { useAccountState, useActiveGame, useOnlineUrl } from "../lib/queries";
 import { isTauri } from "../lib/runtime";
 import { LauncherFiles, LauncherPlay, LauncherPlayProvider } from "./communityPlay";
+// --- slice: community events ---
+import { EventsPlatformProvider } from "../components/events";
+import { useLauncherEventsPlatform } from "./eventsPlatform";
 
 /** The website's page of a community: what **Share** copies. */
 const PUBLIC_PAGE = "https://jknet.app/servers/";
@@ -85,6 +88,8 @@ export function CommunityPage() {
   const apiBase = useOnlineUrl();
   const errorText = useErrorText();
   const [externalError, setExternalError] = useState<string | null>(null);
+  // --- slice: community events --- the tab and the block of events on a page.
+  const eventsPlatform = useLauncherEventsPlatform();
 
   const signedIn = account.data?.onlineSignedIn ?? false;
   const accountId = account.data?.onlineUser?.id ?? null;
@@ -137,7 +142,9 @@ export function CommunityPage() {
         </div>
       ) : null}
       <LauncherPlayProvider>
-        <CommunityApp platform={platform} route={route} />
+        <EventsPlatformProvider platform={eventsPlatform}>
+          <CommunityApp platform={platform} route={route} />
+        </EventsPlatformProvider>
       </LauncherPlayProvider>
     </div>
   );

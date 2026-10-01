@@ -21,6 +21,8 @@ import { AccountCard, ACCOUNT_SECTION_ID } from "../components/account/AccountCa
 import { SessionsCard, SESSIONS_SECTION_ID } from "../components/account/SessionsCard";
 // --- slice: communities ---
 import { RegularsPrivacyCard, REGULARS_SECTION_ID } from "../components/account/RegularsPrivacyCard";
+// --- slice: community events ---
+import { CommunityNotificationsCard, COMMUNITY_NOTIFICATIONS_SECTION_ID } from "../components/account/CommunityNotificationsCard";
 // --- slice: chat notifications ---
 import { ChatSettings, CHAT_SETTINGS_SECTION_ID } from "../components/chat/settings/ChatSettings";
 import { TRAY_SECTION_ID } from "../components/chat/settings/TrayStartupCard";
@@ -88,6 +90,9 @@ export function SettingsPage() {
               : // --- slice: communities --- the Players tab of a community.
                 section === "regulars"
                 ? REGULARS_SECTION_ID
+                : // --- slice: community events --- the notifications of events.
+                  section === "events"
+                  ? COMMUNITY_NOTIFICATIONS_SECTION_ID
                 : null;
     if (anchor === null) return;
     document
@@ -176,6 +181,8 @@ export function SettingsPage() {
       {/* --- slice: communities --- whether communities list the player
           among their regular players, after the devices of the account. */}
       {account.data?.onlineConfigured ? <RegularsPrivacyCard /> : null}
+      {/* --- slice: community events --- */}
+      {account.data?.onlineConfigured ? <CommunityNotificationsCard /> : null}
 
       {/* --- slice: chat notifications --- notifications, sounds, the tray,
           privacy and files of the chat, after the account they belong to. */}

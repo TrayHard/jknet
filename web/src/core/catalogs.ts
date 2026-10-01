@@ -170,10 +170,11 @@ export interface CommunityRoute {
 /**
  * The calls of the community bridge the web app makes: every read of the
  * contract — the catalogue, a page, its players, its Discord, the top communities,
- * the player's own lists — and following a community, with the web
- * session's token. `null` for anything else: a write the launcher and the
- * website make, a path of another route, a path that climbs out of
- * `/v1/community/`, a query with a key or a value the service does not take.
+ * the calendar and its events, the player's own lists — following a
+ * community and answering an event, with the web session's token. `null`
+ * for anything else: a write the launcher and the website make, a path of
+ * another route, a path that climbs out of `/v1/community/`, a query with
+ * a key or a value the service does not take.
  */
 export function communityRoute(method: string, path: string): CommunityRoute | null {
   const at = path.indexOf("?");
@@ -215,14 +216,18 @@ export function communityRoute(method: string, path: string): CommunityRoute | n
   if ((method === "PUT" || method === "DELETE") && query === null && parts.length === 3 && a === "communities" && communityId(b) && c === "follow") {
     return { path: bare, auth: "required", body: method === "PUT" };
   }
+  // --- slice: community events --- answering an event: «going», «maybe», or taking it back.
+  if ((method === "PUT" || method === "DELETE") && query === null && parts.length === 3 && a === "events" && communityId(b) && c === "rsvp") {
+    return { path: bare, auth: "required", body: method === "PUT" };
+  }
   return null;
 }
 
 /**
  * The writes of the community bridge the launcher and the website make and
  * the web app leaves to them: creating a community, claiming a server,
- * editing a page, the organizers' and the administrators' tools, answering
- * an event.
+ * editing a page, the organizers' and the administrators' tools, creating
+ * and changing events.
  */
 function communityWrite(method: string, path: string): boolean {
   if (method !== "POST" && method !== "PUT" && method !== "DELETE") return false;

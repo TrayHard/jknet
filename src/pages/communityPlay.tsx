@@ -50,13 +50,14 @@ interface PlayState {
   job: Job | null;
   error: { communityId: string; text: string } | null;
   notice: { communityId: string; text: string } | null;
-  run: (community: Community, clientId: string, game: Game, server: CommunityServer | null, install: boolean, join: boolean) => void;
+  // --- slice: community events --- an event installs its requirements through the same queue.
+  run: (community: Pick<Community, "id" | "recommendations">, clientId: string, game: Game, server: CommunityServer | null, install: boolean, join: boolean) => void;
   stop: () => void;
 }
 
 const PlayContextValue = createContext<PlayState | null>(null);
 
-function usePlayState(): PlayState {
+export function usePlayState(): PlayState {
   const state = useContext(PlayContextValue);
   if (state === null) throw new Error("The launcher's play controls need a LauncherPlayProvider");
   return state;
@@ -90,7 +91,7 @@ export function LauncherPlayProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const run = useCallback(
-    (community: Community, clientId: string, game: Game, server: CommunityServer | null, install: boolean, join: boolean) => {
+    (community: Pick<Community, "id" | "recommendations">, clientId: string, game: Game, server: CommunityServer | null, install: boolean, join: boolean) => {
       if (locked.current || clientId === "") return;
       locked.current = true;
       cancel.current = false;
@@ -147,7 +148,7 @@ export function LauncherPlayProvider({ children }: { children: ReactNode }) {
 }
 
 /** The clients of a game with an engine in them, and the one chosen. */
-function useClientChoice(game: Game): { choices: Client[]; clientId: string; engineName: (client: Client) => string } {
+export function useClientChoice(game: Game): { choices: Client[]; clientId: string; engineName: (client: Client) => string } {
   const state = usePlayState();
   const clients = useClients();
   const engines = useEngines();
@@ -159,7 +160,7 @@ function useClientChoice(game: Game): { choices: Client[]; clientId: string; eng
 }
 
 /** The JKHub files of a list the client already has, by the provenance the JKHub tab wrote. */
-function useInstalledFiles(clientId: string): { known: boolean; installed: Set<number> } {
+export function useInstalledFiles(clientId: string): { known: boolean; installed: Set<number> } {
   const library = useLibrary(clientId === "" ? null : clientId);
   const installed = useMemo(() => {
     const ids = new Set<number>();
@@ -171,7 +172,7 @@ function useInstalledFiles(clientId: string): { known: boolean; installed: Set<n
   return { known: library.data !== undefined, installed };
 }
 
-function ClientSelect({ game, clientId, choices, engineName, disabled }: {
+export function ClientSelect({ game, clientId, choices, engineName, disabled }: {
   game: Game;
   clientId: string;
   choices: Client[];
@@ -192,7 +193,7 @@ function ClientSelect({ game, clientId, choices, engineName, disabled }: {
   );
 }
 
-function Tone({ tone, children }: { tone: "warm" | "success" | "danger" | "info"; children: ReactNode }) {
+export function Tone({ tone, children }: { tone: "warm" | "success" | "danger" | "info"; children: ReactNode }) {
   const Icon = tone === "success" ? CheckCircle2 : AlertTriangle;
   return (
     <p

@@ -249,6 +249,8 @@ function useSaveSettings(device: PushDevice) {
 function DeviceSettings({ device }: { device: PushDevice }) {
   const { t } = useTranslation("web");
   const { t: tChat } = useTranslation("chat");
+  // --- slice: community events ---
+  const { t: tEvents } = useTranslation("events");
   const { save, error } = useSaveSettings(device);
   const settings = device.settings;
   const off = !settings.enabled;
@@ -322,6 +324,14 @@ function DeviceSettings({ device }: { device: PushDevice }) {
           checked={settings.serverInvites}
           disabled={off}
           onChange={(serverInvites) => save({ serverInvites })}
+        />
+        {/* --- slice: community events --- a device that predates the flag reads it as on. */}
+        <ToggleRow
+          title={tEvents("web.pushTitle")}
+          hint={tEvents("web.pushHint")}
+          checked={settings.communityEvents ?? true}
+          disabled={off}
+          onChange={(communityEvents) => save({ communityEvents })}
         />
       </RowGroup>
 

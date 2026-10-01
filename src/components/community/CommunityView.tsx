@@ -19,6 +19,9 @@ import { PlayPanel } from "./PlayPanel";
 import { PlayersTab, RegularsPreview } from "./Regulars";
 import { onlineCount, useLiveStatuses } from "./ServerBlock";
 import { FilesCard, LinksCard } from "./SideCards";
+// --- slice: community events ---
+import { CommunityEventsTab, UpcomingEventsPanel } from "../events/CommunityEvents";
+import { useOptionalEventsPlatform } from "../events/platform";
 import type { Community } from "./types";
 import { useAction, useRemote } from "./useRemote";
 
@@ -37,6 +40,9 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
   const platform = useCommunityPlatform();
   const api = useCommunityApi();
   const failure = useFailureText();
+  // --- slice: community events --- the tab and the block draw where the host gives events.
+  const eventsHost = useOptionalEventsPlatform();
+  const { t: tEvents } = useTranslation("events");
   const account = platform.signedIn ? platform.accountId ?? "account" : "guest";
 
   const page = useRemote(`page:${id}:${account}`, () => api.get(id));
@@ -169,6 +175,7 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
   const tabs = [
     { id: "overview" as const, label: t("tabs.overview") },
     { id: "servers" as const, label: t("tabs.servers"), count: servers.length },
+    ...(eventsHost ? [{ id: "events" as const, label: tEvents("title"), count: community.counts.upcomingEvents }] : []),
     { id: "players" as const, label: t("tabs.players"), count: community.counts.regulars },
     ...(manager ? [{ id: "manage" as const, label: t("tabs.manage") }] : []),
   ];
@@ -212,6 +219,7 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
       {tab === "overview" ? (
         <div className="grid grid-cols-[minmax(0,1fr)_352px] items-start gap-16 @max-[900px]/community:grid-cols-1">
           <div className="flex min-w-0 flex-col gap-16">
+            <UpcomingEventsPanel community={community} onAll={() => go("events")} />
             <Panel labelledBy="community-about">
               <PanelHead
                 id="community-about"
@@ -282,6 +290,8 @@ export function CommunityView({ id, tab: asked }: { id: string; tab: PageTab }) 
           </div>
         </div>
       ) : null}
+
+      {tab === "events" ? <CommunityEventsTab community={community} organizer={manager} /> : null}
 
       {tab === "players" ? <PlayersTab remote={players} /> : null}
 

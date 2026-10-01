@@ -46,7 +46,14 @@ test("the community bridge takes every read of the contract", () => {
   }
 });
 
-test("the web app follows a community and makes no other write", () => {
+test("the web app answers an event with the token, and takes the answer back", () => {
+  assert.deepEqual(communityRoute("PUT", `events/${ID}/rsvp`), { path: `events/${ID}/rsvp`, auth: "required", body: true });
+  assert.deepEqual(communityRoute("DELETE", `events/${ID}/rsvp`), { path: `events/${ID}/rsvp`, auth: "required", body: false });
+  assert.equal(communityRoute("POST", `events/${ID}/rsvp`), null);
+  assert.equal(communityRoute("GET", `events/${ID}/rsvp`), null);
+});
+
+test("the web app follows a community and answers events, and makes no other write", () => {
   assert.deepEqual(communityRoute("PUT", `communities/${ID}/follow`), { path: `communities/${ID}/follow`, auth: "required", body: true });
   assert.deepEqual(communityRoute("DELETE", `communities/${ID}/follow`), { path: `communities/${ID}/follow`, auth: "required", body: false });
   for (const [method, path] of [
@@ -57,7 +64,11 @@ test("the web app follows a community and makes no other write", () => {
     ["PUT", `servers/${ID}`],
     ["POST", `servers/${ID}/claims`],
     ["POST", `claims/${ID}/verify`],
-    ["PUT", `events/${ID}/rsvp`],
+    ["POST", `communities/${ID}/events`],
+    ["PUT", `events/${ID}`],
+    ["DELETE", `events/${ID}`],
+    ["PUT", `events/${ID}/rsvp?x=1`],
+    ["PUT", `events/short/rsvp`],
     ["GET", "../me"],
     ["GET", "servers/../../me"],
     ["GET", "servers?token=x"],

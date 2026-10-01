@@ -42,6 +42,11 @@ const CommunityScreen = lazy(() =>
 const CommunityDetailsScreen = lazy(() =>
   import("./screens/CommunityDetailsScreen.tsx").then((module) => ({ default: module.CommunityDetailsScreen })),
 );
+// --- slice: community events ---
+const EventsScreen = lazy(() => import("./screens/EventsScreen.tsx").then((module) => ({ default: module.EventsScreen })));
+const EventDetailsScreen = lazy(() =>
+  import("./screens/EventDetailsScreen.tsx").then((module) => ({ default: module.EventDetailsScreen })),
+);
 const JkhubScreen = lazy(() => import("./screens/JkhubScreen.tsx").then((module) => ({ default: module.JkhubScreen })));
 const JkhubDetailsScreen = lazy(() =>
   import("./screens/JkhubDetailsScreen.tsx").then((module) => ({ default: module.JkhubDetailsScreen })),
@@ -116,6 +121,19 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
       return (
         <Deferred>
           <CommunityDetailsScreen key={params.serverId} serverId={params.serverId ?? ""} />
+        </Deferred>
+      );
+    // --- slice: community events ---
+    case "events":
+      return (
+        <Deferred>
+          <EventsScreen />
+        </Deferred>
+      );
+    case "eventDetails":
+      return (
+        <Deferred>
+          <EventDetailsScreen key={params.eventId} eventId={params.eventId ?? ""} />
         </Deferred>
       );
     case "bundles":

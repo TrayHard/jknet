@@ -17,6 +17,9 @@ import { OtherClientsMenu } from "../components/OtherClientsMenu";
 import { Page, PageHeader } from "../components/PageHeader";
 import { realPlayers, visibleServers } from "../components/servers/filter";
 import { ServerListBlock } from "../components/servers/ServerListBlock";
+// --- slice: community events ---
+import { HomeEventsCard } from "../components/events/HomeEventsCard";
+import { LauncherEventsProviders } from "./eventsHost";
 import { ServerMenu } from "../components/servers/ServerMenu";
 import { TopServers } from "../components/servers/TopServers";
 import { Badge, Button } from "../components/ui";
@@ -546,6 +549,13 @@ export function HomePage() {
           ) : null}
         </div>
       </section>
+
+      {/* --- slice: community events --- the soonest events the player
+          answered or that the communities they follow announced, under the
+          hero; nothing at all while there are none. */}
+      <LauncherEventsProviders>
+        <HomeEventsCard className="mt-24" />
+      </LauncherEventsProviders>
 
       {/* --- slice: play with friends --- between the hero and the server
           blocks: a game with friends is the other way into a match, and a

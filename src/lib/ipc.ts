@@ -31,6 +31,30 @@ export const communityIpc = {
   request: <T>(method: string, path: string, body?: unknown) => call<T>("community_request", { method, path, body: body ?? null }),
 };
 
+// --- slice: community events ---
+/** The words of the Windows notifications of events: `{community}`, `{title}`, `{when}`, `{place}` stay slots. */
+export interface CommunityEventLabels {
+  created: string;
+  createdText: string;
+  changed: string;
+  changedText: string;
+  cancelled: string;
+  cancelledText: string;
+  reminder: string;
+  reminderText: string;
+  offline: string;
+}
+
+/** `src-tauri/src/community_events.rs`: what only the launcher's core does for events. */
+export const communityEventsIpc = {
+  /** Hands the core the words of its notifications, in the language on screen. */
+  setLabels: (labels: CommunityEventLabels) => call<void>("community_event_labels", { labels }),
+  /** The save dialog, then the file. The name it was saved under, or `null` when cancelled. */
+  saveIcs: (name: string, text: string) => call<string | null>("community_save_ics", { name, text }),
+  /** The open dialog, then `PUT /v1/blobs`: the SHA-256 of the picture, or `null` when cancelled. */
+  pickPicture: (kind: "cover" | "logo" | "banner") => call<string | null>("community_pick_picture", { kind }),
+};
+
 export interface PreviewAsset { name: string; path: string | null; text: string | null }
 /**
  * What one object of a preview session is, `PreviewProduct` in
@@ -480,6 +504,20 @@ export interface Settings {
    * window. Absent, or a value this build does not know: `main`.
    */
   chatOpenIn?: ChatOpenIn;
+  // --- slice: community events ---
+  /** Absent from a core that predates it: every switch on. */
+  communityNotifications?: CommunityNotifications;
+}
+
+// --- slice: community events ---
+/** `src-tauri/src/settings.rs`: `CommunityNotifications`. */
+export interface CommunityNotifications {
+  /** A community the player follows announced an event. */
+  newEvents: boolean;
+  /** An event the player answered starts in 15 minutes. */
+  reminders: boolean;
+  /** A Windows notification while no window of JKNet is focused. */
+  os: boolean;
 }
 
 // --- slice: chat notifications ---
@@ -601,6 +639,9 @@ export interface SettingsPatch {
   chatOpenIn?: ChatOpenIn;
   /** 0 to 25; the core refuses more. */
   chatAutoDownloadMb?: number;
+  // --- slice: community events ---
+  /** The switches that changed, and only those. */
+  communityNotifications?: Partial<CommunityNotifications>;
 }
 
 /** `src-tauri/src/settings.rs`: one line of `serverHistory`. */
