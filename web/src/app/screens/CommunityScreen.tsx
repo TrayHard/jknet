@@ -1,44 +1,34 @@
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { useSearchParams } from "react-router";
 
-import { CommunityBrowser, type CommunityLabels } from "../../../../src/components/community/CommunityBrowser.tsx";
-import { useAccountState } from "../../../../src/lib/queries.ts";
-import { useCommunityRequest } from "../catalog/useCommunityRequest.ts";
+import { CommunityCatalog, CommunityFrame, CommunityPlatformProvider, catalogTab } from "../../../../src/components/community/index.ts";
+import { communityRoutePath, useWebCommunityPlatform } from "../catalog/useCommunityPlatform.tsx";
 
-/** The path of a community server's page. */
-export function communityPath(serverId: string): string {
-  return `/community/${encodeURIComponent(serverId)}`;
+/** The path of a community's page. */
+export function communityPath(communityId: string): string {
+  return communityRoutePath({ view: "community", id: communityId, tab: "overview" });
 }
 
 /**
- * The community servers: the catalog of jknet.app, read only. The
- * launcher's `CommunityBrowser` draws it — the search, the game, the
- * player's own pages — without its heading, which the layout gives, and
- * without adding, claiming or editing a page. A card opens the server's page
+ * The communities: the shared catalogue of the launcher and jknet.app, in
+ * the list pane — the catalogue with its search and filters, the player's
+ * own communities and the ones they follow — without its heading, which the
+ * layout gives, and without creating a community. A card opens the page
  * beside the list or, on a phone, in its place.
  */
 export function CommunityScreen({ selectedId }: { selectedId?: string }) {
-  const { t } = useTranslation("servers");
   const { t: tWeb } = useTranslation("web");
-  const labels = t("community", { returnObjects: true }) as CommunityLabels;
-  const account = useAccountState().data;
-  const navigate = useNavigate();
-  const request = useCommunityRequest();
+  const [params] = useSearchParams();
+  const platform = useWebCommunityPlatform();
 
   return (
     <div className="web-catalog flex flex-col" data-testid="community-list">
       <p className="px-16 pt-4 text-body-sm text-fg-secondary">{tWeb("catalog.communityLead")}</p>
-      <CommunityBrowser
-        request={request}
-        labels={labels}
-        signedIn={account?.onlineSignedIn ?? false}
-        accountKey={account?.onlineUser?.id ?? ""}
-        signIn={() => void navigate("/settings/account")}
-        navigate={(id) => void navigate(id ? communityPath(id) : "/community")}
-        readOnly
-        embedded
-        selectedId={selectedId}
-      />
+      <CommunityPlatformProvider platform={platform}>
+        <CommunityFrame className="px-16 pt-8 pb-24">
+          <CommunityCatalog tab={catalogTab(selectedId ? null : params.get("tab"))} selectedId={selectedId} />
+        </CommunityFrame>
+      </CommunityPlatformProvider>
     </div>
   );
 }

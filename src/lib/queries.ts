@@ -406,6 +406,8 @@ import {
   type AccountState,
   // --- slice: web app ---
   type DeviceSession,
+  // --- slice: communities ---
+  type RegularsPrivacy,
   // --- slice: bundles ---
   type BundleDetailsWithLocal,
   type BundleFileRoot,
@@ -1883,6 +1885,9 @@ export const accountKeys = {
   // --- slice: web app ---
   /** The devices signed in to the account: `get_sessions`. */
   sessions: ["account", "sessions"] as const,
+  // --- slice: communities ---
+  /** Whether communities list the account among their regular players. */
+  regulars: ["account", "regulars"] as const,
 };
 
 /**
@@ -2166,6 +2171,38 @@ export function useRevokeSession() {
     mutationFn: (target: { id: string } | { others: true }) => accountIpc.revokeSession(target),
     onSuccess: refresh,
     onSettled: () => queryClient.invalidateQueries({ queryKey: accountKeys.sessions }),
+  });
+}
+
+// --- slice: communities ---
+/**
+ * Whether communities list the account among their regular players: the
+ * `showInRegulars` of `GET /v1/me`, read when the Settings card mounts. A
+ * different account signed in on the same run never sees the answer of the
+ * one before: the key follows the account.
+ */
+export function useRegularsPrivacy(accountId: string | null): UseQueryResult<RegularsPrivacy> {
+  return useQuery({
+    queryKey: [...accountKeys.regulars, accountId ?? ""],
+    queryFn: accountIpc.getRegularsPrivacy,
+    enabled: accountId !== null && hasBackend(),
+    retry: false,
+  });
+}
+
+/**
+ * Shows the account among the regular players of communities, or hides it.
+ * The answer goes straight into the card's cache; the account is read again,
+ * because the core stored what the service said of it.
+ */
+export function useSetShowInRegulars(accountId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (show: boolean) => accountIpc.setShowInRegulars(show),
+    onSuccess: (answer) => {
+      queryClient.setQueryData([...accountKeys.regulars, accountId ?? ""], answer);
+      void queryClient.invalidateQueries({ queryKey: accountKeys.state });
+    },
   });
 }
 

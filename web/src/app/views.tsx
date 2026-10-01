@@ -2,9 +2,9 @@
  * The screens of each route: `RouteView` out of a row of `routeTable.ts` and
  * the route's params. The layouts decide where each pane goes.
  *
- * The server list and the JKHub catalog load on first use, each screen in a
- * chunk of its own with the launcher's filters, tree and cards it draws, so
- * the first download of the app does not carry them.
+ * The server list, the JKHub catalog and the communities load on first use,
+ * each screen in a chunk of its own with the launcher's filters, tree, cards
+ * and Markdown it draws, so the first download of the app does not carry them.
  */
 
 import type { TFunction } from "i18next";
@@ -19,8 +19,6 @@ import { AccountScreen } from "./screens/AccountScreen.tsx";
 import { BundleDetailsScreen } from "./screens/BundleDetailsScreen.tsx";
 import { BundlesScreen } from "./screens/BundlesScreen.tsx";
 import { ChatListScreen } from "./screens/ChatListScreen.tsx";
-import { CommunityDetailsScreen } from "./screens/CommunityDetailsScreen.tsx";
-import { CommunityScreen } from "./screens/CommunityScreen.tsx";
 import { FriendDetailsScreen, FriendTitle } from "./screens/FriendDetailsScreen.tsx";
 import { FriendsScreen } from "./screens/FriendsScreen.tsx";
 import { GroupInfoScreen } from "./screens/GroupInfoScreen.tsx";
@@ -37,6 +35,12 @@ const ServerListScreen = lazy(() =>
 );
 const ServerDetailsScreen = lazy(() =>
   import("./screens/ServerDetailsScreen.tsx").then((module) => ({ default: module.ServerDetailsScreen })),
+);
+const CommunityScreen = lazy(() =>
+  import("./screens/CommunityScreen.tsx").then((module) => ({ default: module.CommunityScreen })),
+);
+const CommunityDetailsScreen = lazy(() =>
+  import("./screens/CommunityDetailsScreen.tsx").then((module) => ({ default: module.CommunityDetailsScreen })),
 );
 const JkhubScreen = lazy(() => import("./screens/JkhubScreen.tsx").then((module) => ({ default: module.JkhubScreen })));
 const JkhubDetailsScreen = lazy(() =>
@@ -103,9 +107,17 @@ function screen(id: ScreenId, spec: RouteSpec, params: Params): ReactNode {
     case "friendDetails":
       return <FriendDetailsScreen key={params.userId} userId={params.userId ?? ""} />;
     case "community":
-      return <CommunityScreen selectedId={params.serverId} />;
+      return (
+        <Deferred>
+          <CommunityScreen selectedId={params.serverId} />
+        </Deferred>
+      );
     case "communityDetails":
-      return <CommunityDetailsScreen key={params.serverId} serverId={params.serverId ?? ""} />;
+      return (
+        <Deferred>
+          <CommunityDetailsScreen key={params.serverId} serverId={params.serverId ?? ""} />
+        </Deferred>
+      );
     case "bundles":
       return <BundlesScreen selectedId={params.bundleId} />;
     case "bundleDetails":

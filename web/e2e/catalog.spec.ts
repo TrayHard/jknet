@@ -32,7 +32,7 @@ import {
 import { tokenOf } from "./push-fixtures.ts";
 
 const WEB = webCatalog("en") as Record<string, Record<string, string>>;
-const COMMUNITY = (sharedCatalog("en", "servers") as Record<string, Record<string, string>>).community;
+const COMMUNITY = sharedCatalog("en", "community") as Record<string, Record<string, string>>;
 const BUNDLES = sharedCatalog("en", "bundles") as Record<string, Record<string, unknown>>;
 
 /** A string of the `bundles` namespace, `section.key`, with `{{name}}` filled in. */
@@ -84,7 +84,12 @@ async function publishCommunityServer(token: string, ownerId: string, name: stri
   const database = new DatabaseSync(serviceDatabase());
   try {
     database.exec("PRAGMA busy_timeout = 5000");
-    database.prepare("UPDATE community_servers SET owner_id = ? WHERE id = ?").run(ownerId, created.id);
+    // The owner of the community and its first server verified, as a proof
+    // of the code in sv_hostname leaves them.
+    database.prepare("UPDATE communities SET owner_id = ? WHERE id = ?").run(ownerId, created.id);
+    database
+      .prepare("UPDATE community_servers SET verified_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), verified_by = ? WHERE community_id = ?")
+      .run(ownerId, created.id);
   } finally {
     database.close();
   }
@@ -154,10 +159,10 @@ test("community servers: the list, a server's page, and the server shared to a f
   await visit(page, "/community");
   const list = page.getByTestId("community-list");
   await expect(list).toContainText(WEB.catalog.communityLead);
-  await list.getByRole("textbox", { name: COMMUNITY.search }).fill(name);
-  const card = list.getByRole("button").filter({ hasText: name });
+  await list.getByRole("textbox", { name: COMMUNITY.catalog.search }).fill(name);
+  const card = list.getByRole("link", { name, exact: true });
   await expect(card).toBeVisible({ timeout: 15_000 });
-  await expect(list.getByRole("button", { name: COMMUNITY.add })).toHaveCount(0);
+  await expect(list.getByRole("button", { name: COMMUNITY.catalog.create })).toHaveCount(0);
   await card.click();
   await expect(page).toHaveURL(new RegExp(`/community/${server.id}$`));
 
@@ -165,19 +170,20 @@ test("community servers: the list, a server's page, and the server shared to a f
   await expect(details.getByRole("heading", { name, level: 1 })).toBeVisible();
   await expect(details).toContainText(server.address);
   await expect(details).toContainText(`Duels every evening on ${name}.`);
+  await details.getByRole("button", { name: COMMUNITY.about.rules }).click();
   await expect(details).toContainText("Bow before a duel.");
   await expect(details).toContainText("Hilt pack");
   await expect(details.getByTestId("platform-note")).toHaveText(WEB.catalog.playNote);
-  await expect(details.getByRole("button", { name: COMMUNITY.copyAddress })).toBeVisible();
-  // Read only: no page edits, no claims, no way back of its own.
-  await expect(details.getByRole("button", { name: COMMUNITY.edit })).toHaveCount(0);
-  await expect(details.getByRole("button", { name: COMMUNITY.getCode })).toHaveCount(0);
-  await expect(details.getByRole("button", { name: COMMUNITY.back })).toHaveCount(0);
+  await expect(details.getByRole("button", { name: COMMUNITY.play.copy.replace("{{address}}", server.address) })).toBeVisible();
+  // Read and follow only: no page edits, no claims, no way back of its own.
+  await expect(details.getByRole("button", { name: COMMUNITY.page.edit })).toHaveCount(0);
+  await expect(details.getByRole("button", { name: COMMUNITY.claim.getCode })).toHaveCount(0);
+  await expect(details.getByRole("link", { name: COMMUNITY.page.back })).toHaveCount(0);
   await expectNoGameControls(page);
 
   if (await wideLayout(page)) {
     // The list stays beside the page, the open server marked on it.
-    await expect(page.locator("[data-pane=list]").getByRole("button").filter({ hasText: name })).toHaveAttribute("aria-current", "true");
+    await expect(page.locator("[data-pane=list]").getByRole("link", { name, exact: true })).toHaveAttribute("aria-current", "page");
   }
 
   await shareWith(page, jan);

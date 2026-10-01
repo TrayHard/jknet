@@ -670,6 +670,9 @@ pub fn run() {
             account::cancel_sign_in,
             account::sign_out,
             account::update_display_name,
+            // --- slice: communities ---
+            account::get_regulars_privacy,
+            account::set_show_in_regulars,
             account::delete_account,
             // --- slice: web app ---
             account::get_sessions,

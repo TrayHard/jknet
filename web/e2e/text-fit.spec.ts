@@ -537,7 +537,10 @@ async function publishCommunityServer(token: string, ownerId: string, name: stri
   const database = new DatabaseSync(serviceDatabase());
   try {
     database.exec("PRAGMA busy_timeout = 5000");
-    database.prepare("UPDATE community_servers SET owner_id = ? WHERE id = ?").run(ownerId, created.id);
+    database.prepare("UPDATE communities SET owner_id = ? WHERE id = ?").run(ownerId, created.id);
+    database
+      .prepare("UPDATE community_servers SET verified_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), verified_by = ? WHERE community_id = ?")
+      .run(ownerId, created.id);
   } finally {
     database.close();
   }
@@ -639,7 +642,7 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
   const openMenu = web.nav.openMenu;
   const account = sharedCatalog(language, "account") as Record<string, Record<string, string>>;
   const chat = sharedCatalog(language, "chat") as Record<string, Record<string, string>>;
-  const servers = sharedCatalog(language, "servers") as Record<string, Record<string, string>>;
+  const community = sharedCatalog(language, "community") as Record<string, Record<string, string>>;
   const direct = `/c/${encodeURIComponent(seeded.direct)}`;
   const info = `/c/${encodeURIComponent(seeded.group)}/info`;
   // The catalogs list what every language's test has published so far, a
@@ -649,7 +652,7 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
   const bundleSearch = `?q=${encodeURIComponent(seeded.bundleName)}`;
   const bundle = `/bundles/${encodeURIComponent(seeded.bundleId)}${bundleSearch}`;
   const communitySearch = async (page: Page) => {
-    const box = page.getByPlaceholder(servers.community.search, { exact: true });
+    const box = page.getByPlaceholder(community.catalog.searchPlaceholder, { exact: true });
     if (await box.isVisible()) await box.fill(seeded.communityName);
   };
   const cards = ["[data-testid=card-actions]", "[data-testid=card-facts]"];
@@ -779,7 +782,7 @@ function screensOf(seeded: Seeded, language: Language): Screen[] {
       ready: byTest("community-details"),
       // The list beside the page on the wide screen.
       prepare: communitySearch,
-      gates: [".community-files li"],
+      gates: ["[data-testid=community-file]"],
     },
     // The emoji picker: a sheet on the phone.
     {

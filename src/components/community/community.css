@@ -1,77 +1,216 @@
-.community-app { --cm-bg:#10151e; --cm-panel:#171e2a; --cm-border:#2b3545; --cm-fg:#edf3fa; --cm-muted:#a3b1c3; --cm-accent:#65d9df; color:var(--cm-fg); font:14px/1.6 Inter,system-ui,sans-serif; width:100%; max-width:1280px; margin:0 auto; padding:28px; box-sizing:border-box; }
-.community-app * { box-sizing:border-box; }
-.community-app h1 { font-size:30px; line-height:1.25; margin:10px 0; letter-spacing:-.6px; overflow-wrap:anywhere; }
-.community-app h2 { font-size:18px; margin:0 0 14px; line-height:1.4; }
-.community-app h3 { margin:8px 0 0; font-size:15px; }
-.community-app p { color:var(--cm-muted); margin:8px 0 16px; }
-.community-app button,.community-app input,.community-app select,.community-app textarea { font:inherit; }
-.community-app button { display:inline-flex; justify-content:center; align-items:center; gap:8px; min-height:36px; border:1px solid var(--cm-border); border-radius:7px; background:#202a39; color:var(--cm-fg); padding:7px 13px; cursor:pointer; line-height:1.4; }
-.community-app button:hover { border-color:var(--cm-accent); }
-.community-app button:disabled { opacity:.5; cursor:default; }
-.community-app button:focus-visible,.community-app a:focus-visible,.community-app input:focus,.community-app textarea:focus,.community-app select:focus { outline:2px solid var(--cm-accent); outline-offset:3px; }
-.community-app .community-primary { background:var(--cm-accent); color:#0b1b24; border-color:var(--cm-accent); font-weight:600; }
-.community-app input,.community-app select,.community-app textarea { min-width:0; width:100%; border:1px solid var(--cm-border); border-radius:6px; padding:9px 11px; color:var(--cm-fg); background:var(--cm-bg); }
-.community-app textarea { resize:vertical; }
-.community-app label { display:flex; flex-direction:column; gap:6px; color:var(--cm-muted); }
-.community-app code { font-size:12px; overflow-wrap:anywhere; color:var(--cm-muted); }
-.community-heading { display:flex; justify-content:space-between; gap:24px; align-items:center; margin-bottom:26px; }
-.community-eyebrow { display:flex; align-items:center; gap:8px; color:var(--cm-accent); letter-spacing:2px; font-size:10px; font-weight:600; }
-.community-actions { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
-.community-toolbar { display:flex; gap:12px; align-items:center; margin:24px 0; flex-wrap:wrap; }
-.community-toolbar select { width:170px; }
-.community-search { flex:1; min-width:140px; }
-.community-tabs { display:flex; gap:4px; }
-.community-tabs button[aria-pressed=true] { color:var(--cm-accent); border-color:var(--cm-accent); }
-.community-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:18px; }
-.community-app .community-card { background:var(--cm-panel); padding:22px; display:flex; flex-direction:column; align-items:flex-start; text-align:left; gap:10px; border-radius:12px; }
-.community-app .community-card[aria-current=true] { border-color:var(--cm-accent); }
-.community-card strong { font-size:19px; overflow-wrap:anywhere; max-width:100%; }
-.community-card-icon { width:46px; height:46px; display:grid; place-items:center; color:var(--cm-accent); background:#233540; border-radius:10px; margin-bottom:4px; }
-.community-card-game { font-size:11px; color:var(--cm-muted); text-transform:uppercase; letter-spacing:1px; }
-.community-card-description { color:var(--cm-muted); font-size:13px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; min-height:56px; overflow-wrap:anywhere; }
-.community-card-footer { width:100%; margin-top:auto; padding-top:15px; border-top:1px solid var(--cm-border); display:flex; align-items:center; gap:6px; font-size:11px; color:var(--cm-accent); }
-.community-card-footer>span:last-child { margin-left:auto; color:var(--cm-muted); }
-.community-detail-grid { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:20px; }
-.community-content,.community-stack { display:flex; flex-direction:column; gap:18px; min-width:0; }
-.community-panel { background:var(--cm-panel); border:1px solid var(--cm-border); border-radius:12px; padding:24px; min-width:0; }
-.community-prose { white-space:pre-wrap; overflow-wrap:anywhere; }
-.community-link { display:inline-flex; gap:6px; align-items:center; color:var(--cm-accent); text-decoration:none; }
-.community-link:hover { text-decoration:underline; }
-.community-badges { display:flex; gap:8px; margin-bottom:22px; flex-wrap:wrap; }
-.community-badges span { display:flex; align-items:center; gap:7px; border:1px solid var(--cm-border); border-radius:20px; padding:4px 12px; font-size:12px; color:var(--cm-muted); }
-.community-section-heading { display:flex; justify-content:space-between; align-items:center; }
-.community-count { color:var(--cm-accent); }
-.community-files { padding:0; margin:20px 0 0; list-style:none; }
-.community-files li { display:flex; gap:14px; align-items:center; border-top:1px solid var(--cm-border); padding:18px 0; }
-/* The title keeps 190 px: in a narrow list the link goes under it instead of squeezing it to a word a line. */
-.community-files li>div { flex:1 1 190px; min-width:0; overflow-wrap:anywhere; }
-.community-files small,.community-claim small { display:block; color:var(--cm-muted); font-size:11px; }
-.community-file-number { color:var(--cm-accent); font-size:12px; }
-.community-claim { border-top:1px solid var(--cm-border); margin-top:20px; padding-top:12px; }
-.community-claim code { display:block; color:var(--cm-accent); user-select:all; padding:10px 0; }
-.community-claim button { margin-top:15px; }
-.community-error,.community-note { padding:16px; margin:16px 0; border:1px solid #a15454; background:#38232c; border-radius:8px; overflow-wrap:anywhere; }
-.community-note { border-color:#407d77; background:#193333; }
-.community-empty { text-align:center; padding:65px 24px; color:var(--cm-muted); border:1px dashed var(--cm-border); border-radius:12px; }
-.community-empty svg { margin:0 auto 18px; color:var(--cm-accent); }
-.community-editor,.community-add { margin-top:24px; display:flex; flex-direction:column; gap:18px; }
-.community-add { margin-bottom:24px; }
-.community-form-columns { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-.community-file-edit { display:grid; grid-template-columns:1fr 1.4fr auto; gap:10px; align-items:end; }
-.community-admin { margin-top:26px; }
-.community-review { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:16px 0; border-top:1px solid var(--cm-border); }
-.community-review>div { flex:1; min-width:200px; }
-.community-review p { margin:4px 0; }
-.community-install { display:flex; flex-direction:column; gap:12px; margin-top:18px; }
-.community-install ul { margin:0; padding-left:18px; overflow-wrap:anywhere; }
-.community-sr { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
-/* --- slice: chat layout --- the width of the page, the `page` container of
-   AppShell, not of the window: the chat drawer pinned beside the page takes
-   380 px of the window. 818 px is the page of the 1050 px window these steps
-   were written for; the one-column step comes before the side column would
-   leave the page body under 300 px. The toolbar folds with them: the search
-   keeps room for its placeholder and the game list wraps below it rather
-   than squeezing it, and on the narrow step the search takes a row of its own
-   with the game list and Add server under it. */
-@container page (max-width:818px) { .community-app { padding:20px; } .community-heading { align-items:flex-start; } .community-detail-grid { grid-template-columns:minmax(0,1fr) 265px; } .community-files li { flex-wrap:wrap; } .community-search { min-width:220px; } }
-@container page (max-width:640px) { .community-app { padding:16px; } .community-heading { flex-direction:column; gap:8px; } .community-detail-grid { grid-template-columns:1fr; } .community-form-columns,.community-file-edit { grid-template-columns:1fr; } .community-panel { padding:18px; } .community-app h1 { font-size:26px; } .community-toolbar { align-items:stretch; } .community-toolbar select { flex:1; } .community-search { flex-basis:100%; } .community-cards { grid-template-columns:1fr; } }
+/*
+ * What the community screens cannot say with the utilities of the theme.
+ *
+ * The screens are built from Tailwind utilities and the UI kit. This file
+ * holds four things the utilities do not reach: the placeholder cover and
+ * logo of a community, drawn on its own hue; the ring of the one live
+ * number of a page; and the elements of a description, which come out of
+ * Markdown and take no class attribute.
+ *
+ * The hue is the one colour computed outside the tokens: a decorative
+ * gradient, like the previews of maps, set as `--jkc-hue` by `hueStyle`.
+ * Everything else reads the semantic tokens.
+ *
+ * The rules sit in the `components` layer, so a utility on the same element
+ * still wins, as it does over the kit.
+ *
+ * The first line names the layers in Tailwind's order. `main.tsx` imports
+ * `index.css` after the app, so this file can reach the page first, and the
+ * first mention of a layer fixes its place: without the line, `components`
+ * would sink under `base`, and the preflight's `h1 { font-size: inherit }`
+ * would beat `text-display-lg` everywhere.
+ */
+
+@layer theme, base, components, utilities;
+
+@layer components {
+  .jkc-logo {
+    background: hsl(var(--jkc-hue, 195) 45% 16%);
+    border: 1px solid hsl(var(--jkc-hue, 195) 50% 30%);
+    color: hsl(var(--jkc-hue, 195) 85% 74%);
+    letter-spacing: 0.02em;
+  }
+
+  .jkc-cover {
+    background:
+      radial-gradient(
+        circle at 76% 58%,
+        transparent 0 58px,
+        hsl(var(--jkc-hue, 195) 80% 60% / 0.28) 59px 60px,
+        transparent 61px 104px,
+        hsl(var(--jkc-hue, 195) 80% 60% / 0.18) 105px 106px,
+        transparent 107px
+      ),
+      repeating-linear-gradient(60deg, var(--alpha-white-4) 0 1px, transparent 1px 30px),
+      repeating-linear-gradient(-60deg, var(--alpha-white-4) 0 1px, transparent 1px 30px),
+      radial-gradient(
+        90% 140% at 78% 50%,
+        hsl(var(--jkc-hue, 195) 55% 22%) 0%,
+        hsl(var(--jkc-hue, 195) 50% 11%) 45%,
+        hsl(var(--jkc-hue, 195) 40% 5%) 100%
+      );
+  }
+
+  /* The bar of a place in the week's top, in the community's hue. */
+  .jkc-hue-bar {
+    background: hsl(var(--jkc-hue, 195) 70% 58%);
+  }
+
+  /* One pulsing ring per screen, on the number that is live. */
+  .jkc-pulse::after {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 999px;
+    border: 2px solid var(--color-bg-success);
+    opacity: 0;
+    animation: jkc-pulse 1.6s ease-out infinite;
+  }
+
+  /* A description: Markdown the organizers wrote. */
+  .jkc-md {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 72ch;
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--color-text-secondary);
+    overflow-wrap: anywhere;
+  }
+
+  .jkc-md :where(p, ul, ol, blockquote, pre, table, hr) {
+    margin: 0;
+  }
+
+  .jkc-md :where(h1, h2, h3, h4, h5, h6) {
+    margin: 4px 0 0;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--color-text-primary);
+  }
+
+  .jkc-md :where(h1, h2) {
+    font-size: 15px;
+  }
+
+  .jkc-md :where(strong, b) {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .jkc-md :where(em) {
+    font-style: italic;
+  }
+
+  .jkc-md :where(del, s) {
+    text-decoration: line-through;
+  }
+
+  .jkc-md :where(ul, ol) {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 20px;
+  }
+
+  .jkc-md :where(ul) {
+    list-style: disc;
+  }
+
+  .jkc-md :where(ol) {
+    list-style: decimal;
+  }
+
+  .jkc-md :where(li)::marker {
+    color: var(--color-text-muted);
+  }
+
+  .jkc-md :where(li > p) {
+    margin: 0;
+  }
+
+  .jkc-md :where(a) {
+    color: var(--color-text-accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+
+  .jkc-md :where(blockquote) {
+    border-left: 2px solid var(--color-border-default);
+    padding-left: 12px;
+  }
+
+  .jkc-md :where(code) {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background-color: var(--color-bg-elevated);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 18px;
+    color: var(--color-text-primary);
+  }
+
+  .jkc-md :where(pre) {
+    padding: 8px;
+    border: 1px solid var(--color-border-default);
+    border-radius: 6px;
+    background-color: var(--color-bg-elevated);
+    overflow-x: auto;
+  }
+
+  .jkc-md :where(pre code) {
+    padding: 0;
+    background: none;
+  }
+
+  .jkc-md :where(table) {
+    display: block;
+    border-collapse: collapse;
+    overflow-x: auto;
+  }
+
+  .jkc-md :where(th, td) {
+    border: 1px solid var(--color-border-default);
+    padding: 4px 8px;
+    text-align: left;
+  }
+
+  .jkc-md :where(th) {
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .jkc-md :where(hr) {
+    border: 0;
+    border-top: 1px solid var(--color-border-default);
+  }
+
+  /* The rules fold under the description, in a smaller face. */
+  .jkc-md.jkc-md-rules {
+    font-size: 13px;
+    line-height: 20px;
+  }
+}
+
+@keyframes jkc-pulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jkc-pulse::after {
+    animation: none;
+  }
+}

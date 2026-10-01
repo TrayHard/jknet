@@ -2060,6 +2060,13 @@ export interface AccountChanged {
 /** Emitted by the core after every sign-in, sign-out and rename. */
 export const ACCOUNT_CHANGED_EVENT = "account:changed";
 
+// --- slice: communities ---
+/** `src-tauri/src/account.rs`: whether communities list the account among their regular players. */
+export interface RegularsPrivacy {
+  /** `null` when the service is older than communities and has no such setting. */
+  showInRegulars: boolean | null;
+}
+
 export const accountIpc = {
   getAccountState: () => call<AccountState>("get_account_state"),
   /** Opens a session and sends the player to the browser. */
@@ -2075,6 +2082,11 @@ export const accountIpc = {
   signOut: () => call<void>("sign_out"),
   updateDisplayName: (displayName: string) =>
     call<OnlineUser>("update_display_name", { displayName }),
+  // --- slice: communities ---
+  /** Reads `showInRegulars` of `GET /v1/me`. */
+  getRegularsPrivacy: () => call<RegularsPrivacy>("get_regulars_privacy"),
+  /** Shows the account among the regular players of communities, or hides it and has the service forget its days of play. */
+  setShowInRegulars: (show: boolean) => call<RegularsPrivacy>("set_show_in_regulars", { show }),
   deleteAccount: () => call<void>("delete_account"),
   // --- slice: web app ---
   /** Every launcher and browser signed in to the account, most recently used first. */

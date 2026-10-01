@@ -27,6 +27,8 @@ export const WEB_NAMESPACES = [
   "library",
   "pk3",
   "jkhub",
+  // --- slice: communities ---
+  "community",
   "web",
 ] as const;
 

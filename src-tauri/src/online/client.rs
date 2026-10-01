@@ -609,6 +609,22 @@ impl OnlineClient {
             .json()
     }
 
+    // --- slice: communities ---
+    /// `PATCH /v1/me {"showInRegulars": …}`: shows the account among the
+    /// regular players of the communities it plays in, or hides it, which
+    /// also has the service forget the days of play it counted. The answer
+    /// is the contract's `User`, as for a rename.
+    pub async fn patch_show_in_regulars(
+        &self,
+        ctx: &OnlineContext,
+        show: bool,
+    ) -> Result<OnlineUser> {
+        let body = serde_json::json!({ "showInRegulars": show });
+        self.call(ctx, Method::PATCH, "/v1/me", Some(body), Auth::Required)
+            .await?
+            .json()
+    }
+
     /// Deletes the account together with its friendships, requests and
     /// invites. Nothing on this machine is touched.
     pub async fn delete_me(&self, ctx: &OnlineContext) -> Result<()> {
@@ -805,15 +821,18 @@ impl OnlineClient {
 
     // -- Transport ----------------------------------------------------------
 
+    /// One call of the communities contract, as `crate::community` checked
+    /// it. A read carries the token when there is one ([`Auth::Optional`]),
+    /// so the service can fill the reader's half of a page.
     pub async fn community(
         &self,
         ctx: &OnlineContext,
         method: Method,
         path: &str,
         body: Option<Value>,
-        auth: bool,
+        auth: Auth,
     ) -> Result<Value> {
-        self.call(ctx, method, path, body, auth.into())
+        self.call(ctx, method, path, body, auth)
             .await?
             .json()
     }
