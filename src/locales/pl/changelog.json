@@ -19,6 +19,7 @@
     "v0_11_0_privacy": "Strony społeczności pokazują stałych graczy. Wyłącz w ustawieniach „Pokazuj mnie wśród stałych graczy społeczności”, aby zniknąć ze wszystkich list. JKNet Online usunie wtedy zliczony czas gry.",
     "v0_11_1_imageDrop": "Logo i okładkę społeczności na ekranie zarządzania oraz okładkę wydarzenia w edytorze można przeciągnąć prosto na kafelek. Kafelek podświetla się, gdy plik jest nad nim.",
     "v0_11_1_catalogVisibility": "„Moje społeczności” oznaczają społeczność, której nie ma w katalogu, i podają powód. Administratorzy JKNet publikują stronę bez właściciela prosto z tego wiersza.",
+    "v0_11_2_followersTop": "Top społeczności został przebudowany i pokazuje liczbę obserwujących każdej społeczności.",
     "v0_10_0_webApp": "Rozmawiaj ze znajomymi z telefonu lub dowolnej przeglądarki: zaloguj się na online.jknet.app i dodaj JKNet do ekranu głównego.",
     "v0_10_0_signIn": "Logowanie w przeglądarce jest teraz powiązane z launcherem, który je rozpoczął: cudzy link logowania nie przekaże już twojego konta osobie, która go wysłała.",
     "v0_10_0_attachments": "Menu załączników czatu jest podzielone na pliki, multimedia, dane gry, ustawienia i katalogi. Mapy, konfiguracje i profile gracza pochodzą ze wszystkich twoich klientów na jednej liście, która pokazuje ich źródło.",
